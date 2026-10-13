@@ -65,7 +65,11 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   Widget _buildSidebar(BuildContext context) {
-    final sidebarWidth = _isSidebarCollapsed ? 72.0 : 230.0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobileLandscape = screenWidth < 900;
+    final collapsedWidth = isMobileLandscape ? 56.0 : 68.0;
+    final expandedWidth = isMobileLandscape ? 190.0 : 230.0;
+    final sidebarWidth = _isSidebarCollapsed ? collapsedWidth : expandedWidth;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),

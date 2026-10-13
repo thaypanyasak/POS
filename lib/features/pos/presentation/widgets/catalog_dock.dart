@@ -555,17 +555,31 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                   )
                 : LayoutBuilder(
                     builder: (context, constraints) {
-                      // High-density: 5 columns on wide tablet landscape, 4 on standard tablet, 3 on compact
-                      final crossAxisCount = constraints.maxWidth > 950
-                          ? 5
-                          : (constraints.maxWidth > 650 ? 4 : 3);
+                      final width = constraints.maxWidth;
+                      final int crossAxisCount;
+                      final double childAspectRatio;
+
+                      if (width > 950) {
+                        crossAxisCount = 5;
+                        childAspectRatio = 1.25;
+                      } else if (width > 650) {
+                        crossAxisCount = 4;
+                        childAspectRatio = 1.22;
+                      } else if (width > 420) {
+                        crossAxisCount = 3;
+                        childAspectRatio = 1.15;
+                      } else {
+                        crossAxisCount = 2;
+                        childAspectRatio = 1.10;
+                      }
+
                       return GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: crossAxisCount,
-                          childAspectRatio: 1.25,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
+                          childAspectRatio: childAspectRatio,
+                          crossAxisSpacing: 6,
+                          mainAxisSpacing: 6,
                         ),
                         itemCount: catalogState.filteredProducts.length,
                         itemBuilder: (context, index) {

@@ -86,21 +86,29 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: const [
-            // Left 65% Catalog Dock
-            Expanded(
-              flex: 65,
-              child: CatalogDock(),
-            ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final screenWidth = constraints.maxWidth;
+            // On compact mobile landscape (width < 900): 58% catalog, 42% cart
+            // On larger tablet landscape: 65% catalog, 35% cart
+            final isCompactMobile = screenWidth < 900;
+            final catalogFlex = isCompactMobile ? 58 : 65;
+            final cartFlex = isCompactMobile ? 42 : 35;
 
-            // Right 35% Cart Dock
-            Expanded(
-              flex: 35,
-              child: CartDock(),
-            ),
-          ],
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: catalogFlex,
+                  child: const CatalogDock(),
+                ),
+                Expanded(
+                  flex: cartFlex,
+                  child: const CartDock(),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

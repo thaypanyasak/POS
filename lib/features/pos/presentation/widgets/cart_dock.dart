@@ -355,7 +355,7 @@ class _CartDockState extends ConsumerState<CartDock> {
 
           // Bottom Checkout Dock
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: const BoxDecoration(
               color: AppColors.surface,
               border: Border(top: BorderSide(color: AppColors.border, width: 0.9)),
@@ -378,21 +378,21 @@ class _CartDockState extends ConsumerState<CartDock> {
                       '${LaoStrings.subtotal} (${cartState.totalQuantity} ຊິ້ນ):',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: AppColors.textSecondary,
-                        fontSize: 12.5,
+                        fontSize: 11.5,
                       ),
                     ),
                     Text(
                       LaoCurrencyFormatter.format(cartState.subtotal),
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w600,
-                        fontSize: 12.5,
+                        fontSize: 11.5,
                       ),
                     ),
                   ],
                 ),
 
                 if (cartState.discountTotal > 0) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -400,7 +400,7 @@ class _CartDockState extends ConsumerState<CartDock> {
                         '${LaoStrings.discount}:',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: AppColors.error,
-                          fontSize: 12.5,
+                          fontSize: 11.5,
                         ),
                       ),
                       Text(
@@ -408,14 +408,14 @@ class _CartDockState extends ConsumerState<CartDock> {
                         style: theme.textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: AppColors.error,
-                          fontSize: 12.5,
+                          fontSize: 11.5,
                         ),
                       ),
                     ],
                   ),
                 ],
 
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
 
                 // Prominent Total in Lao Kip
                 Row(
@@ -426,13 +426,13 @@ class _CartDockState extends ConsumerState<CartDock> {
                       LaoStrings.total,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
-                        fontSize: 15,
+                        fontSize: 13.5,
                       ),
                     ),
                     Text(
                       LaoCurrencyFormatter.format(cartState.grandTotal),
                       style: TextStyle(
-                        fontSize: 26,
+                        fontSize: 22,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.5,
                         color: cartState.isWholesaleMode
@@ -443,7 +443,7 @@ class _CartDockState extends ConsumerState<CartDock> {
                   ],
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
 
                 // Full-width Prominent Pay Button with subtle gradient
                 SizedBox(
