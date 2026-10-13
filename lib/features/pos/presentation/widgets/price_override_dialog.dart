@@ -72,7 +72,14 @@ class _PriceOverrideDialogState extends State<PriceOverrideDialog> {
     final int originalPrice = widget.item.originalUnitPrice;
     final int discount = originalPrice - newPrice;
 
+    final screenSize = MediaQuery.of(context).size;
+    final isCompactLandscape = screenSize.height < 500;
+
     return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isCompactLandscape ? 16 : 40,
+        vertical: isCompactLandscape ? 10 : 24,
+      ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: const BorderSide(color: AppColors.borderSubtle, width: 0.9),
@@ -81,9 +88,12 @@ class _PriceOverrideDialogState extends State<PriceOverrideDialog> {
       surfaceTintColor: Colors.transparent,
       elevation: 6,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
+        constraints: BoxConstraints(
+          maxWidth: 480,
+          maxHeight: isCompactLandscape ? (screenSize.height - 20) : 680,
+        ),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(isCompactLandscape ? 14.0 : 24.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

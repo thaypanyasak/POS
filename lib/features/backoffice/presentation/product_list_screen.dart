@@ -531,16 +531,17 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
     required IconData icon,
     required Color color,
     String? subtitle,
+    double? fixedWidth,
   }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.borderSubtle, width: 0.9),
-          boxShadow: AppColors.cardShadow,
-        ),
+    final cardContent = Container(
+      width: fixedWidth,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderSubtle, width: 0.9),
+        boxShadow: AppColors.cardShadow,
+      ),
         child: Row(
           children: [
             Container(
@@ -598,8 +599,9 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
             ),
           ],
         ),
-      ),
-    );
+      );
+
+    return fixedWidth != null ? cardContent : Expanded(child: cardContent);
   }
 
   Widget _buildStockFilterChip(String label, StockStatusFilter filter, int count, Color color) {
@@ -801,67 +803,75 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
       ),
       body: Column(
         children: [
-          // 1. KPI Metric Summary Header
+          // 1. KPI Metric Summary Header (Scrollable horizontally on compact mobile)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             color: AppColors.surface,
-            child: Row(
-              children: [
-                _buildKpiCard(
-                  title: 'ສິນຄ້າທັງໝົດ (SKUs)',
-                  value: '$totalSkus ລາຍການ',
-                  icon: Icons.grid_view_rounded,
-                  color: AppColors.primary,
-                  subtitle: '${catalogState.categories.length} ໝວດໝູ່',
-                ),
-                const SizedBox(width: 12),
-                _buildKpiCard(
-                  title: 'ມູນຄ່າສາງລວມ (Inventory Value)',
-                  value: LaoCurrencyFormatter.format(totalInventoryValue),
-                  icon: Icons.account_balance_wallet_rounded,
-                  color: const Color(0xFF047857),
-                  subtitle: 'ອີງຕາມຕົ້ນທຶນຊື້',
-                ),
-                const SizedBox(width: 12),
-                _buildKpiCard(
-                  title: 'ໃກ້ໝົດສາງ (Low Stock)',
-                  value: '$lowStockCount ລາຍການ',
-                  icon: Icons.warning_amber_rounded,
-                  color: const Color(0xFFD97706),
-                  subtitle: 'ເຫຼືອຕ່ຳກວ່າ 2 ແກັດ',
-                ),
-                const SizedBox(width: 12),
-                _buildKpiCard(
-                  title: 'ໝົດສາງ (Out of Stock)',
-                  value: '$outOfStockCount ລາຍການ',
-                  icon: Icons.remove_circle_outline_rounded,
-                  color: AppColors.error,
-                  subtitle: 'ຕ້ອງການສັ່ງຊື້ດ່ວນ',
-                ),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildKpiCard(
+                    title: 'ສິນຄ້າທັງໝົດ (SKUs)',
+                    value: '$totalSkus ລາຍການ',
+                    icon: Icons.grid_view_rounded,
+                    color: AppColors.primary,
+                    subtitle: '${catalogState.categories.length} ໝວດໝູ່',
+                    fixedWidth: 200,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildKpiCard(
+                    title: 'ມູນຄ່າສາງລວມ (Inventory Value)',
+                    value: LaoCurrencyFormatter.format(totalInventoryValue),
+                    icon: Icons.account_balance_wallet_rounded,
+                    color: const Color(0xFF047857),
+                    subtitle: 'ອີງຕາມຕົ້ນທຶນຊື້',
+                    fixedWidth: 220,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildKpiCard(
+                    title: 'ໃກ້ໝົດສາງ (Low Stock)',
+                    value: '$lowStockCount ລາຍການ',
+                    icon: Icons.warning_amber_rounded,
+                    color: const Color(0xFFD97706),
+                    subtitle: 'ເຫຼືອຕ່ຳກວ່າ 2 ແກັດ',
+                    fixedWidth: 190,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildKpiCard(
+                    title: 'ໝົດສາງ (Out of Stock)',
+                    value: '$outOfStockCount ລາຍການ',
+                    icon: Icons.remove_circle_outline_rounded,
+                    color: AppColors.error,
+                    subtitle: 'ຕ້ອງການສັ່ງຊື້ດ່ວນ',
+                    fixedWidth: 190,
+                  ),
+                ],
+              ),
             ),
           ),
 
           const Divider(height: 1, color: AppColors.borderSubtle),
 
-          // 2. Filter & Search Bar with Stock Status Pills
+          // 2. Filter & Search Bar with Stock Status Pills (Scrollable horizontally)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             color: AppColors.surface,
-            child: Row(
-              children: [
-                // Search Input
-                Expanded(
-                  flex: 3,
-                  child: SizedBox(
-                    height: 40,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  // Search Input
+                  SizedBox(
+                    width: 260,
+                    height: 38,
                     child: TextField(
                       controller: _searchController,
                       style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        hintText: 'ຄົ້ນຫາຊື່ສິນຄ້າ, ບາໂຄດ, ຫຼື ໝວດໝູ່...',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                        hintText: 'ຄົ້ນຫາຊື່ສິນຄ້າ, ບາໂຄດ...',
                         prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppColors.textMuted),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
@@ -873,51 +883,51 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
+                  const SizedBox(width: 10),
 
-                // Category Dropdown
-                SizedBox(
-                  width: 210,
-                  height: 40,
-                  child: DropdownButtonFormField<String>(
-                    value: _selectedCategory,
-                    isDense: true,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.surfaceDark,
-                      fontWeight: FontWeight.w600,
+                  // Category Dropdown
+                  SizedBox(
+                    width: 180,
+                    height: 38,
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedCategory,
+                      isDense: true,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.surfaceDark,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      decoration: const InputDecoration(
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        prefixIcon: Icon(Icons.filter_list_rounded, size: 16, color: AppColors.textMuted),
+                      ),
+                      items: catalogState.categories.map((cat) {
+                        return DropdownMenuItem(
+                          value: cat,
+                          child: Text(cat, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedCategory = val);
+                      },
                     ),
-                    decoration: const InputDecoration(
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      prefixIcon: Icon(Icons.filter_list_rounded, size: 16, color: AppColors.textMuted),
-                    ),
-                    items: catalogState.categories.map((cat) {
-                      return DropdownMenuItem(
-                        value: cat,
-                        child: Text(cat, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) setState(() => _selectedCategory = val);
-                    },
                   ),
-                ),
-                const SizedBox(width: 12),
+                  const SizedBox(width: 10),
 
-                // Stock Status Pills
-                Row(
-                  children: [
-                    _buildStockFilterChip('ທັງໝົດ', StockStatusFilter.all, totalSkus, AppColors.primary),
-                    const SizedBox(width: 6),
-                    _buildStockFilterChip('ມີສິນຄ້າ', StockStatusFilter.inStock, inStockCount, const Color(0xFF047857)),
-                    const SizedBox(width: 6),
-                    _buildStockFilterChip('ໃກ້ໝົດ', StockStatusFilter.lowStock, lowStockCount, const Color(0xFFD97706)),
-                    const SizedBox(width: 6),
-                    _buildStockFilterChip('ໝົດສາງ', StockStatusFilter.outOfStock, outOfStockCount, AppColors.error),
-                  ],
-                ),
-              ],
+                  // Stock Status Pills
+                  Row(
+                    children: [
+                      _buildStockFilterChip('ທັງໝົດ', StockStatusFilter.all, totalSkus, AppColors.primary),
+                      const SizedBox(width: 6),
+                      _buildStockFilterChip('ມີສິນຄ້າ', StockStatusFilter.inStock, inStockCount, const Color(0xFF047857)),
+                      const SizedBox(width: 6),
+                      _buildStockFilterChip('ໃກ້ໝົດ', StockStatusFilter.lowStock, lowStockCount, const Color(0xFFD97706)),
+                      const SizedBox(width: 6),
+                      _buildStockFilterChip('ໝົດສາງ', StockStatusFilter.outOfStock, outOfStockCount, AppColors.error),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
 

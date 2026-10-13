@@ -422,79 +422,96 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
               const SizedBox(height: 20),
 
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Left Column (55%): Basic info, Image picker, Stock inventory
-                  Expanded(
-                    flex: 55,
-                    child: Column(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 760;
+
+                  final leftColumn = Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Section 1: Basic Info & Image
+                      _buildSectionCard(
+                        title: '1. ຂໍ້ມູນສິນຄ້າ & ຮູບພາບ (Basic Info & Image)',
+                        icon: Icons.inventory_2_outlined,
+                        children: [
+                          _buildImagePickerBox(),
+
+                          const SizedBox(height: 16),
+
+                          TextFormField(
+                            controller: _nameController,
+                            decoration: InputDecoration(
+                              labelText: 'ຊື່ສິນຄ້າ (Product Name) *',
+                              hintText: _currentMode == ProductTypeMode.beer
+                                  ? 'e.g. ເບຍລາວ ຂວດໃຫຍ່ 640ml (ລັງ 24 ແກ້ວ)'
+                                  : 'e.g. ເຂົ້າໜົມຊັອກໂກແລັດ, ຢາສູບ, ນ້ຳຫວານ...',
+                            ),
+                            validator: (val) => val == null || val.trim().isEmpty ? 'ກະລຸນາປ້ອນຊື່ສິນຄ້າ' : null,
+                          ),
+                          const SizedBox(height: 14),
+
+                          TextFormField(
+                            controller: _barcodeController,
+                            decoration: InputDecoration(
+                              labelText: 'ບາໂຄດ (Barcode)',
+                              hintText: '8850029010012',
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.qr_code_scanner),
+                                onPressed: () {
+                                  _barcodeController.text = '885${DateTime.now().millisecondsSinceEpoch.toString().substring(3, 13)}';
+                                },
+                                tooltip: 'ຈຳລອງການຍິງບາໂຄດ',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+
+                          Text(
+                            'ໝວດໝູ່ສິນຄ້າ:',
+                            style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 6),
+                          _buildCategorySelector(),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Section 2: Stock Inventory
+                      _buildStockInventoryCard(),
+                    ],
+                  );
+
+                  final rightColumn = _currentMode == ProductTypeMode.beer
+                      ? _buildBeerPricingCard()
+                      : _buildGroceryPricingCard();
+
+                  if (isCompact) {
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Section 1: Basic Info & Image
-                        _buildSectionCard(
-                          title: '1. ຂໍ້ມູນສິນຄ້າ & ຮູບພາບ (Basic Info & Image)',
-                          icon: Icons.inventory_2_outlined,
-                          children: [
-                            _buildImagePickerBox(),
-
-                            const SizedBox(height: 16),
-
-                            TextFormField(
-                              controller: _nameController,
-                              decoration: InputDecoration(
-                                labelText: 'ຊື່ສິນຄ້າ (Product Name) *',
-                                hintText: _currentMode == ProductTypeMode.beer
-                                    ? 'e.g. ເບຍລາວ ຂວດໃຫຍ່ 640ml (ລັງ 24 ແກ້ວ)'
-                                    : 'e.g. ເຂົ້າໜົມຊັອກໂກແລັດ, ຢາສູບ, ນ້ຳຫວານ...',
-                              ),
-                              validator: (val) => val == null || val.trim().isEmpty ? 'ກະລຸນາປ້ອນຊື່ສິນຄ້າ' : null,
-                            ),
-                            const SizedBox(height: 14),
-
-                            TextFormField(
-                              controller: _barcodeController,
-                              decoration: InputDecoration(
-                                labelText: 'ບາໂຄດ (Barcode)',
-                                hintText: '8850029010012',
-                                suffixIcon: IconButton(
-                                  icon: const Icon(Icons.qr_code_scanner),
-                                  onPressed: () {
-                                    _barcodeController.text = '885${DateTime.now().millisecondsSinceEpoch.toString().substring(3, 13)}';
-                                  },
-                                  tooltip: 'ຈຳລອງການຍິງບາໂຄດ',
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-
-                            Text(
-                              'ໝວດໝູ່ສິນຄ້າ:',
-                              style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 6),
-                            _buildCategorySelector(),
-                          ],
-                        ),
-
+                        leftColumn,
                         const SizedBox(height: 20),
-
-                        // Section 2: Stock Inventory
-                        _buildStockInventoryCard(),
+                        rightColumn,
                       ],
-                    ),
-                  ),
+                    );
+                  }
 
-                  const SizedBox(width: 20),
-
-                  // Right Column (45%): Mode-specific Pricing & Cost Splitting
-                  Expanded(
-                    flex: 45,
-                    child: _currentMode == ProductTypeMode.beer
-                        ? _buildBeerPricingCard()
-                        : _buildGroceryPricingCard(),
-                  ),
-                ],
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 55,
+                        child: leftColumn,
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        flex: 45,
+                        child: rightColumn,
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),

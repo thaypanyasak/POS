@@ -452,67 +452,75 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
       ),
       body: Column(
         children: [
-          // 1. KPI Top Metric Cards
+          // 1. KPI Top Metric Cards (Horizontal scrollable for mobile landscape)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             color: AppColors.surface,
-            child: Row(
-              children: [
-                _buildKpiCard(
-                  title: 'ຍອດຂາຍລວມ (Revenue)',
-                  value: LaoCurrencyFormatter.format(totalRev),
-                  icon: Icons.payments_rounded,
-                  color: AppColors.primary,
-                  subtitle: '${filteredTxs.length} ໃບບິນ',
-                ),
-                const SizedBox(width: 12),
-                _buildKpiCard(
-                  title: 'ກຳໄລລວມ (Gross Profit)',
-                  value: '+${LaoCurrencyFormatter.format(totalProfit)}',
-                  icon: Icons.trending_up_rounded,
-                  color: const Color(0xFF047857),
-                  subtitle: totalRev > 0 ? '${((totalProfit / totalRev) * 100).round()}% Margin' : '0%',
-                ),
-                const SizedBox(width: 12),
-                _buildKpiCard(
-                  title: 'ເງິນສົດ (Cash Sales)',
-                  value: LaoCurrencyFormatter.format(totalCash),
-                  icon: Icons.account_balance_wallet_rounded,
-                  color: const Color(0xFF2563EB),
-                  subtitle: 'ຊຳລະເງິນສົດ',
-                ),
-                const SizedBox(width: 12),
-                _buildKpiCard(
-                  title: 'QR ໂອນ (BCEL One)',
-                  value: LaoCurrencyFormatter.format(totalQr),
-                  icon: Icons.qr_code_scanner_rounded,
-                  color: AppColors.wholesaleDark,
-                  subtitle: 'ສະແກນ Lao QR',
-                ),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildKpiCard(
+                    title: 'ຍອດຂາຍລວມ (Revenue)',
+                    value: LaoCurrencyFormatter.format(totalRev),
+                    icon: Icons.payments_rounded,
+                    color: AppColors.primary,
+                    subtitle: '${filteredTxs.length} ໃບບິນ',
+                    fixedWidth: 210,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildKpiCard(
+                    title: 'ກຳໄລລວມ (Gross Profit)',
+                    value: '+${LaoCurrencyFormatter.format(totalProfit)}',
+                    icon: Icons.trending_up_rounded,
+                    color: const Color(0xFF047857),
+                    subtitle: totalRev > 0 ? '${((totalProfit / totalRev) * 100).round()}% Margin' : '0%',
+                    fixedWidth: 210,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildKpiCard(
+                    title: 'ເງິນສົດ (Cash Sales)',
+                    value: LaoCurrencyFormatter.format(totalCash),
+                    icon: Icons.account_balance_wallet_rounded,
+                    color: const Color(0xFF2563EB),
+                    subtitle: 'ຊຳລະເງິນສົດ',
+                    fixedWidth: 190,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildKpiCard(
+                    title: 'QR ໂອນ (BCEL One)',
+                    value: LaoCurrencyFormatter.format(totalQr),
+                    icon: Icons.qr_code_scanner_rounded,
+                    color: AppColors.wholesaleDark,
+                    subtitle: 'ສະແກນ Lao QR',
+                    fixedWidth: 190,
+                  ),
+                ],
+              ),
             ),
           ),
 
           const Divider(height: 1, color: AppColors.borderSubtle),
 
-          // 2. Filter Bar
+          // 2. Filter Bar (Horizontal scrollable for mobile landscape)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             color: AppColors.surface,
-            child: Row(
-              children: [
-                // Search Input
-                Expanded(
-                  flex: 3,
-                  child: SizedBox(
-                    height: 40,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  // Search Input
+                  SizedBox(
+                    width: 260,
+                    height: 38,
                     child: TextField(
                       controller: _searchController,
                       style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        hintText: 'ຄົ້ນຫາ ເລກທີບິນ (RC-...), ຊື່ລູກຄ້າ...',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                        hintText: 'ຄົ້ນຫາ ເລກທີບິນ (RC-...), ຊື່...',
                         prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppColors.textMuted),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
@@ -527,74 +535,74 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
-                ),
 
-                const SizedBox(width: 12),
+                  const SizedBox(width: 10),
 
-                // Date Timeframe Pills Container
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: AppColors.backgroundAlt,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.borderSubtle, width: 0.9),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildTimeframeChip('ທັງໝົດ', HistoryDateFilter.all),
-                      const SizedBox(width: 3),
-                      _buildTimeframeChip('ມື້ນີ້', HistoryDateFilter.today),
-                      const SizedBox(width: 3),
-                      _buildTimeframeChip('ອາທິດນີ້', HistoryDateFilter.thisWeek),
-                      const SizedBox(width: 3),
-                      _buildTimeframeChip('ເດືອນນີ້', HistoryDateFilter.thisMonth),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                // Payment Method Selector
-                Container(
-                  height: 40,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.borderSubtle, width: 0.9),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<PaymentMethod?>(
-                      value: _paymentFilter,
-                      hint: const Text(
-                        'ທຸກຮູບແບບຊຳລະ',
-                        style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: null,
-                          child: Text('ທຸກຮູບແບບຊຳລະ',
-                              style: TextStyle(fontSize: 12.5, color: AppColors.textPrimary)),
-                        ),
-                        DropdownMenuItem(
-                          value: PaymentMethod.cash,
-                          child: Text('ເງິນສົດ (Cash)',
-                              style: TextStyle(fontSize: 12.5, color: AppColors.textPrimary)),
-                        ),
-                        DropdownMenuItem(
-                          value: PaymentMethod.qrTransfer,
-                          child: Text('QR ໂອນ (BCEL)',
-                              style: TextStyle(fontSize: 12.5, color: AppColors.textPrimary)),
-                        ),
+                  // Date Timeframe Pills Container
+                  Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: AppColors.backgroundAlt,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.borderSubtle, width: 0.9),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildTimeframeChip('ທັງໝົດ', HistoryDateFilter.all),
+                        const SizedBox(width: 3),
+                        _buildTimeframeChip('ມື້ນີ້', HistoryDateFilter.today),
+                        const SizedBox(width: 3),
+                        _buildTimeframeChip('ອາທິດນີ້', HistoryDateFilter.thisWeek),
+                        const SizedBox(width: 3),
+                        _buildTimeframeChip('ເດືອນນີ້', HistoryDateFilter.thisMonth),
                       ],
-                      onChanged: (val) {
-                        setState(() => _paymentFilter = val);
-                      },
                     ),
                   ),
-                ),
-              ],
+
+                  const SizedBox(width: 10),
+
+                  // Payment Method Selector
+                  Container(
+                    height: 38,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.borderSubtle, width: 0.9),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<PaymentMethod?>(
+                        value: _paymentFilter,
+                        hint: const Text(
+                          'ທຸກຮູບແບບຊຳລະ',
+                          style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: null,
+                            child: Text('ທຸກຮູບແບບຊຳລະ',
+                                style: TextStyle(fontSize: 12.5, color: AppColors.textPrimary)),
+                          ),
+                          DropdownMenuItem(
+                            value: PaymentMethod.cash,
+                            child: Text('ເງິນສົດ (Cash)',
+                                style: TextStyle(fontSize: 12.5, color: AppColors.textPrimary)),
+                          ),
+                          DropdownMenuItem(
+                            value: PaymentMethod.qrTransfer,
+                            child: Text('QR ໂອນ (BCEL)',
+                                style: TextStyle(fontSize: 12.5, color: AppColors.textPrimary)),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          setState(() => _paymentFilter = val);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 
@@ -1013,16 +1021,17 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
     required IconData icon,
     required Color color,
     String? subtitle,
+    double? fixedWidth,
   }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.borderSubtle, width: 0.9),
-          boxShadow: AppColors.cardShadow,
-        ),
+    final cardContent = Container(
+      width: fixedWidth,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderSubtle, width: 0.9),
+        boxShadow: AppColors.cardShadow,
+      ),
         child: Row(
           children: [
             Container(
@@ -1080,7 +1089,8 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
             ),
           ],
         ),
-      ),
-    );
+      );
+
+    return fixedWidth != null ? cardContent : Expanded(child: cardContent);
   }
 }

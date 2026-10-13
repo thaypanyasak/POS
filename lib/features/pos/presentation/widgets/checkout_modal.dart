@@ -48,14 +48,24 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
     final change = LaoCurrencyFormatter.calculateChange(_tenderedAmount, cartState.grandTotal);
     final isCashSufficient = _paymentMethod == PaymentMethod.qrTransfer || _tenderedAmount >= cartState.grandTotal;
 
+    final screenSize = MediaQuery.of(context).size;
+    final isCompactLandscape = screenSize.height < 500;
+
     return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isCompactLandscape ? 16 : 40,
+        vertical: isCompactLandscape ? 10 : 24,
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       backgroundColor: AppColors.surface,
       surfaceTintColor: Colors.transparent,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 720),
+        constraints: BoxConstraints(
+          maxWidth: 620,
+          maxHeight: isCompactLandscape ? (screenSize.height - 20) : 720,
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: EdgeInsets.all(isCompactLandscape ? 14.0 : 24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -87,16 +97,19 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                 ],
               ),
 
-              const SizedBox(height: 16),
+              SizedBox(height: isCompactLandscape ? 8 : 16),
 
               // Total Due Banner
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isCompactLandscape ? 12 : 18,
+                  vertical: isCompactLandscape ? 8 : 14,
+                ),
                 decoration: BoxDecoration(
                   gradient: cartState.isWholesaleMode
                       ? AppColors.wholesaleGradient
                       : AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   boxShadow: [
                     BoxShadow(
                       color: cartState.isWholesaleMode
@@ -117,7 +130,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                           LaoStrings.netTotal,
                           style: TextStyle(
                             color: Colors.white70,
-                            fontSize: 13,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -132,8 +145,8 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                     ),
                     Text(
                       LaoCurrencyFormatter.format(cartState.grandTotal),
-                      style: const TextStyle(
-                        fontSize: 28,
+                      style: TextStyle(
+                        fontSize: isCompactLandscape ? 22 : 28,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                         letterSpacing: -0.5,
@@ -143,7 +156,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                 ),
               ),
 
-              const SizedBox(height: 16),
+              SizedBox(height: isCompactLandscape ? 8 : 16),
 
               // Payment Method Tabs
               Row(
@@ -154,15 +167,17 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                       icon: Icons.payments_rounded,
                       label: LaoStrings.cash,
                       isSelected: _paymentMethod == PaymentMethod.cash,
+                      isCompact: isCompactLandscape,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: _buildPaymentTab(
                       method: PaymentMethod.qrTransfer,
                       icon: Icons.qr_code_scanner_rounded,
                       label: LaoStrings.transfer,
                       isSelected: _paymentMethod == PaymentMethod.qrTransfer,
+                      isCompact: isCompactLandscape,
                     ),
                   ),
                 ],
@@ -292,13 +307,14 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
     required IconData icon,
     required String label,
     required bool isSelected,
+    bool isCompact = false,
   }) {
     return InkWell(
       onTap: () => setState(() => _paymentMethod = method),
       borderRadius: BorderRadius.circular(10),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 13),
+        padding: EdgeInsets.symmetric(vertical: isCompact ? 8 : 13),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.surface : AppColors.surfaceSubtle,
           borderRadius: BorderRadius.circular(10),

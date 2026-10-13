@@ -40,14 +40,24 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     final totalCost = _selectedUnit.costForUnit(widget.product.costPerBaseUnit) * _quantity;
     final totalProfit = totalAmount - totalCost;
 
+    final screenSize = MediaQuery.of(context).size;
+    final isCompactLandscape = screenSize.height < 500;
+
     return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isCompactLandscape ? 16 : 40,
+        vertical: isCompactLandscape ? 10 : 24,
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       backgroundColor: AppColors.surface,
       surfaceTintColor: Colors.transparent,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 540),
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
+        constraints: BoxConstraints(
+          maxWidth: 540,
+          maxHeight: isCompactLandscape ? (screenSize.height - 20) : 680,
+        ),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(isCompactLandscape ? 14.0 : 24.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -162,9 +162,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
             const SizedBox(height: 20),
 
-            // 5 Key Metric KPI Cards
+            // 5 Key Metric KPI Cards (Responsive column count)
             LayoutBuilder(
               builder: (context, constraints) {
+                final isCompact = constraints.maxWidth < 750;
+                final cardWidth3 = isCompact ? (constraints.maxWidth - 16) / 2 : (constraints.maxWidth - 32) / 3;
+                final cardWidth2 = (constraints.maxWidth - 16) / 2;
+
                 return Wrap(
                   spacing: 16,
                   runSpacing: 16,
@@ -175,7 +179,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       subtext: '${txs.length} ບິນຂາຍ • ສະເລ່ຍ/ບິນ: ${LaoCurrencyFormatter.format(avgBasket)}',
                       icon: Icons.payments,
                       accentColor: AppColors.primary,
-                      width: (constraints.maxWidth - 32) / 3,
+                      width: cardWidth3,
                     ),
                     _buildKpiCard(
                       title: '2. ຕົ້ນທຶນສິນຄ້າ (COGS)',
@@ -183,7 +187,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       subtext: 'ຕົ້ນທຶນສະສົມຕາມຫົວໜ່ວຍຫຼັກ',
                       icon: Icons.inventory_2,
                       accentColor: AppColors.textSecondary,
-                      width: (constraints.maxWidth - 32) / 3,
+                      width: cardWidth3,
                     ),
                     _buildKpiCard(
                       title: '3. ກຳໄລສຸດທິ (Gross Profit)',
@@ -192,7 +196,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       icon: Icons.trending_up,
                       accentColor: AppColors.primaryDark,
                       isHero: true,
-                      width: (constraints.maxWidth - 32) / 3,
+                      width: cardWidth3,
                     ),
                     _buildKpiCard(
                       title: '4. ຈຳນວນບິນ (Total Tickets)',
@@ -200,7 +204,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       subtext: 'ຍອດຂາຍສົ່ງ: ${txs.where((t) => t.isWholesale).length} • ຂາຍຍ່ອຍ: ${txs.where((t) => !t.isWholesale).length}',
                       icon: Icons.receipt_long,
                       accentColor: AppColors.wholesale,
-                      width: (constraints.maxWidth - 16) / 2,
+                      width: cardWidth2,
                     ),
                     _buildKpiCard(
                       title: '5. ແຍກປະເພດຊຳລະ (Payment Split)',
@@ -208,7 +212,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       subtext: 'ເງິນໂອນ (QR): ${LaoCurrencyFormatter.format(transferAmount)} ($transferTickets ບິນ)',
                       icon: Icons.pie_chart,
                       accentColor: AppColors.info,
-                      width: (constraints.maxWidth - 16) / 2,
+                      width: cardWidth2,
                     ),
                   ],
                 );
@@ -217,13 +221,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
             const SizedBox(height: 24),
 
-            // Bottom Split: Top Selling Items (Left 50%) + Recent Transactions Log (Right 50%)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Selling Items Widget (ສິນຄ້າຂາຍດີສຸດ)
-                Expanded(
-                  child: Container(
+            // Bottom Split: Top Selling Items + Recent Transactions Log
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 750;
+                final widgets = [
+                  // Top Selling Items Widget (ສິນຄ້າຂາຍດີສຸດ)
+                  Container(
+                    width: isNarrow ? constraints.maxWidth : (constraints.maxWidth - 20) / 2,
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: AppColors.surface,
@@ -295,13 +300,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ],
                     ),
                   ),
-                ),
-
-                const SizedBox(width: 20),
-
-                // Recent Transactions Log
-                Expanded(
-                  child: Container(
+                  Container(
+                    width: isNarrow ? constraints.maxWidth : (constraints.maxWidth - 20) / 2,
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: AppColors.surface,
@@ -375,8 +375,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ],
                     ),
                   ),
-                ),
-              ],
+                ];
+
+                return Wrap(
+                  spacing: 20,
+                  runSpacing: 20,
+                  children: widgets,
+                );
+              },
             ),
           ],
         ),
