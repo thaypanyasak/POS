@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="meiishop">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>meiishop</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    @media print {
+      @page {
+        size: 80mm auto;
+        margin: 0;
+      }
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 80mm !important;
+        background: #ffffff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .receipt-container, #receipt-print-area {
+        width: 100% !important;
+        max-width: 80mm !important;
+        margin: 0 auto !important;
+        padding: 3mm 4mm !important;
+        box-sizing: border-box !important;
+      }
+      .no-print, header, nav, .sidebar {
+        display: none !important;
+      }
+    }
+  </style>
+  <script>
+    window.printReceiptImage = function(base64DataUri, paperWidthMm) {
+      try {
+        var widthMm = (paperWidthMm === 58) ? 58 : 80;
+        var existingFrame = document.getElementById('receipt-print-frame');
+        if (existingFrame) {
+          existingFrame.remove();
+        }
+        var printFrame = document.createElement('iframe');
+        printFrame.id = 'receipt-print-frame';
+        printFrame.style.position = 'fixed';
+        printFrame.style.right = '0';
+        printFrame.style.bottom = '0';
+        printFrame.style.width = '0';
+        printFrame.style.height = '0';
+        printFrame.style.border = '0';
+        document.body.appendChild(printFrame);
+
+        var doc = printFrame.contentWindow.document;
+        doc.open();
+        doc.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>MeiiShop Receipt</title>' +
+          '<style>' +
+          '@page {' +
+          '  size: ' + widthMm + 'mm auto;' +
+          '  margin: 0;' +
+          '}' +
+          '@media print {' +
+          '  @page {' +
+          '    size: ' + widthMm + 'mm auto;' +
+          '    margin: 0;' +
+          '  }' +
+          '  html, body {' +
+          '    margin: 0 !important;' +
+          '    padding: 0 !important;' +
+          '    width: ' + widthMm + 'mm !important;' +
+          '    background: #ffffff !important;' +
+          '    -webkit-print-color-adjust: exact !important;' +
+          '    print-color-adjust: exact !important;' +
+          '  }' +
+          '  .receipt-container, #receipt-print-area {' +
+          '    width: 100% !important;' +
+          '    max-width: ' + widthMm + 'mm !important;' +
+          '    margin: 0 auto !important;' +
+          '    padding: 3mm 4mm !important;' +
+          '    box-sizing: border-box !important;' +
+          '  }' +
+          '  img#receipt-img {' +
+          '    width: 100% !important;' +
+          '    max-width: 100% !important;' +
+          '    height: auto !important;' +
+          '    display: block !important;' +
+          '    margin: 0 auto !important;' +
+          '    page-break-inside: avoid !important;' +
+          '    break-inside: avoid !important;' +
+          '    page-break-after: avoid !important;' +
+          '    break-after: avoid !important;' +
+          '  }' +
+          '  .no-print, header, nav, .sidebar {' +
+          '    display: none !important;' +
+          '  }' +
+          '}' +
+          'html, body {' +
+          '  margin: 0;' +
+          '  padding: 0;' +
+          '  width: ' + widthMm + 'mm;' +
+          '  background: #ffffff;' +
+          '}' +
+          '.receipt-container, #receipt-print-area {' +
+          '  width: 100%;' +
+          '  max-width: ' + widthMm + 'mm;' +
+          '  margin: 0 auto;' +
+          '  padding: 3mm 4mm;' +
+          '  box-sizing: border-box;' +
+          '}' +
+          'img#receipt-img {' +
+          '  width: 100%;' +
+          '  max-width: 100%;' +
+          '  height: auto;' +
+          '  display: block;' +
+          '  margin: 0 auto;' +
+          '}' +
+          '</style>' +
+          '</head><body>' +
+          '<div class="receipt-container" id="receipt-print-area">' +
+          '<img id="receipt-img" src="' + base64DataUri + '" onload="setTimeout(function(){window.focus();window.print();},250);"/>' +
+          '</div>' +
+          '</body></html>');
+        doc.close();
+      } catch (err) {
+        console.error('Print receipt error:', err);
+        window.print();
+      }
+    };
+  </script>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
