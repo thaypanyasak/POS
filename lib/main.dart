@@ -11,8 +11,10 @@ import 'features/navigation/main_shell.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Strictly lock orientation to Landscape for iPad / Tablet POS Workstation
+  // 1. Support all orientations (Portrait, UpsideDown, LandscapeLeft, LandscapeRight)
   await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
