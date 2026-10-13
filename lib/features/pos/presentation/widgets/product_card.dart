@@ -8,16 +8,17 @@ import '../../../../domain/models/product_unit.dart';
 
 /// Minimal, Modern Product Card for POS Station
 /// - Clean card design with subtle borders, smooth micro-shadows, and elegant typography
-/// - Dynamic packaging action pills: [Sub-unit (ແກ້ວ/ແພັກ/ກະປ໋ອງ)] and [Carton (ແກັດ/ລັງ)]
+/// - Compact layout: big thumbnail (with stock badge overlaid), product name,
+///   then full-width price action pills [Sub-unit (ແກ້ວ/ແພັກ/ກະປ໋ອງ)] and [Carton (ແກັດ/ລັງ)]
+/// - No category pill, no tune/customize button: maximum space for image, name & prices
 /// - Automatic single full-width tier for Beer (e.g. [ລັງ 265.000 ₭])
 /// - Lao currency formatted with dots e.g. `70.000 ₭`
-/// - Dynamic compound stock indicator
+/// - Dynamic compound stock indicator (overlaid on thumbnail)
 class ProductCard extends StatelessWidget {
   final Product product;
   final bool isWholesaleMode;
   final VoidCallback onTap;
   final ValueChanged<ProductUnit> onSelectUnit;
-  final VoidCallback onOpenUnitSelector;
 
   const ProductCard({
     super.key,
@@ -25,7 +26,6 @@ class ProductCard extends StatelessWidget {
     required this.isWholesaleMode,
     required this.onTap,
     required this.onSelectUnit,
-    required this.onOpenUnitSelector,
   });
 
   @override
@@ -61,70 +61,48 @@ class ProductCard extends StatelessWidget {
             boxShadow: AppColors.cardShadow,
           ),
           child: Padding(
-            padding: const EdgeInsets.all(9.0),
+            padding: const EdgeInsets.all(8.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Top Row: Category Pill & Stock Status with Dot
+                // 1. Top Row: Big Thumbnail (stock badge overlaid) + Product Name
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceSubtle,
-                          borderRadius: BorderRadius.circular(6),
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        _buildProductImageOrFallback(),
+                        Positioned(
+                          top: -4,
+                          left: -4,
+                          child: _buildStockBadge(context),
                         ),
-                        child: Text(
-                          product.category,
-                          style: const TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      ],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        product.name,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                          height: 1.25,
+                          color: isOutOfStock
+                              ? AppColors.textMuted
+                              : AppColors.textPrimary,
+                          letterSpacing: -0.2,
                         ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    _buildStockBadge(context),
                   ],
                 ),
 
-                const SizedBox(height: 7),
+                const SizedBox(height: 6),
 
-                // 2. Middle Row: Thumbnail (or fallback icon) + Product Name
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildProductImageOrFallback(),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          product.name,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                            height: 1.25,
-                            color: isOutOfStock
-                                ? AppColors.textMuted
-                                : AppColors.textPrimary,
-                            letterSpacing: -0.2,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 7),
-
-                // 3. Bottom Row: Minimal Unit Action Pills
+                // 2. Bottom Row: Full-width Unit Price Pills (no tune button)
                 Row(
                   children: [
                     if (isSingleTier) ...[
@@ -160,25 +138,6 @@ class ProductCard extends StatelessWidget {
                         ),
                       ],
                     ],
-                    const SizedBox(width: 5),
-                    // Quick Tune / Custom Stepper Trigger
-                    InkWell(
-                      onTap: onOpenUnitSelector,
-                      borderRadius: BorderRadius.circular(7),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceSubtle,
-                          borderRadius: BorderRadius.circular(7),
-                          border: Border.all(color: AppColors.border, width: 0.8),
-                        ),
-                        child: Icon(
-                          Icons.tune_rounded,
-                          size: 14,
-                          color: isWholesaleMode ? AppColors.wholesale : AppColors.primary,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ],
@@ -193,11 +152,11 @@ class ProductCard extends StatelessWidget {
     if (product.imageUrl != null && product.imageUrl!.isNotEmpty) {
       final isDataUri = ImageCompressService.isDataUri(product.imageUrl!);
       return Container(
-        width: 36,
-        height: 36,
+        width: 60,
+        height: 60,
         decoration: BoxDecoration(
           color: AppColors.surfaceSubtle,
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppColors.border, width: 0.8),
         ),
         clipBehavior: Clip.antiAlias,
@@ -241,15 +200,15 @@ class ProductCard extends StatelessWidget {
     }
 
     return Container(
-      width: 36,
-      height: 36,
+      width: 60,
+      height: 60,
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.borderSubtle, width: 0.8),
       ),
       child: Center(
-        child: Icon(icon, size: 18, color: iconColor),
+        child: Icon(icon, size: 30, color: iconColor),
       ),
     );
   }
@@ -278,7 +237,7 @@ class ProductCard extends StatelessWidget {
         onTap: () => onSelectUnit(unit),
         borderRadius: BorderRadius.circular(7),
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
           decoration: BoxDecoration(
             color: activeBg,
             borderRadius: BorderRadius.circular(7),
@@ -293,7 +252,7 @@ class ProductCard extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 10.5,
                   fontWeight: FontWeight.w700,
                   color: activeDark,
                 ),
@@ -303,7 +262,7 @@ class ProductCard extends StatelessWidget {
               Text(
                 LaoCurrencyFormatter.format(price),
                 style: TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 11.5,
                   fontWeight: FontWeight.w900,
                   color: activeDark,
                   letterSpacing: -0.2,
@@ -318,19 +277,29 @@ class ProductCard extends StatelessWidget {
     );
   }
 
+  /// Compact stock badge, overlaid on the thumbnail's top-left corner.
   Widget _buildStockBadge(BuildContext context) {
+    const badgeShadow = [
+      BoxShadow(
+        color: Color(0x33000000),
+        offset: Offset(0, 1),
+        blurRadius: 3,
+      ),
+    ];
+
     if (!product.trackStock) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
         decoration: BoxDecoration(
           color: AppColors.infoLight,
           borderRadius: BorderRadius.circular(5),
           border: Border.all(color: AppColors.infoBorder, width: 0.7),
+          boxShadow: badgeShadow,
         ),
         child: const Text(
           'ບໍ່ນັບສາງ',
           style: TextStyle(
-            fontSize: 9,
+            fontSize: 8.5,
             fontWeight: FontWeight.w600,
             color: AppColors.info,
           ),
@@ -340,11 +309,12 @@ class ProductCard extends StatelessWidget {
 
     if (product.currentStockBaseUnits <= 0) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
         decoration: BoxDecoration(
           color: AppColors.errorLight,
           borderRadius: BorderRadius.circular(5),
           border: Border.all(color: AppColors.errorBorder, width: 0.7),
+          boxShadow: badgeShadow,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -357,11 +327,11 @@ class ProductCard extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 3),
             const Text(
               'ໝົດສາງ',
               style: TextStyle(
-                fontSize: 9,
+                fontSize: 8.5,
                 fontWeight: FontWeight.w700,
                 color: AppColors.error,
               ),
@@ -374,7 +344,7 @@ class ProductCard extends StatelessWidget {
     final isLowStock = product.currentStockBaseUnits <= (product.highestTierUnit.multiplier * 2);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
         color: isLowStock ? AppColors.warningLight : AppColors.surfaceSubtle,
         borderRadius: BorderRadius.circular(5),
@@ -382,6 +352,7 @@ class ProductCard extends StatelessWidget {
           color: isLowStock ? AppColors.wholesaleBorder : AppColors.border,
           width: 0.7,
         ),
+        boxShadow: badgeShadow,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -394,11 +365,11 @@ class ProductCard extends StatelessWidget {
               shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 3),
           Text(
             product.stockBadgeText,
             style: TextStyle(
-              fontSize: 9,
+              fontSize: 8.5,
               fontWeight: FontWeight.w600,
               color: isLowStock ? AppColors.warning : AppColors.textSecondary,
             ),
