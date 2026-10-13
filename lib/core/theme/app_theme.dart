@@ -44,7 +44,7 @@ class AppTheme {
       ),
       dividerColor: AppColors.border,
       cardColor: AppColors.surface,
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -52,7 +52,7 @@ class AppTheme {
           side: const BorderSide(color: AppColors.border, width: 0.9),
         ),
       ),
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surface,
         elevation: 12,
         shadowColor: const Color(0x1F0F172A),
