@@ -53,19 +53,22 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
 
     return Dialog(
       insetPadding: EdgeInsets.symmetric(
-        horizontal: isCompactLandscape ? 16 : 40,
-        vertical: isCompactLandscape ? 10 : 24,
+        horizontal: isCompactLandscape ? 12 : 40,
+        vertical: isCompactLandscape ? 6 : 24,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       backgroundColor: AppColors.surface,
       surfaceTintColor: Colors.transparent,
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: 620,
-          maxHeight: isCompactLandscape ? (screenSize.height - 20) : 720,
+          maxWidth: isCompactLandscape ? 660 : 620,
+          maxHeight: isCompactLandscape ? (screenSize.height - 12) : 720,
         ),
         child: Padding(
-          padding: EdgeInsets.all(isCompactLandscape ? 14.0 : 24.0),
+          padding: EdgeInsets.symmetric(
+            horizontal: isCompactLandscape ? 14.0 : 24.0,
+            vertical: isCompactLandscape ? 10.0 : 20.0,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -78,13 +81,16 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                     children: [
                       Text(
                         LaoStrings.pay,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: isCompactLandscape
+                            ? const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.textPrimary)
+                            : theme.textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                       ),
                       Text(
                         '${cartState.customer.name} • ${cartState.isWholesaleMode ? LaoStrings.wholesale : LaoStrings.retail}',
-                        style: theme.textTheme.bodyMedium?.copyWith(
+                        style: TextStyle(
+                          fontSize: isCompactLandscape ? 11 : 13,
                           color: AppColors.textSecondary,
                         ),
                       ),
@@ -92,31 +98,33 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, color: AppColors.textMuted),
+                    icon: Icon(Icons.close, color: AppColors.textMuted, size: isCompactLandscape ? 18 : 22),
+                    padding: isCompactLandscape ? EdgeInsets.zero : const EdgeInsets.all(8),
+                    constraints: isCompactLandscape ? const BoxConstraints() : null,
                   ),
                 ],
               ),
 
-              SizedBox(height: isCompactLandscape ? 8 : 16),
+              SizedBox(height: isCompactLandscape ? 6 : 14),
 
               // Total Due Banner
               Container(
                 padding: EdgeInsets.symmetric(
-                  horizontal: isCompactLandscape ? 12 : 18,
-                  vertical: isCompactLandscape ? 8 : 14,
+                  horizontal: isCompactLandscape ? 10 : 18,
+                  vertical: isCompactLandscape ? 6 : 12,
                 ),
                 decoration: BoxDecoration(
                   gradient: cartState.isWholesaleMode
                       ? AppColors.wholesaleGradient
                       : AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(9),
                   boxShadow: [
                     BoxShadow(
                       color: cartState.isWholesaleMode
                           ? const Color(0x26D97706)
                           : const Color(0x26059669),
-                      offset: const Offset(0, 4),
-                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                      blurRadius: 8,
                     ),
                   ],
                 ),
@@ -126,19 +134,19 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           LaoStrings.netTotal,
                           style: TextStyle(
                             color: Colors.white70,
-                            fontSize: 12,
+                            fontSize: isCompactLandscape ? 10.5 : 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
                           '${cartState.items.length} ${LaoStrings.products} (${cartState.totalQuantity} ຊິ້ນ)',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white60,
-                            fontSize: 11,
+                            fontSize: isCompactLandscape ? 9.5 : 11,
                           ),
                         ),
                       ],
@@ -146,7 +154,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                     Text(
                       LaoCurrencyFormatter.format(cartState.grandTotal),
                       style: TextStyle(
-                        fontSize: isCompactLandscape ? 22 : 28,
+                        fontSize: isCompactLandscape ? 18 : 26,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                         letterSpacing: -0.5,
@@ -156,7 +164,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                 ),
               ),
 
-              SizedBox(height: isCompactLandscape ? 8 : 16),
+              SizedBox(height: isCompactLandscape ? 6 : 12),
 
               // Payment Method Tabs
               Row(
@@ -170,7 +178,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                       isCompact: isCompactLandscape,
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: isCompactLandscape ? 8 : 10),
                   Expanded(
                     child: _buildPaymentTab(
                       method: PaymentMethod.qrTransfer,
@@ -183,7 +191,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                 ],
               ),
 
-              const SizedBox(height: 14),
+              SizedBox(height: isCompactLandscape ? 6 : 12),
 
               // Tender Area
               Expanded(
@@ -194,29 +202,37 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                 ),
               ),
 
-              const SizedBox(height: 12),
+              SizedBox(height: isCompactLandscape ? 5 : 10),
               const Divider(color: AppColors.border, height: 1),
-              const SizedBox(height: 10),
+              SizedBox(height: isCompactLandscape ? 5 : 8),
 
               // Printer Options & Trigger
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Checkbox(
-                        value: _shouldPrintReceipt,
-                        activeColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                        onChanged: (val) {
-                          setState(() => _shouldPrintReceipt = val ?? true);
-                        },
+                      SizedBox(
+                        width: isCompactLandscape ? 22 : 30,
+                        height: isCompactLandscape ? 22 : 30,
+                        child: Checkbox(
+                          value: _shouldPrintReceipt,
+                          activeColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                          onChanged: (val) {
+                            setState(() => _shouldPrintReceipt = val ?? true);
+                          },
+                        ),
                       ),
+                      const SizedBox(width: 6),
                       Text(
                         '${LaoStrings.printReceipt} (ESC/POS)',
-                        style: theme.textTheme.bodyMedium?.copyWith(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          fontSize: 13,
+                          fontSize: isCompactLandscape ? 11.5 : 13,
                         ),
                       ),
                     ],
@@ -231,29 +247,40 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.sensor_door_outlined, size: 17),
-                    label: const Text(LaoStrings.openDrawer),
+                    icon: Icon(Icons.sensor_door_outlined, size: isCompactLandscape ? 15 : 17),
+                    label: Text(
+                      LaoStrings.openDrawer,
+                      style: TextStyle(fontSize: isCompactLandscape ? 11.5 : 13),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCompactLandscape ? 6 : 10,
+                        vertical: isCompactLandscape ? 2 : 6,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
                 ],
               ),
 
-              const SizedBox(height: 10),
+              SizedBox(height: isCompactLandscape ? 6 : 10),
 
               // Final Pay Button
               SizedBox(
-                height: 48,
+                height: isCompactLandscape ? 38 : 48,
                 child: Container(
                   decoration: BoxDecoration(
                     gradient: isCashSufficient
                         ? AppColors.primaryGradient
                         : null,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(9),
                     boxShadow: isCashSufficient
-                        ? const [
+                        ? [
                             BoxShadow(
-                              color: Color(0x33059669),
-                              offset: Offset(0, 3),
-                              blurRadius: 8,
+                              color: const Color(0x33059669),
+                              offset: const Offset(0, 2),
+                              blurRadius: isCompactLandscape ? 5 : 8,
                             ),
                           ]
                         : null,
@@ -270,27 +297,34 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                           ? Colors.white
                           : AppColors.textMuted,
                       shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
                     ),
                     child: printerState.isPrinting
                         ? const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               SizedBox(
-                                width: 18,
-                                height: 18,
+                                width: 16,
+                                height: 16,
                                 child: CircularProgressIndicator(
                                   color: Colors.white,
                                   strokeWidth: 2,
                                 ),
                               ),
-                              SizedBox(width: 12),
-                              Text('ກຳລັງປະມວນຜົນ...', style: TextStyle(fontWeight: FontWeight.w700)),
+                              SizedBox(width: 8),
+                              Text('ກຳລັງປະມວນຜົນ...', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
                             ],
                           )
-                        : Text(
-                            '${LaoStrings.confirmPayment} (${LaoCurrencyFormatter.format(cartState.grandTotal)})',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                        : FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${LaoStrings.confirmPayment} (${LaoCurrencyFormatter.format(cartState.grandTotal)})',
+                              style: TextStyle(
+                                fontSize: isCompactLandscape ? 13.5 : 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
                   ),
                 ),
@@ -311,16 +345,16 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
   }) {
     return InkWell(
       onTap: () => setState(() => _paymentMethod = method),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(8),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: EdgeInsets.symmetric(vertical: isCompact ? 8 : 13),
+        padding: EdgeInsets.symmetric(vertical: isCompact ? 6 : 11),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.surface : AppColors.surfaceSubtle,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isSelected ? AppColors.primary : AppColors.border,
-            width: isSelected ? 1.6 : 0.9,
+            width: isSelected ? 1.5 : 0.8,
           ),
           boxShadow: isSelected ? AppColors.cardShadow : null,
         ),
@@ -330,13 +364,13 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
             Icon(
               icon,
               color: isSelected ? AppColors.primary : AppColors.textSecondary,
-              size: 21,
+              size: isCompact ? 16 : 20,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: isCompact ? 12 : 14,
                 fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                 color: isSelected ? AppColors.primaryDark : AppColors.textSecondary,
               ),
@@ -349,6 +383,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
 
   Widget _buildCashTenderView(int grandTotal, int change) {
     final breakdown = LaoCurrencyFormatter.breakdownChange(change);
+    final isCompactLandscape = MediaQuery.of(context).size.height < 500;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -361,9 +396,9 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
         ),
 
         if (change > 0 && breakdown.isNotEmpty) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: isCompactLandscape ? 6 : 12),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(isCompactLandscape ? 6 : 12),
             decoration: BoxDecoration(
               color: AppColors.surfaceSubtle,
               borderRadius: BorderRadius.circular(8),
@@ -372,17 +407,24 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'ແນະນຳໃບເງິນທອນ:',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: isCompactLandscape ? 10 : 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: isCompactLandscape ? 3 : 6),
                 Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
+                  spacing: isCompactLandscape ? 4 : 6,
+                  runSpacing: isCompactLandscape ? 3 : 4,
                   children: breakdown.entries.map((entry) {
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCompactLandscape ? 5 : 8,
+                        vertical: isCompactLandscape ? 2 : 3,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.surface,
                         borderRadius: BorderRadius.circular(4),
@@ -390,7 +432,10 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                       ),
                       child: Text(
                         '${LaoCurrencyFormatter.format(entry.key, includeSymbol: false)} x ${entry.value} ໃບ',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: isCompactLandscape ? 10 : 11,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     );
                   }).toList(),
@@ -404,51 +449,56 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
   }
 
   Widget _buildQrTransferView(int grandTotal) {
+    final isCompactLandscape = MediaQuery.of(context).size.height < 500;
+
     return Center(
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isCompactLandscape ? 8 : 16),
         decoration: BoxDecoration(
           color: AppColors.surfaceSubtle,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppColors.border),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: EdgeInsets.symmetric(
+                horizontal: isCompactLandscape ? 8 : 12,
+                vertical: isCompactLandscape ? 3 : 6,
+              ),
               decoration: BoxDecoration(
                 color: const Color(0xFFDC2626), // BCEL Red
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(5),
               ),
-              child: const Text(
+              child: Text(
                 'BCEL One / Lao QR Payment',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  fontSize: isCompactLandscape ? 11 : 13,
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: isCompactLandscape ? 6 : 12),
             // QR Code image (public/qr.jpg)
             Container(
-              width: 200,
-              height: 200,
+              width: isCompactLandscape ? 110 : 180,
+              height: isCompactLandscape ? 110 : 180,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border, width: 2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border, width: 1.5),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 8,
+                    blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
               clipBehavior: Clip.antiAlias,
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(6),
               child: Image.asset(
                 'public/qr.jpg',
                 fit: BoxFit.contain,
@@ -458,10 +508,10 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                   errorBuilder: (_, __, ___) => Image.network(
                     'public/qr.jpg',
                     fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Center(
+                    errorBuilder: (_, __, ___) => Center(
                       child: Icon(
                         Icons.qr_code_2,
-                        size: 140,
+                        size: isCompactLandscape ? 70 : 120,
                         color: AppColors.textPrimary,
                       ),
                     ),
@@ -469,19 +519,22 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: isCompactLandscape ? 6 : 10),
             Text(
               'ຍອດໂອນ: ${LaoCurrencyFormatter.format(grandTotal)}',
-              style: const TextStyle(
-                fontSize: 18,
+              style: TextStyle(
+                fontSize: isCompactLandscape ? 14 : 18,
                 fontWeight: FontWeight.w800,
                 color: AppColors.textPrimary,
               ),
             ),
-            const SizedBox(height: 4),
-            const Text(
+            const SizedBox(height: 2),
+            Text(
               'ສະແກນ QR ຜ່ານແອັບທະນາຄານເພື່ອຊຳລະເງິນ',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: TextStyle(
+                fontSize: isCompactLandscape ? 10.5 : 12,
+                color: AppColors.textSecondary,
+              ),
             ),
           ],
         ),
