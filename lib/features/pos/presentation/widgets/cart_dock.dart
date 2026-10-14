@@ -122,6 +122,8 @@ class _CartDockState extends ConsumerState<CartDock> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cartState = ref.watch(cartProvider);
+    final screenSize = MediaQuery.of(context).size;
+    final isCompactLandscape = screenSize.height < 500;
 
     // Keep customer text field in sync if cart customer changes via external events (like clear cart)
     final currentCustomerName = cartState.customer.name;
@@ -144,7 +146,10 @@ class _CartDockState extends ConsumerState<CartDock> {
         children: [
           // Header: Customer Input, Hold/Clear & Wholesale/Retail Mode
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            padding: EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: isCompactLandscape ? 6 : 11,
+            ),
             decoration: const BoxDecoration(
               color: AppColors.surface,
               border: Border(bottom: BorderSide(color: AppColors.border, width: 0.9)),
@@ -157,7 +162,7 @@ class _CartDockState extends ConsumerState<CartDock> {
                     // Customer Name Input Field
                     Expanded(
                       child: Container(
-                        height: 38,
+                        height: isCompactLandscape ? 34 : 38,
                         decoration: BoxDecoration(
                           color: AppColors.surfaceSubtle,
                           borderRadius: BorderRadius.circular(9),
@@ -354,151 +359,166 @@ class _CartDockState extends ConsumerState<CartDock> {
           ),
 
           // Bottom Checkout Dock
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              border: Border(top: BorderSide(color: AppColors.border, width: 0.9)),
-              boxShadow: [
-                BoxShadow(
-                  color: Color(0x0A0F172A),
-                  offset: Offset(0, -3),
-                  blurRadius: 8,
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Subtotal & Discount rows
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${LaoStrings.subtotal} (${cartState.totalQuantity} ຊິ້ນ):',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                    Text(
-                      LaoCurrencyFormatter.format(cartState.subtotal),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ],
-                ),
-
-                if (cartState.discountTotal > 0) ...[
-                  const SizedBox(height: 2),
+          SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            bottom: true,
+            child: Container(
+              padding: EdgeInsets.fromLTRB(
+                10,
+                isCompactLandscape ? 5 : 8,
+                10,
+                isCompactLandscape ? 6 : 8,
+              ),
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                border: Border(top: BorderSide(color: AppColors.border, width: 0.9)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x0A0F172A),
+                    offset: Offset(0, -3),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Subtotal & Discount rows
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '${LaoStrings.discount}:',
+                        '${LaoStrings.subtotal} (${cartState.totalQuantity} ຊິ້ນ):',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.error,
-                          fontSize: 11.5,
+                          color: AppColors.textSecondary,
+                          fontSize: isCompactLandscape ? 10.5 : 11.5,
                         ),
                       ),
                       Text(
-                        '-${LaoCurrencyFormatter.format(cartState.discountTotal)}',
+                        LaoCurrencyFormatter.format(cartState.subtotal),
                         style: theme.textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.error,
-                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          fontSize: isCompactLandscape ? 10.5 : 11.5,
                         ),
                       ),
                     ],
                   ),
-                ],
 
-                const SizedBox(height: 4),
-
-                // Prominent Total in Lao Kip
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      LaoStrings.total,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13.5,
-                      ),
-                    ),
-                    Text(
-                      LaoCurrencyFormatter.format(cartState.grandTotal),
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5,
-                        color: cartState.isWholesaleMode
-                            ? AppColors.wholesaleDark
-                            : AppColors.primaryDark,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 8),
-
-                // Full-width Prominent Pay Button with subtle gradient
-                SizedBox(
-                  height: 48,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: cartState.isWholesaleMode
-                          ? AppColors.wholesaleGradient
-                          : AppColors.primaryGradient,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: cartState.isWholesaleMode
-                              ? const Color(0x33D97706)
-                              : const Color(0x33059669),
-                          offset: const Offset(0, 3),
-                          blurRadius: 8,
+                  if (cartState.discountTotal > 0) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${LaoStrings.discount}:',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppColors.error,
+                            fontSize: isCompactLandscape ? 10.5 : 11.5,
+                          ),
+                        ),
+                        Text(
+                          '-${LaoCurrencyFormatter.format(cartState.discountTotal)}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.error,
+                            fontSize: isCompactLandscape ? 10.5 : 11.5,
+                          ),
                         ),
                       ],
                     ),
-                    child: ElevatedButton(
-                      onPressed: cartState.isEmpty
-                          ? null
-                          : () {
-                              showDialog(
-                                context: context,
-                                builder: (ctx) => const CheckoutModal(),
-                              );
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                  ],
+
+                  SizedBox(height: isCompactLandscape ? 2 : 4),
+
+                  // Prominent Total in Lao Kip
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        LaoStrings.total,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          fontSize: isCompactLandscape ? 12.5 : 13.5,
                         ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.payment_rounded, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${LaoStrings.pay} • ${LaoCurrencyFormatter.format(cartState.grandTotal)}',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.2,
-                            ),
+                      Text(
+                        LaoCurrencyFormatter.format(cartState.grandTotal),
+                        style: TextStyle(
+                          fontSize: isCompactLandscape ? 18 : 22,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
+                          color: cartState.isWholesaleMode
+                              ? AppColors.wholesaleDark
+                              : AppColors.primaryDark,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  SizedBox(height: isCompactLandscape ? 5 : 8),
+
+                  // Full-width Prominent Pay Button with subtle gradient
+                  SizedBox(
+                    height: isCompactLandscape ? 40 : 48,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: cartState.isWholesaleMode
+                            ? AppColors.wholesaleGradient
+                            : AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(9),
+                        boxShadow: [
+                          BoxShadow(
+                            color: cartState.isWholesaleMode
+                                ? const Color(0x33D97706)
+                                : const Color(0x33059669),
+                            offset: const Offset(0, 2),
+                            blurRadius: 6,
                           ),
                         ],
                       ),
+                      child: ElevatedButton(
+                        onPressed: cartState.isEmpty
+                            ? null
+                            : () {
+                                showDialog(
+                                  context: context,
+                                  builder: (ctx) => const CheckoutModal(),
+                                );
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.payment_rounded, size: isCompactLandscape ? 18 : 20),
+                            const SizedBox(width: 6),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                '${LaoStrings.pay} • ${LaoCurrencyFormatter.format(cartState.grandTotal)}',
+                                style: TextStyle(
+                                  fontSize: isCompactLandscape ? 14 : 16,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],

@@ -89,11 +89,11 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final screenWidth = constraints.maxWidth;
-            // On compact mobile landscape (width < 900): 58% catalog, 42% cart
+            // On compact mobile landscape (width < 900): 62% catalog, 38% cart
             // On larger tablet landscape: 65% catalog, 35% cart
             final isCompactMobile = screenWidth < 900;
-            final catalogFlex = isCompactMobile ? 58 : 65;
-            final cartFlex = isCompactMobile ? 42 : 35;
+            final catalogFlex = isCompactMobile ? 62 : 65;
+            final cartFlex = isCompactMobile ? 38 : 35;
 
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,

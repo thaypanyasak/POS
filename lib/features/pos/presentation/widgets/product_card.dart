@@ -46,6 +46,7 @@ class ProductCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onOpenUnitSelector,
         borderRadius: BorderRadius.circular(14),
         splashColor: AppColors.primaryLight.withValues(alpha: 0.3),
         child: Ink(
@@ -61,46 +62,26 @@ class ProductCard extends StatelessWidget {
             boxShadow: AppColors.cardShadow,
           ),
           child: Padding(
-            padding: const EdgeInsets.all(9.0),
+            padding: const EdgeInsets.all(7.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Top Row: Category Pill & Stock Status with Dot
+                // 1. Top Row: Stock Status with Dot (Category removed to maximize card space)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceSubtle,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          product.category,
-                          style: const TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
                     _buildStockBadge(context),
                   ],
                 ),
 
-                const SizedBox(height: 7),
+                const SizedBox(height: 4),
 
-                // 2. Middle Row: Thumbnail (or fallback icon) + Product Name
+                // 2. Middle Row: Enlarged Thumbnail + Product Name
                 Expanded(
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      _buildProductImageOrFallback(),
+                      _buildProductImageOrFallback(size: 46),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -108,7 +89,7 @@ class ProductCard extends StatelessWidget {
                           style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
-                            height: 1.25,
+                            height: 1.22,
                             color: isOutOfStock
                                 ? AppColors.textMuted
                                 : AppColors.textPrimary,
@@ -122,9 +103,9 @@ class ProductCard extends StatelessWidget {
                   ),
                 ),
 
-                const SizedBox(height: 7),
+                const SizedBox(height: 6),
 
-                // 3. Bottom Row: Minimal Unit Action Pills
+                // 3. Bottom Row: Packaging Action Pills (Full width without tune button)
                 Row(
                   children: [
                     if (isSingleTier) ...[
@@ -148,7 +129,7 @@ class ProductCard extends StatelessWidget {
                         ),
                       ),
                       if (hasCarton) ...[
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 4),
                         // Carton Unit (e.g. ແກັດ / ລັງ)
                         Expanded(
                           child: _buildUnitButton(
@@ -160,25 +141,6 @@ class ProductCard extends StatelessWidget {
                         ),
                       ],
                     ],
-                    const SizedBox(width: 5),
-                    // Quick Tune / Custom Stepper Trigger
-                    InkWell(
-                      onTap: onOpenUnitSelector,
-                      borderRadius: BorderRadius.circular(7),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceSubtle,
-                          borderRadius: BorderRadius.circular(7),
-                          border: Border.all(color: AppColors.border, width: 0.8),
-                        ),
-                        child: Icon(
-                          Icons.tune_rounded,
-                          size: 14,
-                          color: isWholesaleMode ? AppColors.wholesale : AppColors.primary,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ],
@@ -189,15 +151,15 @@ class ProductCard extends StatelessWidget {
     );
   }
 
-  Widget _buildProductImageOrFallback() {
+  Widget _buildProductImageOrFallback({double size = 46}) {
     if (product.imageUrl != null && product.imageUrl!.isNotEmpty) {
       final isDataUri = ImageCompressService.isDataUri(product.imageUrl!);
       return Container(
-        width: 36,
-        height: 36,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
           color: AppColors.surfaceSubtle,
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(color: AppColors.border, width: 0.8),
         ),
         clipBehavior: Clip.antiAlias,
@@ -205,19 +167,19 @@ class ProductCard extends StatelessWidget {
             ? Image.memory(
                 ImageCompressService.bytesFromDataUri(product.imageUrl!) ?? Uint8List(0),
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildFallbackCategoryIcon(),
+                errorBuilder: (_, __, ___) => _buildFallbackCategoryIcon(size: size),
               )
             : Image.network(
                 product.imageUrl!,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildFallbackCategoryIcon(),
+                errorBuilder: (_, __, ___) => _buildFallbackCategoryIcon(size: size),
               ),
       );
     }
-    return _buildFallbackCategoryIcon();
+    return _buildFallbackCategoryIcon(size: size);
   }
 
-  Widget _buildFallbackCategoryIcon() {
+  Widget _buildFallbackCategoryIcon({double size = 46}) {
     IconData icon = Icons.inventory_2_outlined;
     Color iconColor = AppColors.textSecondary;
     Color bgColor = AppColors.surfaceSubtle;
@@ -241,15 +203,15 @@ class ProductCard extends StatelessWidget {
     }
 
     return Container(
-      width: 36,
-      height: 36,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.borderSubtle, width: 0.8),
       ),
       child: Center(
-        child: Icon(icon, size: 18, color: iconColor),
+        child: Icon(icon, size: size * 0.52, color: iconColor),
       ),
     );
   }
@@ -293,23 +255,26 @@ class ProductCard extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 10.5,
                   fontWeight: FontWeight.w700,
                   color: activeDark,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              Text(
-                LaoCurrencyFormatter.format(price),
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w900,
-                  color: activeDark,
-                  letterSpacing: -0.2,
+              const SizedBox(height: 1),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  LaoCurrencyFormatter.format(price),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: activeDark,
+                    letterSpacing: -0.2,
+                  ),
+                  maxLines: 1,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

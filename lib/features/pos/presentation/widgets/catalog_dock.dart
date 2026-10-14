@@ -216,6 +216,8 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
     final theme = Theme.of(context);
     final catalogState = ref.watch(catalogProvider);
     final cartState = ref.watch(cartProvider);
+    final screenSize = MediaQuery.of(context).size;
+    final isCompactLandscape = screenSize.height < 500;
 
     return Container(
       color: AppColors.background,
@@ -223,7 +225,10 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
         children: [
           // Station Top Bar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            padding: EdgeInsets.symmetric(
+              horizontal: isCompactLandscape ? 10 : 16,
+              vertical: isCompactLandscape ? 6 : 11,
+            ),
             decoration: const BoxDecoration(
               color: AppColors.surface,
               border: Border(bottom: BorderSide(color: AppColors.border, width: 0.9)),
@@ -232,10 +237,13 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
               children: [
                 // Store Identity Badge
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isCompactLandscape ? 8 : 11,
+                    vertical: isCompactLandscape ? 4 : 6,
+                  ),
                   decoration: BoxDecoration(
                     gradient: AppColors.primaryGradient,
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: BorderRadius.circular(8),
                     boxShadow: const [
                       BoxShadow(
                         color: Color(0x33059669),
@@ -244,17 +252,17 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                       ),
                     ],
                   ),
-                  child: const Text(
+                  child: Text(
                     'MeiiShop',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w900,
-                      fontSize: 15,
+                      fontSize: isCompactLandscape ? 13 : 15,
                       letterSpacing: 0.3,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: isCompactLandscape ? 8 : 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -262,26 +270,27 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                       LaoStrings.storeName,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
-                        fontSize: 15,
+                        fontSize: isCompactLandscape ? 13 : 15,
                         letterSpacing: -0.2,
                       ),
                     ),
                     Row(
                       children: [
                         Container(
-                          width: 7,
-                          height: 7,
+                          width: 6,
+                          height: 6,
                           decoration: const BoxDecoration(
                             color: Color(0xFF10B981),
                             shape: BoxShape.circle,
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 5),
                         Text(
                           '${LaoStrings.cashier}: ໄມ້ຄຳ • ${LaoStrings.onlineStatus}',
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: AppColors.textTertiary,
                             fontWeight: FontWeight.w500,
+                            fontSize: isCompactLandscape ? 9.5 : 11,
                           ),
                         ),
                       ],
@@ -304,8 +313,10 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                       );
                     }
                   },
-                  icon: const Icon(Icons.sync_rounded, color: AppColors.textSecondary, size: 20),
+                  icon: Icon(Icons.sync_rounded, color: AppColors.textSecondary, size: isCompactLandscape ? 18 : 20),
                   tooltip: 'ດຶງຂໍ້ມູນສິນຄ້າຈາກ Supabase Cloud',
+                  padding: isCompactLandscape ? const EdgeInsets.all(6) : null,
+                  constraints: isCompactLandscape ? const BoxConstraints() : null,
                   style: IconButton.styleFrom(
                     backgroundColor: AppColors.surfaceSubtle,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -314,55 +325,100 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                 const SizedBox(width: 6),
 
                 // Profit Report Quick Trigger
-                OutlinedButton.icon(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => const ProfitSummarySheet(),
-                    );
-                  },
-                  icon: const Icon(Icons.analytics_outlined, size: 17, color: AppColors.primary),
-                  label: const Text(LaoStrings.profitReport),
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: AppColors.surface,
-                    side: const BorderSide(color: AppColors.border, width: 0.9),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                if (!isCompactLandscape)
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => const ProfitSummarySheet(),
+                      );
+                    },
+                    icon: const Icon(Icons.analytics_outlined, size: 17, color: AppColors.primary),
+                    label: const Text(LaoStrings.profitReport),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: AppColors.surface,
+                      side: const BorderSide(color: AppColors.border, width: 0.9),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                    ),
+                  )
+                else
+                  IconButton(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => const ProfitSummarySheet(),
+                      );
+                    },
+                    icon: const Icon(Icons.analytics_outlined, size: 18, color: AppColors.primary),
+                    tooltip: LaoStrings.profitReport,
+                    padding: const EdgeInsets.all(6),
+                    constraints: const BoxConstraints(),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.surfaceSubtle,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                   ),
-                ),
                 const SizedBox(width: 6),
 
                 // Receipt History Quick Trigger
-                OutlinedButton.icon(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => Dialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        clipBehavior: Clip.antiAlias,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 1050, maxHeight: 720),
-                          child: const ReceiptHistoryScreen(),
+                if (!isCompactLandscape)
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => Dialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          clipBehavior: Clip.antiAlias,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1050, maxHeight: 720),
+                            child: const ReceiptHistoryScreen(),
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.receipt_long_outlined, size: 17, color: AppColors.textSecondary),
-                  label: const Text('ປະຫວັດໃບບິນ'),
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: AppColors.surface,
-                    side: const BorderSide(color: AppColors.border, width: 0.9),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                      );
+                    },
+                    icon: const Icon(Icons.receipt_long_outlined, size: 17, color: AppColors.textSecondary),
+                    label: const Text('ປະຫວັດໃບບິນ'),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: AppColors.surface,
+                      side: const BorderSide(color: AppColors.border, width: 0.9),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                    ),
+                  )
+                else
+                  IconButton(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => Dialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          clipBehavior: Clip.antiAlias,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1050, maxHeight: 720),
+                            child: const ReceiptHistoryScreen(),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.receipt_long_outlined, size: 18, color: AppColors.textSecondary),
+                    tooltip: 'ປະຫວັດໃບບິນ',
+                    padding: const EdgeInsets.all(6),
+                    constraints: const BoxConstraints(),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.surfaceSubtle,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                   ),
-                ),
                 const SizedBox(width: 6),
 
                 // Printer settings button
                 IconButton(
                   onPressed: _showPrinterSettingsDialog,
-                  icon: const Icon(Icons.print_outlined, color: AppColors.textSecondary, size: 20),
+                  icon: Icon(Icons.print_outlined, color: AppColors.textSecondary, size: isCompactLandscape ? 18 : 20),
                   tooltip: 'ຕັ້ງຄ່າເຄື່ອງພິມ',
+                  padding: isCompactLandscape ? const EdgeInsets.all(6) : null,
+                  constraints: isCompactLandscape ? const BoxConstraints() : null,
                   style: IconButton.styleFrom(
                     backgroundColor: AppColors.surfaceSubtle,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -374,31 +430,49 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
 
           // Search Bar & Barcode Scanner Row
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+            padding: EdgeInsets.fromLTRB(
+              isCompactLandscape ? 8 : 16,
+              isCompactLandscape ? 5 : 10,
+              isCompactLandscape ? 8 : 16,
+              isCompactLandscape ? 4 : 8,
+            ),
             child: Row(
               children: [
                 Expanded(
                   child: Container(
-                    height: 44,
+                    height: isCompactLandscape ? 38 : 44,
                     decoration: BoxDecoration(
                       color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(9),
                       border: Border.all(color: AppColors.border, width: 0.9),
                       boxShadow: AppColors.cardShadow,
                     ),
                     child: TextField(
                       controller: _searchController,
                       focusNode: _searchFocusNode,
-                      style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontSize: isCompactLandscape ? 12.5 : 13.5,
+                        fontWeight: FontWeight.w500,
+                      ),
                       decoration: InputDecoration(
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: isCompactLandscape ? 8 : 11,
+                        ),
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
                         hintText: LaoStrings.searchHint,
-                        hintStyle: const TextStyle(fontSize: 13, color: AppColors.textMuted),
-                        prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textTertiary, size: 20),
+                        hintStyle: TextStyle(
+                          fontSize: isCompactLandscape ? 12 : 13,
+                          color: AppColors.textMuted,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          color: AppColors.textTertiary,
+                          size: isCompactLandscape ? 18 : 20,
+                        ),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.clear, size: 16),
@@ -408,8 +482,8 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                                 },
                               )
                             : Container(
-                                margin: const EdgeInsets.all(8),
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                margin: EdgeInsets.all(isCompactLandscape ? 5 : 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: AppColors.surfaceSubtle,
                                   borderRadius: BorderRadius.circular(5),
@@ -418,12 +492,12 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.barcode_reader, size: 13, color: AppColors.textTertiary),
-                                    SizedBox(width: 4),
+                                    Icon(Icons.barcode_reader, size: 12, color: AppColors.textTertiary),
+                                    SizedBox(width: 3),
                                     Text(
                                       'SCAN',
                                       style: TextStyle(
-                                        fontSize: 9,
+                                        fontSize: 8.5,
                                         fontWeight: FontWeight.w700,
                                         color: AppColors.textTertiary,
                                         letterSpacing: 0.5,
@@ -446,35 +520,38 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
 
           // Horizontal Category Tabs
           SizedBox(
-            height: 42,
+            height: isCompactLandscape ? 34 : 42,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: EdgeInsets.symmetric(horizontal: isCompactLandscape ? 8 : 16),
               itemCount: catalogState.categories.length + 1,
               itemBuilder: (context, index) {
                 // Last item is the dynamic "+ ເພີ່ມໝວດໝູ່" tab button
                 if (index == catalogState.categories.length) {
                   return Padding(
-                    padding: const EdgeInsets.only(right: 8.0),
+                    padding: const EdgeInsets.only(right: 6.0),
                     child: InkWell(
                       onTap: _showAddCategoryDialog,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(7),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isCompactLandscape ? 8 : 10,
+                          vertical: isCompactLandscape ? 4 : 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primaryLight,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(7),
                           border: Border.all(color: AppColors.primaryBorder, width: 0.9),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.add, size: 15, color: AppColors.primaryDark),
-                            SizedBox(width: 4),
+                            Icon(Icons.add, size: isCompactLandscape ? 13 : 15, color: AppColors.primaryDark),
+                            const SizedBox(width: 3),
                             Text(
                               'ເພີ່ມໝວດໝູ່',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: isCompactLandscape ? 11 : 12,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.primaryDark,
                               ),
@@ -490,16 +567,19 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                 final isSelected = category == catalogState.selectedCategory;
 
                 return Padding(
-                  padding: const EdgeInsets.only(right: 6.0),
+                  padding: const EdgeInsets.only(right: 5.0),
                   child: InkWell(
                     onTap: () => ref.read(catalogProvider.notifier).selectCategory(category),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(7),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isCompactLandscape ? 9 : 12,
+                        vertical: isCompactLandscape ? 5 : 7,
+                      ),
                       decoration: BoxDecoration(
                         color: isSelected ? AppColors.surfaceDark : AppColors.surface,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(7),
                         border: Border.all(
                           color: isSelected ? AppColors.surfaceDark : AppColors.border,
                           width: 0.9,
@@ -517,7 +597,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                       child: Text(
                         category,
                         style: TextStyle(
-                          fontSize: 12.5,
+                          fontSize: isCompactLandscape ? 11 : 12.5,
                           fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                           color: isSelected ? Colors.white : AppColors.textPrimary,
                         ),
@@ -529,7 +609,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
             ),
           ),
 
-          const SizedBox(height: 6),
+          SizedBox(height: isCompactLandscape ? 4 : 6),
 
           // High-density Product Grid (Ultra-compact for iPad/Tablet Landscape)
           Expanded(
@@ -561,25 +641,30 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
 
                       if (width > 950) {
                         crossAxisCount = 5;
-                        childAspectRatio = 1.25;
+                        childAspectRatio = isCompactLandscape ? 1.35 : 1.25;
                       } else if (width > 650) {
                         crossAxisCount = 4;
-                        childAspectRatio = 1.22;
-                      } else if (width > 420) {
+                        childAspectRatio = isCompactLandscape ? 1.30 : 1.22;
+                      } else if (width > 360) {
                         crossAxisCount = 3;
-                        childAspectRatio = 1.15;
+                        childAspectRatio = isCompactLandscape ? 1.25 : 1.15;
                       } else {
                         crossAxisCount = 2;
-                        childAspectRatio = 1.10;
+                        childAspectRatio = isCompactLandscape ? 1.20 : 1.10;
                       }
 
                       return GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                        padding: EdgeInsets.fromLTRB(
+                          isCompactLandscape ? 6 : 8,
+                          2,
+                          isCompactLandscape ? 6 : 8,
+                          6,
+                        ),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: crossAxisCount,
                           childAspectRatio: childAspectRatio,
-                          crossAxisSpacing: 6,
-                          mainAxisSpacing: 6,
+                          crossAxisSpacing: 5,
+                          mainAxisSpacing: 5,
                         ),
                         itemCount: catalogState.filteredProducts.length,
                         itemBuilder: (context, index) {
