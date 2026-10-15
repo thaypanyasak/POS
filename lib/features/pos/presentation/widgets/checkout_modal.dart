@@ -4,16 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:screenshot/screenshot.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
-import '../../../../core/localization/lo.dart';
 import '../../../../core/utils/platform_print.dart';
 import '../../../../domain/models/sale_transaction.dart';
 import '../controllers/cart_controller.dart';
 import '../controllers/printer_controller.dart';
 import '../controllers/transaction_controller.dart';
 import 'meii_receipt_slip.dart';
-import 'quick_cash_keypad.dart';
 
-/// Checkout & Tender Modal
+/// Checkout & Tender Modal matching 100% web-app CheckoutModal.jsx
 class CheckoutModal extends ConsumerStatefulWidget {
   const CheckoutModal({super.key});
 
@@ -24,20 +22,61 @@ class CheckoutModal extends ConsumerStatefulWidget {
 class _CheckoutModalState extends ConsumerState<CheckoutModal> {
   PaymentMethod _paymentMethod = PaymentMethod.cash;
   int _tenderedAmount = 0;
+  int _debtPaidKip = 0;
   bool _shouldPrintReceipt = true;
   SaleTransaction? _completedTransaction;
-  final ScreenshotController _receiptScreenshotController = ScreenshotController();
+  final ScreenshotController _receiptScreenshotController =
+      ScreenshotController();
+
+  late final TextEditingController _customerNameController;
+  late final TextEditingController _cashInputController;
+  late final TextEditingController _debtInputController;
+  late final TextEditingController _debtNoteController;
 
   @override
   void initState() {
     super.initState();
     final grandTotal = ref.read(cartProvider).grandTotal;
-    _tenderedAmount = grandTotal; // Default to exact amount
+    _tenderedAmount = grandTotal;
+    _debtPaidKip = 0;
+
+    _customerNameController = TextEditingController(
+      text: ref.read(cartProvider).customer.name,
+    );
+    _cashInputController = TextEditingController(
+      text: LaoCurrencyFormatter.formatDots(grandTotal),
+    );
+    _debtInputController = TextEditingController();
+    _debtNoteController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _customerNameController.dispose();
+    _cashInputController.dispose();
+    _debtInputController.dispose();
+    _debtNoteController.dispose();
+    super.dispose();
+  }
+
+  void _onCashInputChanged(String val, int grandTotal) {
+    final clean = val.replaceAll(RegExp(r'[^0-9]'), '');
+    final numVal = int.tryParse(clean) ?? 0;
+    setState(() {
+      _tenderedAmount = numVal;
+    });
+  }
+
+  void _onDebtInputChanged(String val, int grandTotal) {
+    final clean = val.replaceAll(RegExp(r'[^0-9]'), '');
+    final numVal = (int.tryParse(clean) ?? 0).clamp(0, grandTotal);
+    setState(() {
+      _debtPaidKip = numVal;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final cartState = ref.watch(cartProvider);
     final printerState = ref.watch(printerProvider);
 
@@ -45,168 +84,459 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
       return _buildSuccessView(context, _completedTransaction!);
     }
 
-    final change = LaoCurrencyFormatter.calculateChange(_tenderedAmount, cartState.grandTotal);
-    final isCashSufficient = _paymentMethod == PaymentMethod.qrTransfer || _tenderedAmount >= cartState.grandTotal;
+    final grandTotal = cartState.grandTotal;
+    final change = LaoCurrencyFormatter.calculateChange(
+      _tenderedAmount,
+      grandTotal,
+    );
+    final remainingDebt = (grandTotal - _debtPaidKip).clamp(0, grandTotal);
+
+    final isCashSufficient =
+        _paymentMethod != PaymentMethod.cash || _tenderedAmount >= grandTotal;
 
     final screenSize = MediaQuery.of(context).size;
     final isCompactLandscape = screenSize.height < 500;
+    final isMobileWidth = screenSize.width < 520;
 
     return Dialog(
       insetPadding: EdgeInsets.symmetric(
-        horizontal: isCompactLandscape ? 12 : 40,
-        vertical: isCompactLandscape ? 6 : 24,
+        horizontal: isMobileWidth ? 10 : (isCompactLandscape ? 16 : 24),
+        vertical: isCompactLandscape ? 6 : (isMobileWidth ? 12 : 24),
       ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(isMobileWidth ? 20 : 24),
+      ),
+      backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: isCompactLandscape ? 660 : 620,
-          maxHeight: isCompactLandscape ? (screenSize.height - 12) : 720,
+          maxWidth: isCompactLandscape ? 600 : (isMobileWidth ? screenSize.width - 20 : 490),
+          maxHeight: isCompactLandscape
+              ? (screenSize.height - 12)
+              : (screenSize.height * 0.92).clamp(520.0, 780.0),
         ),
         child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: isCompactLandscape ? 14.0 : 24.0,
-            vertical: isCompactLandscape ? 10.0 : 20.0,
+          padding: EdgeInsets.all(
+            isMobileWidth ? 12.0 : (isCompactLandscape ? 12.0 : 18.0),
           ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header
+              // 1. Header (Matching Web CheckoutModal)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
                     children: [
-                      Text(
-                        LaoStrings.pay,
-                        style: isCompactLandscape
-                            ? const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.textPrimary)
-                            : theme.textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        color: Color(0xFF0D9488),
+                        size: 22,
                       ),
-                      Text(
-                        '${cartState.customer.name} • ${cartState.isWholesaleMode ? LaoStrings.wholesale : LaoStrings.retail}',
-                        style: TextStyle(
-                          fontSize: isCompactLandscape ? 11 : 13,
-                          color: AppColors.textSecondary,
-                        ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'ຊຳລະເງິນ (Checkout)',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          Text(
+                            'ເລືອກຮູບແບບການຊຳລະ: ເງິນສົດ, ໂອນ, ຫຼື ຄ້າງຊຳລະ',
+                            style: TextStyle(
+                              fontSize: isCompactLandscape ? 10 : 11,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: Icon(Icons.close, color: AppColors.textMuted, size: isCompactLandscape ? 18 : 22),
-                    padding: isCompactLandscape ? EdgeInsets.zero : const EdgeInsets.all(8),
-                    constraints: isCompactLandscape ? const BoxConstraints() : null,
+                    icon: const Icon(
+                      Icons.close,
+                      color: Color(0xFF94A3B8),
+                      size: 20,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 ],
               ),
+              const SizedBox(height: 10),
 
-              SizedBox(height: isCompactLandscape ? 6 : 14),
-
-              // Total Due Banner
+              // 2. Customer Name Editor Bar
               Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isCompactLandscape ? 10 : 18,
-                  vertical: isCompactLandscape ? 6 : 12,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  gradient: cartState.isWholesaleMode
-                      ? AppColors.wholesaleGradient
-                      : AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(9),
-                  boxShadow: [
-                    BoxShadow(
-                      color: cartState.isWholesaleMode
-                          ? const Color(0x26D97706)
-                          : const Color(0x26059669),
-                      offset: const Offset(0, 3),
-                      blurRadius: 8,
-                    ),
-                  ],
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          LaoStrings.netTotal,
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: isCompactLandscape ? 10.5 : 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          '${cartState.items.length} ${LaoStrings.products} (${cartState.totalQuantity} ຊິ້ນ)',
-                          style: TextStyle(
-                            color: Colors.white60,
-                            fontSize: isCompactLandscape ? 9.5 : 11,
-                          ),
-                        ),
-                      ],
+                    const Icon(
+                      Icons.person_outline_rounded,
+                      color: Color(0xFF94A3B8),
+                      size: 16,
                     ),
-                    Text(
-                      LaoCurrencyFormatter.format(cartState.grandTotal),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'ລູກຄ້າ:',
                       style: TextStyle(
-                        fontSize: isCompactLandscape ? 18 : 26,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF64748B),
                       ),
                     ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: TextField(
+                        controller: _customerNameController,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'ຊື່ລູກຄ້າ ຫຼື ເບີໂທຕິດຕໍ່...',
+                          hintStyle: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF94A3B8),
+                          ),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 2,
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                        ),
+                        onChanged: (val) => setState(() {}),
+                      ),
+                    ),
+                    if (_paymentMethod == PaymentMethod.debt &&
+                        (_customerNameController.text.trim().isEmpty ||
+                            _customerNameController.text.trim() ==
+                                'ລູກຄ້າທົ່ວໄປ'))
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFCD34D)),
+                        ),
+                        child: const Text(
+                          '⚠️ ຄວນໃສ່ຊື່ລູກຄ້າ',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF92400E),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
+              const SizedBox(height: 10),
 
-              SizedBox(height: isCompactLandscape ? 6 : 12),
-
-              // Payment Method Tabs
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildPaymentTab(
-                      method: PaymentMethod.cash,
-                      icon: Icons.payments_rounded,
-                      label: LaoStrings.cash,
-                      isSelected: _paymentMethod == PaymentMethod.cash,
-                      isCompact: isCompactLandscape,
-                    ),
-                  ),
-                  SizedBox(width: isCompactLandscape ? 8 : 10),
-                  Expanded(
-                    child: _buildPaymentTab(
-                      method: PaymentMethod.qrTransfer,
-                      icon: Icons.qr_code_scanner_rounded,
-                      label: LaoStrings.transfer,
-                      isSelected: _paymentMethod == PaymentMethod.qrTransfer,
-                      isCompact: isCompactLandscape,
-                    ),
-                  ),
-                ],
-              ),
-
-              SizedBox(height: isCompactLandscape ? 6 : 12),
-
-              // Tender Area
+              // 3. Scrollable Order Summary & Tender Details
               Expanded(
                 child: SingleChildScrollView(
-                  child: _paymentMethod == PaymentMethod.cash
-                      ? _buildCashTenderView(cartState.grandTotal, change)
-                      : _buildQrTransferView(cartState.grandTotal),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Order Breakdown (Grouped items + Crate deposit fees)
+                      if (cartState.items.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'ລາຍການສິນຄ້າ (${cartState.items.length})',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                  ),
+                                  const Text(
+                                    'ລວມ (₭)',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Divider(
+                                color: Color(0xFFE2E8F0),
+                                height: 12,
+                              ),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxHeight: 120,
+                                ),
+                                child: ListView.separated(
+                                  shrinkWrap: true,
+                                  physics: const ClampingScrollPhysics(),
+                                  itemCount: cartState.items.length,
+                                  separatorBuilder:
+                                      (_, __) => const SizedBox(height: 6),
+                                  itemBuilder: (context, idx) {
+                                    final item = cartState.items[idx];
+                                    final prodName = item.product.name;
+                                    final unitName = item.selectedUnit.unitName;
+                                    final effectivePrice =
+                                        item.effectiveUnitPrice;
+                                    final baseTotal = item.lineGoodsTotal;
+                                    final feePerCrate = item.feePerCrate;
+                                    final missingCount =
+                                        item.effectiveMissingCratesCount;
+                                    final crateDepositTotal =
+                                        item.crateFeeTotal;
+
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                '$prodName ($unitName)',
+                                                style: const TextStyle(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF1E293B),
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  '${item.quantity} x ${LaoCurrencyFormatter.formatDots(effectivePrice)}',
+                                                  style: const TextStyle(
+                                                    fontSize: 10.5,
+                                                    color: Color(0xFF64748B),
+                                                    fontFamily: 'monospace',
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  LaoCurrencyFormatter.format(
+                                                    baseTotal,
+                                                  ),
+                                                  style: const TextStyle(
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: Color(0xFF0F172A),
+                                                    fontFamily: 'monospace',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                        if (item.noEmptyCrates &&
+                                            missingCount > 0)
+                                          Container(
+                                            margin: const EdgeInsets.only(
+                                              top: 3,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFEF3C7),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: const Color(0xFFFDE68A),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Text(
+                                                  '* ບໍ່ມີແກັດປ່ຽນ: ($missingCount ແກັດ)',
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Color(0xFF78350F),
+                                                  ),
+                                                ),
+                                                Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      '$missingCount x ${LaoCurrencyFormatter.formatDots(feePerCrate)}',
+                                                      style: const TextStyle(
+                                                        fontSize: 9.5,
+                                                        color: Color(
+                                                          0xFFB45309,
+                                                        ),
+                                                        fontFamily: 'monospace',
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      '+${LaoCurrencyFormatter.format(crateDepositTotal)}',
+                                                      style: const TextStyle(
+                                                        fontSize: 10.5,
+                                                        fontWeight:
+                                                            FontWeight.w900,
+                                                        color: Color(
+                                                          0xFF78350F,
+                                                        ),
+                                                        fontFamily: 'monospace',
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 10),
+
+                      // Grand Total Display (Matching Web: Total Due)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text(
+                              'ຍອດເງິນທີ່ຕ້ອງຊຳລະ (Total Due)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              LaoCurrencyFormatter.format(grandTotal),
+                              style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF0F766E),
+                                letterSpacing: -0.5,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // 4. 3 Payment Tabs: Cash, Transfer, Debt
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildPaymentTab(
+                              method: PaymentMethod.cash,
+                              icon: Icons.monetization_on_outlined,
+                              label: 'ເງິນສົດ (Cash)',
+                              isSelected: _paymentMethod == PaymentMethod.cash,
+                              activeBg: const Color(0xFFF0FDFA),
+                              activeBorder: const Color(0xFF14B8A6),
+                              activeText: const Color(0xFF115E59),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: _buildPaymentTab(
+                              method: PaymentMethod.qrTransfer,
+                              icon: Icons.qr_code_rounded,
+                              label: 'ໂອນເງິນ (Transfer)',
+                              isSelected:
+                                  _paymentMethod == PaymentMethod.qrTransfer,
+                              activeBg: const Color(0xFFEFF6FF),
+                              activeBorder: const Color(0xFF3B82F6),
+                              activeText: const Color(0xFF1E40AF),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: _buildPaymentTab(
+                              method: PaymentMethod.debt,
+                              icon: Icons.access_time_rounded,
+                              label: 'ຄ້າງຊຳລະ (Debt)',
+                              isSelected: _paymentMethod == PaymentMethod.debt,
+                              activeBg: const Color(0xFFFFF1F2),
+                              activeBorder: const Color(0xFFFB7185),
+                              activeText: const Color(0xFF9F1239),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      // 5. Active Tab Content
+                      if (_paymentMethod == PaymentMethod.cash)
+                        _buildCashSection(grandTotal, change)
+                      else if (_paymentMethod == PaymentMethod.qrTransfer)
+                        _buildTransferSection(grandTotal)
+                      else
+                        _buildDebtSection(grandTotal, remainingDebt),
+                    ],
+                  ),
                 ),
               ),
 
-              SizedBox(height: isCompactLandscape ? 5 : 10),
-              const Divider(color: AppColors.border, height: 1),
-              SizedBox(height: isCompactLandscape ? 5 : 8),
+              const SizedBox(height: 10),
+              const Divider(color: Color(0xFFE2E8F0), height: 1),
+              const SizedBox(height: 8),
 
-              // Printer Options & Trigger
+              // 6. Thermal Print Receipt Checkbox & Open Drawer
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -214,25 +544,27 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
-                        width: isCompactLandscape ? 22 : 30,
-                        height: isCompactLandscape ? 22 : 30,
+                        width: 24,
+                        height: 24,
                         child: Checkbox(
                           value: _shouldPrintReceipt,
-                          activeColor: AppColors.primary,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                          onChanged: (val) {
-                            setState(() => _shouldPrintReceipt = val ?? true);
-                          },
+                          activeColor: const Color(0xFF0F766E),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          onChanged:
+                              (val) => setState(
+                                () => _shouldPrintReceipt = val ?? true,
+                              ),
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        '${LaoStrings.printReceipt} (ESC/POS)',
+                      const Text(
+                        'ພິມໃບບິນອັດຕະໂນມັດ (ESC/POS)',
                         style: TextStyle(
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w600,
-                          fontSize: isCompactLandscape ? 11.5 : 13,
+                          color: Color(0xFF334155),
                         ),
                       ),
                     ],
@@ -242,92 +574,100 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                       ref.read(printerProvider.notifier).openCashDrawer();
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('ສົ່ງຄຳສັ່ງເປີດລິ້ນຊັກເງິນແລ້ວ (ESC p 0)'),
-                          duration: Duration(seconds: 2),
+                          content: Text(
+                            'ສົ່ງຄຳສັ່ງເປີດລິ້ນຊັກເງິນແລ້ວ (ESC p 0)',
+                          ),
+                          duration: Duration(seconds: 1),
+                          backgroundColor: Color(0xFF0F766E),
                         ),
                       );
                     },
-                    icon: Icon(Icons.sensor_door_outlined, size: isCompactLandscape ? 15 : 17),
-                    label: Text(
-                      LaoStrings.openDrawer,
-                      style: TextStyle(fontSize: isCompactLandscape ? 11.5 : 13),
+                    icon: const Icon(
+                      Icons.sensor_door_outlined,
+                      size: 14,
+                      color: Color(0xFF64748B),
+                    ),
+                    label: const Text(
+                      'ເປີດລິ້ນຊັກ',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                     ),
                     style: TextButton.styleFrom(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isCompactLandscape ? 6 : 10,
-                        vertical: isCompactLandscape ? 2 : 6,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
                       ),
                       minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
 
-              SizedBox(height: isCompactLandscape ? 6 : 10),
-
-              // Final Pay Button
-              SizedBox(
-                height: isCompactLandscape ? 38 : 48,
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: isCashSufficient
-                        ? AppColors.primaryGradient
-                        : null,
-                    borderRadius: BorderRadius.circular(9),
-                    boxShadow: isCashSufficient
-                        ? [
-                            BoxShadow(
-                              color: const Color(0x33059669),
-                              offset: const Offset(0, 2),
-                              blurRadius: isCompactLandscape ? 5 : 8,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: ElevatedButton(
-                    onPressed: isCashSufficient
-                        ? () => _onConfirmCheckout(context, cartState.grandTotal)
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isCashSufficient
-                          ? Colors.transparent
-                          : AppColors.surfaceSubtle,
-                      foregroundColor: isCashSufficient
-                          ? Colors.white
-                          : AppColors.textMuted,
-                      shadowColor: Colors.transparent,
-                      padding: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+              // 7. Action Footer: Cancel & Confirm
+              Row(
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'ຍົກເລີກ',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
                     ),
-                    child: printerState.isPrinting
-                        ? const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Text('ກຳລັງປະມວນຜົນ...', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                            ],
-                          )
-                        : FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              '${LaoStrings.confirmPayment} (${LaoCurrencyFormatter.format(cartState.grandTotal)})',
-                              style: TextStyle(
-                                fontSize: isCompactLandscape ? 13.5 : 16,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed:
+                          isCashSufficient
+                              ? () => _onConfirmCheckout(context, grandTotal)
+                              : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: const Color(0xFFE2E8F0),
+                        disabledForegroundColor: const Color(0xFF94A3B8),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon:
+                          printerState.isPrinting
+                              ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                              : const Icon(Icons.check_rounded, size: 18),
+                      label: Text(
+                        printerState.isPrinting
+                            ? 'ກຳລັງປະມວນຜົນ...'
+                            : 'ຢືນຢັນ & ພິມໃບບິນ',
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -341,39 +681,62 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
     required IconData icon,
     required String label,
     required bool isSelected,
-    bool isCompact = false,
+    required Color activeBg,
+    required Color activeBorder,
+    required Color activeText,
   }) {
     return InkWell(
-      onTap: () => setState(() => _paymentMethod = method),
-      borderRadius: BorderRadius.circular(8),
+      onTap: () {
+        setState(() {
+          _paymentMethod = method;
+          if (method == PaymentMethod.cash) {
+            _tenderedAmount = ref.read(cartProvider).grandTotal;
+            _cashInputController.text = LaoCurrencyFormatter.formatDots(
+              _tenderedAmount,
+            );
+          }
+        });
+      },
+      borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: EdgeInsets.symmetric(vertical: isCompact ? 6 : 11),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.surface : AppColors.surfaceSubtle,
-          borderRadius: BorderRadius.circular(8),
+          color: isSelected ? activeBg : Colors.white,
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.border,
-            width: isSelected ? 1.5 : 0.8,
+            color: isSelected ? activeBorder : const Color(0xFFE2E8F0),
+            width: isSelected ? 1.5 : 1.0,
           ),
-          boxShadow: isSelected ? AppColors.cardShadow : null,
+          boxShadow:
+              isSelected
+                  ? [
+                    BoxShadow(
+                      color: activeBorder.withValues(alpha: 0.15),
+                      offset: const Offset(0, 2),
+                      blurRadius: 4,
+                    ),
+                  ]
+                  : null,
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
           children: [
             Icon(
               icon,
-              color: isSelected ? AppColors.primary : AppColors.textSecondary,
-              size: isCompact ? 16 : 20,
+              size: 18,
+              color: isSelected ? activeText : const Color(0xFF64748B),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(height: 3),
             Text(
               label,
               style: TextStyle(
-                fontSize: isCompact ? 12 : 14,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                color: isSelected ? AppColors.primaryDark : AppColors.textSecondary,
+                fontSize: 10.5,
+                fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+                color: isSelected ? activeText : const Color(0xFF64748B),
               ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -381,175 +744,572 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
     );
   }
 
-  Widget _buildCashTenderView(int grandTotal, int change) {
-    final breakdown = LaoCurrencyFormatter.breakdownChange(change);
-    final isCompactLandscape = MediaQuery.of(context).size.height < 500;
-
+  Widget _buildCashSection(int grandTotal, int change) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        QuickCashKeypad(
-          totalDue: grandTotal,
-          currentTendered: _tenderedAmount,
-          onTenderChanged: (amount) => setState(() => _tenderedAmount = amount),
-          onExactTender: () => setState(() => _tenderedAmount = grandTotal),
-        ),
-
-        if (change > 0 && breakdown.isNotEmpty) ...[
-          SizedBox(height: isCompactLandscape ? 6 : 12),
-          Container(
-            padding: EdgeInsets.all(isCompactLandscape ? 6 : 12),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceSubtle,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.border),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'ຈຳນວນເງິນທີ່ໄດ້ຮັບ (₭):',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF334155),
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'ແນະນຳໃບເງິນທອນ:',
-                  style: TextStyle(
-                    fontSize: isCompactLandscape ? 10 : 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                SizedBox(height: isCompactLandscape ? 3 : 6),
-                Wrap(
-                  spacing: isCompactLandscape ? 4 : 6,
-                  runSpacing: isCompactLandscape ? 3 : 4,
-                  children: breakdown.entries.map((entry) {
-                    return Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isCompactLandscape ? 5 : 8,
-                        vertical: isCompactLandscape ? 2 : 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Text(
-                        '${LaoCurrencyFormatter.format(entry.key, includeSymbol: false)} x ${entry.value} ໃບ',
-                        style: TextStyle(
-                          fontSize: isCompactLandscape ? 10 : 11,
-                          fontWeight: FontWeight.w600,
+            Text(
+              '${LaoCurrencyFormatter.formatDots(_tenderedAmount)} ₭',
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F766E),
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+          ),
+          child: TextField(
+            controller: _cashInputController,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0F172A),
+              fontFamily: 'monospace',
+            ),
+            decoration: const InputDecoration(
+              hintText: '0',
+              suffixText: '₭',
+              suffixStyle: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF94A3B8),
+              ),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+            ),
+            onChanged: (val) => _onCashInputChanged(val, grandTotal),
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // Fast Cash Chips: [Exact, 50k, 100k, 500k]
+        Row(
+          children:
+              [grandTotal, 50000, 100000, 500000].map((amt) {
+                final isChosen = _tenderedAmount == amt;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _tenderedAmount = amt;
+                          _cashInputController
+                              .text = LaoCurrencyFormatter.formatDots(amt);
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color:
+                              isChosen
+                                  ? const Color(0xFF0F766E)
+                                  : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color:
+                                isChosen
+                                    ? const Color(0xFF0F766E)
+                                    : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Text(
+                          '${LaoCurrencyFormatter.formatDots(amt)} ₭',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace',
+                            color:
+                                isChosen
+                                    ? Colors.white
+                                    : const Color(0xFF334155),
+                          ),
                         ),
                       ),
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
+                    ),
+                  ),
+                );
+              }).toList(),
+        ),
+        const SizedBox(height: 8),
+
+        // Change Box
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFECFDF5),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFA7F3D0)),
           ),
-        ],
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'ເງິນທອນ (Change):',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF065F46),
+                ),
+              ),
+              Text(
+                LaoCurrencyFormatter.format(change),
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF065F46),
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildQrTransferView(int grandTotal) {
-    final isCompactLandscape = MediaQuery.of(context).size.height < 500;
-
-    return Center(
-      child: Container(
-        padding: EdgeInsets.all(isCompactLandscape ? 8 : 16),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceSubtle,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: isCompactLandscape ? 8 : 12,
-                vertical: isCompactLandscape ? 3 : 6,
-              ),
-              decoration: BoxDecoration(
-                color: const Color(0xFFDC2626), // BCEL Red
-                borderRadius: BorderRadius.circular(5),
-              ),
-              child: Text(
-                'BCEL One / Lao QR Payment',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: isCompactLandscape ? 11 : 13,
+  Widget _buildTransferSection(int grandTotal) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F9FF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFBAE6FD)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 120,
+            height: 120,
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0D000000),
+                  offset: Offset(0, 1),
+                  blurRadius: 4,
                 ),
-              ),
+              ],
             ),
-            SizedBox(height: isCompactLandscape ? 6 : 12),
-            // QR Code image (public/qr.jpg)
-            Container(
-              width: isCompactLandscape ? 110 : 180,
-              height: isCompactLandscape ? 110 : 180,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.border, width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
+            child: Image.asset(
+              'public/qr.jpg',
+              fit: BoxFit.contain,
+              errorBuilder:
+                  (_, __, ___) => Image.network(
+                    'qr.jpg',
+                    fit: BoxFit.contain,
+                    errorBuilder:
+                        (_, __, ___) => const Center(
+                          child: Icon(
+                            Icons.qr_code_2_rounded,
+                            size: 80,
+                            color: Color(0xFF0284C7),
+                          ),
+                        ),
+                  ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'ສະແກນ QR ຜ່ານແອັບ BCEL One / Lao QR',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0C4A6E),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'ຍອດໂອນ: ${LaoCurrencyFormatter.format(grandTotal)}',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0284C7),
+              fontFamily: 'monospace',
+            ),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            '010-12-000-12345678-001 • ຮ້ານ MeiiShop',
+            style: TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDebtSection(int grandTotal, int remainingDebt) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1F2).withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFECDD3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 16,
+                    color: Color(0xFFF43F5E),
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'ຕັ້ງຄ່າການຄ້າງຊຳລະ (Credit Sale)',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
                   ),
                 ],
               ),
-              clipBehavior: Clip.antiAlias,
-              padding: const EdgeInsets.all(6),
-              child: Image.asset(
-                'public/qr.jpg',
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => Image.network(
-                  'qr.jpg',
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => Image.network(
-                    'public/qr.jpg',
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => Center(
-                      child: Icon(
-                        Icons.qr_code_2,
-                        size: isCompactLandscape ? 70 : 120,
-                        color: AppColors.textPrimary,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color:
+                      _debtPaidKip <= 0
+                          ? const Color(0xFFFFE4E6)
+                          : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color:
+                        _debtPaidKip <= 0
+                            ? const Color(0xFFFDA4AF)
+                            : const Color(0xFFFDE68A),
+                  ),
+                ),
+                child: Text(
+                  _debtPaidKip <= 0 ? 'ຄ້າງຊຳລະ 100%' : 'ຈ່າຍກ່ອນບາງສ່ວນ',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.bold,
+                    color:
+                        _debtPaidKip <= 0
+                            ? const Color(0xFFBE123C)
+                            : const Color(0xFF92400E),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'ຈຳນວນເງິນທີ່ຈ່າຍແລ້ວ / ຈ່າຍກ່ອນ (₭):',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF475569),
+                ),
+              ),
+              Text(
+                _debtPaidKip <= 0
+                    ? 'ຍັງບໍ່ຈ່າຍ (0 ₭)'
+                    : '${LaoCurrencyFormatter.formatDots(_debtPaidKip)} ₭',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'monospace',
+                  color:
+                      _debtPaidKip <= 0
+                          ? const Color(0xFFE11D48)
+                          : const Color(0xFF059669),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: TextField(
+              controller: _debtInputController,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+                fontFamily: 'monospace',
+              ),
+              decoration: const InputDecoration(
+                hintText: '0 (ຫຼື ກົດເລືອກດ້ານລຸ່ມ)',
+                hintStyle: TextStyle(fontSize: 11.5, color: Color(0xFF94A3B8)),
+                suffixText: '₭',
+                suffixStyle: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF94A3B8),
+                ),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+              ),
+              onChanged: (val) => _onDebtInputChanged(val, grandTotal),
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          // 2 Fast Debt Buttons: 100% (0 Kip) & 50%
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () {
+                    setState(() {
+                      _debtPaidKip = 0;
+                      _debtInputController.clear();
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color:
+                          _debtPaidKip == 0
+                              ? const Color(0xFFF43F5E)
+                              : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color:
+                            _debtPaidKip == 0
+                                ? const Color(0xFFF43F5E)
+                                : const Color(0xFFCBD5E1),
+                      ),
+                    ),
+                    child: Text(
+                      'ຄ້າງຊຳລະ 100% (0 ₭)',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                        color:
+                            _debtPaidKip == 0
+                                ? Colors.white
+                                : const Color(0xFF475569),
                       ),
                     ),
                   ),
                 ),
               ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: InkWell(
+                  onTap: () {
+                    final half = (grandTotal / 2).round();
+                    setState(() {
+                      _debtPaidKip = half;
+                      _debtInputController
+                          .text = LaoCurrencyFormatter.formatDots(half);
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color:
+                          _debtPaidKip == (grandTotal / 2).round() &&
+                                  _debtPaidKip > 0
+                              ? const Color(0xFFF59E0B)
+                              : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color:
+                            _debtPaidKip == (grandTotal / 2).round() &&
+                                    _debtPaidKip > 0
+                                ? const Color(0xFFF59E0B)
+                                : const Color(0xFFCBD5E1),
+                      ),
+                    ),
+                    child: Text(
+                      'ຈ່າຍກ່ອນ 50% (${LaoCurrencyFormatter.formatDots((grandTotal / 2).round())} ₭)',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                        color:
+                            _debtPaidKip == (grandTotal / 2).round() &&
+                                    _debtPaidKip > 0
+                                ? Colors.white
+                                : const Color(0xFF475569),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Debt Balance Box
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFFFE4E6)),
             ),
-            SizedBox(height: isCompactLandscape ? 6 : 10),
-            Text(
-              'ຍອດໂອນ: ${LaoCurrencyFormatter.format(grandTotal)}',
-              style: TextStyle(
-                fontSize: isCompactLandscape ? 14 : 18,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'ຍອດຄ້າງຊຳລະ (DEBT BALANCE)',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF94A3B8),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      _debtPaidKip > 0
+                          ? 'ເຕັມ ${LaoCurrencyFormatter.formatDots(grandTotal)} ₭ - ຈ່າຍ ${LaoCurrencyFormatter.formatDots(_debtPaidKip)} ₭'
+                          : 'ລູກຄ້າຄ້າງຊຳລະເຕັມຈຳນວນ 100%',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  LaoCurrencyFormatter.format(remainingDebt),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFFE11D48),
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Debt Note
+          const Text(
+            'ໝາຍເຫດຄ້າງຊຳລະ / ວັນນັດຊຳລະ:',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: TextField(
+              controller: _debtNoteController,
+              style: const TextStyle(fontSize: 11.5, color: Color(0xFF1E293B)),
+              decoration: const InputDecoration(
+                hintText:
+                    'ເຊັ່ນ: ນັດຈ່າຍທ້າຍເດືອນ, ອ້າຍສົມສັກ 020 5555 1234...',
+                hintStyle: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              'ສະແກນ QR ຜ່ານແອັບທະນາຄານເພື່ອຊຳລະເງິນ',
-              style: TextStyle(
-                fontSize: isCompactLandscape ? 10.5 : 12,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Future<void> _onConfirmCheckout(BuildContext context, int grandTotal) async {
-    final tendered = _paymentMethod == PaymentMethod.cash
-        ? _tenderedAmount
-        : grandTotal;
+    final customerName = _customerNameController.text.trim();
+    final effectiveCustomer = customerName.isNotEmpty ? customerName : null;
 
-    final tx = await ref.read(transactionHistoryProvider.notifier).processCheckout(
+    int tendered;
+    int? paidAmount;
+    int? debtAmount;
+    String? debtStatus;
+    String? debtNote;
+
+    if (_paymentMethod == PaymentMethod.cash) {
+      tendered = _tenderedAmount;
+    } else if (_paymentMethod == PaymentMethod.qrTransfer) {
+      tendered = grandTotal;
+    } else {
+      // Debt / Credit
+      tendered = _debtPaidKip;
+      paidAmount = _debtPaidKip;
+      debtAmount =
+          (grandTotal - _debtPaidKip) > 0 ? (grandTotal - _debtPaidKip) : 0;
+      debtStatus =
+          _debtPaidKip <= 0
+              ? 'unpaid'
+              : (_debtPaidKip >= grandTotal ? 'paid' : 'partial');
+      debtNote =
+          _debtNoteController.text.trim().isNotEmpty
+              ? _debtNoteController.text.trim()
+              : null;
+    }
+
+    final tx = await ref
+        .read(transactionHistoryProvider.notifier)
+        .processCheckout(
           paymentMethod: _paymentMethod,
           amountTendered: tendered,
+          paidAmount: paidAmount,
+          debtAmount: debtAmount,
+          debtStatus: debtStatus,
+          debtNote: debtNote,
+          customerNameOverride: effectiveCustomer,
         );
 
     if (_shouldPrintReceipt) {
@@ -561,7 +1321,10 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
     });
   }
 
-  Future<void> _handlePrintReceipt(BuildContext context, SaleTransaction tx) async {
+  Future<void> _handlePrintReceipt(
+    BuildContext context,
+    SaleTransaction tx,
+  ) async {
     // 1. Silent ESC/POS thermal printer transmission (for physical printers)
     ref.read(printerProvider.notifier).printTransactionReceipt(tx);
 
@@ -591,9 +1354,10 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
 
   Widget _buildSuccessView(BuildContext context, SaleTransaction tx) {
     final isCash = tx.paymentMethod == PaymentMethod.cash;
-    final changeBreakdown = isCash && tx.changeAmount > 0
-        ? LaoCurrencyFormatter.breakdownChange(tx.changeAmount)
-        : <int, int>{};
+    final changeBreakdown =
+        isCash && tx.changeAmount > 0
+            ? LaoCurrencyFormatter.breakdownChange(tx.changeAmount)
+            : <int, int>{};
     final screenSize = MediaQuery.of(context).size;
     final isCompactLandscape = screenSize.height < 500;
 
@@ -641,26 +1405,41 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                         decoration: BoxDecoration(
                                           color: AppColors.primaryLight,
                                           shape: BoxShape.circle,
-                                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                                          border: Border.all(
+                                            color: AppColors.primary.withValues(
+                                              alpha: 0.3,
+                                            ),
+                                          ),
                                         ),
-                                        child: Icon(Icons.check_circle_rounded, size: isCompactLandscape ? 22 : 28, color: AppColors.primary),
+                                        child: Icon(
+                                          Icons.check_circle_rounded,
+                                          size: isCompactLandscape ? 22 : 28,
+                                          color: AppColors.primary,
+                                        ),
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
                                               'ຊຳລະເງິນສຳເລັດແລ້ວ!',
                                               style: TextStyle(
-                                                fontSize: isCompactLandscape ? 15 : 18,
+                                                fontSize:
+                                                    isCompactLandscape
+                                                        ? 15
+                                                        : 18,
                                                 fontWeight: FontWeight.w800,
                                               ),
                                             ),
                                             Text(
                                               'ບັນທຶກລາຍການ ແລະ ຕັດສາງຮຽບຮ້ອຍ',
                                               style: TextStyle(
-                                                fontSize: isCompactLandscape ? 11 : 12,
+                                                fontSize:
+                                                    isCompactLandscape
+                                                        ? 11
+                                                        : 12,
                                                 color: AppColors.textSecondary,
                                               ),
                                             ),
@@ -675,30 +1454,47 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                   // If Change Due > 0, Big Eye-catching Banner
                                   if (isCash && tx.changeAmount > 0) ...[
                                     Container(
-                                      padding: EdgeInsets.all(isCompactLandscape ? 8 : 14),
+                                      padding: EdgeInsets.all(
+                                        isCompactLandscape ? 8 : 14,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFF0FDF4),
                                         borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: const Color(0xFF86EFAC), width: 1.2),
+                                        border: Border.all(
+                                          color: const Color(0xFF86EFAC),
+                                          width: 1.2,
+                                        ),
                                       ),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Row(
                                             children: [
-                                              Icon(Icons.paid_outlined, color: AppColors.primaryDark, size: 16),
+                                              Icon(
+                                                Icons.paid_outlined,
+                                                color: AppColors.primaryDark,
+                                                size: 16,
+                                              ),
                                               SizedBox(width: 6),
                                               Text(
                                                 'ເງິນທອນລູກຄ້າ (Change Due):',
-                                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.primaryDark,
+                                                ),
                                               ),
                                             ],
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
-                                            LaoCurrencyFormatter.format(tx.changeAmount),
+                                            LaoCurrencyFormatter.format(
+                                              tx.changeAmount,
+                                            ),
                                             style: TextStyle(
-                                              fontSize: isCompactLandscape ? 20 : 24,
+                                              fontSize:
+                                                  isCompactLandscape ? 20 : 24,
                                               fontWeight: FontWeight.w900,
                                               color: AppColors.primaryDark,
                                             ),
@@ -707,59 +1503,131 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                             const SizedBox(height: 6),
                                             const Text(
                                               'ໃບເງິນທີ່ຕ້ອງທອນ (Banknotes):',
-                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF166534)),
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF166534),
+                                              ),
                                             ),
                                             const SizedBox(height: 3),
                                             Wrap(
                                               spacing: 5,
                                               runSpacing: 4,
-                                              children: changeBreakdown.entries.map((e) {
-                                                return Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white,
-                                                    borderRadius: BorderRadius.circular(5),
-                                                    border: Border.all(color: const Color(0xFFBBF7D0)),
-                                                  ),
-                                                  child: Text(
-                                                    '${LaoCurrencyFormatter.format(e.key)} × ${e.value}',
-                                                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF166534)),
-                                                  ),
-                                                );
-                                              }).toList(),
+                                              children:
+                                                  changeBreakdown.entries.map((
+                                                    e,
+                                                  ) {
+                                                    return Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 2,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.white,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              5,
+                                                            ),
+                                                        border: Border.all(
+                                                          color: const Color(
+                                                            0xFFBBF7D0,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        '${LaoCurrencyFormatter.format(e.key)} × ${e.value}',
+                                                        style: const TextStyle(
+                                                          fontSize: 10.5,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          color: Color(
+                                                            0xFF166534,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }).toList(),
                                             ),
                                           ],
                                         ],
                                       ),
                                     ),
-                                    SizedBox(height: isCompactLandscape ? 6 : 12),
+                                    SizedBox(
+                                      height: isCompactLandscape ? 6 : 12,
+                                    ),
                                   ],
 
                                   // Summary Box
                                   Container(
-                                    padding: EdgeInsets.all(isCompactLandscape ? 8 : 14),
+                                    padding: EdgeInsets.all(
+                                      isCompactLandscape ? 8 : 14,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: AppColors.surfaceSubtle,
                                       borderRadius: BorderRadius.circular(9),
-                                      border: Border.all(color: AppColors.border),
+                                      border: Border.all(
+                                        color: AppColors.border,
+                                      ),
                                     ),
                                     child: Column(
                                       children: [
-                                        _buildSummaryRow('ເລກທີບິນ:', tx.receiptNumber, isBold: true, isCompact: isCompactLandscape),
-                                        SizedBox(height: isCompactLandscape ? 4 : 6),
-                                        _buildSummaryRow('ຍອດຂາຍລວມ:', LaoCurrencyFormatter.format(tx.grandTotal), isBold: true, isCompact: isCompactLandscape),
-                                        SizedBox(height: isCompactLandscape ? 4 : 6),
                                         _buildSummaryRow(
-                                          isCash ? 'ຮັບເງິນສົດມາ:' : 'ຮັບເງິນໂອນມາ:',
-                                          LaoCurrencyFormatter.format(tx.amountTendered),
+                                          'ເລກທີບິນ:',
+                                          tx.receiptNumber,
+                                          isBold: true,
                                           isCompact: isCompactLandscape,
                                         ),
-                                        SizedBox(height: isCompactLandscape ? 4 : 6),
-                                        _buildSummaryRow('ວິທີຊຳລະ:', isCash ? 'ເງິນສົດ (Cash)' : 'QR ໂອນ (BCEL One)', isCompact: isCompactLandscape),
-                                        SizedBox(height: isCompactLandscape ? 4 : 6),
-                                        _buildSummaryRow('ລູກຄ້າ:', tx.customer.name, isCompact: isCompactLandscape),
-                                        Divider(height: isCompactLandscape ? 10 : 16),
-                                        _buildSummaryRow('ກຳໄລຂັ້ນຕົ້ນ:', '+${LaoCurrencyFormatter.format(tx.grossProfit)}', color: AppColors.primaryDark, isCompact: isCompactLandscape),
+                                        SizedBox(
+                                          height: isCompactLandscape ? 4 : 6,
+                                        ),
+                                        _buildSummaryRow(
+                                          'ຍອດຂາຍລວມ:',
+                                          LaoCurrencyFormatter.format(
+                                            tx.grandTotal,
+                                          ),
+                                          isBold: true,
+                                          isCompact: isCompactLandscape,
+                                        ),
+                                        SizedBox(
+                                          height: isCompactLandscape ? 4 : 6,
+                                        ),
+                                        _buildSummaryRow(
+                                          isCash
+                                              ? 'ຮັບເງິນສົດມາ:'
+                                              : 'ຮັບເງິນໂອນມາ:',
+                                          LaoCurrencyFormatter.format(
+                                            tx.amountTendered,
+                                          ),
+                                          isCompact: isCompactLandscape,
+                                        ),
+                                        SizedBox(
+                                          height: isCompactLandscape ? 4 : 6,
+                                        ),
+                                        _buildSummaryRow(
+                                          'ວິທີຊຳລະ:',
+                                          isCash
+                                              ? 'ເງິນສົດ (Cash)'
+                                              : 'QR ໂອນ (BCEL One)',
+                                          isCompact: isCompactLandscape,
+                                        ),
+                                        SizedBox(
+                                          height: isCompactLandscape ? 4 : 6,
+                                        ),
+                                        _buildSummaryRow(
+                                          'ລູກຄ້າ:',
+                                          tx.customer.name,
+                                          isCompact: isCompactLandscape,
+                                        ),
+                                        Divider(
+                                          height: isCompactLandscape ? 10 : 16,
+                                        ),
+                                        _buildSummaryRow(
+                                          'ກຳໄລຂັ້ນຕົ້ນ:',
+                                          '+${LaoCurrencyFormatter.format(tx.grossProfit)}',
+                                          color: AppColors.primaryDark,
+                                          isCompact: isCompactLandscape,
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -768,22 +1636,36 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
 
                                   // Notice regarding no physical printer
                                   Container(
-                                    padding: EdgeInsets.all(isCompactLandscape ? 7 : 10),
+                                    padding: EdgeInsets.all(
+                                      isCompactLandscape ? 7 : 10,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primaryLight.withValues(alpha: 0.35),
+                                      color: AppColors.primaryLight.withValues(
+                                        alpha: 0.35,
+                                      ),
                                       borderRadius: BorderRadius.circular(7),
-                                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                                      border: Border.all(
+                                        color: AppColors.primary.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                      ),
                                     ),
                                     child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Icon(Icons.info_outline, size: isCompactLandscape ? 14 : 16, color: AppColors.primaryDark),
+                                        Icon(
+                                          Icons.info_outline,
+                                          size: isCompactLandscape ? 14 : 16,
+                                          color: AppColors.primaryDark,
+                                        ),
                                         const SizedBox(width: 6),
                                         Expanded(
                                           child: Text(
                                             'ບໍ່ທັນມີເຄື່ອງພິມບິນ? ທ່ານສາມາດກວດເບິ່ງໃບບິນດິຈິຕອນຂ້າງໆນີ້ ຫຼື ກົດປຸ່ມ "ພິມໃບບິນ" ເພື່ອພິມຜ່ານ Browser / Save ເປັນ PDF ໄດ້.',
                                             style: TextStyle(
-                                              fontSize: isCompactLandscape ? 9.5 : 11,
+                                              fontSize:
+                                                  isCompactLandscape ? 9.5 : 11,
                                               color: AppColors.primaryDark,
                                               height: 1.3,
                                             ),
@@ -806,15 +1688,30 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                 Expanded(
                                   flex: 4,
                                   child: OutlinedButton.icon(
-                                    onPressed: () => Navigator.of(context).pop(),
-                                    icon: const Icon(Icons.add_shopping_cart_rounded, size: 15),
+                                    onPressed:
+                                        () => Navigator.of(context).pop(),
+                                    icon: const Icon(
+                                      Icons.add_shopping_cart_rounded,
+                                      size: 15,
+                                    ),
                                     label: const FittedBox(
                                       fit: BoxFit.scaleDown,
-                                      child: Text('ເລີ່ມບິນໃໝ່', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                      child: Text(
+                                        'ເລີ່ມບິນໃໝ່',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
                                     ),
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 9,
+                                        horizontal: 6,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -822,17 +1719,32 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                 Expanded(
                                   flex: 6,
                                   child: ElevatedButton.icon(
-                                    onPressed: () => _handlePrintReceipt(context, tx),
-                                    icon: const Icon(Icons.print_rounded, size: 16),
+                                    onPressed:
+                                        () => _handlePrintReceipt(context, tx),
+                                    icon: const Icon(
+                                      Icons.print_rounded,
+                                      size: 16,
+                                    ),
                                     label: const FittedBox(
                                       fit: BoxFit.scaleDown,
-                                      child: Text('ພິມໃບບິນ (Print)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                      child: Text(
+                                        'ພິມໃບບິນ (Print)',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12.5,
+                                        ),
+                                      ),
                                     ),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: AppColors.primary,
                                       foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 9,
+                                        horizontal: 6,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -842,22 +1754,42 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                             ElevatedButton.icon(
                               onPressed: () => _handlePrintReceipt(context, tx),
                               icon: const Icon(Icons.print_rounded, size: 20),
-                              label: const Text('ພິມໃບບິນ (Print Receipt)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              label: const Text(
+                                'ພິມໃບບິນ (Print Receipt)',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 8),
                             OutlinedButton.icon(
                               onPressed: () => Navigator.of(context).pop(),
-                              icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
-                              label: const Text('ເລີ່ມບິນໃໝ່ (New Sale)', style: TextStyle(fontWeight: FontWeight.bold)),
+                              icon: const Icon(
+                                Icons.add_shopping_cart_rounded,
+                                size: 18,
+                              ),
+                              label: const Text(
+                                'ເລີ່ມບິນໃໝ່ (New Sale)',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
                             ),
                           ],
@@ -880,29 +1812,49 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                           children: [
                             // Receipt Toolbar Header
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
                               decoration: const BoxDecoration(
                                 color: Colors.white,
-                                borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
-                                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(11),
+                                ),
+                                border: Border(
+                                  bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                                ),
                               ),
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Row(
                                     children: [
-                                      Icon(Icons.receipt_long_rounded, size: 18, color: AppColors.primary),
+                                      Icon(
+                                        Icons.receipt_long_rounded,
+                                        size: 18,
+                                        color: AppColors.primary,
+                                      ),
                                       SizedBox(width: 8),
                                       Text(
                                         'ໃບບິນດິຈິຕອນ (Digital Receipt Preview)',
-                                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ],
                                   ),
                                   IconButton(
                                     tooltip: 'ພິມໃບບິນ',
-                                    icon: const Icon(Icons.print_outlined, size: 20, color: AppColors.primary),
-                                    onPressed: () => _handlePrintReceipt(context, tx),
+                                    icon: const Icon(
+                                      Icons.print_outlined,
+                                      size: 20,
+                                      color: AppColors.primary,
+                                    ),
+                                    onPressed:
+                                        () => _handlePrintReceipt(context, tx),
                                   ),
                                 ],
                               ),
@@ -910,7 +1862,10 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                             // Scrollable Receipt Slip (Captured for print)
                             Expanded(
                               child: SingleChildScrollView(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 16,
+                                ),
                                 child: Screenshot(
                                   controller: _receiptScreenshotController,
                                   child: MeiiReceiptSlip(transaction: tx),
@@ -935,11 +1890,24 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.check_circle_rounded, size: 28, color: AppColors.primary),
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        size: 28,
+                        color: AppColors.primary,
+                      ),
                       const SizedBox(width: 10),
-                      const Text('ຊຳລະເງິນສຳເລັດ!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Text(
+                        'ຊຳລະເງິນສຳເລັດ!',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const Spacer(),
-                      IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close)),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
                     ],
                   ),
                   if (isCash && tx.changeAmount > 0) ...[
@@ -954,10 +1922,17 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('ເງິນທອນ:', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const Text(
+                            'ເງິນທອນ:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                           Text(
                             LaoCurrencyFormatter.format(tx.changeAmount),
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.primaryDark),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.primaryDark,
+                            ),
                           ),
                         ],
                       ),
@@ -993,7 +1968,13 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
     );
   }
 
-  Widget _buildSummaryRow(String label, String value, {bool isBold = false, Color? color, bool isCompact = false}) {
+  Widget _buildSummaryRow(
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? color,
+    bool isCompact = false,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [

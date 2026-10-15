@@ -1,7 +1,8 @@
 import 'product.dart';
 import 'product_unit.dart';
 
-/// Cart line item representing a chosen product, packaging unit, and price structure
+/// Cart line item representing a chosen product, packaging unit, price structure,
+/// and specialized crate deposit / missing empty crate logic.
 class CartItem {
   final String id;
   final Product product;
@@ -10,6 +11,8 @@ class CartItem {
   final bool isWholesaleMode;
   final int? customPrice; // On-the-fly override price per unit
   final String? overrideReason; // e.g., "ລູກຄ້າປະຈຳ"
+  final bool noEmptyCrates; // Checkbox for missing empty crate (ບໍ່ມີແກັດປ່ຽນ)
+  final int? missingCratesCount; // Count of crates customer doesn't have to return
 
   const CartItem({
     required this.id,
@@ -19,7 +22,35 @@ class CartItem {
     this.isWholesaleMode = false,
     this.customPrice,
     this.overrideReason,
+    this.noEmptyCrates = false,
+    this.missingCratesCount,
   });
+
+  /// Specialized Crate Deposit / Missing Crate Fee Eligibility Check
+  bool get isCrateEligible {
+    return product.hasCrateDeposit ||
+        ((product.category.contains('ເບຍ') || product.name.contains('ເບຍ')) &&
+            (selectedUnit.unitName == 'ແກັດ' ||
+                selectedUnit.unitName == 'ລັງ' ||
+                selectedUnit.multiplier >= 12));
+  }
+
+  /// Deposit fee per crate (default 30.000 Kip)
+  int get feePerCrate {
+    return product.crateDepositFee > 0 ? product.crateDepositFee : 30000;
+  }
+
+  /// Effective number of missing crates (clamped between 1 and quantity)
+  int get effectiveMissingCratesCount {
+    if (!noEmptyCrates) return 0;
+    final count = missingCratesCount ?? quantity;
+    return count.clamp(1, quantity);
+  }
+
+  /// Total crate deposit surcharge for this line
+  int get crateFeeTotal {
+    return noEmptyCrates ? effectiveMissingCratesCount * feePerCrate : 0;
+  }
 
   /// Catalog price before any custom override
   int get originalUnitPrice {
@@ -39,9 +70,19 @@ class CartItem {
     return originalUnitPrice - effectiveUnitPrice;
   }
 
-  /// Line catalog total before discount
-  int get lineSubtotal {
+  /// Pure line goods total before crate deposit and discount
+  int get lineGoodsSubtotal {
     return originalUnitPrice * quantity;
+  }
+
+  /// Pure line goods total after discount (without crate deposit)
+  int get lineGoodsTotal {
+    return effectiveUnitPrice * quantity;
+  }
+
+  /// Line catalog total before discount (including crate deposit)
+  int get lineSubtotal {
+    return lineGoodsSubtotal + crateFeeTotal;
   }
 
   /// Line discount total
@@ -49,9 +90,9 @@ class CartItem {
     return (discountPerUnit > 0 ? discountPerUnit : 0) * quantity;
   }
 
-  /// Total amount charged for this line
+  /// Total amount charged for this line: (effectiveUnitPrice * quantity) + crateFeeTotal
   int get lineTotal {
-    return effectiveUnitPrice * quantity;
+    return lineGoodsTotal + crateFeeTotal;
   }
 
   /// Cost of goods for this unit: `cost_per_base_unit * multiplier`
@@ -70,7 +111,7 @@ class CartItem {
     return effectiveUnitPrice - unitCost;
   }
 
-  /// Total gross profit for this line item
+  /// Total gross profit for this line item (crate fee is passed through/not counted as pure COGS)
   int get lineProfit {
     return lineTotal - lineTotalCost;
   }
@@ -95,6 +136,8 @@ class CartItem {
     int? customPrice,
     String? overrideReason,
     bool clearOverride = false,
+    bool? noEmptyCrates,
+    int? missingCratesCount,
   }) {
     return CartItem(
       id: id ?? this.id,
@@ -105,6 +148,8 @@ class CartItem {
       customPrice: clearOverride ? null : (customPrice ?? this.customPrice),
       overrideReason:
           clearOverride ? null : (overrideReason ?? this.overrideReason),
+      noEmptyCrates: noEmptyCrates ?? this.noEmptyCrates,
+      missingCratesCount: missingCratesCount ?? this.missingCratesCount,
     );
   }
 
@@ -117,8 +162,13 @@ class CartItem {
       'is_wholesale_mode': isWholesaleMode,
       'custom_price': customPrice,
       'override_reason': overrideReason,
+      'no_empty_crates': noEmptyCrates,
+      'missing_crates_count': missingCratesCount,
+      'fee_per_crate': feePerCrate,
+      'crate_fee_total': crateFeeTotal,
       'original_unit_price': originalUnitPrice,
       'effective_unit_price': effectiveUnitPrice,
+      'line_goods_total': lineGoodsTotal,
       'line_total': lineTotal,
       'line_profit': lineProfit,
       'base_units_deducted': totalBaseUnitsDeducted,
@@ -135,6 +185,11 @@ class CartItem {
       isWholesaleMode: json['is_wholesale_mode'] as bool? ?? false,
       customPrice: (json['custom_price'] as num?)?.toInt(),
       overrideReason: json['override_reason'] as String?,
+      noEmptyCrates: json['no_empty_crates'] as bool? ??
+          json['noEmptyCrates'] as bool? ??
+          false,
+      missingCratesCount: (json['missing_crates_count'] as num?)?.toInt() ??
+          (json['missingCratesCount'] as num?)?.toInt(),
     );
   }
 }

@@ -18,6 +18,14 @@ class CartState {
     this.heldOrders = const [],
   });
 
+  /// Pure goods subtotal before crate deposit
+  int get pureGoodsSubtotal =>
+      items.fold<int>(0, (sum, item) => sum + item.lineGoodsTotal);
+
+  /// Total crate deposit / missing crate fee across all items
+  int get totalCrateDeposit =>
+      items.fold<int>(0, (sum, item) => sum + item.crateFeeTotal);
+
   /// Catalog subtotal before discounts
   int get subtotal =>
       items.fold<int>(0, (sum, item) => sum + item.lineSubtotal);
@@ -47,6 +55,22 @@ class CartState {
   int get totalQuantity =>
       items.fold<int>(0, (sum, item) => sum + item.quantity);
 
+  /// Total count of distinct line items in cart
+  int get itemCount => items.length;
+
+  /// Formatted grand total with Lao thousands separators
+  String get formattedGrandTotal {
+    final str = grandTotal.toString();
+    final buffer = StringBuffer();
+    for (int i = 0; i < str.length; i++) {
+      if (i > 0 && (str.length - i) % 3 == 0) {
+        buffer.write('.');
+      }
+      buffer.write(str[i]);
+    }
+    return buffer.toString();
+  }
+
   /// Is cart empty
   bool get isEmpty => items.isEmpty;
 
@@ -70,10 +94,23 @@ class CartNotifier extends StateNotifier<CartState> {
 
   CartNotifier() : super(const CartState());
 
-  /// Adds a product to the cart. If the product and unit match an existing line item,
-  /// increments quantity; otherwise adds a new line item.
-  void addProduct(Product product, {ProductUnit? unit, int quantity = 1}) {
+  /// Adds a product to the cart with strict stock validation for tracked items
+  bool addProduct(Product product, {ProductUnit? unit, int quantity = 1}) {
     final selectedUnit = unit ?? product.defaultBaseUnit;
+    final multiplier = selectedUnit.multiplier > 0 ? selectedUnit.multiplier : 1;
+
+    // Check inventory constraint if trackStock == true
+    if (product.trackStock) {
+      final currentBaseInCart = state.items
+          .where((it) => it.product.id == product.id)
+          .fold<int>(0, (sum, it) => sum + (it.selectedUnit.multiplier * it.quantity));
+      final requestedBase = currentBaseInCart + (multiplier * quantity);
+
+      if (requestedBase > product.currentStockBaseUnits) {
+        return false; // Exceeds available stock
+      }
+    }
+
     final existingIndex = state.items.indexWhere(
       (item) =>
           item.product.id == product.id &&
@@ -98,13 +135,34 @@ class CartNotifier extends StateNotifier<CartState> {
       );
       state = state.copyWith(items: [...state.items, newItem]);
     }
+    return true;
   }
 
-  /// Updates quantity of a specific cart item
-  void updateQuantity(String cartItemId, int newQuantity) {
+  /// Updates quantity of a specific cart item with stock check
+  bool updateQuantity(String cartItemId, int newQuantity) {
     if (newQuantity <= 0) {
       removeItem(cartItemId);
-      return;
+      return true;
+    }
+
+    final itemIndex = state.items.indexWhere((it) => it.id == cartItemId);
+    if (itemIndex < 0) return false;
+
+    final targetItem = state.items[itemIndex];
+    final product = targetItem.product;
+
+    if (product.trackStock) {
+      final otherBaseInCart = state.items
+          .where((it) => it.product.id == product.id && it.id != cartItemId)
+          .fold<int>(0, (sum, it) => sum + (it.selectedUnit.multiplier * it.quantity));
+      final targetMultiplier = targetItem.selectedUnit.multiplier > 0
+          ? targetItem.selectedUnit.multiplier
+          : 1;
+      final requestedTotalBase = otherBaseInCart + (targetMultiplier * newQuantity);
+
+      if (requestedTotalBase > product.currentStockBaseUnits) {
+        return false;
+      }
     }
 
     final newItems = state.items.map((item) {
@@ -115,6 +173,7 @@ class CartNotifier extends StateNotifier<CartState> {
     }).toList();
 
     state = state.copyWith(items: newItems);
+    return true;
   }
 
   /// Increments quantity by 1
@@ -175,6 +234,37 @@ class CartNotifier extends StateNotifier<CartState> {
     final newItems = state.items.map((item) {
       if (item.id == cartItemId) {
         return item.copyWith(clearOverride: true);
+      }
+      return item;
+    }).toList();
+
+    state = state.copyWith(items: newItems);
+  }
+
+  /// Toggles missing crate deposit fee (ບໍ່ມີແກັດປ່ຽນ) for an item
+  void toggleCrateDeposit(String cartItemId, bool noEmptyCrates) {
+    final newItems = state.items.map((item) {
+      if (item.id == cartItemId) {
+        return item.copyWith(
+          noEmptyCrates: noEmptyCrates,
+          missingCratesCount: noEmptyCrates ? (item.missingCratesCount ?? item.quantity) : 0,
+        );
+      }
+      return item;
+    }).toList();
+
+    state = state.copyWith(items: newItems);
+  }
+
+  /// Updates count of missing crates for an item
+  void updateMissingCrates(String cartItemId, int missingCount) {
+    final newItems = state.items.map((item) {
+      if (item.id == cartItemId) {
+        final clamped = missingCount.clamp(1, item.quantity);
+        return item.copyWith(
+          noEmptyCrates: true,
+          missingCratesCount: clamped,
+        );
       }
       return item;
     }).toList();

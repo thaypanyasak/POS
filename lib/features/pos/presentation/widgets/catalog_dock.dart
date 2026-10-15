@@ -3,11 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/localization/lo.dart';
 import '../../../../domain/models/product.dart';
-import '../../../analytics/presentation/profit_summary_sheet.dart';
-import '../../../history/presentation/receipt_history_screen.dart';
 import '../controllers/cart_controller.dart';
 import '../controllers/catalog_controller.dart';
 import '../controllers/printer_controller.dart';
+import 'barcode_scanner_modal.dart';
 import 'product_card.dart';
 import 'unit_selector_modal.dart';
 
@@ -30,21 +29,53 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
     super.dispose();
   }
 
+  void _openBarcodeScanner() {
+    showDialog(
+      context: context,
+      builder: (ctx) => const BarcodeScannerModal(),
+    );
+  }
+
   void _handleBarcodeSubmission(String text) {
     final match = ref.read(catalogProvider.notifier).findProductByBarcode(text);
     if (match != null) {
-      ref.read(cartProvider.notifier).addProduct(
-            match.product,
-            unit: match.unit,
-            quantity: 1,
-          );
+      final product = match.product;
+      final unit = match.unit;
+
+      final isOutOfStock = product.trackStock && product.currentStockBaseUnits <= 0;
+      final success = !isOutOfStock &&
+          ref.read(cartProvider.notifier).addProduct(
+                product,
+                unit: unit,
+                quantity: 1,
+              );
+
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ສິນຄ້າ "${product.name}" ໝົດສາງແລ້ວ! (ຍອດເຫຼືອ: ${product.currentStockBaseUnits} ${product.baseUnit})'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
       _searchController.clear();
       ref.read(catalogProvider.notifier).clearSearch();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('ຍິງບາໂຄດສຳເລັດ: ${match.product.name} (${match.unit.unitName})'),
+          content: Text('ຍິງບາໂຄດສຳເລັດ: ${product.name} (${unit.unitName})'),
           duration: const Duration(seconds: 1),
           backgroundColor: AppColors.primary,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('ບໍ່ພົບສິນຄ້າທີ່ມີບາໂຄດ: "$text"'),
+          duration: const Duration(seconds: 2),
+          backgroundColor: AppColors.error,
         ),
       );
     }
@@ -223,390 +254,282 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
       color: AppColors.background,
       child: Column(
         children: [
-          // Station Top Bar
-          Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: isCompactLandscape ? 10 : 16,
-              vertical: isCompactLandscape ? 6 : 11,
-            ),
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              border: Border(bottom: BorderSide(color: AppColors.border, width: 0.9)),
-            ),
-            child: Row(
-              children: [
-                // Store Identity Badge
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isCompactLandscape ? 8 : 11,
-                    vertical: isCompactLandscape ? 4 : 6,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: AppColors.primaryGradient,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x33059669),
-                        offset: Offset(0, 2),
-                        blurRadius: 6,
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    'MeiiShop',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: isCompactLandscape ? 13 : 15,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
+          // Top Control Bar: Search input with Camera Barcode Scanner & Category Filters (Matching Web POS)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final availableWidth = constraints.maxWidth;
+              final isNarrow = availableWidth < 500;
+              final inputHeight = isCompactLandscape ? 36.0 : (isNarrow ? 38.0 : 42.0);
+              final chipsHeight = isCompactLandscape ? 30.0 : (isNarrow ? 32.0 : 36.0);
+
+              return Container(
+                padding: EdgeInsets.fromLTRB(
+                  isNarrow ? 8 : (isCompactLandscape ? 10 : 14),
+                  isCompactLandscape ? 5 : 8,
+                  isNarrow ? 8 : (isCompactLandscape ? 10 : 14),
+                  isCompactLandscape ? 5 : 8,
                 ),
-                SizedBox(width: isCompactLandscape ? 8 : 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      LaoStrings.storeName,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        fontSize: isCompactLandscape ? 13 : 15,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
+                    // Top Search Row (with Camera Barcode Scanner INSIDE input, Sync Cloud, Printer Config)
                     Row(
                       children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF10B981),
-                            shape: BoxShape.circle,
+                        Expanded(
+                          child: Container(
+                            height: inputHeight,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFCBD5E1), width: 1.0),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const SizedBox(width: 14),
+                                const Icon(
+                                  Icons.search_rounded,
+                                  color: Color(0xFF64748B),
+                                  size: 19,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _searchController,
+                                    focusNode: _searchFocusNode,
+                                    cursorColor: const Color(0xFF0F766E),
+                                    style: TextStyle(
+                                      fontSize: isNarrow ? 12.0 : 13.0,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      border: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      errorBorder: InputBorder.none,
+                                      disabledBorder: InputBorder.none,
+                                      contentPadding: const EdgeInsets.only(left: 8, right: 8, top: 8, bottom: 8),
+                                      hintText: isNarrow ? 'ຄົ້ນຫາສິນຄ້າ ຫຼື ບາໂຄດ...' : 'ຄົ້ນຫາຊື່ສິນຄ້າ ຫຼື ສະແກນບາໂຄດ...',
+                                      hintStyle: TextStyle(
+                                        fontSize: isNarrow ? 11.0 : 12.0,
+                                        color: const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                    onChanged: (val) {
+                                      ref.read(catalogProvider.notifier).setSearchQuery(val);
+                                    },
+                                    onSubmitted: _handleBarcodeSubmission,
+                                  ),
+                                ),
+                                if (_searchController.text.isNotEmpty)
+                                  IconButton(
+                                    icon: const Icon(Icons.clear, size: 15, color: Color(0xFF94A3B8)),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      ref.read(catalogProvider.notifier).clearSearch();
+                                    },
+                                  ),
+
+                                // Compact Camera Barcode Scanner Button INSIDE input on right edge
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 5.0),
+                                  child: InkWell(
+                                    onTap: _openBarcodeScanner,
+                                    borderRadius: BorderRadius.circular(7),
+                                    child: Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: isNarrow ? 7 : 9,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF0FDFA),
+                                        borderRadius: BorderRadius.circular(7),
+                                        border: Border.all(color: const Color(0xFF99F6E4), width: 1.0),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Color(0xFF0F766E)),
+                                          if (!isNarrow) ...[
+                                            const SizedBox(width: 4),
+                                            const Text(
+                                              'SCAN',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w900,
+                                                color: Color(0xFF0F766E),
+                                                letterSpacing: 0.3,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 5),
-                        Text(
-                          '${LaoStrings.cashier}: ໄມ້ຄຳ • ${LaoStrings.onlineStatus}',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: AppColors.textTertiary,
-                            fontWeight: FontWeight.w500,
-                            fontSize: isCompactLandscape ? 9.5 : 11,
+                        const SizedBox(width: 6),
+
+                        // Supabase Sync Button
+                        IconButton(
+                          onPressed: () async {
+                            await ref.read(catalogProvider.notifier).fetchFromSupabase();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('ອັບເດດລາຍການສິນຄ້າຈາກ Supabase Cloud ສຳເລັດ!'),
+                                  backgroundColor: Color(0xFF0F766E),
+                                  duration: Duration(seconds: 1),
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.sync_rounded, color: Color(0xFF475569), size: 18),
+                          tooltip: 'ດຶງຂໍ້ມູນສິນຄ້າຈາກ Supabase Cloud',
+                          padding: EdgeInsets.all(isNarrow ? 6 : 8),
+                          constraints: BoxConstraints(minWidth: isNarrow ? 34 : 38, minHeight: isNarrow ? 34 : 38),
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(0xFFF8FAFC),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+
+                        // Printer Settings Button
+                        IconButton(
+                          onPressed: _showPrinterSettingsDialog,
+                          icon: const Icon(Icons.print_outlined, color: Color(0xFF475569), size: 18),
+                          tooltip: 'ຕັ້ງຄ່າເຄື່ອງພິມ',
+                          padding: EdgeInsets.all(isNarrow ? 6 : 8),
+                          constraints: BoxConstraints(minWidth: isNarrow ? 34 : 38, minHeight: isNarrow ? 34 : 38),
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(0xFFF8FAFC),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
-                const Spacer(),
 
-                // Refresh from Supabase button
-                IconButton(
-                  onPressed: () async {
-                    await ref.read(catalogProvider.notifier).fetchFromSupabase();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('ອັບເດດລາຍການສິນຄ້າຈາກ Supabase Cloud ສຳເລັດ!'),
-                          backgroundColor: AppColors.primary,
-                          duration: Duration(seconds: 1),
-                        ),
-                      );
-                    }
-                  },
-                  icon: Icon(Icons.sync_rounded, color: AppColors.textSecondary, size: isCompactLandscape ? 18 : 20),
-                  tooltip: 'ດຶງຂໍ້ມູນສິນຄ້າຈາກ Supabase Cloud',
-                  padding: isCompactLandscape ? const EdgeInsets.all(6) : null,
-                  constraints: isCompactLandscape ? const BoxConstraints() : null,
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.surfaceSubtle,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-                const SizedBox(width: 6),
+                    SizedBox(height: isCompactLandscape ? 5 : 7),
 
-                // Profit Report Quick Trigger
-                if (!isCompactLandscape)
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => const ProfitSummarySheet(),
-                      );
-                    },
-                    icon: const Icon(Icons.analytics_outlined, size: 17, color: AppColors.primary),
-                    label: const Text(LaoStrings.profitReport),
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: AppColors.surface,
-                      side: const BorderSide(color: AppColors.border, width: 0.9),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-                    ),
-                  )
-                else
-                  IconButton(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => const ProfitSummarySheet(),
-                      );
-                    },
-                    icon: const Icon(Icons.analytics_outlined, size: 18, color: AppColors.primary),
-                    tooltip: LaoStrings.profitReport,
-                    padding: const EdgeInsets.all(6),
-                    constraints: const BoxConstraints(),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.surfaceSubtle,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                const SizedBox(width: 6),
-
-                // Receipt History Quick Trigger
-                if (!isCompactLandscape)
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => Dialog(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          clipBehavior: Clip.antiAlias,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1050, maxHeight: 720),
-                            child: const ReceiptHistoryScreen(),
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.receipt_long_outlined, size: 17, color: AppColors.textSecondary),
-                    label: const Text('ປະຫວັດໃບບິນ'),
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: AppColors.surface,
-                      side: const BorderSide(color: AppColors.border, width: 0.9),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-                    ),
-                  )
-                else
-                  IconButton(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => Dialog(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          clipBehavior: Clip.antiAlias,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1050, maxHeight: 720),
-                            child: const ReceiptHistoryScreen(),
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.receipt_long_outlined, size: 18, color: AppColors.textSecondary),
-                    tooltip: 'ປະຫວັດໃບບິນ',
-                    padding: const EdgeInsets.all(6),
-                    constraints: const BoxConstraints(),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.surfaceSubtle,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                const SizedBox(width: 6),
-
-                // Printer settings button
-                IconButton(
-                  onPressed: _showPrinterSettingsDialog,
-                  icon: Icon(Icons.print_outlined, color: AppColors.textSecondary, size: isCompactLandscape ? 18 : 20),
-                  tooltip: 'ຕັ້ງຄ່າເຄື່ອງພິມ',
-                  padding: isCompactLandscape ? const EdgeInsets.all(6) : null,
-                  constraints: isCompactLandscape ? const BoxConstraints() : null,
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.surfaceSubtle,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Search Bar & Barcode Scanner Row
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              isCompactLandscape ? 8 : 16,
-              isCompactLandscape ? 5 : 10,
-              isCompactLandscape ? 8 : 16,
-              isCompactLandscape ? 4 : 8,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    height: isCompactLandscape ? 38 : 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(9),
-                      border: Border.all(color: AppColors.border, width: 0.9),
-                      boxShadow: AppColors.cardShadow,
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      focusNode: _searchFocusNode,
-                      style: TextStyle(
-                        fontSize: isCompactLandscape ? 12.5 : 13.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: isCompactLandscape ? 8 : 11,
-                        ),
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        hintText: LaoStrings.searchHint,
-                        hintStyle: TextStyle(
-                          fontSize: isCompactLandscape ? 12 : 13,
-                          color: AppColors.textMuted,
-                        ),
-                        prefixIcon: Icon(
-                          Icons.search_rounded,
-                          color: AppColors.textTertiary,
-                          size: isCompactLandscape ? 18 : 20,
-                        ),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 16),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  ref.read(catalogProvider.notifier).clearSearch();
-                                },
-                              )
-                            : Container(
-                                margin: EdgeInsets.all(isCompactLandscape ? 5 : 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceSubtle,
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(color: AppColors.borderSubtle),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.barcode_reader, size: 12, color: AppColors.textTertiary),
-                                    SizedBox(width: 3),
-                                    Text(
-                                      'SCAN',
-                                      style: TextStyle(
-                                        fontSize: 8.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.textTertiary,
-                                        letterSpacing: 0.5,
+                    // Category Chips Bar (Smooth horizontal sliding with BouncingScrollPhysics)
+                    SizedBox(
+                      height: chipsHeight,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 1),
+                        itemCount: catalogState.categories.length + 1,
+                        itemBuilder: (context, index) {
+                          // Add Category Button
+                          if (index == catalogState.categories.length) {
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 5.0),
+                              child: InkWell(
+                                onTap: _showAddCategoryDialog,
+                                borderRadius: BorderRadius.circular(7),
+                                child: Container(
+                                  alignment: Alignment.center,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isNarrow ? 8 : 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF0FDFA),
+                                    borderRadius: BorderRadius.circular(7),
+                                    border: Border.all(color: const Color(0xFF99F6E4), width: 1.0),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.add, size: 13, color: Color(0xFF0F766E)),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'ເພີ່ມໝວດໝູ່',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF0F766E),
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
-                      ),
-                      onChanged: (val) {
-                        ref.read(catalogProvider.notifier).setSearchQuery(val);
-                      },
-                      onSubmitted: _handleBarcodeSubmission,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+                            );
+                          }
 
-          // Horizontal Category Tabs
-          SizedBox(
-            height: isCompactLandscape ? 34 : 42,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: isCompactLandscape ? 8 : 16),
-              itemCount: catalogState.categories.length + 1,
-              itemBuilder: (context, index) {
-                // Last item is the dynamic "+ ເພີ່ມໝວດໝູ່" tab button
-                if (index == catalogState.categories.length) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 6.0),
-                    child: InkWell(
-                      onTap: _showAddCategoryDialog,
-                      borderRadius: BorderRadius.circular(7),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isCompactLandscape ? 8 : 10,
-                          vertical: isCompactLandscape ? 4 : 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight,
-                          borderRadius: BorderRadius.circular(7),
-                          border: Border.all(color: AppColors.primaryBorder, width: 0.9),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.add, size: isCompactLandscape ? 13 : 15, color: AppColors.primaryDark),
-                            const SizedBox(width: 3),
-                            Text(
-                              'ເພີ່ມໝວດໝູ່',
-                              style: TextStyle(
-                                fontSize: isCompactLandscape ? 11 : 12,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.primaryDark,
+                          final category = catalogState.categories[index];
+                          final isSelected = category == catalogState.selectedCategory;
+
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 5.0),
+                            child: InkWell(
+                              onTap: () => ref.read(catalogProvider.notifier).selectCategory(category),
+                              borderRadius: BorderRadius.circular(7),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                alignment: Alignment.center,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: isNarrow ? 10 : 13,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? const Color(0xFF0F766E) : const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(7),
+                                  border: Border.all(
+                                    color: isSelected ? const Color(0xFF0F766E) : const Color(0xFFCBD5E1),
+                                    width: 1.0,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? const [
+                                          BoxShadow(
+                                            color: Color(0x260F766E),
+                                            offset: Offset(0, 1),
+                                            blurRadius: 2,
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    category,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: isNarrow ? 11.0 : 11.5,
+                                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                      color: isSelected ? Colors.white : const Color(0xFF475569),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     ),
-                  );
-                }
-
-                final category = catalogState.categories[index];
-                final isSelected = category == catalogState.selectedCategory;
-
-                return Padding(
-                  padding: const EdgeInsets.only(right: 5.0),
-                  child: InkWell(
-                    onTap: () => ref.read(catalogProvider.notifier).selectCategory(category),
-                    borderRadius: BorderRadius.circular(7),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isCompactLandscape ? 9 : 12,
-                        vertical: isCompactLandscape ? 5 : 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected ? AppColors.surfaceDark : AppColors.surface,
-                        borderRadius: BorderRadius.circular(7),
-                        border: Border.all(
-                          color: isSelected ? AppColors.surfaceDark : AppColors.border,
-                          width: 0.9,
-                        ),
-                        boxShadow: isSelected
-                            ? const [
-                                BoxShadow(
-                                  color: Color(0x1F0F172A),
-                                  offset: Offset(0, 2),
-                                  blurRadius: 4,
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Text(
-                        category,
-                        style: TextStyle(
-                          fontSize: isCompactLandscape ? 11 : 12.5,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                          color: isSelected ? Colors.white : AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+                  ],
+                ),
+              );
+            },
           ),
 
           SizedBox(height: isCompactLandscape ? 4 : 6),
@@ -641,16 +564,16 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
 
                       if (width > 950) {
                         crossAxisCount = 5;
-                        childAspectRatio = isCompactLandscape ? 1.35 : 1.25;
+                        childAspectRatio = isCompactLandscape ? 0.92 : 0.82;
                       } else if (width > 650) {
                         crossAxisCount = 4;
-                        childAspectRatio = isCompactLandscape ? 1.30 : 1.22;
+                        childAspectRatio = isCompactLandscape ? 0.90 : 0.80;
                       } else if (width > 360) {
                         crossAxisCount = 3;
-                        childAspectRatio = isCompactLandscape ? 1.25 : 1.15;
+                        childAspectRatio = isCompactLandscape ? 0.86 : 0.78;
                       } else {
                         crossAxisCount = 2;
-                        childAspectRatio = isCompactLandscape ? 1.20 : 1.10;
+                        childAspectRatio = isCompactLandscape ? 0.84 : 0.76;
                       }
 
                       return GridView.builder(
@@ -673,18 +596,38 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                             product: product,
                             isWholesaleMode: cartState.isWholesaleMode,
                             onTap: () {
-                              ref.read(cartProvider.notifier).addProduct(
+                              final success = ref.read(cartProvider.notifier).addProduct(
                                     product,
                                     unit: product.defaultBaseUnit,
                                     quantity: 1,
                                   );
+                              if (!success) {
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('⚠️ ສິນຄ້າໃນສາງບໍ່ພໍ! ຍັງເຫຼືອພຽງ ${product.stockBadgeText}'),
+                                    backgroundColor: AppColors.error,
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
                             },
                             onSelectUnit: (unit) {
-                              ref.read(cartProvider.notifier).addProduct(
+                              final success = ref.read(cartProvider.notifier).addProduct(
                                     product,
                                     unit: unit,
                                     quantity: 1,
                                   );
+                              if (!success) {
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('⚠️ ສິນຄ້າໃນສາງບໍ່ພໍ! ຍັງເຫຼືອພຽງ ${product.stockBadgeText}'),
+                                    backgroundColor: AppColors.error,
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
                             },
                             onOpenUnitSelector: () {
                               _openUnitSelector(product, cartState.isWholesaleMode);

@@ -9,6 +9,8 @@ class ProductUnit {
   final int wholesalePrice; // wholesale selling price in Lao Kip (₭)
   final String? barcode;
   final bool isBaseUnit;
+  final int? tier; // 1: piece, 2: pack, 3: carton
+  final bool isActive;
 
   const ProductUnit({
     required this.id,
@@ -19,6 +21,8 @@ class ProductUnit {
     required this.wholesalePrice,
     this.barcode,
     this.isBaseUnit = false,
+    this.tier,
+    this.isActive = true,
   });
 
   /// Returns the effective price given wholesale mode flag
@@ -50,6 +54,8 @@ class ProductUnit {
     int? wholesalePrice,
     String? barcode,
     bool? isBaseUnit,
+    int? tier,
+    bool? isActive,
   }) {
     return ProductUnit(
       id: id ?? this.id,
@@ -60,6 +66,8 @@ class ProductUnit {
       wholesalePrice: wholesalePrice ?? this.wholesalePrice,
       barcode: barcode ?? this.barcode,
       isBaseUnit: isBaseUnit ?? this.isBaseUnit,
+      tier: tier ?? this.tier,
+      isActive: isActive ?? this.isActive,
     );
   }
 
@@ -73,19 +81,25 @@ class ProductUnit {
       'wholesale_price': wholesalePrice,
       'barcode': barcode,
       'is_base_unit': isBaseUnit,
+      'tier': tier,
+      'is_active': isActive,
     };
   }
 
   factory ProductUnit.fromJson(Map<String, dynamic> json) {
     return ProductUnit(
-      id: json['id'] as String,
-      productId: json['product_id'] as String,
-      unitName: json['unit_name'] as String,
-      multiplier: (json['multiplier'] as num).toInt(),
-      retailPrice: (json['retail_price'] as num).toInt(),
-      wholesalePrice: (json['wholesale_price'] as num).toInt(),
-      barcode: json['barcode'] as String?,
+      id: json['id']?.toString() ?? '',
+      productId: json['product_id']?.toString() ?? '',
+      unitName: json['unit_name']?.toString() ?? 'ອັນ',
+      multiplier: (json['multiplier'] as num?)?.toInt() ?? 1,
+      retailPrice: (json['retail_price'] as num?)?.toInt() ?? 0,
+      wholesalePrice: (json['wholesale_price'] as num?)?.toInt() ??
+          (json['retail_price'] as num?)?.toInt() ??
+          0,
+      barcode: json['barcode']?.toString(),
       isBaseUnit: json['is_base_unit'] as bool? ?? false,
+      tier: (json['tier'] as num?)?.toInt(),
+      isActive: json['is_active'] as bool? ?? true,
     );
   }
 }

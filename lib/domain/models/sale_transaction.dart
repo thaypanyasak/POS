@@ -5,6 +5,7 @@ import 'sale_item.dart';
 enum PaymentMethod {
   cash, // ເງິນສົດ
   qrTransfer, // ເງິນໂອນ (BCEL One / Lao QR)
+  debt, // ຄ້າງຊຳລະ (Debt/Credit)
 }
 
 /// Customer Category
@@ -93,6 +94,15 @@ class SaleTransaction {
   final int grossProfit; // grandTotal - totalCostOfGoods
   final bool isSynced; // Drift -> Supabase sync flag
   final String? cashierName;
+  final bool isDebt;
+  final int paidAmount;
+  final int debtAmount;
+  final String debtStatus; // 'unpaid', 'partial', 'paid'
+  final String? debtNote;
+  final String status; // 'completed' | 'cancelled' | 'voided'
+  final bool isCancelled;
+  final DateTime? cancelledAt;
+  final String? voidReason;
 
   const SaleTransaction({
     required this.id,
@@ -111,6 +121,15 @@ class SaleTransaction {
     required this.grossProfit,
     this.isSynced = false,
     this.cashierName = 'Meii',
+    this.isDebt = false,
+    this.paidAmount = 0,
+    this.debtAmount = 0,
+    this.debtStatus = 'paid',
+    this.debtNote,
+    this.status = 'completed',
+    this.isCancelled = false,
+    this.cancelledAt,
+    this.voidReason,
   });
 
   /// Total count of physical units sold
@@ -171,6 +190,15 @@ class SaleTransaction {
     int? grossProfit,
     bool? isSynced,
     String? cashierName,
+    bool? isDebt,
+    int? paidAmount,
+    int? debtAmount,
+    String? debtStatus,
+    String? debtNote,
+    String? status,
+    bool? isCancelled,
+    DateTime? cancelledAt,
+    String? voidReason,
   }) {
     return SaleTransaction(
       id: id ?? this.id,
@@ -189,6 +217,15 @@ class SaleTransaction {
       grossProfit: grossProfit ?? this.grossProfit,
       isSynced: isSynced ?? this.isSynced,
       cashierName: cashierName ?? this.cashierName,
+      isDebt: isDebt ?? this.isDebt,
+      paidAmount: paidAmount ?? this.paidAmount,
+      debtAmount: debtAmount ?? this.debtAmount,
+      debtStatus: debtStatus ?? this.debtStatus,
+      debtNote: debtNote ?? this.debtNote,
+      status: status ?? this.status,
+      isCancelled: isCancelled ?? this.isCancelled,
+      cancelledAt: cancelledAt ?? this.cancelledAt,
+      voidReason: voidReason ?? this.voidReason,
     );
   }
 
@@ -210,6 +247,15 @@ class SaleTransaction {
       'gross_profit': grossProfit,
       'is_synced': isSynced,
       'cashier_name': cashierName,
+      'is_debt': isDebt,
+      'paid_amount': paidAmount,
+      'debt_amount': debtAmount,
+      'debt_status': debtStatus,
+      'debt_note': debtNote,
+      'status': status,
+      'is_cancelled': isCancelled,
+      'cancelled_at': cancelledAt?.toIso8601String(),
+      'void_reason': voidReason,
     };
   }
 
@@ -236,11 +282,30 @@ class SaleTransaction {
 
     PaymentMethod method = PaymentMethod.cash;
     final methodStr = json['payment_method'] as String?;
-    if (methodStr == PaymentMethod.qrTransfer.name ||
-        methodStr == 'qrTransfer' ||
-        methodStr == 'qr') {
-      method = PaymentMethod.qrTransfer;
+    final isMethodCancelled = methodStr != null && methodStr.startsWith('cancelled');
+    String cleanMethodStr = methodStr ?? 'cash';
+    if (cleanMethodStr.startsWith('cancelled:')) {
+      cleanMethodStr = cleanMethodStr.replaceFirst('cancelled:', '');
+    } else if (cleanMethodStr == 'cancelled') {
+      cleanMethodStr = 'cash';
     }
+
+    if (cleanMethodStr == PaymentMethod.qrTransfer.name ||
+        cleanMethodStr == 'qrTransfer' ||
+        cleanMethodStr == 'qr' ||
+        cleanMethodStr == 'transfer' ||
+        cleanMethodStr == 'onepay') {
+      method = PaymentMethod.qrTransfer;
+    } else if (cleanMethodStr == PaymentMethod.debt.name ||
+        cleanMethodStr == 'debt' ||
+        cleanMethodStr == 'credit') {
+      method = PaymentMethod.debt;
+    }
+
+    final isDebt = json['is_debt'] as bool? ?? (method == PaymentMethod.debt);
+    final rawStatus = json['status'] as String? ?? (isMethodCancelled ? 'cancelled' : 'completed');
+    final isCancelled = json['is_cancelled'] as bool? ??
+        (rawStatus == 'cancelled' || rawStatus == 'voided' || isMethodCancelled);
 
     return SaleTransaction(
       id: json['id'] as String,
@@ -263,6 +328,17 @@ class SaleTransaction {
       grossProfit: (json['gross_profit'] as num?)?.toInt() ?? 0,
       isSynced: json['is_synced'] as bool? ?? false,
       cashierName: json['cashier_name'] as String? ?? 'ໄມ້ຄຳ (Meii)',
+      isDebt: isDebt,
+      paidAmount: (json['paid_amount'] as num?)?.toInt() ?? 0,
+      debtAmount: (json['debt_amount'] as num?)?.toInt() ?? 0,
+      debtStatus: json['debt_status'] as String? ?? 'paid',
+      debtNote: json['debt_note'] as String?,
+      status: isCancelled ? 'cancelled' : rawStatus,
+      isCancelled: isCancelled,
+      cancelledAt: json['cancelled_at'] != null
+          ? DateTime.tryParse(json['cancelled_at'] as String)
+          : (json['voided_at'] != null ? DateTime.tryParse(json['voided_at'] as String) : null),
+      voidReason: json['void_reason'] as String?,
     );
   }
 }
@@ -298,6 +374,9 @@ class ProfitSummary {
     int items = 0;
 
     for (final tx in txs) {
+      if (tx.isCancelled || tx.status == 'cancelled' || tx.status == 'voided') {
+        continue;
+      }
       revenue += tx.grandTotal;
       cost += tx.totalCostOfGoods;
       profit += tx.grossProfit;

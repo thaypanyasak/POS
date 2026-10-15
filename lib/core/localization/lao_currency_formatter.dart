@@ -57,6 +57,21 @@ class LaoCurrencyFormatter {
     return '$formatted $currencySymbol';
   }
 
+  /// Formats amount with thousand dot separators and without currency symbol (e.g. 500.000)
+  static String formatDots(num amount) {
+    return _dotNumberFormat.format(amount.round());
+  }
+
+  /// Formats amount as number string with thousand dots (alias for formatDots)
+  static String formatNumber(num amount) {
+    return _dotNumberFormat.format(amount.round());
+  }
+
+  /// Parses a string into an integer Lao Kip amount (alias for parse)
+  static int parseClean(String? input) {
+    return parse(input);
+  }
+
   /// Formats an integer with a `+` prefix for quick cash buttons.
   /// Example: `50000` -> `+50.000 ₭`
   static String formatPreset(int presetAmount) {

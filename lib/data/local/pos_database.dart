@@ -56,6 +56,19 @@ class PosDatabase {
     }
   }
 
+  /// Deletes a transaction locally
+  Future<void> deleteTransaction(String transactionId) async {
+    try {
+      final prefs = await _getPrefs();
+      final content = prefs.getString(_keyTransactions);
+      if (content == null || content.isEmpty) return;
+
+      final List<dynamic> list = jsonDecode(content) as List<dynamic>;
+      list.removeWhere((item) => item is Map && item['id'] == transactionId);
+      await prefs.setString(_keyTransactions, jsonEncode(list));
+    } catch (_) {}
+  }
+
   /// Clears stored transactions (for reset)
   Future<void> clearTransactions() async {
     try {

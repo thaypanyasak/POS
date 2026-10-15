@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/models/cart_item.dart';
+import '../../domain/models/category_model.dart';
 import '../../domain/models/product.dart';
 import '../../domain/models/product_unit.dart';
 import '../../domain/models/sale_transaction.dart';
@@ -117,11 +118,17 @@ class SupabaseSyncService {
 
   /// Syncs an added or edited product and its units to Supabase
   static Future<bool> syncProduct(Product product) async {
-    if (!isConnected) return false;
+    if (!isConnected) {
+      // ignore: avoid_print
+      print('⚠️ SupabaseSyncService: Not connected, skipping cloud sync.');
+      return false;
+    }
     try {
       final client = _client!;
-      // 1. Upsert product
-      await client.from('products').upsert({
+      final currentStock = product.trackStock ? product.currentStockBaseUnits : 0;
+
+      // Exactly matches Supabase 'products' table schema (same as web-app/src/services/supabase.js)
+      final prodPayload = <String, dynamic>{
         'id': product.id,
         'name': product.name,
         'category': product.category,
@@ -129,12 +136,32 @@ class SupabaseSyncService {
         'image_url': product.imageUrl,
         'base_unit': product.baseUnit,
         'cost_per_base_unit': product.costPerBaseUnit,
-        'current_stock_base_units': product.currentStockBaseUnits,
+        'current_stock_base_units': currentStock,
         'track_stock': product.trackStock,
-      });
+        'updated_at': DateTime.now().toIso8601String(),
+      };
 
-      // 2. Delete existing units and re-insert
+      if (product.categoryId != null && product.categoryId!.isNotEmpty) {
+        prodPayload['category_id'] = product.categoryId;
+      }
+
+      // 1. Upsert product
+      try {
+        await client.from('products').upsert(prodPayload);
+      } catch (e) {
+        // Fallback if category_id column error occurs
+        if (prodPayload.containsKey('category_id')) {
+          prodPayload.remove('category_id');
+          await client.from('products').upsert(prodPayload);
+        } else {
+          rethrow;
+        }
+      }
+
+      // 2. Delete existing units and re-insert fresh active units
       await client.from('product_units').delete().eq('product_id', product.id);
+
+      // Matches Supabase 'product_units' table schema
       final unitsData = product.units.map((u) {
         return {
           'id': u.id,
@@ -152,18 +179,27 @@ class SupabaseSyncService {
         await client.from('product_units').insert(unitsData);
       }
       return true;
-    } catch (_) {
+    } catch (e, stack) {
+      // ignore: avoid_print
+      print('❌ SupabaseSyncService.syncProduct error: $e\n$stack');
       return false;
     }
   }
 
   /// Deletes product from Supabase
   static Future<bool> deleteProduct(String productId) async {
-    if (!isConnected) return false;
+    if (!isConnected) {
+      // ignore: avoid_print
+      print('⚠️ SupabaseSyncService: Not connected, cannot delete product $productId');
+      return false;
+    }
     try {
+      await _client!.from('product_units').delete().eq('product_id', productId);
       await _client!.from('products').delete().eq('id', productId);
       return true;
-    } catch (_) {
+    } catch (e, stack) {
+      // ignore: avoid_print
+      print('❌ SupabaseSyncService.deleteProduct error: $e\n$stack');
       return false;
     }
   }
@@ -172,11 +208,141 @@ class SupabaseSyncService {
   static Future<List<Product>?> fetchProducts() async {
     if (!isConnected) return null;
     try {
-      final data =
-          await _client!.from('products').select('*, product_units(*)');
-      return (data as List).map((json) => Product.fromJson(json)).toList();
+      try {
+        final data = await _client!
+            .from('products')
+            .select('*, categories:category_id(id, name), product_units(*)')
+            .order('created_at', ascending: false);
+        return (data as List).map((json) => Product.fromJson(json)).toList();
+      } catch (_) {
+        // Fallback without relational categories join if schema is simple
+        final fallbackData = await _client!
+            .from('products')
+            .select('*, product_units(*)')
+            .order('name', ascending: true);
+        return (fallbackData as List).map((json) => Product.fromJson(json)).toList();
+      }
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Fetches Categories from Supabase ('categories' table) as simple strings
+  static Future<List<String>?> fetchCategories() async {
+    if (!isConnected) return null;
+    try {
+      final detailed = await fetchCategoriesDetailed();
+      if (detailed != null && detailed.isNotEmpty) {
+        return detailed.map((c) => c.name).toList();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Fetches full CategoryModel objects from Supabase
+  static Future<List<CategoryModel>?> fetchCategoriesDetailed() async {
+    if (!isConnected) return null;
+    try {
+      final data = await _client!
+          .from('categories')
+          .select('id, name, sort_order')
+          .order('sort_order', ascending: true);
+      final list = (data as List)
+          .map((row) => CategoryModel.fromJson(row as Map<String, dynamic>))
+          .where((cat) => cat.name.isNotEmpty)
+          .toList();
+      return list;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Creates a new category in Supabase ('categories' table)
+  static Future<CategoryModel?> createCategoryDetailed(String name, {int sortOrder = 0}) async {
+    if (!isConnected) return null;
+    try {
+      final clean = name.trim();
+      if (clean.isEmpty) return null;
+      final res = await _client!.from('categories').insert({
+        'name': clean,
+        'sort_order': sortOrder,
+      }).select().single();
+      return CategoryModel.fromJson(res);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Alias for backward compatibility
+  static Future<bool> createCategory(String name, {int sortOrder = 0}) async {
+    final res = await createCategoryDetailed(name, sortOrder: sortOrder);
+    return res != null;
+  }
+
+  /// Updates Category name & cascades to products in Supabase
+  static Future<bool> updateCategory({
+    required String id,
+    required String newName,
+    String? oldName,
+  }) async {
+    if (!isConnected) return false;
+    try {
+      final clean = newName.trim();
+      if (clean.isEmpty) return false;
+
+      // 1. Update categories table
+      await _client!.from('categories').update({'name': clean}).eq('id', id);
+
+      // 2. Cascade to products by oldName or category_id
+      if (oldName != null && oldName.isNotEmpty) {
+        await _client!.from('products').update({'category': clean}).eq('category', oldName);
+      }
+      try {
+        await _client!.from('products').update({'category': clean}).eq('category_id', id);
+      } catch (_) {}
+
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Deletes a Category safely after checking product count
+  static Future<String?> deleteCategorySafely({
+    required String id,
+    required String categoryName,
+  }) async {
+    if (!isConnected) return 'ບໍ່ສາມາດເຊື່ອມຕໍ່ລະບົບໄດ້';
+    try {
+      // 1. Safety check: count products linked by category name or category_id
+      int count = 0;
+      try {
+        final countByName = await _client!
+            .from('products')
+            .count(CountOption.exact)
+            .eq('category', categoryName);
+        count += countByName;
+      } catch (_) {}
+
+      try {
+        final countById = await _client!
+            .from('products')
+            .count(CountOption.exact)
+            .eq('category_id', id);
+        count = count > countById ? count : countById;
+      } catch (_) {}
+
+      if (count > 0) {
+        return 'ໝວດໝູ່ນີ້ກຳລັງມີສິນຄ້າຢູ່ $count ລາຍການ, ບໍ່ສາມາດລຶບໄດ້! ກະລຸນາຍ້າຍສິນຄ້າໄປໝວດອື່ນກ່ອນ.';
+      }
+
+      // 2. Delete
+      await _client!.from('categories').delete().eq('id', id);
+      return null; // success
+    } catch (e) {
+      return 'ເກີດຂໍ້ຜິດພາດ: $e';
     }
   }
 
@@ -229,6 +395,59 @@ class SupabaseSyncService {
       }).toList();
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Cancels / Voids a transaction in Supabase
+  static Future<bool> cancelTransaction(String transactionId, String paymentMethod) async {
+    if (!isConnected) return false;
+    try {
+      final client = _client!;
+      final cancelledMethod = paymentMethod.startsWith('cancelled')
+          ? paymentMethod
+          : 'cancelled:$paymentMethod';
+
+      await client
+          .from('sale_transactions')
+          .update({'payment_method': cancelledMethod})
+          .eq('id', transactionId);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Deletes a transaction and its items permanently from Supabase
+  static Future<bool> deleteTransaction(String transactionId) async {
+    if (!isConnected) return false;
+    try {
+      final client = _client!;
+      await client
+          .from('sale_transaction_items')
+          .delete()
+          .eq('transaction_id', transactionId);
+      await client
+          .from('sale_transactions')
+          .delete()
+          .eq('id', transactionId);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Updates transaction details in Supabase (customer name, payment method)
+  static Future<bool> updateTransaction(String transactionId, Map<String, dynamic> updates) async {
+    if (!isConnected) return false;
+    try {
+      final client = _client!;
+      await client
+          .from('sale_transactions')
+          .update(updates)
+          .eq('id', transactionId);
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 }

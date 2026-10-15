@@ -81,30 +81,189 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     }
   }
 
+  void _openMobileCartDrawer() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          height: MediaQuery.of(ctx).size.height * 0.88,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 20,
+                offset: Offset(0, -4),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              // Pull Handle Indicator
+              Container(
+                margin: const EdgeInsets.only(top: 10, bottom: 6),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Expanded(child: CartDock()),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final cartState = ref.watch(cartProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             final screenWidth = constraints.maxWidth;
-            // On compact mobile landscape (width < 900): 62% catalog, 38% cart
-            // On larger tablet landscape: 65% catalog, 35% cart
-            final isCompactMobile = screenWidth < 900;
-            final catalogFlex = isCompactMobile ? 62 : 65;
-            final cartFlex = isCompactMobile ? 38 : 35;
+            final isLandscapeTablet = screenWidth >= 768;
 
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            // 1. TABLET / DESKTOP (Width >= 768px) -> Split Screen View
+            if (isLandscapeTablet) {
+              final cartWidth = screenWidth >= 1280
+                  ? 380.0
+                  : (screenWidth >= 1024 ? 350.0 : 330.0);
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Expanded(
+                    child: CatalogDock(),
+                  ),
+                  SizedBox(
+                    width: cartWidth,
+                    child: const CartDock(),
+                  ),
+                ],
+              );
+            }
+
+            // 2. MOBILE PORTRAIT / PHONE (< 768px) -> Full Catalog + Floating Bottom Cart Bar
+            return Column(
               children: [
-                Expanded(
-                  flex: catalogFlex,
-                  child: const CatalogDock(),
+                const Expanded(
+                  child: CatalogDock(),
                 ),
-                Expanded(
-                  flex: cartFlex,
-                  child: const CartDock(),
+
+                // Floating Cart Summary Bar (Section 2.1.B in SPEC_RESPONSIVE_ORIENTATION.md)
+                InkWell(
+                  onTap: _openMobileCartDrawer,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0F766E),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x260F766E),
+                          offset: Offset(0, -3),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        // Cart Icon Badge
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            const Icon(Icons.shopping_cart_rounded, color: Colors.white, size: 22),
+                            if (cartState.itemCount > 0)
+                              Positioned(
+                                top: -6,
+                                right: -8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE11D48),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.white, width: 1.5),
+                                  ),
+                                  child: Text(
+                                    '${cartState.itemCount}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(width: 14),
+
+                        // Customer & Subtotal
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                cartState.customer.name.isNotEmpty
+                                    ? cartState.customer.name
+                                    : 'ລູກຄ້າທົ່ວໄປ',
+                                style: const TextStyle(
+                                  color: Color(0xFFCCFBF1),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '${cartState.formattedGrandTotal} ₭',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w900,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Action Button
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: const [
+                              Text(
+                                'ເບິ່ງກະຕ່າ',
+                                style: TextStyle(
+                                  color: Color(0xFF0F766E),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              SizedBox(width: 4),
+                              Icon(Icons.arrow_forward_rounded, size: 14, color: Color(0xFF0F766E)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             );

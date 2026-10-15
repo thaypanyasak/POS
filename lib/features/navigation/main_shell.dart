@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/localization/lo.dart';
 import '../backoffice/presentation/dashboard_screen.dart';
-import '../backoffice/presentation/product_form_screen.dart';
 import '../backoffice/presentation/product_list_screen.dart';
 import '../history/presentation/receipt_history_screen.dart';
 import '../pos/presentation/controllers/printer_controller.dart';
@@ -11,10 +10,9 @@ import '../pos/presentation/pos_screen.dart';
 
 enum MainWorkflow {
   pos,
-  catalog,
-  addProduct,
-  history,
   dashboard,
+  catalog,
+  history,
 }
 
 /// Master Shell with Collapsible Sidebar Navigation for iPad/Tablet Landscape
@@ -31,36 +29,92 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Row(
-        children: [
-          // Collapsible Left Navigation Rail
-          _buildSidebar(context),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 640;
 
-          // Main Workflow Content (IndexedStack keeps POS state alive)
-          Expanded(
-            child: IndexedStack(
-              index: _currentWorkflow.index,
-              children: [
-                const PosScreen(),
-                ProductListScreen(
-                  onOpenAddProduct: () {
-                    setState(() => _currentWorkflow = MainWorkflow.addProduct);
-                  },
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Row(
+            children: [
+              // Collapsible Left Navigation Rail (Only for tablets & desktop >= 640px)
+              if (!isMobile) _buildSidebar(context),
+
+              // Main Workflow Content (IndexedStack keeps POS state alive)
+              Expanded(
+                child: IndexedStack(
+                  index: _currentWorkflow.index,
+                  children: const [
+                    PosScreen(),
+                    DashboardScreen(),
+                    ProductListScreen(),
+                    ReceiptHistoryScreen(),
+                  ],
                 ),
-                ProductFormScreen(
-                  onSaved: () {
-                    setState(() => _currentWorkflow = MainWorkflow.catalog);
-                  },
-                ),
-                const ReceiptHistoryScreen(),
-                const DashboardScreen(),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+          bottomNavigationBar: isMobile
+              ? Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    border: Border(
+                      top: BorderSide(color: Color(0xFFE2E8F0), width: 1.0),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x0F000000),
+                        offset: Offset(0, -2),
+                        blurRadius: 6,
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: BottomNavigationBar(
+                      currentIndex: _currentWorkflow.index,
+                      onTap: (index) {
+                        setState(() {
+                          _currentWorkflow = MainWorkflow.values[index];
+                        });
+                      },
+                      type: BottomNavigationBarType.fixed,
+                      backgroundColor: Colors.white,
+                      selectedItemColor: const Color(0xFF0F766E),
+                      unselectedItemColor: const Color(0xFF64748B),
+                      selectedFontSize: 11,
+                      unselectedFontSize: 10,
+                      selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w800),
+                      unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                      elevation: 0,
+                      items: const [
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.storefront_rounded),
+                          activeIcon: Icon(Icons.storefront_rounded),
+                          label: 'ຂາຍໜ້າຮ້ານ',
+                        ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.bar_chart_rounded),
+                          activeIcon: Icon(Icons.bar_chart_rounded),
+                          label: 'ແຜງຄວບຄຸມ',
+                        ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.warehouse_rounded),
+                          activeIcon: Icon(Icons.warehouse_rounded),
+                          label: 'ລາຍການສິນຄ້າ',
+                        ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.history_rounded),
+                          activeIcon: Icon(Icons.history_rounded),
+                          label: 'ປະຫວັດບິນ',
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : null,
+        );
+      },
     );
   }
 
@@ -97,98 +151,115 @@ class _MainShellState extends ConsumerState<MainShell> {
               // Sidebar Header & Toggle
               Container(
                 padding: EdgeInsets.symmetric(
-                  horizontal: isCompact ? 10 : 16,
+                  horizontal: isCompact ? 4 : 16,
                   vertical: 14,
                 ),
-                child: Row(
-                  mainAxisAlignment: isCompact
-                      ? MainAxisAlignment.center
-                      : MainAxisAlignment.spaceBetween,
-                  children: [
-                    if (!isCompact)
-                      Expanded(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                gradient: AppColors.primaryGradient,
-                                borderRadius: BorderRadius.circular(9),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x33059669),
-                                    offset: Offset(0, 2),
-                                    blurRadius: 6,
+                child: isCompact
+                    ? Center(
+                        child: IconButton(
+                          onPressed: () {
+                            setState(() => _isSidebarCollapsed = !_isSidebarCollapsed);
+                          },
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.surfaceSubtle,
+                            padding: const EdgeInsets.all(6),
+                            minimumSize: const Size(36, 36),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          icon: const Icon(
+                            Icons.menu,
+                            color: AppColors.textSecondary,
+                            size: 18,
+                          ),
+                          tooltip: 'ຂະຫຍາຍເມນູ',
+                        ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    gradient: AppColors.primaryGradient,
+                                    borderRadius: BorderRadius.circular(9),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x33059669),
+                                        offset: Offset(0, 2),
+                                        blurRadius: 6,
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'M',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 18,
-                                    letterSpacing: -0.5,
+                                  child: const Center(
+                                    child: Text(
+                                      'M',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 18,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
                                   ),
                                 ),
+                                const SizedBox(width: 10),
+                                const Flexible(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'MeiiShop',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppColors.textPrimary,
+                                          letterSpacing: -0.3,
+                                        ),
+                                        overflow: TextOverflow.fade,
+                                        softWrap: false,
+                                      ),
+                                      Text(
+                                        'POS Station',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textTertiary,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              setState(() => _isSidebarCollapsed = !_isSidebarCollapsed);
+                            },
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
                             ),
-                            const SizedBox(width: 10),
-                            const Flexible(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'MeiiShop',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppColors.textPrimary,
-                                      letterSpacing: -0.3,
-                                    ),
-                                    overflow: TextOverflow.fade,
-                                    softWrap: false,
-                                  ),
-                                  Text(
-                                    'POS Station',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textTertiary,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
+                            icon: const Icon(
+                              Icons.menu_open,
+                              color: AppColors.textSecondary,
+                              size: 20,
                             ),
-                          ],
-                        ),
+                            tooltip: 'ຫຍໍ້ເມນູ',
+                          ),
+                        ],
                       ),
-                    IconButton(
-                      onPressed: () {
-                        setState(() => _isSidebarCollapsed = !_isSidebarCollapsed);
-                      },
-                      style: IconButton.styleFrom(
-                        backgroundColor: isCompact
-                            ? AppColors.surfaceSubtle
-                            : Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: Icon(
-                        _isSidebarCollapsed ? Icons.menu_open : Icons.menu,
-                        color: AppColors.textSecondary,
-                        size: 20,
-                      ),
-                      tooltip: _isSidebarCollapsed ? 'ຂະຫຍາຍເມນູ' : 'ຫຍໍ້ເມນູ',
-                    ),
-                  ],
-                ),
               ),
 
               const Divider(height: 1, color: AppColors.border),
@@ -201,36 +272,26 @@ class _MainShellState extends ConsumerState<MainShell> {
                   children: [
                     _buildNavItem(
                       workflow: MainWorkflow.pos,
-                      icon: Icons.point_of_sale_rounded,
-                      label: 'ຈຸດຂາຍ (POS)',
-                      badgeText: 'ໜ້າຮ້ານ',
-                      isCompact: isCompact,
-                    ),
-                    _buildNavItem(
-                      workflow: MainWorkflow.catalog,
-                      icon: Icons.inventory_2_outlined,
-                      label: 'ສາງ & ສິນຄ້າ',
-                      badgeText: 'ຫຼັງຮ້ານ',
-                      isCompact: isCompact,
-                    ),
-                    _buildNavItem(
-                      workflow: MainWorkflow.addProduct,
-                      icon: Icons.add_circle_outline_rounded,
-                      label: 'ເພີ່ມສິນຄ້າໃໝ່',
-                      isCompact: isCompact,
-                    ),
-                    _buildNavItem(
-                      workflow: MainWorkflow.history,
-                      icon: Icons.receipt_long_rounded,
-                      label: 'ປະຫວັດໃບບິນ',
-                      badgeText: 'ບິນຂາຍ',
+                      icon: Icons.storefront_rounded,
+                      label: 'ຂາຍໜ້າຮ້ານ (POS)',
                       isCompact: isCompact,
                     ),
                     _buildNavItem(
                       workflow: MainWorkflow.dashboard,
-                      icon: Icons.insights_rounded,
+                      icon: Icons.bar_chart_rounded,
                       label: 'ແຜງຄວບຄຸມ',
-                      badgeText: 'ກຳໄລ',
+                      isCompact: isCompact,
+                    ),
+                    _buildNavItem(
+                      workflow: MainWorkflow.catalog,
+                      icon: Icons.warehouse_rounded,
+                      label: 'ລາຍການສິນຄ້າ',
+                      isCompact: isCompact,
+                    ),
+                    _buildNavItem(
+                      workflow: MainWorkflow.history,
+                      icon: Icons.history_rounded,
+                      label: 'ປະຫວັດບິນ',
                       isCompact: isCompact,
                     ),
                   ],
@@ -290,8 +351,8 @@ class _MainShellState extends ConsumerState<MainShell> {
 
               // Cashier profile footer
               Container(
-                margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                padding: EdgeInsets.symmetric(horizontal: isCompact ? 6 : 10, vertical: 8),
+                margin: EdgeInsets.fromLTRB(isCompact ? 4 : 8, 0, isCompact ? 4 : 8, 8),
+                padding: EdgeInsets.symmetric(horizontal: isCompact ? 2 : 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceSubtle,
                   borderRadius: BorderRadius.circular(10),
@@ -303,13 +364,14 @@ class _MainShellState extends ConsumerState<MainShell> {
                       : MainAxisAlignment.start,
                   children: [
                     Stack(
+                      clipBehavior: Clip.none,
                       children: [
                         const CircleAvatar(
-                          radius: 14,
+                          radius: 13,
                           backgroundColor: AppColors.primaryLight,
                           child: Text(
                             'M',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
                           ),
                         ),
                         Positioned(
@@ -364,30 +426,34 @@ class _MainShellState extends ConsumerState<MainShell> {
     required IconData icon,
     required String label,
     required bool isCompact,
-    String? badgeText,
   }) {
     final isSelected = _currentWorkflow == workflow;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.5),
+      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 3.0),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: () => setState(() => _currentWorkflow = workflow),
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             padding: EdgeInsets.symmetric(
-              horizontal: isCompact ? 8 : 10,
-              vertical: 9,
+              horizontal: isCompact ? 8 : 12,
+              vertical: 10,
             ),
             decoration: BoxDecoration(
-              color: isSelected ? AppColors.primaryLight : Colors.transparent,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: isSelected ? AppColors.primaryBorder : Colors.transparent,
-                width: 0.9,
-              ),
+              color: isSelected ? const Color(0xFF0F766E) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: isSelected
+                  ? const [
+                      BoxShadow(
+                        color: Color(0x330F766E),
+                        offset: Offset(0, 2),
+                        blurRadius: 4,
+                      ),
+                    ]
+                  : null,
             ),
             child: Row(
               mainAxisAlignment: isCompact
@@ -397,7 +463,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 Icon(
                   icon,
                   size: 20,
-                  color: isSelected ? AppColors.primaryDark : AppColors.textSecondary,
+                  color: isSelected ? Colors.white : const Color(0xFF64748B),
                 ),
                 if (!isCompact) ...[
                   const SizedBox(width: 10),
@@ -407,29 +473,13 @@ class _MainShellState extends ConsumerState<MainShell> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                        color: isSelected ? AppColors.primaryDark : AppColors.textPrimary,
+                        color: isSelected ? Colors.white : const Color(0xFF334155),
                         letterSpacing: -0.2,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (badgeText != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primary : AppColors.surfaceSubtle,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        badgeText,
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: isSelected ? Colors.white : AppColors.textTertiary,
-                        ),
-                      ),
-                    ),
                 ],
               ],
             ),

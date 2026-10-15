@@ -375,62 +375,144 @@ class MeiiReceiptSlip extends StatelessWidget {
                     ),
                   ),
 
+                  // Void / Cancelled Watermark Banner (Matching web-app ReceiptModal)
+                  if (transaction.isCancelled) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE11D48),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF9F1239), width: 1.5),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.block_rounded, color: Colors.white, size: 16),
+                              const SizedBox(width: 6),
+                              Text(
+                                'ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ (VOID)',
+                                style: _style(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            transaction.cancelledAt != null
+                                ? 'ວັນທີຍົກເລີກ: ${dateFormat.format(transaction.cancelledAt!)} ${timeFormat.format(transaction.cancelledAt!)} • ສິນຄ້າສົ່ງຄືນສາງແລ້ວ'
+                                : 'ບິນຖືກຍົກເລີກແລ້ວ • ສິນຄ້າຖືກສົ່ງຄືນເຂົ້າສາງແລ້ວ',
+                            style: _style(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFFFFF1F2),
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   const SizedBox(height: 10),
 
-                  // Metadata Info
-                  _buildMetaLine(
-                    'ເລກທີບິນ:',
-                    transaction.receiptNumber,
-                    isBold: true,
+                  // Metadata Info - 2 Clean Compact Rows (No redundant invoice number at top since barcode is at bottom)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'ຜູ້ຂາຍ: ${transaction.cashierName ?? 'Meii'}',
+                          style: _style(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF475569),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'ລູກຄ້າ: ${transaction.customer.name}',
+                          style: _style(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF0F172A),
+                          ),
+                          textAlign: TextAlign.right,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
-                  _buildMetaLine(
-                    'ວັນທີ & ເວລາ:',
-                    '${dateFormat.format(transaction.createdAt)} ${timeFormat.format(transaction.createdAt)}',
-                  ),
-                  _buildMetaLine(
-                    'ພະນັກງານຂາຍ:',
-                    transaction.cashierName ?? 'Meii',
-                  ),
-                  _buildMetaLine(
-                    'ລູກຄ້າ:',
-                    '${transaction.customer.name} (${transaction.isWholesale ? 'ຂາຍສົ່ງ' : 'ຂາຍຍ່ອຍ'})',
-                  ),
-                  _buildMetaLine(
-                    'ຮູບແບບຊຳລະ:',
-                    transaction.paymentMethod == PaymentMethod.cash
-                        ? 'ເງິນສົດ (Cash)'
-                        : 'QR ໂອນ (BCEL One)',
-                    valueColor:
-                        transaction.paymentMethod == PaymentMethod.cash
-                            ? AppColors.primaryDark
-                            : AppColors.wholesaleDark,
-                    isBold: true,
+                  const SizedBox(height: 3),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'ວັນທີ: ${dateFormat.format(transaction.createdAt)} ${timeFormat.format(transaction.createdAt)}',
+                        style: _style(
+                          fontSize: 10.5,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      Text(
+                        'ຊຳລະ: ${transaction.paymentMethod == PaymentMethod.cash ? 'ເງິນສົດ' : 'QR ໂອນ'}',
+                        style: _style(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: transaction.paymentMethod == PaymentMethod.cash
+                              ? AppColors.primaryDark
+                              : AppColors.wholesaleDark,
+                        ),
+                      ),
+                    ],
                   ),
 
                   const SizedBox(height: 10),
                   _buildDashedLine(),
                   const SizedBox(height: 8),
 
-                  // Table Columns Header
+                  // Table Columns Header - 4 Columns Single Line Layout
                   Row(
                     children: [
                       Expanded(
-                        flex: 5,
+                        flex: 4,
                         child: Text(
-                          'ລາຍການສິນຄ້າ',
+                          'ຊື່ລາຍການ',
                           style: _style(
-                            fontSize: 11.5,
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w800,
                             color: const Color(0xFF334155),
                           ),
                         ),
                       ),
                       Expanded(
-                        flex: 3,
+                        flex: 2,
                         child: Text(
-                          'ຈຳນວນ x ລາຄາ',
+                          'ຈຳນວນ',
                           style: _style(
-                            fontSize: 11.5,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF334155),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          'ລາຄາ',
+                          style: _style(
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w800,
                             color: const Color(0xFF334155),
                           ),
@@ -442,7 +524,7 @@ class MeiiReceiptSlip extends StatelessWidget {
                         child: Text(
                           'ລວມ (₭)',
                           style: _style(
-                            fontSize: 11.5,
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w800,
                             color: const Color(0xFF334155),
                           ),
@@ -460,42 +542,48 @@ class MeiiReceiptSlip extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
 
-                  // Items List
+                  // Items List - 4 Columns on 1 Single Line
                   ...transaction.items.map((item) {
                     final unitName = item.selectedUnit.unitName;
                     return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 3.5),
+                      padding: const EdgeInsets.symmetric(vertical: 3.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            item.product.name,
-                            style: _style(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF0F172A),
-                            ),
-                          ),
-                          const SizedBox(height: 1),
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
-                                flex: 5,
+                                flex: 4,
                                 child: Text(
-                                  '  ${item.quantity} $unitName',
+                                  '${item.product.name} ($unitName)',
                                   style: _style(
                                     fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: const Color(0xFF475569),
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               Expanded(
-                                flex: 3,
+                                flex: 2,
                                 child: Text(
-                                  '@ ${LaoCurrencyFormatter.format(item.effectiveUnitPrice, includeSymbol: false)}',
+                                  '${item.quantity}x',
                                   style: _style(
-                                    fontSize: 11.5,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF334155),
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  LaoCurrencyFormatter.format(item.effectiveUnitPrice, includeSymbol: false),
+                                  style: _style(
+                                    fontSize: 11,
                                     color: const Color(0xFF475569),
                                   ),
                                   textAlign: TextAlign.right,
@@ -509,8 +597,8 @@ class MeiiReceiptSlip extends StatelessWidget {
                                     includeSymbol: false,
                                   ),
                                   style: _style(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w800,
                                     color: const Color(0xFF0F172A),
                                   ),
                                   textAlign: TextAlign.right,
@@ -531,6 +619,19 @@ class MeiiReceiptSlip extends StatelessWidget {
                               ),
                             ),
                           ],
+                          if (item.crateFeeTotal > 0) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(left: 10, top: 1),
+                              child: Text(
+                                '↳ ບໍ່ມີແກັດປ່ຽນ ${item.effectiveMissingCratesCount} ${item.selectedUnit.unitName} (+${LaoCurrencyFormatter.format(item.crateFeeTotal)})',
+                                style: _style(
+                                  fontSize: 10,
+                                  color: const Color(0xFFB45309), // amber-700
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     );
@@ -540,19 +641,39 @@ class MeiiReceiptSlip extends StatelessWidget {
                   _buildDashedLine(),
                   const SizedBox(height: 8),
 
-                  // Summary Totals
-                  _buildTotalLine(
-                    'ລວມເງິນສິນຄ້າ (Subtotal):',
-                    LaoCurrencyFormatter.format(transaction.subtotal),
+                  // Summary Totals with Crate Deposit Breakdown
+                  Builder(
+                    builder: (context) {
+                      final totalCrateDeposit = transaction.items.fold<int>(0, (sum, i) => sum + i.crateFeeTotal);
+                      final pureGoodsSubtotal = transaction.grandTotal - totalCrateDeposit;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildTotalLine(
+                            'ລວມເງິນສິນຄ້າ (Subtotal):',
+                            LaoCurrencyFormatter.format(pureGoodsSubtotal),
+                          ),
+                          if (totalCrateDeposit > 0) ...[
+                            _buildTotalLine(
+                              'ຄ່າມັດຈຳແກັດ (Crate Deposit):',
+                              '+${LaoCurrencyFormatter.format(totalCrateDeposit)}',
+                              valueColor: const Color(0xFFB45309),
+                              isBold: true,
+                            ),
+                          ],
+                          if (transaction.discountTotal > 0) ...[
+                            _buildTotalLine(
+                              'ສ່ວນຫຼຸດ (Discount):',
+                              '-${LaoCurrencyFormatter.format(transaction.discountTotal)}',
+                              valueColor: AppColors.error,
+                              isBold: true,
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
-                  if (transaction.discountTotal > 0) ...[
-                    _buildTotalLine(
-                      'ສ່ວນຫຼຸດ (Discount):',
-                      '-${LaoCurrencyFormatter.format(transaction.discountTotal)}',
-                      valueColor: AppColors.error,
-                      isBold: true,
-                    ),
-                  ],
 
                   const SizedBox(height: 6),
                   const Divider(
@@ -715,51 +836,27 @@ class MeiiReceiptSlip extends StatelessWidget {
   Widget _buildQrCodeSection() {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFCBD5E1), width: 1),
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      alignment: Alignment.center,
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.qr_code_scanner,
-                size: 16,
-                color: AppColors.wholesaleDark,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'ສະແກນ QR ເພື່ອຊຳລະເງິນ (BCEL One / Lao QR)',
-                style: _style(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF0F172A),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: Image.asset(
               'public/qr.jpg',
-              width: 140,
-              height: 140,
+              width: 130,
+              height: 130,
               fit: BoxFit.contain,
               errorBuilder:
                   (_, __, ___) => Image.network(
                     'qr.jpg',
-                    width: 140,
-                    height: 140,
+                    width: 130,
+                    height: 130,
                     fit: BoxFit.contain,
                     errorBuilder:
                         (_, __, ___) => Container(
-                          width: 140,
-                          height: 140,
+                          width: 130,
+                          height: 130,
                           color: Colors.white,
                           child: const Center(
                             child: Icon(
@@ -777,14 +874,9 @@ class MeiiReceiptSlip extends StatelessWidget {
             'ຍອດໂອນ: ${LaoCurrencyFormatter.format(transaction.grandTotal)}',
             style: _style(
               fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-              color: AppColors.wholesaleDark,
+              fontWeight: FontWeight.w900,
+              color: const Color(0xFF0F172A),
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'ກະລຸນາກວດສອບຍອດເງິນ ແລະ ຊື່ບັນຊີກ່ອນໂອນ',
-            style: _style(fontSize: 9.5, color: const Color(0xFF64748B)),
           ),
         ],
       ),
@@ -872,37 +964,7 @@ class MeiiReceiptSlip extends StatelessWidget {
     );
   }
 
-  Widget _buildMetaLine(
-    String label,
-    String value, {
-    bool isBold = false,
-    Color? valueColor,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1.5),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: _style(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF64748B),
-            ),
-          ),
-          Text(
-            value,
-            style: _style(
-              fontSize: 11.5,
-              fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
-              color: valueColor ?? const Color(0xFF1E293B),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildTotalLine(
     String label,

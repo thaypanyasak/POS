@@ -106,6 +106,11 @@ class TransactionHistoryNotifier
   Future<SaleTransaction> processCheckout({
     required PaymentMethod paymentMethod,
     required int amountTendered,
+    int? paidAmount,
+    int? debtAmount,
+    String? debtStatus,
+    String? debtNote,
+    String? customerNameOverride,
   }) async {
     state = state.copyWith(isProcessingCheckout: true);
 
@@ -117,11 +122,29 @@ class TransactionHistoryNotifier
           (state.transactions.length + 1).toString().padLeft(4, '0');
       final receiptNumber = 'RC-$dateCode-$seqNumber';
 
+      final isDebt = paymentMethod == PaymentMethod.debt;
+      final effectivePaid = isDebt
+          ? (paidAmount ?? 0)
+          : (paymentMethod == PaymentMethod.cash ? amountTendered : cartState.grandTotal);
+      final effectiveDebtAmount = isDebt
+          ? (debtAmount ?? (cartState.grandTotal - effectivePaid))
+          : 0;
+      final effectiveDebtStatus = isDebt
+          ? (debtStatus ?? (effectivePaid <= 0 ? 'unpaid' : (effectiveDebtAmount > 0 ? 'partial' : 'paid')))
+          : 'paid';
+
       final changeAmount = paymentMethod == PaymentMethod.cash
           ? (amountTendered > cartState.grandTotal
               ? amountTendered - cartState.grandTotal
               : 0)
           : 0;
+
+      PosCustomer customer = cartState.customer;
+      if (customerNameOverride != null && customerNameOverride.trim().isNotEmpty) {
+        customer = customer.copyWith(name: customerNameOverride.trim());
+      } else if (isDebt && (customer.name.trim().isEmpty || customer.name == 'ລູກຄ້າທົ່ວໄປ')) {
+        customer = customer.copyWith(name: 'ລູກຄ້າຄ້າງຊຳລະ');
+      }
 
       final transaction = SaleTransaction(
         id: 'tx_${now.millisecondsSinceEpoch}',
@@ -129,15 +152,20 @@ class TransactionHistoryNotifier
         createdAt: now,
         items: List.from(cartState.items),
         isWholesale: cartState.isWholesaleMode,
-        customer: cartState.customer,
+        customer: customer,
         paymentMethod: paymentMethod,
-        subtotal: cartState.subtotal,
+        subtotal: cartState.pureGoodsSubtotal,
         discountTotal: cartState.discountTotal,
         grandTotal: cartState.grandTotal,
-        amountTendered: amountTendered,
+        amountTendered: effectivePaid,
         changeAmount: changeAmount,
         totalCostOfGoods: cartState.totalCostOfGoods,
         grossProfit: cartState.grossProfit,
+        isDebt: isDebt,
+        paidAmount: effectivePaid,
+        debtAmount: effectiveDebtAmount,
+        debtStatus: effectiveDebtStatus,
+        debtNote: debtNote?.trim(),
       );
 
       // 1. Deduct stock from local catalog
@@ -164,6 +192,81 @@ class TransactionHistoryNotifier
     } finally {
       state = state.copyWith(isProcessingCheckout: false);
     }
+  }
+
+  /// Cancels / Voids a transaction, marks status as cancelled, and restores stock
+  Future<bool> cancelTransaction(SaleTransaction tx, {String? voidReason}) async {
+    final now = DateTime.now();
+    final updatedTx = tx.copyWith(
+      status: 'cancelled',
+      isCancelled: true,
+      cancelledAt: now,
+      voidReason: voidReason,
+    );
+
+    // 1. Restore product stock in local catalog and Supabase
+    _ref.read(catalogProvider.notifier).restoreStockFromTransaction(tx);
+
+    // 2. Update locally
+    await PosDatabase.instance.saveTransaction(updatedTx);
+
+    // 3. Update Supabase
+    await SupabaseSyncService.cancelTransaction(tx.id, tx.paymentMethod.name);
+
+    // 4. Update state
+    final updatedList = state.transactions.map((t) => t.id == tx.id ? updatedTx : t).toList();
+    state = state.copyWith(transactions: updatedList);
+    return true;
+  }
+
+  /// Deletes a transaction permanently and restores stock if it was not cancelled yet
+  Future<bool> deleteTransaction(SaleTransaction tx) async {
+    // 1. If it was not cancelled yet, restore stock
+    if (!tx.isCancelled && tx.status != 'cancelled') {
+      _ref.read(catalogProvider.notifier).restoreStockFromTransaction(tx);
+    }
+
+    // 2. Delete locally
+    await PosDatabase.instance.deleteTransaction(tx.id);
+
+    // 3. Delete in Supabase
+    await SupabaseSyncService.deleteTransaction(tx.id);
+
+    // 4. Update state
+    final updatedList = state.transactions.where((t) => t.id != tx.id).toList();
+    state = state.copyWith(transactions: updatedList);
+    return true;
+  }
+
+  /// Updates transaction details (customer name, payment method)
+  Future<bool> updateTransaction(
+    String txId, {
+    String? customerName,
+    PaymentMethod? paymentMethod,
+  }) async {
+    final txIndex = state.transactions.indexWhere((t) => t.id == txId);
+    if (txIndex < 0) return false;
+
+    final existing = state.transactions[txIndex];
+    final updated = existing.copyWith(
+      customer: customerName != null ? existing.customer.copyWith(name: customerName) : null,
+      paymentMethod: paymentMethod ?? existing.paymentMethod,
+    );
+
+    // 1. Save locally
+    await PosDatabase.instance.saveTransaction(updated);
+
+    // 2. Push update to Supabase
+    final Map<String, dynamic> updates = {};
+    if (customerName != null) updates['customer_name'] = customerName;
+    if (paymentMethod != null) updates['payment_method'] = paymentMethod.name;
+    await SupabaseSyncService.updateTransaction(txId, updates);
+
+    // 3. Update state
+    final updatedList = List<SaleTransaction>.from(state.transactions);
+    updatedList[txIndex] = updated;
+    state = state.copyWith(transactions: updatedList);
+    return true;
   }
 
   /// Adds a new customer

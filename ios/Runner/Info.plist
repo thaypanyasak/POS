@@ -49,6 +49,10 @@
 		<string>_printer._tcp</string>
 		<string>_pdl-datastream._tcp</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>MeiiShop requires camera access to scan product retail barcodes on iPhone/iPad.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>MeiiShop requires photo library access to upload product pictures.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

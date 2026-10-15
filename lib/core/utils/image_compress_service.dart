@@ -7,6 +7,11 @@ import 'package:image/image.dart' as img;
 class ImageCompressService {
   ImageCompressService._();
 
+  /// Compresses product image bytes (< 40 KB)
+  static Future<Uint8List> compressProductImage(Uint8List rawBytes) async {
+    return compressImage(rawBytes);
+  }
+
   /// Compresses raw image bytes to a max dimension of 400x400 with aggressive JPEG optimization (< 40 KB)
   static Uint8List compressImage(
     Uint8List rawBytes, {
