@@ -10,12 +10,30 @@ class CartState {
   final bool isWholesaleMode;
   final PosCustomer customer;
   final List<List<CartItem>> heldOrders;
+  final bool isEditingOldOrder;
+  final SaleTransaction? originalTransaction;
+  final String? originalTransactionId;
+  final String? originalReceiptNumber;
+  final String? originalPaymentMethod; // 'CASH', 'TRANSFER', 'DEBT'
+  final String? originalPaymentStatus; // 'PAID', 'PARTIAL', 'DEBT'
+  final String? originalCustomerName;
+  final int originalAmountTendered;
+  final int originalRemainingDebt;
 
   const CartState({
     this.items = const [],
     this.isWholesaleMode = false,
     this.customer = PosCustomer.walkIn,
     this.heldOrders = const [],
+    this.isEditingOldOrder = false,
+    this.originalTransaction,
+    this.originalTransactionId,
+    this.originalReceiptNumber,
+    this.originalPaymentMethod,
+    this.originalPaymentStatus,
+    this.originalCustomerName,
+    this.originalAmountTendered = 0,
+    this.originalRemainingDebt = 0,
   });
 
   /// Pure goods subtotal before crate deposit
@@ -79,12 +97,31 @@ class CartState {
     bool? isWholesaleMode,
     PosCustomer? customer,
     List<List<CartItem>>? heldOrders,
+    bool? isEditingOldOrder,
+    SaleTransaction? originalTransaction,
+    String? originalTransactionId,
+    String? originalReceiptNumber,
+    String? originalPaymentMethod,
+    String? originalPaymentStatus,
+    String? originalCustomerName,
+    int? originalAmountTendered,
+    int? originalRemainingDebt,
+    bool clearEditingTransaction = false,
   }) {
     return CartState(
       items: items ?? this.items,
       isWholesaleMode: isWholesaleMode ?? this.isWholesaleMode,
       customer: customer ?? this.customer,
       heldOrders: heldOrders ?? this.heldOrders,
+      isEditingOldOrder: clearEditingTransaction ? false : (isEditingOldOrder ?? this.isEditingOldOrder),
+      originalTransaction: clearEditingTransaction ? null : (originalTransaction ?? this.originalTransaction),
+      originalTransactionId: clearEditingTransaction ? null : (originalTransactionId ?? originalTransaction?.id ?? this.originalTransactionId),
+      originalReceiptNumber: clearEditingTransaction ? null : (originalReceiptNumber ?? originalTransaction?.receiptNumber ?? this.originalReceiptNumber),
+      originalPaymentMethod: clearEditingTransaction ? null : (originalPaymentMethod ?? this.originalPaymentMethod),
+      originalPaymentStatus: clearEditingTransaction ? null : (originalPaymentStatus ?? this.originalPaymentStatus),
+      originalCustomerName: clearEditingTransaction ? null : (originalCustomerName ?? this.originalCustomerName),
+      originalAmountTendered: clearEditingTransaction ? 0 : (originalAmountTendered ?? this.originalAmountTendered),
+      originalRemainingDebt: clearEditingTransaction ? 0 : (originalRemainingDebt ?? this.originalRemainingDebt),
     );
   }
 }
@@ -338,6 +375,75 @@ class CartNotifier extends StateNotifier<CartState> {
     state = state.copyWith(
       items: [],
       customer: PosCustomer.walkIn,
+      clearEditingTransaction: true,
+    );
+  }
+
+  /// Loads an existing completed/debt order into the POS cart for editing
+  void editExistingOrder(SaleTransaction tx, List<Product> catalogProducts) {
+    final List<CartItem> loadedItems = [];
+
+    for (final item in tx.items) {
+      final product = catalogProducts.firstWhere(
+        (p) => p.id == item.product.id,
+        orElse: () => item.product,
+      );
+
+      final unit = product.units.firstWhere(
+        (u) => u.unitName == item.selectedUnit.unitName,
+        orElse: () => item.selectedUnit,
+      );
+
+      loadedItems.add(
+        CartItem(
+          id: item.id.isNotEmpty ? item.id : 'item_${_uuid.v4()}',
+          product: product,
+          selectedUnit: unit,
+          quantity: item.quantity,
+          customPrice: item.customPrice,
+          isWholesaleMode: tx.isWholesale,
+          noEmptyCrates: item.noEmptyCrates,
+          missingCratesCount: item.missingCratesCount,
+        ),
+      );
+    }
+
+    final String pMethod = (tx.isDebt || tx.paymentMethod == PaymentMethod.debt)
+        ? 'DEBT'
+        : (tx.paymentMethod == PaymentMethod.qrTransfer ? 'TRANSFER' : 'CASH');
+
+    final String pStatus = pMethod == 'DEBT'
+        ? (tx.debtAmount > 0
+            ? (tx.paidAmount > 0 ? 'PARTIAL' : 'DEBT')
+            : 'PAID')
+        : 'PAID';
+
+    final int pTendered = tx.isDebt ? tx.paidAmount : tx.amountTendered;
+    final int pDebt = tx.debtAmount;
+
+    state = state.copyWith(
+      items: loadedItems,
+      customer: tx.customer,
+      isWholesaleMode: tx.isWholesale,
+      isEditingOldOrder: true,
+      originalTransaction: tx,
+      originalTransactionId: tx.id,
+      originalReceiptNumber: tx.receiptNumber,
+      originalPaymentMethod: pMethod,
+      originalPaymentStatus: pStatus,
+      originalCustomerName: tx.customer.name,
+      originalAmountTendered: pTendered,
+      originalRemainingDebt: pDebt,
+    );
+  }
+
+  /// Cancels editing mode and restores fresh cart
+  void cancelEditingOrder() {
+    state = state.copyWith(
+      items: const [],
+      customer: PosCustomer.walkIn,
+      isWholesaleMode: false,
+      clearEditingTransaction: true,
     );
   }
 }

@@ -67,6 +67,13 @@ export default function Navbar({
       badge: transactionsCount > 0 ? transactionsCount : null,
       badgeColor: 'bg-slate-200 text-slate-700',
     },
+    {
+      id: 'purchases',
+      label: 'ຮັບສິນຄ້າເຂົ້າ (GRN)',
+      sub: 'ສາງ & ໜີ້ຜູ້ສະໜອງ',
+      shortLabel: 'ຮັບເຂົ້າ',
+      icon: Warehouse,
+    },
   ];
 
   const toggleFullscreen = () => {

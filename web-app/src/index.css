@@ -95,10 +95,12 @@ html, body, #root {
   body * {
     visibility: hidden;
   }
-  #thermal-receipt-print-area, #thermal-receipt-print-area * {
+  #thermal-receipt-print-area, #thermal-receipt-print-area *,
+  #quotation-print-area, #quotation-print-area * {
     visibility: visible;
   }
-  #thermal-receipt-print-area {
+  #thermal-receipt-print-area,
+  #quotation-print-area {
     position: absolute;
     left: 0;
     top: 0;

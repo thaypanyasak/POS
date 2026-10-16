@@ -12,11 +12,16 @@ import {
   Barcode,
   CheckCircle,
   WarningCircle,
-  CornersOut
+  CornersOut,
+  FileText,
+  Money,
+  QrCode,
+  HandCoins,
 } from '@phosphor-icons/react';
 import { formatKip, formatCompoundStock, formatDots } from '../utils/formatters';
 import PriceOverrideModal from './PriceOverrideModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
+import QuotationPreviewModal from './inventory/QuotationPreviewModal';
 
 export default function PosScreen({
   categories,
@@ -39,12 +44,15 @@ export default function PosScreen({
   toggleCartItemCrateDeposit,
   updateMissingCrates,
   changeCartItemUnit,
+  editingOldTransaction = null,
+  onCancelEditOrder,
 }) {
   // Modal for editing line item price (familiar customer / price override)
   const [overrideModalItem, setOverrideModalItem] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanToast, setScanToast] = useState(null);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [quotationModalOpen, setQuotationModalOpen] = useState(false);
 
   const handleScanBarcode = (barcode) => {
     if (!barcode) return;
@@ -117,10 +125,88 @@ export default function PosScreen({
     );
   };
 
+  // Reusable Edit Order Banner showing customer name and payment badge
+  const renderEditingBanner = () => {
+    if (!editingOldTransaction) return null;
+
+    const rawMethod = (
+      editingOldTransaction.originalPaymentMethod ||
+      editingOldTransaction.paymentMethod ||
+      editingOldTransaction.payment_method ||
+      ''
+    ).toUpperCase();
+    const isDebt =
+      rawMethod === 'DEBT' ||
+      Boolean(editingOldTransaction.isDebt || editingOldTransaction.is_debt);
+    const isTransfer =
+      rawMethod === 'TRANSFER' ||
+      rawMethod === 'ONEPAY' ||
+      rawMethod === 'QR';
+    const isCash = !isDebt && !isTransfer;
+
+    const custName =
+      editingOldTransaction.originalCustomerName ||
+      editingOldTransaction.customerName ||
+      editingOldTransaction.customer_name ||
+      'ລູກຄ້າທົ່ວໄປ';
+
+    const remainingDebt = Number(
+      editingOldTransaction.originalRemainingDebt ??
+      editingOldTransaction.debtAmount ??
+      editingOldTransaction.debt_amount ??
+      editingOldTransaction.remainingDebt ??
+      editingOldTransaction.remaining_debt ??
+      0
+    );
+
+    return (
+      <div className="bg-amber-500 text-white p-2.5 px-3 flex items-center justify-between gap-2 shadow-xs shrink-0 sticky top-0 z-20 border-b border-amber-600">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto whitespace-nowrap scrollbar-none text-[11px] font-bold">
+          <WarningCircle size={16} weight="fill" className="shrink-0 text-amber-100" />
+          <span>ກຳລັງແກ້ໄຂບິນ: #{editingOldTransaction.receiptNumber || editingOldTransaction.originalReceiptNumber}</span>
+          <span className="text-amber-200 mx-0.5">•</span>
+          <span>ລູກຄ້າ: {custName}</span>
+          <span className="text-amber-200 mx-0.5">•</span>
+          <span className="text-amber-100">ຮູບແບບຊຳລະເດີມ:</span>
+          {isCash && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black shadow-2xs">
+              <Money size={12} weight="bold" />
+              <span>ເງິນສົດ (Cash)</span>
+            </span>
+          )}
+          {isTransfer && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">
+              <QrCode size={12} weight="bold" />
+              <span>ໂອນເງິນ (Transfer)</span>
+            </span>
+          )}
+          {isDebt && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black shadow-2xs">
+              <HandCoins size={12} weight="bold" />
+              <span>ຕິດໜີ້ (ຄ້າງ: {formatDots(remainingDebt)} ₭)</span>
+            </span>
+          )}
+        </div>
+        {onCancelEditOrder && (
+          <button
+            type="button"
+            onClick={onCancelEditOrder}
+            className="px-2.5 py-1 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-[10.5px] font-bold shrink-0 cursor-pointer transition-all shadow-2xs"
+          >
+            ຍົກເລີກ
+          </button>
+        )}
+      </div>
+    );
+  };
+
   // Reusable Cart Renderer for both Desktop Dock & Mobile Slide-Over Drawer
   // Checkout button is NOT fixed; it scrolls naturally up and down, perfectly optimized for mobile landscape!
   const renderCartContent = (isDrawer = false) => (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-y-auto overscroll-contain bg-white">
+      {/* Sticky Yellow Banner when editing an old transaction */}
+      {renderEditingBanner()}
+
       {/* Cart Top Section: Customer Name Input & Quick Chips */}
       <div className={`p-2.5 sm:p-3 border-b border-slate-200/80 bg-slate-50 flex flex-col gap-1.5 shrink-0 ${isDrawer ? 'pt-1.5' : ''}`}>
         {!isDrawer && (
@@ -422,22 +508,55 @@ export default function PosScreen({
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            if (isDrawer) setMobileCartOpen(false);
-            handleOpenCheckout();
-          }}
-          disabled={cart.length === 0}
-          className={`w-full py-2.5 sm:py-3 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98 min-h-[44px] cursor-pointer ${
-            cart.length > 0
-              ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-teal-600/30'
-              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-          }`}
-        >
-          <span>ຄິດໄລ່ເງິນ / ເຊັກບິນ (Checkout)</span>
-          <span className="font-mono">{formatKip(cartSubtotal)}</span>
-        </button>
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-1.5">
+          <button
+            type="button"
+            onClick={() => setQuotationModalOpen(true)}
+            disabled={cart.length === 0}
+            className={`sm:col-span-5 py-2.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+              cart.length > 0
+                ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-500 shadow-2xs active:scale-98'
+                : 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed'
+            }`}
+            title="ພິມໃບບອກລາຄາ / ໃບສະເໜີລາຄາຊົ່ວຄາວ (ບໍ່ຕັດສະຕັອກ)"
+          >
+            <FileText size={16} weight="bold" />
+            <span>ໃບບອກລາຄາ</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (isDrawer) setMobileCartOpen(false);
+              handleOpenCheckout();
+            }}
+            disabled={cart.length === 0}
+            className={`sm:col-span-7 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-98 min-h-[40px] cursor-pointer ${
+              cart.length > 0
+                ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-teal-600/30'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            <span>{editingOldTransaction ? 'ບັນທຶກການແກ້ໄຂ' : 'ເຊັກບິນ (Checkout)'}</span>
+          </button>
+        </div>
+
+        {cart.length > 0 && (
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລ້າງສິນຄ້າທັງໝົດໃນກະຕ່າ?')) {
+                  setCart([]);
+                }
+              }}
+              className="text-[10px] text-slate-400 hover:text-red-600 font-bold hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <Trash size={12} />
+              <span>ລ້າງກະຕ່າ (Clear Cart)</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -448,6 +567,11 @@ export default function PosScreen({
           LEFT DOCK: PRODUCTS CATALOG (FLEX-1 FULL REMAINING WIDTH)
       ========================================================================= */}
       <section className="flex-1 min-w-0 border-r border-slate-200/80 bg-slate-50 flex flex-col h-full min-h-0 overflow-hidden">
+        {/* Mobile Editing Order Banner (< 768px) */}
+        <div className="md:hidden">
+          {renderEditingBanner()}
+        </div>
+
         {/* Top Control Bar: Search, Category chips, Scanner */}
         <div className="p-2.5 sm:p-3 bg-white border-b border-slate-200/80 flex flex-col gap-2 shrink-0">
           <div className="flex items-center gap-2">
@@ -801,6 +925,15 @@ export default function PosScreen({
         onScanSuccess={handleScanBarcode}
         title="ສະແກນບາໂຄດຂາຍໜ້າຮ້ານ (POS Scanner)"
         description="ສ່ອງກ້ອງຫຼັງໃສ່ບາໂຄດສິນຄ້າເພື່ອເພີ່ມເຂົ້າກະຕ່າອັດຕະໂນມັດ"
+      />
+
+      {/* Quotation / Proforma Preview Modal */}
+      <QuotationPreviewModal
+        isOpen={quotationModalOpen}
+        onClose={() => setQuotationModalOpen(false)}
+        cart={cart}
+        cartSubtotal={cartSubtotal}
+        customerName={customerName}
       />
     </main>
   );

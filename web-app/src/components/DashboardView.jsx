@@ -19,9 +19,15 @@ import {
   CaretRight,
   CheckCircle,
   CurrencyDollar,
-  ArrowRight
+  ArrowRight,
+  TrendUp,
+  TrendDown,
+  ArrowsLeftRight,
 } from '@phosphor-icons/react';
 import { formatKip, formatCompoundStock } from '../utils/formatters';
+import MonthComparisonView from './dashboard/MonthComparisonView';
+import DynamicDailyRevenueChart from './dashboard/DynamicDailyRevenueChart';
+import Annual12MonthSalesChart from './dashboard/Annual12MonthSalesChart';
 
 export default function DashboardView({
   dashboardTimeframe,
@@ -31,9 +37,22 @@ export default function DashboardView({
   products = [],
   rawCategories = [],
 }) {
+  // Custom Date Range State
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+
+  // 2-Month Comparison State (defaults to current month and previous month)
+  const today = new Date();
+  const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const prevMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const prevMonthStr = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+
+  const [compareMonthA, setCompareMonthA] = useState(currentMonthStr);
+  const [compareMonthB, setCompareMonthB] = useState(prevMonthStr);
+
   // Safe reference to active transactions in timeframe
   const currentTxs = useMemo(() => {
-    if (dashboardData.filteredTxs && Array.isArray(dashboardData.filteredTxs)) {
+    if (dashboardData.filteredTxs && Array.isArray(dashboardData.filteredTxs) && dashboardTimeframe !== 'custom' && dashboardTimeframe !== 'compare') {
       return dashboardData.filteredTxs;
     }
     const now = new Date();
@@ -53,10 +72,94 @@ export default function DashboardView({
           txDate.getMonth() === now.getMonth() &&
           txDate.getFullYear() === now.getFullYear()
         );
+      } else if (dashboardTimeframe === 'custom') {
+        if (customStartDate) {
+          const s = new Date(customStartDate);
+          s.setHours(0, 0, 0, 0);
+          if (txDate < s) return false;
+        }
+        if (customEndDate) {
+          const e = new Date(customEndDate);
+          e.setHours(23, 59, 59, 999);
+          if (txDate > e) return false;
+        }
+        return true;
       }
       return true;
     });
-  }, [dashboardData.filteredTxs, transactions, dashboardTimeframe]);
+  }, [dashboardData.filteredTxs, transactions, dashboardTimeframe, customStartDate, customEndDate]);
+
+  // Month-Over-Month Comparison Analytics
+  const comparisonStats = useMemo(() => {
+    const parseMonthTxs = (yearMonthStr) => {
+      const parts = (yearMonthStr || '').split('-');
+      if (parts.length < 2) return [];
+      const y = Number(parts[0]);
+      const m = Number(parts[1]);
+      return transactions.filter((t) => {
+        if (t.status === 'cancelled' || t.isCancelled) return false;
+        const d = new Date(t.createdAt);
+        return d.getFullYear() === y && d.getMonth() + 1 === m;
+      });
+    };
+
+    const txsA = parseMonthTxs(compareMonthA);
+    const txsB = parseMonthTxs(compareMonthB);
+
+    const calcMetrics = (list) => {
+      let revenue = 0;
+      let cost = 0;
+      let profit = 0;
+      let cash = 0;
+      let transfer = 0;
+      let debt = 0;
+
+      list.forEach((t) => {
+        const rev = Number(t.grandTotal) || 0;
+        const c = Number(t.totalCost) || 0;
+        const p = Number(t.grossProfit) || 0;
+        revenue += rev;
+        cost += c;
+        profit += p;
+
+        const m = (t.paymentMethod || '').toLowerCase();
+        if (t.isDebt || m === 'debt') {
+          debt += rev;
+        } else if (m === 'cash' || m === 'ເງິນສົດ') {
+          cash += rev;
+        } else {
+          transfer += rev;
+        }
+      });
+
+      return {
+        revenue,
+        cost,
+        profit,
+        cash,
+        transfer,
+        debt,
+        count: list.length,
+        margin: revenue > 0 ? (profit / revenue) * 100 : 0,
+      };
+    };
+
+    const metricsA = calcMetrics(txsA);
+    const metricsB = calcMetrics(txsB);
+
+    const calcDiffPercent = (valA, valB) => {
+      if (valB === 0) return valA > 0 ? 100 : 0;
+      return ((valA - valB) / Math.abs(valB)) * 100;
+    };
+
+    return {
+      metricsA,
+      metricsB,
+      revenueDiff: calcDiffPercent(metricsA.revenue, metricsB.revenue),
+      profitDiff: calcDiffPercent(metricsA.profit, metricsB.profit),
+      countDiff: calcDiffPercent(metricsA.count, metricsB.count),
+    };
+  }, [transactions, compareMonthA, compareMonthB]);
 
   // 1. Hourly Sales Breakdown (07:00 - 22:00)
   const hourlyData = useMemo(() => {
@@ -241,6 +344,8 @@ export default function DashboardView({
             { id: 'weekly', label: '7 ມື້ຜ່ານມາ' },
             { id: 'monthly', label: 'ເດືອນນີ້' },
             { id: 'all', label: 'ທັງໝົດ' },
+            { id: 'custom', label: 'ເລືອກວັນທີ' },
+            { id: 'compare', label: 'ສົມທຽບ 2 ເດືອນ' },
           ].map((item) => (
             <button
               key={item.id}
@@ -257,7 +362,51 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* 2. TOP 4 MAIN KPI CARDS */}
+      {/* Custom Date Range Filter Inputs & Dynamic Chart */}
+      {dashboardTimeframe === 'custom' && (
+        <div className="mb-6 space-y-4">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 text-xs">
+                <CalendarBlank size={18} className="text-teal-600 font-bold" />
+                <span className="font-bold text-slate-700">ແຕ່ວັນທີ (Từ ngày):</span>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-teal-500"
+                />
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-bold text-slate-700">ຫາວັນທີ (Đến ngày):</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-teal-500"
+                />
+              </div>
+            </div>
+            <span className="text-xs text-slate-500 font-medium bg-slate-100 px-3 py-1 rounded-lg">
+              ພົບ <strong>{currentTxs.length}</strong> ບິນຂາຍ
+            </span>
+          </div>
+
+          {/* Dynamic Daily Revenue Chart auto-scaling across selected days */}
+          <DynamicDailyRevenueChart
+            transactions={currentTxs}
+            startDate={customStartDate}
+            endDate={customEndDate}
+          />
+        </div>
+      )}
+
+      {/* 2-Month Year-over-Year Dual Period Comparison View */}
+      {dashboardTimeframe === 'compare' ? (
+        <MonthComparisonView fallbackTransactions={transactions} products={products} />
+      ) : (
+        <>
+          {/* 2. TOP 4 MAIN KPI CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {/* KPI 1: Revenue */}
         <div className="p-3 sm:p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between hover:border-teal-300 transition-all">
@@ -482,6 +631,9 @@ export default function DashboardView({
               </div>
             </div>
           </div>
+
+          {/* COMPONENT: Annual 12-Month Sales Trend (Smooth Area Line Chart) */}
+          <Annual12MonthSalesChart fallbackTransactions={transactions} />
 
           {/* COMPONENT 2: Sales by Category Breakdown */}
           <div className="bg-white rounded-2xl p-4 sm:p-4.5 border border-slate-200 shadow-2xs">
@@ -721,6 +873,8 @@ export default function DashboardView({
           )}
         </div>
       </div>
-    </main>
+      </>
+    )}
+  </main>
   );
 }

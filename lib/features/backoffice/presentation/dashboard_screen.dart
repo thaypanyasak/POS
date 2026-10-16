@@ -1,14 +1,17 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../core/localization/lao_currency_formatter.dart';
 import '../../../core/utils/image_compress_service.dart';
 import '../../../domain/models/product.dart';
 import '../../../domain/models/sale_transaction.dart';
 import '../../pos/presentation/controllers/catalog_controller.dart';
 import '../../pos/presentation/controllers/transaction_controller.dart';
+import 'widgets/annual_12_month_sales_chart.dart';
+import 'widgets/month_comparison_dashboard_view.dart';
 
-enum DashboardTimeframe { daily, weekly, monthly, all }
+enum DashboardTimeframe { daily, weekly, monthly, all, custom, compare }
 
 /// Financial & Profit Dashboard (ແຜງຄວບຄຸມລາຍຮັບ & ຕົ້ນທຶນ)
 /// Rebuilt to 100% match web-app (DashboardView.jsx & SPEC_FINANCIAL_DASHBOARD.md)
@@ -28,10 +31,13 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   DashboardTimeframe _selectedTimeframe = DashboardTimeframe.daily;
+  DateTime? _customStartDate;
+  DateTime? _customEndDate;
 
   List<SaleTransaction> _filterTransactions(List<SaleTransaction> allTxs) {
     final now = DateTime.now();
     return allTxs.where((tx) {
+      if (tx.isCancelled || tx.status == 'cancelled') return false;
       switch (_selectedTimeframe) {
         case DashboardTimeframe.daily:
           return tx.createdAt.year == now.year &&
@@ -45,9 +51,58 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               tx.createdAt.month == now.month;
         case DashboardTimeframe.all:
           return true;
+        case DashboardTimeframe.custom:
+          if (_customStartDate != null) {
+            final s = DateTime(_customStartDate!.year, _customStartDate!.month,
+                _customStartDate!.day, 0, 0, 0);
+            if (tx.createdAt.isBefore(s)) return false;
+          }
+          if (_customEndDate != null) {
+            final e = DateTime(_customEndDate!.year, _customEndDate!.month,
+                _customEndDate!.day, 23, 59, 59);
+            if (tx.createdAt.isAfter(e)) return false;
+          }
+          return true;
+        case DashboardTimeframe.compare:
+          return false;
       }
     }).toList();
   }
+
+  Future<void> _pickCustomDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2023),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDateRange: _customStartDate != null && _customEndDate != null
+          ? DateTimeRange(start: _customStartDate!, end: _customEndDate!)
+          : DateTimeRange(
+              start: DateTime.now().subtract(const Duration(days: 7)),
+              end: DateTime.now(),
+            ),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            primaryColor: const Color(0xFF0F766E),
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF0F766E),
+              onPrimary: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedTimeframe = DashboardTimeframe.custom;
+        _customStartDate = picked.start;
+        _customEndDate = picked.end;
+      });
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -205,139 +260,152 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
               const SizedBox(height: 14),
 
-              // 2. Top 4 Core KPI Cards (grid 4 on desktop, 2 on tablet/mobile)
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth >= 780;
-                  final cardWidth = isWide
-                      ? (constraints.maxWidth - (3 * 10)) / 4
-                      : (constraints.maxWidth - 10) / 2;
+              if (_selectedTimeframe == DashboardTimeframe.custom) ...[
+                _buildCustomDateFilterBanner(txs.length),
+                const SizedBox(height: 14),
+              ],
 
-                  return Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      // KPI 1: Revenue
-                      _buildKpiCard(
-                        title: 'ຍອດຂາຍລວມ (Revenue)',
-                        value: LaoCurrencyFormatter.format(totalRevenue),
-                        subLeft: 'ຈຳນວນ:',
-                        subRight: '${txs.length} ບິນສຳເລັດ',
-                        icon: Icons.monetization_on_outlined,
-                        iconColor: const Color(0xFF0F766E),
-                        iconBg: const Color(0xFFF0FDFA),
-                        valueColor: const Color(0xFF0F766E),
-                        width: cardWidth,
-                      ),
+              if (_selectedTimeframe == DashboardTimeframe.compare) ...[
+                const MonthComparisonDashboardView(),
+              ] else ...[
+                // 2. Top 4 Core KPI Cards (grid 4 on desktop, 2 on tablet/mobile)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth >= 780;
+                    final cardWidth = isWide
+                        ? (constraints.maxWidth - (3 * 10)) / 4
+                        : (constraints.maxWidth - 10) / 2;
 
-                      // KPI 2: COGS
-                      _buildKpiCard(
-                        title: 'ຕົ້ນທຶນສິນຄ້າລວມ (COGS)',
-                        value: LaoCurrencyFormatter.format(totalCost),
-                        subLeft: 'ຕົ້ນທຶນສິນຄ້າຂາຍອອກ',
-                        subRight: 'ທຶນຈິງ',
-                        icon: Icons.calendar_today_outlined,
-                        iconColor: const Color(0xFFD97706),
-                        iconBg: const Color(0xFFFFFBEB),
-                        valueColor: const Color(0xFF1E293B),
-                        width: cardWidth,
-                      ),
-
-                      // KPI 3: Gross Profit
-                      _buildKpiCard(
-                        title: 'ກຳໄລຂັ້ນຕົ້ນ (Gross Profit)',
-                        value: LaoCurrencyFormatter.format(totalProfit),
-                        subLeft: 'ອັດຕາກຳໄລ:',
-                        subRight: '${margin.toStringAsFixed(1)}%',
-                        isMarginBadge: true,
-                        icon: Icons.credit_card_outlined,
-                        iconColor: const Color(0xFF059669),
-                        iconBg: const Color(0xFFECFDF5),
-                        valueColor: const Color(0xFF059669),
-                        width: cardWidth,
-                      ),
-
-                      // KPI 4: Avg Basket
-                      _buildKpiCard(
-                        title: 'ຍອດສະເລ່ຍຕໍ່ບິນ (Avg Basket)',
-                        value: LaoCurrencyFormatter.format(avgTicket),
-                        subLeft: 'ສະເລ່ຍຕໍ່ 1 ລູກຄ້າ',
-                        subRight: 'ບິນ/ລູກຄ້າ',
-                        icon: Icons.bar_chart_rounded,
-                        iconColor: const Color(0xFF7C3AED),
-                        iconBg: const Color(0xFFF5F3FF),
-                        valueColor: const Color(0xFF0F172A),
-                        width: cardWidth,
-                      ),
-                    ],
-                  );
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // 3. Payment Reconciled Breakdown Section
-              _buildPaymentBreakdownSection(totalRevenue, cashTotal, transferTotal, debtTotal, debtCount),
-
-              const SizedBox(height: 16),
-
-              // 4. Two-Column Analytics Layout (Left 65% : Right 35%)
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth >= 900;
-                  if (isWide) {
-                    final leftWidth = (constraints.maxWidth - 16) * 0.63;
-                    final rightWidth = (constraints.maxWidth - 16) * 0.37;
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
                       children: [
-                        SizedBox(
-                          width: leftWidth,
-                          child: Column(
-                            children: [
-                              _buildHourlyTrendWidget(hourlyBuckets, maxHourlyRev, txs.length),
-                              const SizedBox(height: 14),
-                              _buildCategoryBreakdownWidget(catList, totalCatRev),
-                            ],
-                          ),
+                        // KPI 1: Revenue
+                        _buildKpiCard(
+                          title: 'ຍອດຂາຍລວມ (Revenue)',
+                          value: LaoCurrencyFormatter.format(totalRevenue),
+                          subLeft: 'ຈຳນວນ:',
+                          subRight: '${txs.length} ບິນສຳເລັດ',
+                          icon: Icons.monetization_on_outlined,
+                          iconColor: const Color(0xFF0F766E),
+                          iconBg: const Color(0xFFF0FDFA),
+                          valueColor: const Color(0xFF0F766E),
+                          width: cardWidth,
                         ),
-                        const SizedBox(width: 16),
-                        SizedBox(
-                          width: rightWidth,
-                          child: Column(
-                            children: [
-                              _buildTop5ProductsWidget(top5),
-                              const SizedBox(height: 14),
-                              _buildLowStockAlertWidget(lowStockList),
-                              if (creditTxs.isNotEmpty) ...[
-                                const SizedBox(height: 14),
-                                _buildRecentCreditWidget(creditTxs),
-                              ],
-                            ],
-                          ),
+
+                        // KPI 2: COGS
+                        _buildKpiCard(
+                          title: 'ຕົ້ນທຶນສິນຄ້າລວມ (COGS)',
+                          value: LaoCurrencyFormatter.format(totalCost),
+                          subLeft: 'ຕົ້ນທຶນສິນຄ້າຂາຍອອກ',
+                          subRight: 'ທຶນຈິງ',
+                          icon: Icons.calendar_today_outlined,
+                          iconColor: const Color(0xFFD97706),
+                          iconBg: const Color(0xFFFFFBEB),
+                          valueColor: const Color(0xFF1E293B),
+                          width: cardWidth,
+                        ),
+
+                        // KPI 3: Gross Profit
+                        _buildKpiCard(
+                          title: 'ກຳໄລຂັ້ນຕົ້ນ (Gross Profit)',
+                          value: LaoCurrencyFormatter.format(totalProfit),
+                          subLeft: 'ອັດຕາກຳໄລ:',
+                          subRight: '${margin.toStringAsFixed(1)}%',
+                          isMarginBadge: true,
+                          icon: Icons.credit_card_outlined,
+                          iconColor: const Color(0xFF059669),
+                          iconBg: const Color(0xFFECFDF5),
+                          valueColor: const Color(0xFF059669),
+                          width: cardWidth,
+                        ),
+
+                        // KPI 4: Avg Basket
+                        _buildKpiCard(
+                          title: 'ຍອດສະເລ່ຍຕໍ່ບິນ (Avg Basket)',
+                          value: LaoCurrencyFormatter.format(avgTicket),
+                          subLeft: 'ສະເລ່ຍຕໍ່ 1 ລູກຄ້າ',
+                          subRight: 'ບິນ/ລູກຄ້າ',
+                          icon: Icons.bar_chart_rounded,
+                          iconColor: const Color(0xFF7C3AED),
+                          iconBg: const Color(0xFFF5F3FF),
+                          valueColor: const Color(0xFF0F172A),
+                          width: cardWidth,
                         ),
                       ],
                     );
-                  }
+                  },
+                ),
 
-                  // Stack vertically on tablets / mobile phones
-                  return Column(
-                    children: [
-                      _buildHourlyTrendWidget(hourlyBuckets, maxHourlyRev, txs.length),
-                      const SizedBox(height: 14),
-                      _buildCategoryBreakdownWidget(catList, totalCatRev),
-                      const SizedBox(height: 14),
-                      _buildTop5ProductsWidget(top5),
-                      const SizedBox(height: 14),
-                      _buildLowStockAlertWidget(lowStockList),
-                      if (creditTxs.isNotEmpty) ...[
+                const SizedBox(height: 16),
+
+                // 3. Payment Reconciled Breakdown Section
+                _buildPaymentBreakdownSection(totalRevenue, cashTotal, transferTotal, debtTotal, debtCount),
+
+                const SizedBox(height: 16),
+
+                // 4. Two-Column Analytics Layout (Left 65% : Right 35%)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth >= 900;
+                    if (isWide) {
+                      final leftWidth = (constraints.maxWidth - 16) * 0.63;
+                      final rightWidth = (constraints.maxWidth - 16) * 0.37;
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: leftWidth,
+                            child: Column(
+                              children: [
+                                _buildHourlyTrendWidget(hourlyBuckets, maxHourlyRev, txs.length),
+                                const SizedBox(height: 14),
+                                const Annual12MonthSalesChart(),
+                                const SizedBox(height: 14),
+                                _buildCategoryBreakdownWidget(catList, totalCatRev),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          SizedBox(
+                            width: rightWidth,
+                            child: Column(
+                              children: [
+                                _buildTop5ProductsWidget(top5),
+                                const SizedBox(height: 14),
+                                _buildLowStockAlertWidget(lowStockList),
+                                if (creditTxs.isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  _buildRecentCreditWidget(creditTxs),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+
+                    // Stack vertically on tablets / mobile phones
+                    return Column(
+                      children: [
+                        _buildHourlyTrendWidget(hourlyBuckets, maxHourlyRev, txs.length),
                         const SizedBox(height: 14),
-                        _buildRecentCreditWidget(creditTxs),
+                        const Annual12MonthSalesChart(),
+                        const SizedBox(height: 14),
+                        _buildCategoryBreakdownWidget(catList, totalCatRev),
+                        const SizedBox(height: 14),
+                        _buildTop5ProductsWidget(top5),
+                        const SizedBox(height: 14),
+                        _buildLowStockAlertWidget(lowStockList),
+                        if (creditTxs.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          _buildRecentCreditWidget(creditTxs),
+                        ],
                       ],
-                    ],
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
+              ],
               const SizedBox(height: 24),
             ],
           ),
@@ -402,14 +470,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildTimeframePill(DashboardTimeframe.daily, 'ມື້ນີ້ (Today)'),
-                _buildTimeframePill(DashboardTimeframe.weekly, '7 ມື້ຜ່ານມາ'),
-                _buildTimeframePill(DashboardTimeframe.monthly, 'ເດືອນນີ້'),
-                _buildTimeframePill(DashboardTimeframe.all, 'ທັງໝົດ'),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildTimeframePill(DashboardTimeframe.daily, 'ມື້ນີ້ (Today)'),
+                  _buildTimeframePill(DashboardTimeframe.weekly, '7 ມື້ຜ່ານມາ'),
+                  _buildTimeframePill(DashboardTimeframe.monthly, 'ເດືອນນີ້'),
+                  _buildTimeframePill(DashboardTimeframe.all, 'ທັງໝົດ'),
+                  _buildTimeframePill(DashboardTimeframe.custom, 'ເລືອກວັນທີ'),
+                  _buildTimeframePill(DashboardTimeframe.compare, 'ສົມທຽບ 2 ເດືອນ'),
+                ],
+              ),
             ),
           ),
         ],
@@ -424,6 +497,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         setState(() {
           _selectedTimeframe = timeframe;
         });
+        if (timeframe == DashboardTimeframe.custom &&
+            (_customStartDate == null || _customEndDate == null)) {
+          _pickCustomDateRange();
+        }
       },
       borderRadius: BorderRadius.circular(7),
       child: AnimatedContainer(
@@ -1348,6 +1425,81 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               );
             }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Component 6: Custom Date Range Filter Banner ---
+  Widget _buildCustomDateFilterBanner(int matchedCount) {
+    final dateStr = (_customStartDate != null && _customEndDate != null)
+        ? '${DateFormat('dd/MM/yyyy').format(_customStartDate!)}  ຫາ  ${DateFormat('dd/MM/yyyy').format(_customEndDate!)}'
+        : 'ກົດເພື່ອເລືອກຊ່ວງວັນທີ';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08000000),
+            blurRadius: 4,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          InkWell(
+            onTap: _pickCustomDateRange,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDFA),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF99F6E4)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.date_range_rounded,
+                      size: 16, color: Color(0xFF0F766E)),
+                  const SizedBox(width: 8),
+                  Text(
+                    dateStr,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0F766E),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.edit_calendar_rounded,
+                      size: 14, color: Color(0xFF0F766E)),
+                ],
+              ),
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'ພົບ $matchedCount ບິນໃນຊ່ວງເວລານີ້',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+            ],
           ),
         ],
       ),

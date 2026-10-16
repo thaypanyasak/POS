@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/localization/lo.dart';
+import '../../views/inventory/purchase_list_screen.dart';
 import '../backoffice/presentation/dashboard_screen.dart';
 import '../backoffice/presentation/product_list_screen.dart';
 import '../history/presentation/receipt_history_screen.dart';
@@ -13,7 +14,11 @@ enum MainWorkflow {
   dashboard,
   catalog,
   history,
+  inventory,
 }
+
+/// Global workflow state provider to enable screen transitions from any screen (e.g. edit order in POS)
+final mainWorkflowProvider = StateProvider<MainWorkflow>((ref) => MainWorkflow.pos);
 
 /// Master Shell with Collapsible Sidebar Navigation for iPad/Tablet Landscape
 class MainShell extends ConsumerStatefulWidget {
@@ -24,11 +29,12 @@ class MainShell extends ConsumerStatefulWidget {
 }
 
 class _MainShellState extends ConsumerState<MainShell> {
-  MainWorkflow _currentWorkflow = MainWorkflow.pos;
   bool _isSidebarCollapsed = true; // Collapsed by default for maximum POS real estate
 
   @override
   Widget build(BuildContext context) {
+    final currentWorkflow = ref.watch(mainWorkflowProvider);
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = constraints.maxWidth < 640;
@@ -38,17 +44,18 @@ class _MainShellState extends ConsumerState<MainShell> {
           body: Row(
             children: [
               // Collapsible Left Navigation Rail (Only for tablets & desktop >= 640px)
-              if (!isMobile) _buildSidebar(context),
+              if (!isMobile) _buildSidebar(context, currentWorkflow),
 
               // Main Workflow Content (IndexedStack keeps POS state alive)
               Expanded(
                 child: IndexedStack(
-                  index: _currentWorkflow.index,
+                  index: currentWorkflow.index,
                   children: const [
                     PosScreen(),
                     DashboardScreen(),
                     ProductListScreen(),
                     ReceiptHistoryScreen(),
+                    PurchaseListScreen(),
                   ],
                 ),
               ),
@@ -72,11 +79,10 @@ class _MainShellState extends ConsumerState<MainShell> {
                   child: SafeArea(
                     top: false,
                     child: BottomNavigationBar(
-                      currentIndex: _currentWorkflow.index,
+                      currentIndex: currentWorkflow.index,
                       onTap: (index) {
-                        setState(() {
-                          _currentWorkflow = MainWorkflow.values[index];
-                        });
+                        ref.read(mainWorkflowProvider.notifier).state =
+                            MainWorkflow.values[index];
                       },
                       type: BottomNavigationBarType.fixed,
                       backgroundColor: Colors.white,
@@ -108,6 +114,11 @@ class _MainShellState extends ConsumerState<MainShell> {
                           activeIcon: Icon(Icons.history_rounded),
                           label: 'ປະຫວັດບິນ',
                         ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.inventory_2_rounded),
+                          activeIcon: Icon(Icons.inventory_2_rounded),
+                          label: 'ຮັບເຂົ້າສາງ',
+                        ),
                       ],
                     ),
                   ),
@@ -118,7 +129,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     );
   }
 
-  Widget _buildSidebar(BuildContext context) {
+  Widget _buildSidebar(BuildContext context, MainWorkflow currentWorkflow) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobileLandscape = screenWidth < 900;
     final collapsedWidth = isMobileLandscape ? 56.0 : 68.0;
@@ -275,24 +286,35 @@ class _MainShellState extends ConsumerState<MainShell> {
                       icon: Icons.storefront_rounded,
                       label: 'ຂາຍໜ້າຮ້ານ (POS)',
                       isCompact: isCompact,
+                      currentWorkflow: currentWorkflow,
                     ),
                     _buildNavItem(
                       workflow: MainWorkflow.dashboard,
                       icon: Icons.bar_chart_rounded,
                       label: 'ແຜງຄວບຄຸມ',
                       isCompact: isCompact,
+                      currentWorkflow: currentWorkflow,
                     ),
                     _buildNavItem(
                       workflow: MainWorkflow.catalog,
                       icon: Icons.warehouse_rounded,
                       label: 'ລາຍການສິນຄ້າ',
                       isCompact: isCompact,
+                      currentWorkflow: currentWorkflow,
                     ),
                     _buildNavItem(
                       workflow: MainWorkflow.history,
                       icon: Icons.history_rounded,
                       label: 'ປະຫວັດບິນ',
                       isCompact: isCompact,
+                      currentWorkflow: currentWorkflow,
+                    ),
+                    _buildNavItem(
+                      workflow: MainWorkflow.inventory,
+                      icon: Icons.inventory_2_rounded,
+                      label: 'ຮັບສິນຄ້າເຂົ້າສາງ',
+                      isCompact: isCompact,
+                      currentWorkflow: currentWorkflow,
                     ),
                   ],
                 ),
@@ -426,15 +448,16 @@ class _MainShellState extends ConsumerState<MainShell> {
     required IconData icon,
     required String label,
     required bool isCompact,
+    required MainWorkflow currentWorkflow,
   }) {
-    final isSelected = _currentWorkflow == workflow;
+    final isSelected = currentWorkflow == workflow;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 3.0),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => setState(() => _currentWorkflow = workflow),
+          onTap: () => ref.read(mainWorkflowProvider.notifier).state = workflow,
           borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),

@@ -160,8 +160,8 @@ export async function fetchProductsFromSupabase() {
       const baseCostKip = Number(p.cost_per_base_unit) || 0;
       const computedCartonCostKip = baseCostKip * cartonMultiplier;
 
-      const costKip = localMeta?.costKip !== undefined ? localMeta.costKip : computedCartonCostKip;
-      const costBaht = localMeta?.costBaht !== undefined ? localMeta.costBaht : Math.round(costKip / 720);
+      const costKip = localMeta?.costKip !== undefined ? localMeta.costKip : (Number(p.cost_lak) || computedCartonCostKip);
+      const costBaht = localMeta?.costBaht !== undefined ? localMeta.costBaht : (Number(p.cost_thb) || Number(p.cost_baht) || 0);
 
       // Multipliers resolution
       let packsPerCarton = 8;
@@ -284,11 +284,19 @@ export async function saveProductToSupabase(product) {
     if (product.categoryId) {
       prodPayload.category_id = product.categoryId;
     }
+    if (product.costBaht > 0) {
+      prodPayload.cost_thb = Number(product.costBaht);
+    }
+    if (product.costKip > 0) {
+      prodPayload.cost_lak = Number(product.costKip);
+    }
 
     let { error: pErr } = await supabase.from('products').upsert(prodPayload);
 
-    // If category_id column doesn't exist in Supabase yet, retry without category_id
-    if (pErr && pErr.message && pErr.message.includes('category_id')) {
+    // If optional columns (cost_thb, cost_lak, category_id) do not exist yet in schema cache, safely retry without them
+    if (pErr && pErr.message && (pErr.message.includes('cost_thb') || pErr.message.includes('cost_lak') || pErr.message.includes('category_id'))) {
+      delete prodPayload.cost_thb;
+      delete prodPayload.cost_lak;
       delete prodPayload.category_id;
       const retryRes = await supabase.from('products').upsert(prodPayload);
       pErr = retryRes.error;
@@ -460,11 +468,13 @@ export async function fetchTransactionsFromSupabase() {
         changeAmount: Number(t.change_amount) || 0,
         totalCost: Number(t.total_cost) || 0,
         grossProfit: Number(t.gross_profit) || 0,
-        isDebt: Boolean(cachedMeta?.receipt?.isDebt || cachedMeta?.isDebt || cleanPaymentMethod === 'debt'),
-        debtAmount: Number(cachedMeta?.receipt?.debtAmount ?? cachedMeta?.debtAmount ?? (cleanPaymentMethod === 'debt' ? (Number(t.grand_total) || 0) : 0)),
-        paidAmount: Number(cachedMeta?.receipt?.paidAmount ?? cachedMeta?.paidAmount ?? (cleanPaymentMethod === 'debt' ? 0 : Number(t.amount_tendered || t.grand_total) || 0)),
+        isDebt: Boolean(t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL' || cleanPaymentMethod === 'debt' || (Number(t.remaining_debt) > 0)),
+        remainingDebt: Number(t.remaining_debt ?? (cleanPaymentMethod === 'debt' ? Math.max(0, (Number(t.grand_total) || 0) - (Number(t.amount_tendered) || 0)) : 0)),
+        debtAmount: Number(t.remaining_debt ?? cachedMeta?.receipt?.debtAmount ?? (cleanPaymentMethod === 'debt' ? (Number(t.grand_total) || 0) : 0)),
+        paidAmount: Number(t.paid_amount ?? t.amount_tendered ?? (cleanPaymentMethod === 'debt' ? 0 : Number(t.grand_total) || 0)),
+        paymentStatus: t.payment_status || (cleanPaymentMethod === 'debt' ? 'DEBT' : 'PAID'),
         debtNote: cachedMeta?.receipt?.debtNote || cachedMeta?.debtNote || '',
-        debtStatus: cachedMeta?.receipt?.debtStatus || cachedMeta?.debtStatus || (cleanPaymentMethod === 'debt' ? 'unpaid' : 'paid'),
+        debtStatus: t.payment_status || cachedMeta?.receipt?.debtStatus || (cleanPaymentMethod === 'debt' ? 'unpaid' : 'paid'),
         sale_transaction_items: t.sale_transaction_items || [],
         items: (() => {
           if (cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0) {
@@ -576,6 +586,9 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       total_cost: Number(tx.totalCost) || 0,
       gross_profit: Number(tx.grossProfit) || 0,
       cashier_name: tx.cashierName || 'ໄມ້ຄຳ (Meii)',
+      paid_amount: Number(tx.paidAmount ?? (tx.paymentMethod === 'debt' ? (tx.amountTendered || 0) : (tx.amountTendered || tx.grandTotal || 0))),
+      remaining_debt: Number(tx.debtAmount ?? (tx.paymentMethod === 'debt' ? Math.max(0, (tx.grandTotal || 0) - (tx.amountTendered || 0)) : 0)),
+      payment_status: tx.paymentStatus || (tx.paymentMethod === 'debt' ? ((tx.amountTendered || 0) > 0 ? 'PARTIAL' : 'DEBT') : 'PAID'),
     });
 
     if (txErr) {
@@ -938,5 +951,712 @@ export async function deleteCategoryInSupabase(id, categoryName) {
     return { success: false, error: e.message || String(e) };
   }
 }
+
+// ============================================================================
+// MODULE: QUẢN LÝ NHẬP KHO (GRN) & CÔNG NỢ NHÀ CUNG CẤP (SUPPLIERS & AP)
+// ============================================================================
+
+/**
+ * 1. Fetch all suppliers
+ */
+export async function fetchSuppliersFromSupabase() {
+  try {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.warn('fetchSuppliersFromSupabase error:', error);
+      return { success: false, data: [], error: error.message };
+    }
+    return { success: true, data: data || [] };
+  } catch (e) {
+    console.error('fetchSuppliersFromSupabase exception:', e);
+    return { success: false, data: [], error: e.message };
+  }
+}
+
+/**
+ * 2. Create supplier
+ */
+export async function createSupplierInSupabase(supplier) {
+  try {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .insert({
+        name: supplier.name.trim(),
+        phone: supplier.phone?.trim() || null,
+        address: supplier.address?.trim() || null,
+        contact_person: supplier.contactPerson?.trim() || null,
+        note: supplier.note?.trim() || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true, data };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * 3. Update supplier
+ */
+export async function updateSupplierInSupabase(id, supplier) {
+  try {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .update({
+        name: supplier.name.trim(),
+        phone: supplier.phone?.trim() || null,
+        address: supplier.address?.trim() || null,
+        contact_person: supplier.contactPerson?.trim() || null,
+        note: supplier.note?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true, data };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * 4. Safe delete supplier (Blocked if purchase orders exist)
+ */
+export async function deleteSupplierSafelyInSupabase(supplierId) {
+  try {
+    const { data: poCheck, error: checkErr } = await supabase
+      .from('purchase_orders')
+      .select('id')
+      .eq('supplier_id', supplierId)
+      .limit(1);
+
+    if (poCheck && poCheck.length > 0) {
+      return {
+        success: false,
+        error: 'ບໍ່ສາມາດລົບຜູ້ສະໜອງນີ້ໄດ້ ເນື່ອງຈາກມີປະຫວັດການສັ່ງຊື້ແລ້ວ',
+      };
+    }
+
+    const { error } = await supabase.from('suppliers').delete().eq('id', supplierId);
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * 5. Fetch all purchase orders with items, supplier, and payments
+ */
+export async function fetchPurchaseOrdersFromSupabase() {
+  try {
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .select(`
+        *,
+        suppliers (*),
+        purchase_order_items (*),
+        supplier_debt_payments (*)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('fetchPurchaseOrdersFromSupabase error:', error);
+      return { success: false, data: [], error: error.message };
+    }
+    return { success: true, data: data || [] };
+  } catch (e) {
+    return { success: false, data: [], error: e.message };
+  }
+}
+
+/**
+ * 6. Create Purchase Order (GRN), cascade stock, override cost and retail price
+ */
+export async function createPurchaseOrderInSupabase(poData, draftItems = []) {
+  try {
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+    const randomSuffix = String(Math.floor(1000 + Math.random() * 9000));
+    const poId = `PO-${dateStr}-${randomSuffix}`;
+
+    // 1. Insert purchase_order with single-product fields
+    const firstDraft = draftItems && draftItems.length > 0 ? draftItems[0] : null;
+
+    let poPayload = {
+      id: poId,
+      supplier_id: poData.supplierId || null,
+      product_id: firstDraft?.product?.id || poData.productId || null,
+      product_name: firstDraft?.product?.name || poData.productName || 'ສິນຄ້າຮັບເຂົ້າ',
+      imported_base_units: Number(firstDraft?.importedBaseUnits || poData.importedBaseUnits || 0),
+      tier1_qty: Number(firstDraft?.tier1Qty || poData.tier1Qty || 0),
+      tier2_qty: Number(firstDraft?.tier2Qty || poData.tier2Qty || 0),
+      tier3_qty: Number(firstDraft?.tier3Qty || poData.tier3Qty || 0),
+      cost_thb: Number(firstDraft?.costThb || poData.costThb || 0),
+      cost_lak: Number(firstDraft?.costLak || poData.costLak || 0),
+      cost_per_base_unit: Number(firstDraft?.costPerBaseUnit || poData.costPerBaseUnit || 0),
+      total_cost_lak: Number(poData.totalCostLak) || 0,
+      total_cost_thb: Number(poData.totalCostThb) || 0,
+      total_cost_vnd: Number(poData.totalCostVnd) || 0,
+      paid_amount: Number(poData.paidAmount) || 0,
+      debt_amount: Number(poData.debtAmount) || 0,
+      payment_status: poData.paymentStatus || 'PAID',
+      received_by: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
+      note: poData.note || null,
+    };
+
+    let { error: poErr } = await supabase.from('purchase_orders').insert(poPayload);
+
+    // If single-product columns do not exist yet on purchase_orders, retry with standard header columns
+    if (poErr && (poErr.code === '42703' || (poErr.message && (poErr.message.includes('cost_lak') || poErr.message.includes('column'))))) {
+      console.warn('purchase_orders single-product columns not in schema cache, retrying with header columns:', poErr.message);
+      const basePayload = {
+        id: poId,
+        supplier_id: poData.supplierId || null,
+        total_cost_lak: Number(poData.totalCostLak) || 0,
+        total_cost_thb: Number(poData.totalCostThb) || 0,
+        total_cost_vnd: Number(poData.totalCostVnd) || 0,
+        paid_amount: Number(poData.paidAmount) || 0,
+        debt_amount: Number(poData.debtAmount) || 0,
+        payment_status: poData.paymentStatus || 'PAID',
+        received_by: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
+        note: poData.note || null,
+      };
+      const retryResult = await supabase.from('purchase_orders').insert(basePayload);
+      poErr = retryResult.error;
+    }
+
+    if (poErr) {
+      console.error('PO Insert error:', poErr);
+      return { success: false, error: poErr.message };
+    }
+
+    // 2. Insert items & cascade stock & price overrides
+    if (draftItems && draftItems.length > 0) {
+      const itemsPayload = draftItems.map((d) => ({
+        purchase_order_id: poId,
+        product_id: d.product.id,
+        product_name: d.product.name,
+        cost_per_base_unit: Number(d.costPerBaseUnit) || 0,
+        cost_thb: Number(d.costThb) || 0,
+        cost_lak: Number(d.costLak) || 0,
+        cost_vnd: Number(d.costVnd) || 0,
+        imported_base_units: Number(d.importedBaseUnits) || 0,
+        tier1_qty: Number(d.tier1Qty) || 0,
+        tier2_qty: Number(d.tier2Qty) || 0,
+        tier3_qty: Number(d.tier3Qty) || 0,
+      }));
+
+      const { error: itemErr } = await supabase.from('purchase_order_items').insert(itemsPayload);
+      if (itemErr) console.warn('Purchase items insert warning:', itemErr);
+
+      // Cascade Stock & Cost updates to products table
+      for (const d of draftItems) {
+        const currentStock = Number(d.product.currentStockBaseUnits) || 0;
+        const newStock = currentStock + Number(d.importedBaseUnits || 0);
+
+        await supabase.from('products').update({
+          current_stock_base_units: newStock,
+          cost_per_base_unit: Number(d.costPerBaseUnit) || 0,
+          updated_at: new Date().toISOString(),
+        }).eq('id', d.product.id);
+
+        // Update local metadata for costBaht/costKip
+        saveProductMetaLocal({
+          id: d.product.id,
+          costBaht: Number(d.costThb) || 0,
+          costKip: Number(d.costLak) || 0,
+        });
+
+        // Retail price overrides for units
+        if (d.retailPriceOverrides && typeof d.retailPriceOverrides === 'object') {
+          for (const [unitId, newPrice] of Object.entries(d.retailPriceOverrides)) {
+            await supabase.from('product_units').update({
+              retail_price: Number(newPrice) || 0,
+            }).eq('id', unitId);
+          }
+        }
+      }
+    }
+
+    // 3. Record initial debt payment if paid_amount > 0
+    if (Number(poData.paidAmount) > 0) {
+      await supabase.from('supplier_debt_payments').insert({
+        purchase_order_id: poId,
+        payment_amount: Number(poData.paidAmount),
+        currency: poData.primaryCurrency || 'LAK',
+        payment_method: 'CASH',
+        note: 'ຊຳລະເບື້ອງຕົ້ນຕອນຮັບສິນຄ້າ (Initial payment at GRN)',
+      });
+    }
+
+    return { success: true, poId };
+  } catch (e) {
+    console.error('createPurchaseOrderInSupabase exception:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * 7. Add supplier debt repayment
+ */
+export async function addSupplierDebtPaymentInSupabase(poId, paymentAmount, currency = 'LAK', paymentMethod = 'CASH', note = '') {
+  try {
+    // 1. Fetch current PO
+    const { data: po, error: poErr } = await supabase
+      .from('purchase_orders')
+      .select('*')
+      .eq('id', poId)
+      .single();
+
+    if (poErr || !po) {
+      return { success: false, error: poErr?.message || 'PO not found' };
+    }
+
+    const currentPaid = Number(po.paid_amount) || 0;
+    const currentDebt = Number(po.debt_amount) || 0;
+    const amt = Number(paymentAmount) || 0;
+
+    const newPaid = currentPaid + amt;
+    const newDebt = Math.max(0, currentDebt - amt);
+    const newStatus = newDebt === 0 ? 'PAID' : 'PARTIAL';
+
+    // 2. Insert payment log
+    await supabase.from('supplier_debt_payments').insert({
+      purchase_order_id: poId,
+      payment_amount: amt,
+      currency,
+      payment_method: paymentMethod,
+      note: note || null,
+    });
+
+    // 3. Update purchase_orders
+    const { error: updateErr } = await supabase
+      .from('purchase_orders')
+      .update({
+        paid_amount: newPaid,
+        debt_amount: newDebt,
+        payment_status: newStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', poId);
+
+    if (updateErr) return { success: false, error: updateErr.message };
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * 11. Record Customer Debt Payment (Thu nợ khách hàng)
+ */
+export async function recordCustomerDebtPaymentInSupabase({
+  transactionId,
+  paymentAmount,
+  paymentMethod = 'CASH',
+  note = '',
+}) {
+  try {
+    const amt = Number(paymentAmount) || 0;
+    if (amt <= 0) return { success: false, error: 'ຈຳນວນເງິນຕ້ອງຫຼາຍກວ່າ 0' };
+
+    // 1. Get current transaction debt info
+    const { data: tx, error: txErr } = await supabase
+      .from('sale_transactions')
+      .select('id, grand_total, amount_tendered, paid_amount, remaining_debt')
+      .eq('id', transactionId)
+      .single();
+
+    if (txErr || !tx) {
+      return { success: false, error: txErr?.message || 'Transaction not found' };
+    }
+
+    const currentGrand = Number(tx.grand_total) || 0;
+    const currentPaid = Number(tx.paid_amount ?? tx.amount_tendered ?? 0);
+    const currentDebt = Number(tx.remaining_debt ?? Math.max(0, currentGrand - currentPaid));
+
+    const newPaid = currentPaid + amt;
+    const newDebt = Math.max(0, currentDebt - amt);
+    const newStatus = newDebt === 0 ? 'PAID' : 'PARTIAL';
+
+    // 2. Insert into customer_debt_payments
+    await supabase.from('customer_debt_payments').insert({
+      transaction_id: transactionId,
+      payment_amount: amt,
+      payment_method: paymentMethod,
+      note: note || null,
+    });
+
+    // 3. Update sale_transactions
+    const { error: updateErr } = await supabase
+      .from('sale_transactions')
+      .update({
+        paid_amount: newPaid,
+        remaining_debt: newDebt,
+        payment_status: newStatus,
+        amount_tendered: newPaid,
+      })
+      .eq('id', transactionId);
+
+    if (updateErr) {
+      console.error('Update sale_transactions debt error:', updateErr);
+      return { success: false, error: updateErr.message };
+    }
+
+    return { success: true, newDebt, newPaid, newStatus };
+  } catch (e) {
+    console.error('recordCustomerDebtPaymentInSupabase exception:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * 12. Update / Re-checkout Existing Order via POS
+ * Sequentially:
+ * 1. Restores old stock
+ * 2. Deletes old items
+ * 3. Deducts new stock
+ * 4. Inserts new items
+ * 5. Updates sale_transactions header
+ */
+export async function updateExistingSaleTransactionInSupabase(
+  txId,
+  oldItems = [],
+  newTxData = {},
+  newCartItems = []
+) {
+  try {
+    // Calculate net stock change per product: unitsToRestore (old) - unitsToDeduct (new)
+    const stockDeltas = new Map(); // productId -> number
+
+    // 1. Account for old items to restore
+    for (const item of oldItems) {
+      const prodId = item.product?.id || item.productId || item.product_id;
+      if (prodId && prodId !== 'p_custom') {
+        const mult = Number(item.unit?.multiplier) || Number(item.multiplier) || 1;
+        const qty = Number(item.quantity) || 1;
+        const units = mult * qty;
+        stockDeltas.set(prodId, (stockDeltas.get(prodId) || 0) + units);
+      }
+    }
+
+    // 2. Account for new cart items to deduct
+    for (const item of newCartItems) {
+      const prodId = item.product?.id || item.productId || item.product_id;
+      if (prodId && prodId !== 'p_custom') {
+        const mult = Number(item.unit?.multiplier) || Number(item.multiplier) || 1;
+        const qty = Number(item.quantity) || 1;
+        const units = mult * qty;
+        stockDeltas.set(prodId, (stockDeltas.get(prodId) || 0) - units);
+      }
+    }
+
+    // 3. Apply net stock changes to database for tracked products
+    for (const [prodId, delta] of stockDeltas.entries()) {
+      if (delta !== 0) {
+        const { data: p } = await supabase
+          .from('products')
+          .select('current_stock_base_units, track_stock')
+          .eq('id', prodId)
+          .single();
+
+        if (p && p.track_stock !== false) {
+          const currentStock = Number(p.current_stock_base_units) || 0;
+          const updatedStock = currentStock + delta;
+          await supabase
+            .from('products')
+            .update({
+              current_stock_base_units: updatedStock,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', prodId);
+        }
+      }
+    }
+
+    // 4. Delete old sale_transaction_items
+    await supabase.from('sale_transaction_items').delete().eq('transaction_id', txId);
+
+    // Step 4: Insert new sale_transaction_items
+    if (newCartItems && newCartItems.length > 0) {
+      const itemsPayload = newCartItems.map((item) => {
+        const prodId = item.product?.id || item.productId || 'p_custom';
+        const unitPrice = Number(
+          item.customPrice !== undefined
+            ? item.customPrice
+            : newTxData.isWholesale
+            ? item.unit?.wholesalePrice
+            : item.unit?.retailPrice
+        ) || 0;
+        const qty = Number(item.quantity) || 1;
+        const lineTotal = Number(item.lineTotal || (unitPrice * qty));
+        const multiplier = Number(item.unit?.multiplier) || 1;
+        const baseCost = Number(item.product?.costPerBaseUnit) || 0;
+        const lineCost = baseCost * multiplier * qty;
+        const lineProfit = lineTotal - lineCost;
+
+        return {
+          id: generateUUID(),
+          transaction_id: txId,
+          product_id: prodId,
+          product_name: item.productName || item.product?.name || 'ສິນຄ້າ',
+          unit_name: item.unit?.unitName || item.unitName || 'ອັນ',
+          multiplier,
+          quantity: qty,
+          unit_price: unitPrice,
+          line_total: lineTotal,
+          line_cost: lineCost,
+          line_profit: lineProfit,
+        };
+      });
+
+      await supabase.from('sale_transaction_items').insert(itemsPayload);
+    }
+
+    // Step 5: Update sale_transactions header
+    const { error: headerErr } = await supabase
+      .from('sale_transactions')
+      .update({
+        is_wholesale: Boolean(newTxData.isWholesale),
+        customer_name: newTxData.customerName || 'ລູກຄ້າທົ່ວໄປ',
+        payment_method: newTxData.paymentMethod || 'cash',
+        subtotal: Number(newTxData.subtotal) || 0,
+        discount_total: Number(newTxData.discountTotal) || 0,
+        grand_total: Number(newTxData.grandTotal) || 0,
+        amount_tendered: Number(newTxData.amountTendered) || 0,
+        change_amount: Number(newTxData.changeAmount) || 0,
+        total_cost: Number(newTxData.totalCost) || 0,
+        gross_profit: Number(newTxData.grossProfit) || 0,
+        paid_amount: Number(newTxData.paidAmount ?? newTxData.amountTendered ?? 0),
+        remaining_debt: Number(newTxData.remainingDebt ?? 0),
+        payment_status: newTxData.paymentStatus || 'PAID',
+      })
+      .eq('id', txId);
+
+    if (headerErr) {
+      console.error('Error updating sale_transactions header:', headerErr);
+      return { success: false, error: headerErr.message };
+    }
+
+    return { success: true };
+  } catch (e) {
+    console.error('updateExistingSaleTransactionInSupabase exception:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Strict Year-over-Year / Dual-Month Query:
+ * Queries ONLY the two discrete month intervals (Month A and Month B) in parallel.
+ * TUYỆT ĐỐI KHÔNG truy vấn dồn toàn bộ các tháng nằm ở giữa.
+ */
+export async function fetchDualMonthTransactions(yearMonthA, yearMonthB) {
+  try {
+    const getRange = (ymStr) => {
+      const parts = (ymStr || '').split('-');
+      if (parts.length < 2) return null;
+      const year = Number(parts[0]);
+      const month = Number(parts[1]);
+      if (!year || !month) return null;
+      // Start of month
+      const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0)).toISOString();
+      // End of month
+      const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString();
+      return { start, end };
+    };
+
+    const rangeA = getRange(yearMonthA);
+    const rangeB = getRange(yearMonthB);
+    if (!rangeA || !rangeB) return { txsA: [], txsB: [] };
+
+    // Discrete queries strictly abiding by query rule
+    const [resA, resB] = await Promise.all([
+      supabase
+        .from('sale_transactions')
+        .select('*')
+        .gte('created_at', rangeA.start)
+        .lte('created_at', rangeA.end)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('sale_transactions')
+        .select('*')
+        .gte('created_at', rangeB.start)
+        .lte('created_at', rangeB.end)
+        .order('created_at', { ascending: true }),
+    ]);
+
+    const normalizeTxs = (list) =>
+      (list || [])
+        .filter(
+          (t) =>
+            t.payment_status !== 'CANCELLED' &&
+            t.status !== 'cancelled' &&
+            !t.is_cancelled
+        )
+        .map((t) => ({
+          id: t.id,
+          receiptNumber: t.receipt_number,
+          createdAt: t.created_at,
+          grandTotal: Number(t.grand_total) || 0,
+          totalCost: Number(t.total_cost) || 0,
+          grossProfit: Number(t.gross_profit) || 0,
+          paymentMethod: t.payment_method,
+          paymentStatus: t.payment_status,
+        }));
+
+    return {
+      txsA: normalizeTxs(resA.data),
+      txsB: normalizeTxs(resB.data),
+    };
+  } catch (err) {
+    console.error('fetchDualMonthTransactions error:', err);
+    return { txsA: [], txsB: [] };
+  }
+}
+
+/**
+ * Custom Date Range Query:
+ * Queries sale_transactions strictly between start_date and end_date.
+ */
+export async function fetchDateRangeTransactions(startDateStr, endDateStr) {
+  try {
+    if (!startDateStr || !endDateStr) return [];
+    const s = new Date(startDateStr);
+    s.setHours(0, 0, 0, 0);
+    const e = new Date(endDateStr);
+    e.setHours(23, 59, 59, 999);
+
+    const { data, error } = await supabase
+      .from('sale_transactions')
+      .select('*')
+      .gte('created_at', s.toISOString())
+      .lte('created_at', e.toISOString())
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('fetchDateRangeTransactions error:', error);
+      return [];
+    }
+
+    return (data || [])
+      .filter(
+        (t) =>
+          t.payment_status !== 'CANCELLED' &&
+          t.status !== 'cancelled' &&
+          !t.is_cancelled
+      )
+      .map((t) => ({
+        id: t.id,
+        receiptNumber: t.receipt_number,
+        createdAt: t.created_at,
+        grandTotal: Number(t.grand_total) || 0,
+        totalCost: Number(t.total_cost) || 0,
+        grossProfit: Number(t.gross_profit) || 0,
+        paymentMethod: t.payment_method,
+        paymentStatus: t.payment_status,
+      }));
+  } catch (err) {
+    console.error('fetchDateRangeTransactions exception:', err);
+    return [];
+  }
+}
+
+/**
+ * Annual 12-Month Sales Trend:
+ * Aggregates revenue, cost, profit, and order count for all 12 months of the given year.
+ */
+export async function fetchAnnual12MonthSales(targetYear = new Date().getFullYear()) {
+  try {
+    const start = new Date(Date.UTC(targetYear, 0, 1, 0, 0, 0, 0)).toISOString();
+    const end = new Date(Date.UTC(targetYear, 11, 31, 23, 59, 59, 999)).toISOString();
+
+    const { data, error } = await supabase
+      .from('sale_transactions')
+      .select('created_at, grand_total, total_cost, gross_profit, status, payment_status, is_cancelled')
+      .gte('created_at', start)
+      .lte('created_at', end)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('fetchAnnual12MonthSales error:', error);
+      return [];
+    }
+
+    const laoMonthNames = [
+      'ມັງກອນ (01)',
+      'ກຸມພາ (02)',
+      'ມີນາ (03)',
+      'ເມສາ (04)',
+      'ພຶດສະພາ (05)',
+      'ມິຖຸນາ (06)',
+      'ກໍລະກົດ (07)',
+      'ສິງຫາ (08)',
+      'ກັນຍາ (09)',
+      'ຕຸລາ (10)',
+      'ພະຈິກ (11)',
+      'ທັນວາ (12)',
+    ];
+
+    const months = laoMonthNames.map((name, idx) => ({
+      monthIndex: idx + 1,
+      month: `${String(idx + 1).padStart(2, '0')}/${targetYear}`,
+      monthName: name,
+      label: name,
+      shortLabel: name,
+      simpleMonth: String(idx + 1).padStart(2, '0'),
+      revenue: 0,
+      total_sales: 0,
+      cost: 0,
+      total_cost: 0,
+      profit: 0,
+      gross_profit: 0,
+      count: 0,
+      ticket_count: 0,
+    }));
+
+    (data || []).forEach((t) => {
+      if (t.payment_status === 'CANCELLED' || t.status === 'cancelled' || t.is_cancelled) return;
+      const d = new Date(t.created_at);
+      const mIdx = d.getMonth();
+      if (mIdx >= 0 && mIdx < 12) {
+        const rev = Number(t.grand_total) || 0;
+        const c = Number(t.total_cost) || 0;
+        const p = Number(t.gross_profit) || 0;
+
+        months[mIdx].revenue += rev;
+        months[mIdx].total_sales += rev;
+        months[mIdx].cost += c;
+        months[mIdx].total_cost += c;
+        months[mIdx].profit += p;
+        months[mIdx].gross_profit += p;
+        months[mIdx].count += 1;
+        months[mIdx].ticket_count += 1;
+      }
+    });
+
+    return months;
+  } catch (err) {
+    console.error('fetchAnnual12MonthSales exception:', err);
+    return [];
+  }
+}
+
+
 
 

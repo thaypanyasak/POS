@@ -171,9 +171,16 @@ export default function ReceiptModal({
               receiptItems.map((it, i) => {
                 const prodName = it.product?.name || it.productName || it.product_name || 'ສິນຄ້າ';
                 const unitName = it.unit?.unitName || it.unitName || it.unit_name || 'ອັນ';
-                const price = receipt.isWholesale
-                  ? (it.unit?.wholesalePrice ?? it.unitPrice ?? it.unit_price ?? 0)
-                  : (it.unit?.retailPrice ?? it.unitPrice ?? it.unit_price ?? 0);
+                const price = Number(
+                  it.customPrice ??
+                  it.effectivePrice ??
+                  it.effectiveUnitPrice ??
+                  it.unitPrice ??
+                  it.unit_price ??
+                  (receipt.isWholesale
+                    ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
+                    : (it.unit?.retailPrice ?? 0))
+                ) || 0;
                 const qty = it.quantity || 1;
                 const baseLineTotal = price * qty;
                 const hasMissingCrates = Boolean(
@@ -238,9 +245,16 @@ export default function ReceiptModal({
 
             // True goods-only subtotal: sum of (unit_price * quantity), without crate fee
             const goodsSubtotalFromItems = receiptItems.reduce((sum, it) => {
-              const price = receipt.isWholesale
-                ? (it.unit?.wholesalePrice ?? it.unitPrice ?? it.unit_price ?? 0)
-                : (it.unit?.retailPrice ?? it.unitPrice ?? it.unit_price ?? 0);
+              const price = Number(
+                it.customPrice ??
+                it.effectivePrice ??
+                it.effectiveUnitPrice ??
+                it.unitPrice ??
+                it.unit_price ??
+                (receipt.isWholesale
+                  ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
+                  : (it.unit?.retailPrice ?? 0))
+              ) || 0;
               return sum + (price * (it.quantity || 1));
             }, 0);
 

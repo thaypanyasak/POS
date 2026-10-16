@@ -192,3 +192,97 @@ export const formatCompoundStock = (product) => {
   const result = parts.length > 0 ? parts.join(' ') : `0 ${product.baseUnit || 'ອັນ'}`;
   return isNeg ? `-${result}` : result;
 };
+
+/**
+ * Formats a number to Thai Baht with thousand dots (e.g. 1600000 -> "1.600.000", 250 -> "250", 1600000.5 -> "1.600.000,50")
+ */
+export const formatThb = (val) => {
+  if (val === null || val === undefined || val === '') return '0';
+  const num = Number(val);
+  if (isNaN(num)) return '0';
+  const isInt = num % 1 === 0;
+  if (isInt) {
+    return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+  const parts = num.toFixed(2).split('.');
+  const intFormatted = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${intFormatted},${parts[1]}`;
+};
+
+/**
+ * Parses THB formatted string back to float (e.g. "1.600.000" -> 1600000, "1.600.000,50" -> 1600000.5)
+ */
+export const parseThb = (val) => {
+  if (!val && val !== 0) return 0;
+  const clean = String(val).replace(/\./g, '').replace(',', '.').trim();
+  const n = parseFloat(clean);
+  return isNaN(n) ? 0 : n;
+};
+
+/**
+ * Auto-formats THB input while user is typing
+ * Handles:
+ * 250 -> "250"
+ * 1600000 -> "1.600.000"
+ * 1600000,50 or 1600000.50 -> "1.600.000,50"
+ */
+export const formatThbTyping = (inputStr) => {
+  if (!inputStr && inputStr !== 0) return '';
+  let str = String(inputStr).trim();
+  if (str === '') return '';
+
+  let clean = str.replace(/[^0-9.,]/g, '');
+
+  let parts;
+  if (clean.includes(',')) {
+    parts = clean.split(',');
+  } else if ((clean.match(/\./g) || []).length === 1 && clean.indexOf('.') === clean.length - 1) {
+    parts = [clean.slice(0, -1), ''];
+  } else {
+    parts = [clean.replace(/\./g, '')];
+  }
+
+  const intRaw = parts[0].replace(/\D/g, '');
+  if (!intRaw && parts.length === 1) return '';
+  const intFormatted = intRaw ? intRaw.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '0';
+
+  if (parts.length > 1) {
+    const decRaw = parts[1].replace(/\D/g, '').slice(0, 2);
+    return `${intFormatted},${decRaw}`;
+  }
+  return intFormatted;
+};
+
+/**
+ * Formats base units into compound text according to highest active unit (e.g. "+10 ແກັດ 2 ແພັກ")
+ */
+export const formatCompoundStockUnits = (totalBaseUnits, sortedUnits = []) => {
+  if (!sortedUnits || sortedUnits.length === 0) return `${totalBaseUnits}`;
+  if (sortedUnits.length === 1) return `${totalBaseUnits} ${sortedUnits[0].unitName}`;
+  if (totalBaseUnits === 0) return `0 ${sortedUnits[0].unitName}`;
+
+  const isNeg = totalBaseUnits < 0;
+  let remaining = Math.abs(totalBaseUnits);
+  const parts = [];
+
+  for (let i = 0; i < sortedUnits.length; i++) {
+    const u = sortedUnits[i];
+    const m = u.multiplier || 1;
+    if (i < sortedUnits.length - 1) {
+      if (m > 1) {
+        const count = Math.floor(remaining / m);
+        if (count > 0) {
+          parts.push(`${count} ${u.unitName}`);
+          remaining %= m;
+        }
+      }
+    } else {
+      if (remaining > 0 || parts.length === 0) {
+        parts.push(`${remaining} ${u.unitName}`);
+      }
+    }
+  }
+
+  const text = parts.join(' ');
+  return isNeg ? `-${text}` : text;
+};

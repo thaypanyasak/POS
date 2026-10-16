@@ -1,4 +1,5 @@
 import 'product_unit.dart';
+import '../../data/local/product_local_meta_service.dart';
 
 /// Product domain entity for Lao Grocery POS & Backoffice
 /// Encapsulates multi-tier units, cost, untracked/negative stock rules,
@@ -393,15 +394,54 @@ class Product {
       piecesPerP = pU.multiplier;
     }
 
-    final int costBase = (json['cost_per_base_unit'] as num?)?.toInt() ?? 0;
-    int cKip = (json['cost_lak'] as num?)?.toInt() ??
+    final int rawCostBase = (json['cost_per_base_unit'] as num?)?.toInt() ?? 0;
+    final int cartonMul = cU?.multiplier ?? (hasCarton ? packsPerC : 1);
+    final int effCartonMul = cartonMul > 0 ? cartonMul : 1;
+
+    final String pId = json['id']?.toString() ?? '';
+    final localMeta = ProductLocalMetaService.getMeta(pId);
+
+    // Check if cost_lak or costKip was explicitly provided
+    final int? explicitCostLak = (json['cost_lak'] as num?)?.toInt() ??
+        (json['costLak'] as num?)?.toInt() ??
+        (json['cost_kip'] as num?)?.toInt() ??
         (json['costKip'] as num?)?.toInt() ??
-        (costBase * (cU?.multiplier ?? (hasCarton ? packsPerC : 1)));
+        localMeta?['costKip'];
+
+    int costBase = rawCostBase;
+    int cKip = 0;
+
+    if (explicitCostLak != null && explicitCostLak > 0) {
+      cKip = explicitCostLak;
+      costBase = effCartonMul > 0 ? (cKip / effCartonMul).round() : cKip;
+    } else if (rawCostBase > 0) {
+      // Self-healing check for legacy products saved with old bug:
+      // If rawCostBase in DB was mistakenly saved as carton cost (e.g. 280,000)
+      // for a multi-tier product whose carton multiplier > 1 (e.g. 8):
+      final int cartonRetail = cU?.retailPrice ?? 0;
+      if (effCartonMul > 1 && (cartonRetail > 0 ? rawCostBase > (cartonRetail * 0.4) : rawCostBase > 50000)) {
+        // rawCostBase in DB is already the carton cost (280,000)!
+        cKip = rawCostBase;
+        costBase = (rawCostBase / effCartonMul).round(); // 35,000
+      } else {
+        // Normal case: rawCostBase is true base unit cost (35,000)
+        costBase = rawCostBase;
+        cKip = rawCostBase * effCartonMul; // 35,000 * 8 = 280,000
+      }
+    }
     if (cKip == 0 && costBase > 0) cKip = costBase;
 
-    int cBaht = (json['cost_baht'] as num?)?.toInt() ??
+    // Baht cost: priority cost_thb -> cost_baht -> localMeta -> fallback cKip / 720 (matching Web)
+    int cBaht = (json['cost_thb'] as num?)?.toInt() ??
+        (json['cost_baht'] as num?)?.toInt() ??
         (json['costBaht'] as num?)?.toInt() ??
-        (cKip > 0 ? (cKip / 720).round() : 0);
+        (json['costThb'] as num?)?.toInt() ??
+        localMeta?['costBaht'] ??
+        0;
+
+    if (cBaht <= 0 && cKip > 0) {
+      cBaht = (cKip / 720).round();
+    }
 
     return Product(
       id: json['id']?.toString() ?? '',

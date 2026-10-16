@@ -1,0 +1,8 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://api.mwapi.dev/v1",
+    "ANTHROPIC_API_KEY": "sk-fa8e5a0622bb9a5ad46c53f79762b144ea758e34f4fa6b8acf54184b09b152b5",
+    "ANTHROPIC_AUTH_TOKEN": "sk-fa8e5a0622bb9a5ad46c53f79762b144ea758e34f4fa6b8acf54184b09b152b5",
+    "DISABLE_TELEMETRY": "1"
+  }
+}

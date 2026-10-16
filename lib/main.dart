@@ -5,6 +5,7 @@ import 'core/config/supabase_config.dart';
 import 'core/localization/lo.dart';
 import 'core/theme/app_theme.dart';
 import 'data/local/pos_database.dart';
+import 'data/local/product_local_meta_service.dart';
 import 'data/remote/supabase_sync_service.dart';
 import 'features/navigation/main_shell.dart';
 
@@ -19,8 +20,9 @@ Future<void> main() async {
     DeviceOrientation.landscapeRight,
   ]);
 
-  // 2. Initialize local offline storage
+  // 2. Initialize local offline storage & metadata cache
   await PosDatabase.instance.init();
+  await ProductLocalMetaService.init();
 
   // 3. Initialize Supabase cloud sync if configured
   if (SupabaseConfig.isConfigured) {

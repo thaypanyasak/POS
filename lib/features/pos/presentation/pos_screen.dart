@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/localization/lao_currency_formatter.dart';
+import '../../../../domain/models/sale_transaction.dart';
 import 'controllers/cart_controller.dart';
 import 'controllers/catalog_controller.dart';
 import 'widgets/cart_dock.dart';
@@ -156,6 +158,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             // 2. MOBILE PORTRAIT / PHONE (< 768px) -> Full Catalog + Floating Bottom Cart Bar
             return Column(
               children: [
+                if (cartState.isEditingOldOrder)
+                  _buildMobileEditingBanner(context, cartState),
                 const Expanded(
                   child: CatalogDock(),
                 ),
@@ -269,6 +273,115 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildMobileEditingBanner(BuildContext context, CartState cartState) {
+    final method = (cartState.originalPaymentMethod ??
+            (cartState.originalTransaction?.isDebt == true
+                ? 'DEBT'
+                : (cartState.originalTransaction?.paymentMethod == PaymentMethod.qrTransfer
+                    ? 'TRANSFER'
+                    : 'CASH')))
+        .toUpperCase();
+
+    final isDebt = method == 'DEBT';
+    final isTransfer = method == 'TRANSFER';
+    final isCash = !isDebt && !isTransfer;
+
+    final remainingDebt = cartState.originalRemainingDebt > 0
+        ? cartState.originalRemainingDebt
+        : (cartState.originalTransaction?.debtAmount ?? 0);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF59E0B),
+        border: Border(bottom: BorderSide(color: Color(0xFFD97706))),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  Text(
+                    '⚠️ ກຳລັງແກ້ໄຂບິນ: #${cartState.originalReceiptNumber ?? ""} • ລູກຄ້າ: ${cartState.originalCustomerName ?? cartState.customer.name} • ຮູບແບບຊຳລະເດີມ: ',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                  if (isCash)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF059669),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        '💵 ເງິນສົດ (Cash)',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                      ),
+                    ),
+                  if (isTransfer)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        '📲 ໂອນເງິນ (Transfer)',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                      ),
+                    ),
+                  if (isDebt)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE11D48),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '⏳ ຕິດໜີ້ (ຄ້າງ: ${LaoCurrencyFormatter.formatDots(remainingDebt)} ₭)',
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: () {
+              ref.read(cartProvider.notifier).cancelEditingOrder();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('ຍົກເລີກການແກ້ໄຂບິນເກົ່າແລ້ວ'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(5),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD97706),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: const Text(
+                'ຍົກເລີກ',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

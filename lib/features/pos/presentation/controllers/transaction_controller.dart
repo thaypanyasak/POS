@@ -116,11 +116,16 @@ class TransactionHistoryNotifier
 
     try {
       final cartState = _ref.read(cartProvider);
+      final isEditing = cartState.isEditingOldOrder && cartState.originalTransaction != null;
+      final oldTx = isEditing ? cartState.originalTransaction! : null;
       final now = DateTime.now();
+
       final dateCode = DateFormat('yyyyMMdd').format(now);
       final seqNumber =
           (state.transactions.length + 1).toString().padLeft(4, '0');
-      final receiptNumber = 'RC-$dateCode-$seqNumber';
+      final receiptNumber = oldTx?.receiptNumber ?? 'RC-$dateCode-$seqNumber';
+      final txId = oldTx?.id ?? 'tx_${now.millisecondsSinceEpoch}';
+      final createdAt = oldTx?.createdAt ?? now;
 
       final isDebt = paymentMethod == PaymentMethod.debt;
       final effectivePaid = isDebt
@@ -147,9 +152,9 @@ class TransactionHistoryNotifier
       }
 
       final transaction = SaleTransaction(
-        id: 'tx_${now.millisecondsSinceEpoch}',
+        id: txId,
         receiptNumber: receiptNumber,
-        createdAt: now,
+        createdAt: createdAt,
         items: List.from(cartState.items),
         isWholesale: cartState.isWholesaleMode,
         customer: customer,
@@ -168,6 +173,37 @@ class TransactionHistoryNotifier
         debtNote: debtNote?.trim(),
       );
 
+      if (isEditing && oldTx != null) {
+        // Sequential Re-checkout pattern:
+        // 1. Restore old stock in local catalog, then deduct new items
+        _ref.read(catalogProvider.notifier).restoreStockFromTransaction(oldTx);
+        _ref.read(catalogProvider.notifier).deductStockFromTransaction(transaction);
+
+        // 2. Save locally
+        await PosDatabase.instance.saveTransaction(transaction);
+
+        // 3. Update Supabase
+        await SupabaseSyncService.updateExistingSaleTransaction(
+          oldTransaction: oldTx,
+          newTransaction: transaction,
+        );
+
+        // 4. Update in state
+        final updatedList = state.transactions
+            .map((t) => t.id == txId ? transaction : t)
+            .toList();
+        state = state.copyWith(
+          transactions: updatedList,
+          isProcessingCheckout: false,
+        );
+
+        // 5. Clear cart
+        _ref.read(cartProvider.notifier).clearCart();
+
+        return transaction;
+      }
+
+      // Normal Checkout:
       // 1. Deduct stock from local catalog
       _ref
           .read(catalogProvider.notifier)

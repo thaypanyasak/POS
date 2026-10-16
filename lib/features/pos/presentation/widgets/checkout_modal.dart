@@ -36,18 +36,52 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
   @override
   void initState() {
     super.initState();
-    final grandTotal = ref.read(cartProvider).grandTotal;
-    _tenderedAmount = grandTotal;
-    _debtPaidKip = 0;
+    final cartState = ref.read(cartProvider);
+    final grandTotal = cartState.grandTotal;
+
+    if (cartState.isEditingOldOrder) {
+      final origMethod = (cartState.originalPaymentMethod ??
+              (cartState.originalTransaction?.isDebt == true
+                  ? 'DEBT'
+                  : (cartState.originalTransaction?.paymentMethod == PaymentMethod.qrTransfer
+                      ? 'TRANSFER'
+                      : 'CASH')))
+          .toUpperCase();
+
+      if (origMethod == 'DEBT') {
+        _paymentMethod = PaymentMethod.debt;
+        final origPaid = cartState.originalAmountTendered;
+        _debtPaidKip = origPaid.clamp(0, grandTotal);
+        _tenderedAmount = grandTotal;
+      } else if (origMethod == 'TRANSFER') {
+        _paymentMethod = PaymentMethod.qrTransfer;
+        _tenderedAmount = grandTotal;
+        _debtPaidKip = 0;
+      } else {
+        _paymentMethod = PaymentMethod.cash;
+        final oldTendered = cartState.originalAmountTendered;
+        _tenderedAmount = oldTendered >= grandTotal ? oldTendered : grandTotal;
+        _debtPaidKip = 0;
+      }
+
+      final note = cartState.originalTransaction?.debtNote ?? '';
+      _debtNoteController = TextEditingController(text: note);
+    } else {
+      _paymentMethod = PaymentMethod.cash;
+      _tenderedAmount = grandTotal;
+      _debtPaidKip = 0;
+      _debtNoteController = TextEditingController();
+    }
 
     _customerNameController = TextEditingController(
-      text: ref.read(cartProvider).customer.name,
+      text: cartState.originalCustomerName ?? cartState.customer.name,
     );
     _cashInputController = TextEditingController(
-      text: LaoCurrencyFormatter.formatDots(grandTotal),
+      text: LaoCurrencyFormatter.formatDots(_tenderedAmount),
     );
-    _debtInputController = TextEditingController();
-    _debtNoteController = TextEditingController();
+    _debtInputController = TextEditingController(
+      text: _debtPaidKip > 0 ? LaoCurrencyFormatter.formatDots(_debtPaidKip) : '',
+    );
   }
 
   @override
@@ -57,6 +91,65 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
     _debtInputController.dispose();
     _debtNoteController.dispose();
     super.dispose();
+  }
+
+  Widget _buildOriginalPaymentBadge(CartState cartState) {
+    final method = (cartState.originalPaymentMethod ??
+            (cartState.originalTransaction?.isDebt == true
+                ? 'DEBT'
+                : (cartState.originalTransaction?.paymentMethod == PaymentMethod.qrTransfer
+                    ? 'TRANSFER'
+                    : 'CASH')))
+        .toUpperCase();
+
+    final isDebt = method == 'DEBT';
+    final isTransfer = method == 'TRANSFER';
+    final isCash = !isDebt && !isTransfer;
+
+    final remainingDebt = cartState.originalRemainingDebt > 0
+        ? cartState.originalRemainingDebt
+        : (cartState.originalTransaction?.debtAmount ?? 0);
+
+    if (isCash) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFECFDF5),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFA7F3D0)),
+        ),
+        child: const Text(
+          '💵 ເງິນສົດ (Cash)',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF047857)),
+        ),
+      );
+    } else if (isTransfer) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEFF6FF),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFBFDBFE)),
+        ),
+        child: const Text(
+          '📲 ໂອນເງິນ (Transfer)',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF1D4ED8)),
+        ),
+      );
+    } else {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF1F2),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFFECDD3)),
+        ),
+        child: Text(
+          '⏳ ຕິດໜີ້ (ຄ້າງ: ${LaoCurrencyFormatter.formatDots(remainingDebt)} ₭)',
+          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFFBE123C)),
+        ),
+      );
+    }
   }
 
   void _onCashInputChanged(String val, int grandTotal) {
@@ -138,21 +231,42 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'ຊຳລະເງິນ (Checkout)',
-                            style: TextStyle(
+                          Text(
+                            cartState.isEditingOldOrder
+                                ? 'ແກ້ໄຂບິນ #${cartState.originalReceiptNumber ?? ""}'
+                                : 'ຊຳລະເງິນ (Checkout)',
+                            style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w900,
                               color: Color(0xFF0F172A),
                             ),
                           ),
-                          Text(
-                            'ເລືອກຮູບແບບການຊຳລະ: ເງິນສົດ, ໂອນ, ຫຼື ຄ້າງຊຳລະ',
-                            style: TextStyle(
-                              fontSize: isCompactLandscape ? 10 : 11,
-                              color: const Color(0xFF64748B),
+                          if (cartState.isEditingOldOrder)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'ຮູບແບບຊຳລະເດີມ: ',
+                                    style: TextStyle(
+                                      fontSize: isCompactLandscape ? 10 : 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                  _buildOriginalPaymentBadge(cartState),
+                                ],
+                              ),
+                            )
+                          else
+                            Text(
+                              'ເລືອກຮູບແບບການຊຳລະ: ເງິນສົດ, ໂອນ, ຫຼື ຄ້າງຊຳລະ',
+                              style: TextStyle(
+                                fontSize: isCompactLandscape ? 10 : 11,
+                                color: const Color(0xFF64748B),
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ],
@@ -659,7 +773,9 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                       label: Text(
                         printerState.isPrinting
                             ? 'ກຳລັງປະມວນຜົນ...'
-                            : 'ຢືນຢັນ & ພິມໃບບິນ',
+                            : (cartState.isEditingOldOrder
+                                ? '💾 ບັນທຶກການແກ້ໄຂ'
+                                : 'ຢືນຢັນ & ພິມໃບບິນ'),
                         style: const TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w900,

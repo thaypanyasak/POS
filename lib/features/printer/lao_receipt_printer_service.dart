@@ -144,6 +144,59 @@ class LaoReceiptPrinterService {
     }
   }
 
+  /// Prints a Quotation / Proforma Slip silently without opening cash drawer or recording revenue
+  Future<PrintResult> printQuotationReceipt({
+    required Widget quotationWidget,
+  }) async {
+    try {
+      final receiptWidget = Material(
+        color: Colors.white,
+        child: quotationWidget,
+      );
+
+      final Uint8List pngBytes = await _screenshotController.captureFromWidget(
+        receiptWidget,
+        delay: const Duration(milliseconds: 100),
+        pixelRatio: 1.0,
+      );
+
+      final img.Image? decoded = img.decodeImage(pngBytes);
+      if (decoded == null) {
+        return const PrintResult(
+          success: false,
+          message: 'Failed to decode captured quotation image to bitmap pixels.',
+        );
+      }
+
+      final img.Image resized = (decoded.width != _config.paperWidthDots)
+          ? img.copyResize(decoded, width: _config.paperWidthDots)
+          : decoded;
+
+      // Notice: Do NOT kick cash drawer on quotation
+      final Uint8List escPosBytes = ReceiptEscPosGenerator.generateRasterBytes(
+        image: resized,
+        kickCashDrawer: false,
+        cutPaper: _config.autoCut,
+      );
+
+      if (_config.isSimulationMode) {
+        return PrintResult(
+          success: true,
+          message: 'Quotation simulated successfully (${escPosBytes.length} bytes generated).',
+          rawBytes: escPosBytes,
+          bytesTransmitted: escPosBytes.length,
+        );
+      }
+
+      return await _sendRawBytesToSocket(escPosBytes);
+    } catch (e) {
+      return PrintResult(
+        success: false,
+        message: 'Quotation printing error: ${e.toString()}',
+      );
+    }
+  }
+
   /// Kicks the cash drawer via ESC/POS command directly without printing receipt
   Future<PrintResult> openCashDrawer() async {
     final bytes = ReceiptEscPosGenerator.openCashDrawerBytes;

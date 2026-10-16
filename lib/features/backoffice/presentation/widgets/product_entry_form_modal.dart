@@ -51,10 +51,11 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
   bool _showUrlInput = false;
   late TextEditingController _urlInputController;
 
-  // Dual Currency Cost Controllers & Exchange Rate
+  // Dual Currency Cost Controllers & FocusNodes
   late TextEditingController _costBahtController;
   late TextEditingController _costKipController;
-  final int _exchangeRate = 720;
+  final FocusNode _costBahtFocusNode = FocusNode();
+  final FocusNode _costKipFocusNode = FocusNode();
 
   // Track Stock
   bool _trackStock = true;
@@ -185,8 +186,30 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
       _imageUrl = p.imageUrl ?? '';
       _urlInputController.text = p.imageUrl ?? '';
 
-      _costBahtController.text = p.costBaht > 0 ? LaoCurrencyFormatter.formatNumber(p.costBaht) : '';
-      _costKipController.text = p.costKip > 0 ? LaoCurrencyFormatter.formatNumber(p.costKip) : '';
+      // Hydrate carton purchase cost (Tier 1 / ຍົກລັງ purchase cost):
+      // 1. If p.costKip > 0, use p.costKip directly (already resolved to carton cost)
+      // 2. Otherwise if p.costPerBaseUnit > 0, compute costPerBaseUnit * cartonMultiplier
+      int initialCartonCost = p.costKip;
+      if (initialCartonCost == 0 && p.costPerBaseUnit > 0) {
+        ProductUnit? cU;
+        for (final u in p.units) {
+          if (u.tier == 3 || _commonCartonUnits.contains(u.unitName) || u.id.endsWith('_carton')) {
+            cU = u;
+            break;
+          }
+        }
+        final cMul = cU?.multiplier ?? (p.tier1Active ? p.packsPerCarton : 1);
+        initialCartonCost = p.costPerBaseUnit * (cMul > 0 ? cMul : 1);
+      }
+      _costKipController.text = initialCartonCost > 0
+          ? LaoCurrencyFormatter.formatNumber(initialCartonCost)
+          : '';
+
+      final int resolvedInitialBaht = p.costBaht > 0
+          ? p.costBaht
+          : (initialCartonCost > 0 ? (initialCartonCost / 720).round() : 0);
+      _costBahtController.text =
+          resolvedInitialBaht > 0 ? LaoCurrencyFormatter.formatNumber(resolvedInitialBaht) : '';
 
       _trackStock = p.trackStock;
 
@@ -327,6 +350,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
     _urlInputController.dispose();
     _costBahtController.dispose();
     _costKipController.dispose();
+    _costBahtFocusNode.dispose();
+    _costKipFocusNode.dispose();
     _stockCartonController.dispose();
     _stockPackController.dispose();
     _stockPieceController.dispose();
@@ -526,7 +551,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
     try {
       final prodId = widget.productToEdit?.id ?? const Uuid().v4();
       final costKip = LaoCurrencyFormatter.parseClean(_costKipController.text);
-      final costBaht = LaoCurrencyFormatter.parseClean(_costBahtController.text);
+      final enteredBaht = LaoCurrencyFormatter.parseClean(_costBahtController.text);
+      final costBaht = enteredBaht > 0 ? enteredBaht : (costKip > 0 ? (costKip / 720).round() : 0);
       final crateDepositFee = LaoCurrencyFormatter.parseClean(_crateDepositFeeController.text);
 
       // 1. Upload compressed image if selected
@@ -651,6 +677,25 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
 
       final totalBaseUnits = _calculateTotalBaseUnits();
 
+      // Multiplier ratio of carton relative to base unit:
+      int cartonMultiplierRatio = 1;
+      if (_enablePiece) {
+        final tier2Mult = _enablePack ? (piecesPerPack > 0 ? piecesPerPack : 1) : 1;
+        cartonMultiplierRatio = _enableCarton ? (_enablePack ? packsPerCarton * tier2Mult : packsPerCarton) : 1;
+      } else if (_enablePack) {
+        cartonMultiplierRatio = _enableCarton ? (packsPerCarton > 0 ? packsPerCarton : 1) : 1;
+      } else if (_enableCarton) {
+        cartonMultiplierRatio = 1;
+      }
+      if (cartonMultiplierRatio <= 0) cartonMultiplierRatio = 1;
+
+      // True cost per base unit formula (matching Web App 100%):
+      // cost_per_base_unit = costKip / cartonMultiplierRatio
+      // e.g. 280,000 / 8 = 35,000 ₭
+      final int costPerBaseUnit = cartonMultiplierRatio > 0
+          ? (costKip / cartonMultiplierRatio).round()
+          : costKip;
+
       // General barcode fallback
       String? mainBarcode = _barcodeController.text.trim().isNotEmpty ? _barcodeController.text.trim() : null;
       if (mainBarcode == null) {
@@ -673,9 +718,9 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
         barcode: mainBarcode,
         trackStock: _trackStock,
         currentStockBaseUnits: _trackStock ? totalBaseUnits : 0, // Critical NOT-NULL rule: send 0 if untracked
-        costPerBaseUnit: costKip,
-        costBaht: costBaht,
-        costKip: costKip,
+        costPerBaseUnit: costPerBaseUnit, // 35.000 ₭ per base unit
+        costBaht: costBaht,               // 250 ฿
+        costKip: costKip,                 // 280.000 ₭ per carton
         hasCrateDeposit: _hasCrateDeposit,
         crateDepositFee: crateDepositFee,
         tier1Active: _enableCarton,
@@ -967,61 +1012,172 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
 
                     // SECTION 2: Cost Breakdown (THB & LAK)
                     _buildSectionCard(
-                      title: '2. ຕົ້ນທຶນຊື້ເຂົ້າ (Purchase Cost Breakdown)',
+                      title: '2. ຕົ້ນທຶນຊື້ເຂົ້າ (Purchase Cost)',
                       icon: Icons.payments_outlined,
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('ຕົ້ນທຶນ ฿ (THB) / ຍົກລັງ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _costBahtController,
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [LaoCurrencyInputFormatter()],
-                                  style: const TextStyle(fontSize: 13, fontFamily: 'monospace', fontWeight: FontWeight.bold),
-                                  decoration: InputDecoration(
-                                    hintText: '250',
-                                    prefixText: '฿ ',
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                  onChanged: (val) {
-                                    final baht = LaoCurrencyFormatter.parseClean(val);
-                                    if (baht > 0) {
-                                      final kip = baht * _exchangeRate;
-                                      _costKipController.text = LaoCurrencyFormatter.formatNumber(kip);
-                                    }
-                                  },
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('ຕົ້ນທຶນ ฿ (THB) / ຍົກລັງ',
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                                    const SizedBox(height: 2),
+                                    const Text('ສຳລັບບັນທຶກອ້າງອີງສ່ວນຕົວ',
+                                        style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+                                    const SizedBox(height: 6),
+                                    TextFormField(
+                                      controller: _costBahtController,
+                                      focusNode: _costBahtFocusNode,
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [LaoCurrencyInputFormatter()],
+                                      style: const TextStyle(
+                                          fontSize: 13, fontFamily: 'monospace', fontWeight: FontWeight.bold),
+                                      decoration: InputDecoration(
+                                        hintText: '250',
+                                        prefixText: '฿ ',
+                                        isDense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      onChanged: (_) => setState(() {}),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text('ຕົ້ນທຶນ ₭ (LAK) / ຍົກລັງ',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w800,
+                                                color: Color(0xFF0F766E))),
+                                        InkWell(
+                                          onTap: () {
+                                            final bVal = LaoCurrencyFormatter.parseClean(_costBahtController.text);
+                                            if (bVal > 0) {
+                                              final kVal = bVal * 720;
+                                              _costKipController.text = LaoCurrencyFormatter.formatNumber(kVal);
+                                              setState(() {});
+                                            }
+                                          },
+                                          borderRadius: BorderRadius.circular(6),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF0FDFA),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: const Color(0xFF99F6E4)),
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.bolt_rounded, size: 12, color: Color(0xFF0D9488)),
+                                                SizedBox(width: 2),
+                                                Text('ແປງ 1฿=720₭',
+                                                    style: TextStyle(
+                                                        fontSize: 9.5,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Color(0xFF0F766E))),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 2),
+                                    const Text('ຕົ້ນທຶນຫຼັກບັນຊີຮ້ານ & ກຳໄລ',
+                                        style: TextStyle(fontSize: 10, color: Color(0xFF0D9488))),
+                                    const SizedBox(height: 6),
+                                    TextFormField(
+                                      controller: _costKipController,
+                                      focusNode: _costKipFocusNode,
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [LaoCurrencyInputFormatter()],
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          fontFamily: 'monospace',
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF0F766E)),
+                                      decoration: InputDecoration(
+                                        hintText: '180.000',
+                                        suffixText: '₭',
+                                        isDense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                          borderSide: const BorderSide(color: Color(0xFF0D9488), width: 1.8),
+                                        ),
+                                      ),
+                                      onChanged: (_) => setState(() {}),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('ຕົ້ນທຶນ ₭ (LAK) / ຍົກລັງ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                                const SizedBox(height: 6),
-                                TextFormField(
-                                  controller: _costKipController,
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [LaoCurrencyInputFormatter()],
-                                  style: const TextStyle(fontSize: 13, fontFamily: 'monospace', fontWeight: FontWeight.bold),
-                                  decoration: InputDecoration(
-                                    hintText: '180.000',
-                                    suffixText: '₭',
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
+                          // Live Calculation Preview Banner
+                          Builder(
+                            builder: (context) {
+                              final kipEntered = LaoCurrencyFormatter.parseClean(_costKipController.text);
+                              if (kipEntered <= 0) return const SizedBox.shrink();
+
+                              final pPerC = int.tryParse(_cartonMultiplierController.text.trim()) ?? 8;
+                              final pcPerP = int.tryParse(_packMultiplierController.text.trim()) ?? 6;
+
+                              int ratio = 1;
+                              if (_enablePiece) {
+                                final t2 = _enablePack ? (pcPerP > 0 ? pcPerP : 1) : 1;
+                                ratio = _enableCarton ? (_enablePack ? pPerC * t2 : pPerC) : 1;
+                              } else if (_enablePack) {
+                                ratio = _enableCarton ? (pPerC > 0 ? pPerC : 1) : 1;
+                              } else if (_enableCarton) {
+                                ratio = 1;
+                              }
+                              if (ratio <= 0) ratio = 1;
+
+                              final baseCost = (kipEntered / ratio).round();
+                              final bName = _getBaseUnitName();
+
+                              return Container(
+                                margin: const EdgeInsets.only(top: 10),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF0FDFA),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFCCFBF1)),
                                 ),
-                              ],
-                            ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFF0D9488)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'ຕົ້ນທຶນຍົກລັງ: ${LaoCurrencyFormatter.formatNumber(kipEntered)} ₭  ➜  ຕົ້ນທຶນຕໍ່ຫົວໜ່ວຍຫຼັກ ($bName, x$ratio): ${LaoCurrencyFormatter.formatNumber(baseCost)} ₭',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF0F766E),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),

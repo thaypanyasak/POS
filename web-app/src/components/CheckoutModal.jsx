@@ -8,7 +8,9 @@ import {
   Check,
   User,
   WarningCircle,
-  Bank
+  Bank,
+  Money,
+  HandCoins,
 } from '@phosphor-icons/react';
 import { formatKip, formatDots, parseDots } from '../utils/formatters';
 
@@ -27,6 +29,7 @@ export default function CheckoutModal({
   setDebtPaidKip,
   debtNote = '',
   setDebtNote,
+  editingOldTransaction = null,
   onConfirmPayment,
 }) {
   if (!isOpen) return null;
@@ -40,12 +43,62 @@ export default function CheckoutModal({
         <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
           <div>
             <h3 className="text-base font-black text-slate-900 flex items-center gap-1.5">
-              <CheckCircle size={20} className="text-teal-600" weight="fill" />
-              <span>ຊຳລະເງິນ (Checkout)</span>
+              {editingOldTransaction ? (
+                <>
+                  <WarningCircle size={20} className="text-amber-500" weight="fill" />
+                  <span className="text-amber-900">
+                    ແກ້ໄຂບິນ #{editingOldTransaction.receiptNumber || editingOldTransaction.originalReceiptNumber}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={20} className="text-teal-600" weight="fill" />
+                  <span>ຊຳລະເງິນ (Checkout)</span>
+                </>
+              )}
             </h3>
-            <p className="text-[11.5px] text-slate-500 mt-0.5">
-              ເລືອກຮູບແບບການຊຳລະ: ເງິນສົດ, ໂອນ, ຫຼື ຄ້າງຊຳລະ
-            </p>
+            {editingOldTransaction ? (
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-[11px] text-slate-500 font-medium">ຮູບແບບຊຳລະເດີມ:</span>
+                {(() => {
+                  const m = (
+                    editingOldTransaction.originalPaymentMethod ||
+                    editingOldTransaction.paymentMethod ||
+                    ''
+                  ).toLowerCase();
+                  if (m === 'debt') {
+                    const remaining =
+                      editingOldTransaction.originalRemainingDebt !== undefined
+                        ? Number(editingOldTransaction.originalRemainingDebt)
+                        : Number(editingOldTransaction.remainingDebt || 0);
+                    return (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                        <HandCoins size={12} weight="bold" />
+                        <span>ຕິດໜີ້ (ຄ້າງ: {formatDots(remaining)} ₭)</span>
+                      </span>
+                    );
+                  }
+                  if (m === 'transfer' || m === 'onepay') {
+                    return (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                        <QrCode size={12} weight="bold" />
+                        <span>ໂອນເງິນ (Transfer)</span>
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <Money size={12} weight="bold" />
+                      <span>ເງິນສົດ (Cash)</span>
+                    </span>
+                  );
+                })()}
+              </div>
+            ) : (
+              <p className="text-[11.5px] text-slate-500 mt-0.5">
+                ເລືອກຮູບແບບການຊຳລະ: ເງິນສົດ, ໂອນ, ຫຼື ຄ້າງຊຳລະ
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -392,10 +445,14 @@ export default function CheckoutModal({
           <button
             type="button"
             onClick={onConfirmPayment}
-            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+            className={`px-5 py-2.5 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer ${
+              editingOldTransaction
+                ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'
+                : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+            }`}
           >
             <Check size={16} weight="bold" />
-            <span>ຢືນຢັນ & ພິມໃບບິນ</span>
+            <span>{editingOldTransaction ? '💾 ບັນທຶກການແກ້ໄຂ' : 'ຢືນຢັນ & ພິມໃບບິນ'}</span>
           </button>
         </div>
       </div>

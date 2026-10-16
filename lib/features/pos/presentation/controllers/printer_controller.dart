@@ -97,6 +97,29 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
     }
   }
 
+  /// Print Quotation Receipt (No stock deduction, no sale record)
+  Future<PrintResult> printQuotationReceipt(dynamic quotationWidget) async {
+    state = state.copyWith(isPrinting: true, lastStatusMessage: 'ກຳລັງພິມໃບບອກລາຄາ...');
+
+    try {
+      final result = await _printerService.printQuotationReceipt(quotationWidget: quotationWidget);
+      state = state.copyWith(
+        isPrinting: false,
+        lastStatusMessage: result.message,
+        lastPrintSuccess: result.success,
+      );
+      return result;
+    } catch (e) {
+      final errorMsg = 'ຜິດພາດ: $e';
+      state = state.copyWith(
+        isPrinting: false,
+        lastStatusMessage: errorMsg,
+        lastPrintSuccess: false,
+      );
+      return PrintResult(success: false, message: errorMsg);
+    }
+  }
+
   /// Open Cash drawer
   Future<PrintResult> openCashDrawer() async {
     state = state.copyWith(isPrinting: true, lastStatusMessage: 'ກຳລັງເປີດລິ້ນຊັກ...');

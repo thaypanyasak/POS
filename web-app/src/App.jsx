@@ -14,6 +14,9 @@ import {
   createCategoryInSupabase,
   updateCategoryInSupabase,
   deleteCategoryInSupabase,
+  fetchSuppliersFromSupabase,
+  fetchPurchaseOrdersFromSupabase,
+  updateExistingSaleTransactionInSupabase,
   supabase
 } from './services/supabase';
 
@@ -23,6 +26,9 @@ import PosScreen from './components/PosScreen';
 import DashboardView from './components/DashboardView';
 import ProductsView from './components/ProductsView';
 import HistoryView from './components/HistoryView';
+import PurchasesView from './pages/inventory/purchases';
+import PurchaseEntryModal from './components/inventory/PurchaseEntryModal';
+import SupplierManagementModal from './components/inventory/SupplierManagementModal';
 import ReceiptModal from './components/ReceiptModal';
 import CheckoutModal from './components/CheckoutModal';
 import UnitSelectorModal from './components/UnitSelectorModal';
@@ -99,6 +105,7 @@ export default function App() {
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [selectedReceiptForView, setSelectedReceiptForView] = useState(null);
   const [receiptPaperWidth, setReceiptPaperWidth] = useState(80); // 80mm vs 58mm
+  const [editingOldTransaction, setEditingOldTransaction] = useState(null); // Re-checkout old order mode
 
   // Dashboard Timeframe: 'daily' | 'weekly' | 'monthly' | 'all'
   const [dashboardTimeframe, setDashboardTimeframe] = useState('daily');
@@ -193,7 +200,13 @@ export default function App() {
   const [stockPacks, setStockPacks] = useState('2');
   const [stockPieces, setStockPieces] = useState('0');
 
-  // Function to refresh both products and transactions directly from Supabase
+  // GRN Suppliers & Purchase Orders
+  const [suppliers, setSuppliers] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [purchaseEntryModalOpen, setPurchaseEntryModalOpen] = useState(false);
+  const [supplierManagerModalOpen, setSupplierManagerModalOpen] = useState(false);
+
+  // Function to refresh all data directly from Supabase
   const handleRefreshAllFromSupabase = async () => {
     setIsRefreshing(true);
     try {
@@ -222,6 +235,17 @@ export default function App() {
         setTransactions(cloudTxs);
       } else {
         setTransactions([]);
+      }
+
+      // Fetch suppliers & purchase orders
+      try {
+        const supRes = await fetchSuppliersFromSupabase();
+        if (supRes.success) setSuppliers(supRes.data);
+
+        const poRes = await fetchPurchaseOrdersFromSupabase();
+        if (poRes.success) setPurchaseOrders(poRes.data);
+      } catch (poErr) {
+        console.warn('Suppliers/PO fetch error:', poErr);
       }
 
       // Fetch categories strictly from Supabase 'categories' table
@@ -1076,9 +1100,27 @@ export default function App() {
   // Checkout Payment
   const handleOpenCheckout = () => {
     if (cart.length === 0) return;
-    setTenderedKip(cartSubtotal);
-    setDebtPaidKip(0);
-    setDebtNote('');
+    if (editingOldTransaction) {
+      const origMethod = (editingOldTransaction.originalPaymentMethod || editingOldTransaction.paymentMethod || '').toUpperCase();
+      if (origMethod === 'DEBT' || editingOldTransaction.isDebt) {
+        setPaymentMethod('debt');
+        const origPaid = Number(editingOldTransaction.originalAmountTendered ?? editingOldTransaction.paidAmount ?? 0);
+        setDebtPaidKip(Math.min(cartSubtotal, origPaid));
+      } else if (origMethod === 'TRANSFER') {
+        setPaymentMethod('transfer');
+        setTenderedKip(cartSubtotal);
+      } else {
+        setPaymentMethod('cash');
+        const oldTendered = Number(editingOldTransaction.originalAmountTendered ?? editingOldTransaction.amountTendered ?? 0);
+        setTenderedKip(oldTendered >= cartSubtotal ? oldTendered : cartSubtotal);
+      }
+      setDebtNote(editingOldTransaction.debtNote || editingOldTransaction.debt_note || '');
+    } else {
+      setPaymentMethod('cash');
+      setTenderedKip(cartSubtotal);
+      setDebtPaidKip(0);
+      setDebtNote('');
+    }
     setCheckoutModalOpen(true);
   };
 
@@ -1090,12 +1132,16 @@ export default function App() {
     });
 
     setIsSavingDb(true);
-    setDbSavingMessage('ກຳລັງບັນທຶກບິນຂາຍ & ຕັດສະຕັອກໃນຖານຂໍ້ມູນ Supabase...');
+    setDbSavingMessage(
+      editingOldTransaction
+        ? `ກຳລັງບັນທຶກການແກ້ໄຂບິນ #${editingOldTransaction.receiptNumber}...`
+        : 'ກຳລັງບັນທຶກບິນຂາຍ & ຕັດສະຕັອກໃນຖານຂໍ້ມູນ Supabase...'
+    );
 
     try {
-      const txId = 'tx_' + Date.now().toString(36);
-      const receiptNo = 'INV-' + Date.now().toString().slice(-6);
-      const createdAt = new Date().toISOString();
+      const txId = editingOldTransaction ? editingOldTransaction.id : ('tx_' + Date.now().toString(36));
+      const receiptNo = editingOldTransaction ? editingOldTransaction.receiptNumber : ('INV-' + Date.now().toString().slice(-6));
+      const createdAt = editingOldTransaction ? editingOldTransaction.createdAt : new Date().toISOString();
 
       let totalCost = 0;
       cart.forEach((it) => {
@@ -1139,7 +1185,7 @@ export default function App() {
         id: txId,
         receiptNumber: receiptNo,
         createdAt,
-        date: new Date().toLocaleString('lo-LA'),
+        date: new Date(createdAt).toLocaleString('lo-LA'),
         cashierName: 'ໄມ້ຄຳ (Meii)',
         customerName: customerName.trim() || (isDebt ? 'ລູກຄ້າຄ້າງຊຳລະ' : 'ລູກຄ້າທົ່ວໄປ'),
         items: receiptItems,
@@ -1157,6 +1203,8 @@ export default function App() {
         totalCost,
         grossProfit,
         paymentMethod: isDebt ? 'debt' : (paymentMethod === 'transfer' || paymentMethod === 'onepay' ? 'transfer' : 'cash'),
+        paymentStatus: isDebt ? (remainingDebt > 0 ? (actualPaid > 0 ? 'PARTIAL' : 'DEBT') : 'PAID') : 'PAID',
+        remainingDebt,
       };
 
       // Cache local tx metadata for rich offline/receipt re-rendering with crate deposit and debt info
@@ -1167,43 +1215,63 @@ export default function App() {
         }));
       } catch (_) {}
 
-      // Prepare stock deductions for tracked products
-      const stockDeductions = [];
-      const updatedProducts = products.map((prod) => {
-        const soldItems = cart.filter((it) => it.product.id === prod.id);
-        if (soldItems.length === 0) return prod;
+      if (editingOldTransaction) {
+        // Sequential Safe Replacement Pattern:
+        // 1. Restore old stock 2. Delete old items 3. Deduct new stock 4. Insert new items 5. Update header
+        const res = await updateExistingSaleTransactionInSupabase(
+          editingOldTransaction.id,
+          editingOldTransaction.items || editingOldTransaction.sale_transaction_items || [],
+          receipt,
+          cart
+        );
 
-        if (prod.trackStock === false) {
-          // Untracked stock: sales proceed smoothly without restricting or erroring
-          return prod;
+        if (!res.success) {
+          openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກການແກ້ໄຂ: ' + res.error, 'ຂໍ້ຜິດພາດ', 'error');
+        } else {
+          openAlert(`ບັນທຶກການແກ້ໄຂບິນ #${receiptNo} ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
         }
 
-        const totalBaseUnitsSold = soldItems.reduce((sum, it) => {
-          return sum + (it.unit.multiplier || 1) * it.quantity;
-        }, 0);
+        setEditingOldTransaction(null);
+        await handleRefreshAllFromSupabase();
+      } else {
+        // Prepare stock deductions for tracked products
+        const stockDeductions = [];
+        const updatedProducts = products.map((prod) => {
+          const soldItems = cart.filter((it) => it.product.id === prod.id);
+          if (soldItems.length === 0) return prod;
 
-        const currentStock = prod.currentStockBaseUnits ?? 0;
-        const newStock = currentStock - totalBaseUnitsSold;
+          if (prod.trackStock === false) {
+            return prod;
+          }
 
-        stockDeductions.push({
-          productId: prod.id,
-          newStock,
+          const totalBaseUnitsSold = soldItems.reduce((sum, it) => {
+            return sum + (it.unit.multiplier || 1) * it.quantity;
+          }, 0);
+
+          const currentStock = prod.currentStockBaseUnits ?? 0;
+          const newStock = currentStock - totalBaseUnitsSold;
+
+          stockDeductions.push({
+            productId: prod.id,
+            newStock,
+          });
+
+          return {
+            ...prod,
+            currentStockBaseUnits: newStock,
+          };
         });
 
-        return {
-          ...prod,
-          currentStockBaseUnits: newStock,
-        };
-      });
+        // REAL SUPABASE DATABASE API CALL:
+        const res = await createSaleTransactionInSupabase(receipt, stockDeductions);
+        if (!res.success) {
+          openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກລົງຖານຂໍ້ມູນ: ' + res.error, 'ຂໍ້ຜິດພາດ', 'error');
+        }
 
-      // REAL SUPABASE DATABASE API CALL:
-      const res = await createSaleTransactionInSupabase(receipt, stockDeductions);
-      if (!res.success) {
-        openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກລົງຖານຂໍ້ມູນ: ' + res.error, 'ຂໍ້ຜິດພາດ', 'error');
+        setProducts(updatedProducts);
+        setTransactions([receipt, ...transactions]);
       }
 
-      setProducts(updatedProducts);
-      setTransactions([receipt, ...transactions]);
       setSelectedReceiptForView(receipt);
       setCheckoutModalOpen(false);
       setReceiptModalOpen(true);
@@ -1215,6 +1283,114 @@ export default function App() {
       setIsSavingDb(false);
       setDbSavingMessage('');
     }
+  };
+
+  // Re-checkout Pattern: Load existing order items into POS Cart
+  const handleEditOrderInPos = (tx) => {
+    if (!tx) return;
+    if (tx.status === 'cancelled' || tx.isCancelled) {
+      openAlert('ບໍ່ສາມາດແກ້ໄຂບິນທີ່ຖືກຍົກເລີກແລ້ວ!', 'ແຈ້ງເຕືອນ', 'warning');
+      return;
+    }
+
+    const rawItems = tx.items || tx.sale_transaction_items || [];
+    const loadedCart = rawItems.map((it) => {
+      const prodId = it.product?.id || it.productId || it.product_id;
+      const foundProd = products.find((p) => p.id === prodId) || {
+        id: prodId,
+        name: it.productName || it.product_name || 'ສິນຄ້າ',
+        costPerBaseUnit: 0,
+        currentStockBaseUnits: 0,
+        trackStock: false,
+        units: [],
+      };
+
+      const unitName = it.unit?.unitName || it.unitName || it.unit_name || 'ອັນ';
+      const multiplier = Number(it.unit?.multiplier || it.multiplier) || 1;
+      const unitPrice = Number(it.unit?.retailPrice || it.unit_price) || 0;
+
+      const matchedUnit = foundProd.units?.find((u) => u.unitName === unitName) || {
+        id: `u_${unitName}`,
+        unitName,
+        multiplier,
+        retailPrice: unitPrice,
+        wholesalePrice: unitPrice,
+      };
+
+      const qty = Number(it.quantity) || 1;
+      const lineTotal = Number(it.lineTotal || it.line_total) || (unitPrice * qty);
+
+      return {
+        product: foundProd,
+        unit: matchedUnit,
+        quantity: qty,
+        customPrice: unitPrice,
+        noEmptyCrates: Boolean(it.noEmptyCrates),
+        missingCratesCount: Number(it.missingCratesCount) || 0,
+        crateDepositFee: Number(it.crateDepositFee) || 0,
+        crateDepositTotal: Number(it.crateDepositTotal) || 0,
+        lineTotal,
+      };
+    });
+
+    const rawMethod = (tx.paymentMethod || tx.payment_method || '').toUpperCase();
+    const isDebt = Boolean(tx.isDebt || tx.is_debt || rawMethod === 'DEBT');
+    const pMethod = isDebt
+      ? 'DEBT'
+      : (rawMethod === 'TRANSFER' || rawMethod === 'ONEPAY' || rawMethod === 'QR' ? 'TRANSFER' : 'CASH');
+
+    const debtAmt = Number(tx.debtAmount ?? tx.debt_amount ?? tx.remainingDebt ?? tx.remaining_debt ?? 0);
+    const paidAmt = Number(tx.paidAmount ?? tx.paid_amount ?? tx.amountTendered ?? tx.amount_tendered ?? 0);
+    const pStatus = isDebt
+      ? (debtAmt > 0 ? (paidAmt > 0 ? 'PARTIAL' : 'DEBT') : 'PAID')
+      : 'PAID';
+    const custName = tx.customerName || tx.customer_name || 'ລູກຄ້າທົ່ວໄປ';
+    const receiptNum = tx.receiptNumber || tx.receipt_number || 'INV';
+    const note = tx.debtNote || tx.debt_note || '';
+
+    const enrichedTx = {
+      ...tx,
+      id: tx.id,
+      receiptNumber: receiptNum,
+      originalTransactionId: tx.id,
+      originalReceiptNumber: receiptNum,
+      originalPaymentMethod: pMethod,
+      originalPaymentStatus: pStatus,
+      originalCustomerName: custName,
+      originalAmountTendered: paidAmt,
+      originalRemainingDebt: debtAmt,
+      debtNote: note,
+    };
+
+    setCart(loadedCart);
+    setCustomerName(custName);
+    setEditingOldTransaction(enrichedTx);
+
+    if (pMethod === 'DEBT') {
+      setPaymentMethod('debt');
+      setDebtPaidKip(paidAmt);
+    } else if (pMethod === 'TRANSFER') {
+      setPaymentMethod('transfer');
+      setTenderedKip(tx.grandTotal || tx.subtotal || 0);
+    } else {
+      setPaymentMethod('cash');
+      setTenderedKip(paidAmt || tx.grandTotal || 0);
+    }
+    setDebtNote(note);
+
+    setActiveMainTab('pos');
+    openAlert(
+      `ໂຫຼດບິນ #${receiptNum} ເຂົ້າສູ່ໜ້າ POS ແລ້ວ. ປັບປຸງລາຍການແລ້ວກົດບັນທຶກ!`,
+      'ແກ້ໄຂບິນ',
+      'info'
+    );
+  };
+
+  const handleCancelEditingOrder = () => {
+    setEditingOldTransaction(null);
+    setCart([]);
+    setCustomerName('ລູກຄ້າທົ່ວໄປ');
+    openAlert('ຍົກເລີກການແກ້ໄຂບິນເກົ່າແລ້ວ', 'ແຈ້ງເຕືອນ', 'info');
   };
 
   // Void / Cancel a Sale Transaction from Supabase and restore product stock (Without deleting record)
@@ -1615,6 +1791,8 @@ export default function App() {
             toggleCartItemCrateDeposit={toggleCartItemCrateDeposit}
             updateMissingCrates={updateMissingCrates}
             changeCartItemUnit={changeCartItemUnit}
+            editingOldTransaction={editingOldTransaction}
+            onCancelEditOrder={handleCancelEditingOrder}
           />
         )}
 
@@ -1650,12 +1828,47 @@ export default function App() {
             onDeleteTransaction={handleDeleteTransaction}
             onUpdateTransaction={handleUpdateTransaction}
             onRefreshTransactions={handleRefreshAllFromSupabase}
+            onEditOrderInPos={handleEditOrderInPos}
             isLoading={isRefreshing}
+            onAlert={openAlert}
+          />
+        )}
+
+        {activeMainTab === 'purchases' && (
+          <PurchasesView
+            purchaseOrders={purchaseOrders}
+            suppliers={suppliers}
+            products={products}
+            onOpenNewGRN={() => {
+              handleRefreshAllFromSupabase();
+              setPurchaseEntryModalOpen(true);
+            }}
+            onOpenSupplierManager={() => setSupplierManagerModalOpen(true)}
+            onRefresh={handleRefreshAllFromSupabase}
+            isLoading={isRefreshing}
+            onAlert={openAlert}
           />
         )}
       </div>
 
       {/* 3. MODALS */}
+      <PurchaseEntryModal
+        isOpen={purchaseEntryModalOpen}
+        onClose={() => setPurchaseEntryModalOpen(false)}
+        products={products}
+        suppliers={suppliers}
+        onOpenSupplierManager={() => setSupplierManagerModalOpen(true)}
+        onSuccess={handleRefreshAllFromSupabase}
+        onAlert={openAlert}
+      />
+
+      <SupplierManagementModal
+        isOpen={supplierManagerModalOpen}
+        onClose={() => setSupplierManagerModalOpen(false)}
+        suppliers={suppliers}
+        onRefreshSuppliers={handleRefreshAllFromSupabase}
+        onAlert={openAlert}
+      />
       <UnitSelectorModal
         product={unitSelectorProduct}
         onClose={() => setUnitSelectorProduct(null)}
@@ -1767,6 +1980,7 @@ export default function App() {
         setDebtPaidKip={setDebtPaidKip}
         debtNote={debtNote}
         setDebtNote={setDebtNote}
+        editingOldTransaction={editingOldTransaction}
         onConfirmPayment={handleConfirmPayment}
       />
 
