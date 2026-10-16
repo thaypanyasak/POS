@@ -185,9 +185,9 @@ export default function ReceiptModal({
 
                 return (
                   <div key={i} className="flex flex-col text-[11px] leading-tight">
-                    {/* Main Row: 1 Single Line for Name, Qty, Unit Price, Total */}
+                    {/* Main Row: 4 Columns with Product Name allowed up to 2 lines */}
                     <div className="flex items-start text-slate-900">
-                      <span className="w-[40%] font-bold text-left truncate pr-1" title={`${prodName} (${unitName})`}>
+                      <span className="w-[40%] font-bold text-left line-clamp-2 pr-1 break-words leading-tight" title={`${prodName} (${unitName})`}>
                         {prodName} <span className="font-medium text-slate-700">({unitName})</span>
                       </span>
                       <span className="w-[15%] text-center font-mono text-[10.5px] text-slate-800">
@@ -281,7 +281,7 @@ export default function ReceiptModal({
                 </div>
                 <div className="border-b-2 border-slate-900 my-1"></div>
 
-                {receipt.paymentMethod === 'debt' ? (
+                {(receipt.paymentMethod === 'debt' || receipt.isDebt) ? (
                   <div className="bg-amber-50/80 p-2 rounded-xl border border-amber-300 flex flex-col gap-1.5 my-1">
                     <div className="flex justify-between items-center text-slate-800">
                       <span className="font-bold text-[11px]">ຈ່າຍແລ້ວ / ຈ່າຍກ່ອນ (Paid):</span>
@@ -337,7 +337,7 @@ export default function ReceiptModal({
                 }}
               />
               <span className="text-[11.5px] font-black text-slate-900 mt-1 font-mono">
-                ຍອດໂອນ: {formatKip(receipt.paymentMethod === 'debt' ? (receipt.debtAmount ?? receipt.grandTotal) : receipt.grandTotal)}
+                ຍອດໂອນ: {formatKip((receipt.paymentMethod === 'debt' || receipt.isDebt) ? (receipt.debtAmount ?? receipt.grandTotal) : receipt.grandTotal)}
               </span>
             </div>
           )}
@@ -346,13 +346,13 @@ export default function ReceiptModal({
           <div className="border-t border-dashed border-slate-300 pt-3 pb-2 grid grid-cols-2 text-[10px] text-slate-600 text-center">
             <div>
               <p className="font-bold text-slate-700">
-                {receipt.paymentMethod === 'debt' ? 'ລາຍເຊັນຜູ້ຄ້າງຊຳລະ (Debtor)' : 'ຜູ້ຮັບເຄື່ອງ (Customer)'}
+                {(receipt.paymentMethod === 'debt' || receipt.isDebt) ? 'ລາຍເຊັນຜູ້ຄ້າງຊຳລະ (Debtor)' : 'ຜູ້ຮັບເຄື່ອງ (Customer)'}
               </p>
               <p className="mt-7 text-slate-400">................................</p>
             </div>
             <div>
               <p className="font-bold text-slate-700">
-                {receipt.paymentMethod === 'debt' ? 'ລາຍເຊັນຜູ້ຂາຍ (Seller)' : 'ພະນັກງານຂາຍ (Cashier)'}
+                {(receipt.paymentMethod === 'debt' || receipt.isDebt) ? 'ລາຍເຊັນຜູ້ຂາຍ (Seller)' : 'ພະນັກງານຂາຍ (Cashier)'}
               </p>
               <p className="mt-7 text-slate-400">................................</p>
             </div>

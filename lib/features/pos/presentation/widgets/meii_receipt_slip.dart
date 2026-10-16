@@ -465,13 +465,15 @@ class MeiiReceiptSlip extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'ຊຳລະ: ${transaction.paymentMethod == PaymentMethod.cash ? 'ເງິນສົດ' : 'QR ໂອນ'}',
+                        'ຊຳລະ: ${transaction.isDebt || transaction.paymentMethod == PaymentMethod.debt ? (transaction.paidAmount == 0 ? 'ຕິດໜີ້ 100%' : 'ຕິດໜີ້ (ບາງສ່ວນ)') : (transaction.paymentMethod == PaymentMethod.cash ? 'ເງິນສົດ' : 'QR ໂອນ')}',
                         style: _style(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
-                          color: transaction.paymentMethod == PaymentMethod.cash
-                              ? AppColors.primaryDark
-                              : AppColors.wholesaleDark,
+                          color: (transaction.isDebt || transaction.paymentMethod == PaymentMethod.debt)
+                              ? const Color(0xFFB45309) // amber-700
+                              : (transaction.paymentMethod == PaymentMethod.cash
+                                  ? AppColors.primaryDark
+                                  : AppColors.wholesaleDark),
                         ),
                       ),
                     ],
@@ -562,8 +564,9 @@ class MeiiReceiptSlip extends StatelessWidget {
                                     fontWeight: FontWeight.w700,
                                     color: const Color(0xFF0F172A),
                                   ),
-                                  maxLines: 1,
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
+                                  softWrap: true,
                                 ),
                               ),
                               Expanded(
@@ -620,15 +623,63 @@ class MeiiReceiptSlip extends StatelessWidget {
                             ),
                           ],
                           if (item.crateFeeTotal > 0) ...[
-                            Padding(
-                              padding: const EdgeInsets.only(left: 10, top: 1),
-                              child: Text(
-                                '↳ ບໍ່ມີແກັດປ່ຽນ ${item.effectiveMissingCratesCount} ${item.selectedUnit.unitName} (+${LaoCurrencyFormatter.format(item.crateFeeTotal)})',
-                                style: _style(
-                                  fontSize: 10,
-                                  color: const Color(0xFFB45309), // amber-700
-                                  fontWeight: FontWeight.w700,
-                                ),
+                            Container(
+                              margin: const EdgeInsets.only(top: 2),
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7).withValues(alpha: 0.7),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: const Color(0xFFFDE68A), width: 0.8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 4,
+                                    child: Text(
+                                      '↳ ບໍ່ມີລັງປ່ຽນ',
+                                      style: _style(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF92400E),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      '${item.effectiveMissingCratesCount}x',
+                                      style: _style(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF92400E),
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      LaoCurrencyFormatter.format(item.feePerCrate, includeSymbol: false),
+                                      style: _style(
+                                        fontSize: 10,
+                                        color: const Color(0xFFB45309),
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      '+${LaoCurrencyFormatter.format(item.crateFeeTotal, includeSymbol: false)}',
+                                      style: _style(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w900,
+                                        color: const Color(0xFF78350F),
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -714,30 +765,106 @@ class MeiiReceiptSlip extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
 
-                  // Payment Tender Details
-                  _buildTotalLine(
-                    transaction.paymentMethod == PaymentMethod.cash
-                        ? 'ຮັບເງິນສົດມາ (Tendered):'
-                        : 'ຮັບເງິນໂອນມາ (Transferred):',
-                    LaoCurrencyFormatter.format(transaction.amountTendered),
-                    isBold: true,
-                  ),
-                  if (transaction.paymentMethod == PaymentMethod.cash) ...[
-                    _buildTotalLine(
-                      'ເງິນທອນ (Change):',
-                      LaoCurrencyFormatter.format(transaction.changeAmount),
-                      isBold: true,
-                      valueColor:
-                          transaction.changeAmount > 0
-                              ? AppColors.primaryDark
-                              : const Color(0xFF64748B),
-                      fontSize: 13.5,
+                  if (transaction.isDebt || transaction.paymentMethod == PaymentMethod.debt) ...[
+                    // Yellow Debt Breakdown Box matching Web ReceiptModal
+                    Container(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7).withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFCD34D), width: 1.2),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'ຈ່າຍແລ້ວ / ຈ່າຍກ່ອນ (Paid):',
+                                style: _style(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF1E293B),
+                                ),
+                              ),
+                              Text(
+                                LaoCurrencyFormatter.format(transaction.paidAmount),
+                                style: _style(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                  color: const Color(0xFF166534), // emerald-800
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          _buildDashedLine(),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'ຍອດຄ້າງຊຳລະ (Debt Balance):',
+                                style: _style(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                  color: const Color(0xFFB91C1C), // red-700
+                                ),
+                              ),
+                              Text(
+                                LaoCurrencyFormatter.format(transaction.debtAmount),
+                                style: _style(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  color: const Color(0xFFB91C1C),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (transaction.debtNote != null && transaction.debtNote!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            const Divider(color: Color(0xFFFDE68A), height: 1, thickness: 0.8),
+                            const SizedBox(height: 4),
+                            Text(
+                              '* ໝາຍເຫດ: ${transaction.debtNote}',
+                              style: _style(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF78350F),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
+                  ] else ...[
+                    // Payment Tender Details
+                    _buildTotalLine(
+                      transaction.paymentMethod == PaymentMethod.cash
+                          ? 'ຮັບເງິນສົດມາ (Tendered):'
+                          : 'ຮັບເງິນໂອນມາ (Transferred):',
+                      LaoCurrencyFormatter.format(transaction.amountTendered),
+                      isBold: true,
+                    ),
+                    if (transaction.paymentMethod == PaymentMethod.cash) ...[
+                      _buildTotalLine(
+                        'ເງິນທອນ (Change):',
+                        LaoCurrencyFormatter.format(transaction.changeAmount),
+                        isBold: true,
+                        valueColor:
+                            transaction.changeAmount > 0
+                                ? AppColors.primaryDark
+                                : const Color(0xFF64748B),
+                        fontSize: 13.5,
+                      ),
+                    ],
                   ],
 
-                  // If QR Transfer Payment, show QR code image at bottom of receipt
-                  if (transaction.paymentMethod ==
-                      PaymentMethod.qrTransfer) ...[
+                  // If QR Transfer Payment or unpaid Debt > 0, show QR code image at bottom of receipt
+                  if (transaction.paymentMethod == PaymentMethod.qrTransfer ||
+                      ((transaction.isDebt || transaction.paymentMethod == PaymentMethod.debt) && transaction.debtAmount > 0)) ...[
                     const SizedBox(height: 10),
                     _buildQrCodeSection(),
                   ],
@@ -746,7 +873,7 @@ class MeiiReceiptSlip extends StatelessWidget {
                   _buildDashedLine(),
                   const SizedBox(height: 12),
 
-                  // Receiver & Cashier Signature Section (ບ່ອນວ່າງ "ຜູ້ຮັບ" ເພື່ອໃຫ້ລູກຄ້າເຊັນຮັບເຄື່ອງ)
+                  // Receiver & Cashier Signature Section (Tailored for Debtor vs Cash)
                   _buildSignatureSection(),
 
                   const SizedBox(height: 10),
@@ -834,6 +961,9 @@ class MeiiReceiptSlip extends StatelessWidget {
   }
 
   Widget _buildQrCodeSection() {
+    final isDebt = transaction.isDebt || transaction.paymentMethod == PaymentMethod.debt;
+    final transferAmount = isDebt ? transaction.debtAmount : transaction.grandTotal;
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -871,7 +1001,7 @@ class MeiiReceiptSlip extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'ຍອດໂອນ: ${LaoCurrencyFormatter.format(transaction.grandTotal)}',
+            'ຍອດໂອນ: ${LaoCurrencyFormatter.format(transferAmount)}',
             style: _style(
               fontSize: 12.5,
               fontWeight: FontWeight.w900,
@@ -884,48 +1014,20 @@ class MeiiReceiptSlip extends StatelessWidget {
   }
 
   Widget _buildSignatureSection() {
+    final isDebt = transaction.isDebt || transaction.paymentMethod == PaymentMethod.debt;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // Cashier / ຜູ້ຂາຍ
+          // Debtor / Receiver
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const SizedBox(height: 38), // Blank space for sign
-                Container(
-                  width: 110,
-                  height: 1,
-                  color: const Color(0xFF94A3B8),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'ຜູ້ຂາຍ (Cashier)',
-                  style: _style(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF475569),
-                  ),
-                ),
-                Text(
-                  '(${transaction.cashierName ?? 'ໄມ້ຄຳ'})',
-                  style: _style(fontSize: 10, color: const Color(0xFF64748B)),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          // Receiver / ຜູ້ຮັບ (ລູກຄ້າເຊັນຮັບເຄື່ອງ)
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const SizedBox(
-                  height: 38,
-                ), // Blank space for customer signature
                 Container(
                   width: 130,
                   height: 1.2,
@@ -933,28 +1035,48 @@ class MeiiReceiptSlip extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'ຜູ້ຮັບ (Receiver)',
+                  isDebt ? 'ລາຍເຊັນຜູ້ຄ້າງຊຳລະ (Debtor)' : 'ຜູ້ຮັບເຄື່ອງ (Customer)',
                   style: _style(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
                     color: const Color(0xFF0F172A),
                   ),
                 ),
                 Text(
                   '(${transaction.customer.name})',
                   style: _style(
-                    fontSize: 10.5,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF475569),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Seller / Cashier
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 38), // Blank space for sign
+                Container(
+                  width: 120,
+                  height: 1.2,
+                  color: const Color(0xFF0F172A),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isDebt ? 'ລາຍເຊັນຜູ້ຂາຍ (Seller)' : 'ພະນັກງານຂາຍ (Cashier)',
+                  style: _style(
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: const Color(0xFF0F172A),
                   ),
                 ),
                 Text(
-                  '(ລູກຄ້າເຊັນຮັບເຄື່ອງ)',
-                  style: _style(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF64748B),
-                  ),
+                  '(${transaction.cashierName ?? 'ໄມ້ຄຳ'})',
+                  style: _style(fontSize: 10, color: const Color(0xFF64748B)),
                 ),
               ],
             ),

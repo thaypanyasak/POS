@@ -1011,13 +1011,21 @@ export default function App() {
   const handleOpenReceipt = async (tx) => {
     let target = { ...tx };
 
-    // Check local metadata cache for rich items with crate deposit breakdown
+    // Check local metadata cache for rich items with crate deposit breakdown and debt details
     try {
       const cached = localStorage.getItem(`meiishop_tx_meta_${target.id}`);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (parsed?.receipt) {
+          target = {
+            ...target,
+            ...parsed.receipt,
+            items: parsed.items || parsed.receipt.items || target.items,
+          };
+        } else if (Array.isArray(parsed) && parsed.length > 0) {
           target.items = parsed;
+        } else if (parsed?.items && Array.isArray(parsed.items)) {
+          target.items = parsed.items;
         }
       }
     } catch (_) {}

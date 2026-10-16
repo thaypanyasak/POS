@@ -1354,6 +1354,9 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
 
   Widget _buildSuccessView(BuildContext context, SaleTransaction tx) {
     final isCash = tx.paymentMethod == PaymentMethod.cash;
+    final isDebt = tx.isDebt || tx.paymentMethod == PaymentMethod.debt;
+    final actualPaidAmount = tx.paidAmount > 0 ? tx.paidAmount : (isDebt ? 0 : tx.amountTendered);
+    final remainingDebt = isDebt ? (tx.debtAmount > 0 ? tx.debtAmount : (tx.grandTotal - actualPaidAmount)) : 0;
     final changeBreakdown =
         isCash && tx.changeAmount > 0
             ? LaoCurrencyFormatter.breakdownChange(tx.changeAmount)
@@ -1450,6 +1453,56 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                   ),
 
                                   SizedBox(height: isCompactLandscape ? 8 : 16),
+
+                                  // If Debt > 0, Big Eye-catching Amber Banner
+                                  if (tx.isDebt || tx.paymentMethod == PaymentMethod.debt) ...[
+                                    Container(
+                                      padding: EdgeInsets.all(
+                                        isCompactLandscape ? 8 : 14,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFEF3C7).withValues(alpha: 0.8),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: const Color(0xFFFCD34D),
+                                          width: 1.2,
+                                        ),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Row(
+                                            children: [
+                                              Icon(
+                                                Icons.warning_amber_rounded,
+                                                color: Color(0xFFB45309),
+                                                size: 16,
+                                              ),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                'ຍອດຄ້າງຊຳລະ (Debt Balance):',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF92400E),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            LaoCurrencyFormatter.format(tx.debtAmount),
+                                            style: TextStyle(
+                                              fontSize: isCompactLandscape ? 20 : 24,
+                                              fontWeight: FontWeight.w900,
+                                              color: const Color(0xFFB91C1C),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    SizedBox(height: isCompactLandscape ? 6 : 12),
+                                  ],
 
                                   // If Change Due > 0, Big Eye-catching Banner
                                   if (isCash && tx.changeAmount > 0) ...[
@@ -1593,22 +1646,38 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                           height: isCompactLandscape ? 4 : 6,
                                         ),
                                         _buildSummaryRow(
-                                          isCash
-                                              ? 'ຮັບເງິນສົດມາ:'
-                                              : 'ຮັບເງິນໂອນມາ:',
+                                          isDebt
+                                              ? 'ຈ່າຍກ່ອນ (Paid):'
+                                              : (isCash
+                                                  ? 'ຮັບເງິນສົດມາ:'
+                                                  : 'ຮັບເງິນໂອນມາ:'),
                                           LaoCurrencyFormatter.format(
-                                            tx.amountTendered,
+                                            isDebt ? actualPaidAmount : tx.amountTendered,
                                           ),
                                           isCompact: isCompactLandscape,
                                         ),
+                                        if (isDebt && remainingDebt > 0) ...[
+                                          SizedBox(
+                                            height: isCompactLandscape ? 4 : 6,
+                                          ),
+                                          _buildSummaryRow(
+                                            'ຍອດຄ້າງຊຳລະ:',
+                                            LaoCurrencyFormatter.format(remainingDebt),
+                                            color: const Color(0xFFDC2626),
+                                            isBold: true,
+                                            isCompact: isCompactLandscape,
+                                          ),
+                                        ],
                                         SizedBox(
                                           height: isCompactLandscape ? 4 : 6,
                                         ),
                                         _buildSummaryRow(
                                           'ວິທີຊຳລະ:',
-                                          isCash
-                                              ? 'ເງິນສົດ (Cash)'
-                                              : 'QR ໂອນ (BCEL One)',
+                                          isDebt
+                                              ? 'ຕິດໜີ້ (Debt / Credit)'
+                                              : (isCash
+                                                  ? 'ເງິນສົດ (Cash)'
+                                                  : 'QR ໂອນ (BCEL One)'),
                                           isCompact: isCompactLandscape,
                                         ),
                                         SizedBox(
