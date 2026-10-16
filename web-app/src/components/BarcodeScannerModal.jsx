@@ -279,13 +279,13 @@ export default function BarcodeScannerModal({
               {/* Scanning Box */}
               <div className="relative w-[78%] h-[48%] rounded-2xl border-2 border-teal-400/80 shadow-[0_0_20px_rgba(20,184,166,0.3)] flex items-center justify-center overflow-hidden">
                 {/* 4 Corner Markers */}
-                <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-teal-400 rounded-tl-lg" />
-                <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-teal-400 rounded-tr-lg" />
-                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-teal-400 rounded-bl-lg" />
-                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-teal-400 rounded-br-lg" />
+                <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-teal-400" />
+                <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-teal-400" />
+                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-teal-400" />
+                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-teal-400" />
 
-                {/* Animated Red/Cyan Laser Scan Line */}
-                <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-red-500 to-transparent shadow-[0_0_8px_#ef4444] animate-bounce" />
+                {/* Animated Red Laser Scan Line */}
+                <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-teal-400 to-transparent shadow-[0_0_8px_#14b8a6] animate-pulse" />
               </div>
 
               <span className="text-[10.5px] font-bold text-white/90 bg-slate-900/70 px-3 py-1 rounded-full mt-3 backdrop-blur-xs flex items-center gap-1.5 border border-white/10">

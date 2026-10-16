@@ -125,7 +125,8 @@ export default function PosScreen({
     );
   };
 
-  // Reusable Edit Order Banner showing customer name and payment badge
+  // Reusable Edit Order Banner per DESIGN.md:
+  // ⚠️ ກຳລັງແກ້ໄຂບິນ: #[receipt_number] | ຮູບແບບຊຳລະເດີມ: [Badge Tiền mặt / Chuyển khoản / Nợ]
   const renderEditingBanner = () => {
     if (!editingOldTransaction) return null;
 
@@ -160,38 +161,45 @@ export default function PosScreen({
     );
 
     return (
-      <div className="bg-amber-500 text-white p-2.5 px-3 flex items-center justify-between gap-2 shadow-xs shrink-0 sticky top-0 z-20 border-b border-amber-600">
+      <div className="bg-amber-500 text-white p-2 px-3 flex items-center justify-between gap-2 shadow-xs shrink-0 sticky top-0 z-20 border-b border-amber-600">
         <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto whitespace-nowrap scrollbar-none text-[11px] font-bold">
-          <WarningCircle size={16} weight="fill" className="shrink-0 text-amber-100" />
+          <span className="text-xs select-none shrink-0">⚠️</span>
           <span>ກຳລັງແກ້ໄຂບິນ: #{editingOldTransaction.receiptNumber || editingOldTransaction.originalReceiptNumber}</span>
-          <span className="text-amber-200 mx-0.5">•</span>
-          <span>ລູກຄ້າ: {custName}</span>
-          <span className="text-amber-200 mx-0.5">•</span>
+          <span className="text-amber-200">|</span>
           <span className="text-amber-100">ຮູບແບບຊຳລະເດີມ:</span>
           {isCash && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black shadow-2xs">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold shadow-2xs">
               <Money size={12} weight="bold" />
               <span>ເງິນສົດ (Cash)</span>
             </span>
           )}
           {isTransfer && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-black shadow-2xs">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-2xs">
               <QrCode size={12} weight="bold" />
               <span>ໂອນເງິນ (Transfer)</span>
             </span>
           )}
           {isDebt && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black shadow-2xs">
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-[10px] font-bold shadow-2xs font-mono"
+              style={{ backgroundColor: '#EF4444' }}
+            >
               <HandCoins size={12} weight="bold" />
-              <span>ຕິດໜີ້ (ຄ້າງ: {formatDots(remainingDebt)} ₭)</span>
+              <span>ຕິດໜີ້ ({formatDots(remainingDebt)} ₭)</span>
             </span>
+          )}
+          {custName && custName !== 'ລູກຄ້າທົ່ວໄປ' && (
+            <>
+              <span className="text-amber-200">|</span>
+              <span className="text-amber-100 font-medium">ລູກຄ້າ: {custName}</span>
+            </>
           )}
         </div>
         {onCancelEditOrder && (
           <button
             type="button"
             onClick={onCancelEditOrder}
-            className="px-2.5 py-1 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-[10.5px] font-bold shrink-0 cursor-pointer transition-all shadow-2xs"
+            className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold shrink-0 cursor-pointer transition-all shadow-2xs"
           >
             ຍົກເລີກ
           </button>
@@ -200,21 +208,20 @@ export default function PosScreen({
     );
   };
 
-  // Reusable Cart Renderer for both Desktop Dock & Mobile Slide-Over Drawer
-  // Checkout button is NOT fixed; it scrolls naturally up and down, perfectly optimized for mobile landscape!
+  // Reusable High-Density Compact Cart for Desktop (35%) & Mobile Drawer
   const renderCartContent = (isDrawer = false) => (
-    <div className="flex-1 flex flex-col h-full min-h-0 overflow-y-auto overscroll-contain bg-white">
-      {/* Sticky Yellow Banner when editing an old transaction */}
+    <div className="flex-1 flex flex-col h-full min-h-0 bg-white">
+      {/* 1. Sticky Amber Banner when editing an old transaction */}
       {renderEditingBanner()}
 
-      {/* Cart Top Section: Customer Name Input & Quick Chips */}
-      <div className={`p-2.5 sm:p-3 border-b border-slate-200/80 bg-slate-50 flex flex-col gap-1.5 shrink-0 ${isDrawer ? 'pt-1.5' : ''}`}>
+      {/* 2. Compact Cart Header: Title, Customer Name & Clear */}
+      <div className={`p-2.5 px-3 border-b border-slate-200/80 bg-slate-50/80 flex flex-col gap-1.5 shrink-0 ${isDrawer ? 'pt-1.5' : ''}`}>
         {!isDrawer && (
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              <ShoppingCart size={17} className="text-teal-700" weight="bold" />
-              <span className="font-extrabold text-xs text-slate-900">ກະຕ່າສິນຄ້າ</span>
-              <span className="px-1.5 py-0.2 bg-teal-100 text-teal-800 rounded text-[9.5px] font-bold">
+              <ShoppingCart size={16} className="text-teal-700" weight="bold" />
+              <span className="font-extrabold text-xs text-slate-900 uppercase tracking-wide">ກະຕ່າສິນຄ້າ</span>
+              <span className="px-1.5 py-0.2 bg-teal-100 text-teal-800 rounded-full text-[10px] font-bold font-mono">
                 {cart.length} ລາຍການ
               </span>
             </div>
@@ -222,16 +229,17 @@ export default function PosScreen({
               <button
                 type="button"
                 onClick={() => setCart([])}
-                className="text-red-500 hover:text-red-700 text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
+                className="text-slate-400 hover:text-rose-600 text-[11px] font-bold flex items-center gap-0.5 cursor-pointer transition-colors"
+                title="ລ້າງສິນຄ້າທັງໝົດໃນກະຕ່າ"
               >
-                <Trash size={12} />
+                <Trash size={13} />
                 <span>ລ້າງ</span>
               </button>
             )}
           </div>
         )}
 
-        {/* Customer Name Input */}
+        {/* Customer Name Input & Quick Chips */}
         <div className="flex items-center gap-1.5">
           <div className="relative flex-1">
             <User
@@ -243,17 +251,17 @@ export default function PosScreen({
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               placeholder="ຊື່ລູກຄ້າ / Customer..."
-              className="w-full pl-7 pr-2 py-1 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-bold"
+              className="w-full h-8 pl-7 pr-2 py-1 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-bold shadow-2xs"
             />
           </div>
           {/* Quick chips */}
-          <div className="flex items-center gap-1 text-[10px] overflow-x-auto no-scrollbar shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             {['ທົ່ວໄປ', 'VIP'].map((name) => (
               <button
                 key={name}
                 type="button"
                 onClick={() => setCustomerName(name === 'ທົ່ວໄປ' ? 'ລູກຄ້າທົ່ວໄປ' : name)}
-                className={`px-1.5 py-1 rounded text-[10px] border shrink-0 transition-all cursor-pointer ${
+                className={`px-2 py-1 rounded-md text-[10.5px] font-bold border transition-all cursor-pointer ${
                   customerName === name || (name === 'ທົ່ວໄປ' && customerName === 'ລູກຄ້າທົ່ວໄປ')
                     ? 'bg-teal-50 border-teal-400 text-teal-800 font-bold'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
@@ -266,8 +274,8 @@ export default function PosScreen({
         </div>
       </div>
 
-      {/* Cart Item List (Scrolls together in one fluid scroll container) */}
-      <div className="p-2 sm:p-2.5 flex flex-col gap-2 shrink-0">
+      {/* 3. High-Density Cart Item List (Thumbnail on left + 2 clean rows on right) */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5 overscroll-contain">
         {cart.map((item) => {
           const originalPrice = item.unit.retailPrice;
           const effectivePrice =
@@ -301,13 +309,14 @@ export default function PosScreen({
           return (
             <div
               key={`${item.product.id}_${item.unit.id}`}
-              className={`p-2 rounded-xl border bg-white flex flex-col gap-1.5 transition-all shadow-2xs ${
-                isOverridden ? 'border-amber-300 bg-amber-50/25' : 'border-slate-200/90 hover:border-slate-300'
+              className={`p-2 rounded-xl border bg-white flex flex-col gap-1 transition-all shadow-2xs ${
+                isOverridden ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200/80 hover:border-slate-300'
               }`}
             >
+              {/* Product Thumbnail (Left) + 2 Rows (Right) */}
               <div className="flex items-center gap-2">
                 {/* Product Thumbnail */}
-                <div className="w-9 h-9 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200/80 flex items-center justify-center self-center">
                   {imgUrl ? (
                     <img
                       src={imgUrl}
@@ -318,109 +327,123 @@ export default function PosScreen({
                       }}
                     />
                   ) : (
-                    <span className="text-sm select-none">📦</span>
+                    <span className="text-base select-none">📦</span>
                   )}
                 </div>
 
-                {/* Name & Unit switcher & Stepper */}
-                <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                  <div className="flex items-start justify-between gap-1">
-                    <span className="font-extrabold text-[11px] text-slate-900 leading-tight truncate">
+                {/* 2 Rows Container */}
+                <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
+                  {/* Row 1: Product Name, Line Total, Trash Button */}
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="font-bold text-xs text-slate-900 truncate" title={item.product.name}>
                       {item.product.name}
                     </span>
-                    <button
-                      onClick={() => removeFromCart(item.product.id, item.unit.id)}
-                      className="text-slate-300 hover:text-red-500 p-0.5 cursor-pointer shrink-0 -mr-1 transition-colors"
-                      title="ລຶບລາຍການ"
-                    >
-                      <Trash size={12} />
-                    </button>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="font-black text-xs sm:text-sm font-mono text-slate-900">
+                        {formatKip(lineTotal)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeFromCart(item.product.id, item.unit.id)}
+                        className="text-slate-300 hover:text-rose-500 p-0.5 cursor-pointer shrink-0 transition-colors"
+                        title="ລຶບລາຍການ"
+                      >
+                        <Trash size={14} />
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Unit Switcher */}
-                  {item.product?.units && item.product.units.length > 1 && (
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {item.product.units.map((u) => {
-                        const isSelected = (u.id && u.id === item.unit.id) || u.unitName === item.unit.unitName;
-                        return (
-                          <button
-                            key={u.id || u.unitName}
-                            type="button"
-                            onClick={() => changeCartItemUnit && changeCartItemUnit(item.product.id, item.unit.id, u)}
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer ${
-                              isSelected
-                                ? 'bg-teal-700 text-white shadow-2xs ring-1 ring-teal-800'
-                                : 'bg-slate-100 hover:bg-teal-50 text-slate-600 hover:text-teal-900 border border-slate-200/80'
-                            }`}
-                            title={`ປ່ຽນເປັນ ${u.unitName} (${formatDots(u.retailPrice)} ₭)`}
-                          >
-                            {u.unitName}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {/* Row 2: Unit Switcher (Enlarged) + Highlighted Editable Price + Stepper */}
+                  <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                    <div className="flex items-center gap-1 flex-wrap min-w-0">
+                      {/* Unit Switcher if product has multiple units (Enlarged per user request) */}
+                      {item.product?.units && item.product.units.length > 1 ? (
+                        <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 gap-0.5 shrink-0">
+                          {item.product.units.map((u) => {
+                            const isSelected = (u.id && u.id === item.unit.id) || u.unitName === item.unit.unitName;
+                            return (
+                              <button
+                                key={u.id || u.unitName}
+                                type="button"
+                                onClick={() => changeCartItemUnit && changeCartItemUnit(item.product.id, item.unit.id, u)}
+                                className={`h-6 px-2 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
+                                  isSelected
+                                    ? 'bg-teal-600 text-white shadow-2xs'
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                                }`}
+                                title={`ປ່ຽນເປັນ ${u.unitName} (${formatDots(u.retailPrice)} ₭)`}
+                              >
+                                {u.unitName}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-teal-800 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200/60 shrink-0">
+                          {item.unit.unitName}
+                        </span>
+                      )}
 
-                  {/* Price edit & Stepper & Total */}
-                  <div className="flex items-center justify-between gap-1 flex-wrap">
-                    <div className="flex items-center gap-1">
+                      {/* Highlighted Price Override Button (Làm nổi bật số tiền sửa được) */}
                       <button
                         type="button"
                         onClick={() => setOverrideModalItem(item)}
-                        className="flex items-center gap-0.5 group text-left hover:bg-teal-50 px-1 py-0.5 -ml-1 rounded transition-colors cursor-pointer"
-                        title="ກົດເພື່ອປັບລາຄາພິເສດ"
+                        className={`h-6 px-2 rounded-md font-bold font-mono text-xs flex items-center gap-1 transition-all cursor-pointer border shadow-2xs shrink-0 ${
+                          isOverridden
+                            ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-400 ring-1 ring-amber-400/50'
+                            : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border-teal-300 hover:border-teal-400'
+                        }`}
+                        title="ກົດເພື່ອປັບລາຄາພິເສດ (Edit Price)"
                       >
-                        <span className="text-[10px] text-teal-800 font-bold font-mono">
-                          {item.unit.unitName} @ {formatKip(effectivePrice).replace(' ₭', '')}
-                        </span>
+                        <span>@{formatDots(effectivePrice)}</span>
                         <PencilSimple
-                          size={10}
-                          className="text-slate-400 group-hover:text-teal-700"
+                          size={11}
+                          weight="bold"
+                          className={isOverridden ? 'text-amber-800' : 'text-teal-600'}
                         />
+                        {isOverridden && (
+                          <span className="text-[9px] font-black uppercase tracking-wider bg-amber-200/80 px-1 rounded text-amber-900 ml-0.5">
+                            {item.overrideReason || 'ປັບ'}
+                          </span>
+                        )}
                       </button>
-
-                      {isOverridden && (
-                        <span className="px-1 py-0.1 rounded text-[8.5px] font-black bg-amber-100 text-amber-900 border border-amber-300">
-                          {item.overrideReason || 'ພິເສດ'}
-                        </span>
-                      )}
                     </div>
 
-                    <div className="flex items-center gap-1.5 ml-auto">
-                      <div className="flex items-center bg-slate-100 rounded-md p-0.5 border border-slate-200/70">
-                        <button
-                          onClick={() =>
-                            updateCartQuantity(item.product.id, item.unit.id, item.quantity - 1)
-                          }
-                          className="w-4.5 h-4.5 rounded flex items-center justify-center text-slate-600 hover:bg-white active:scale-95 transition-all cursor-pointer"
-                        >
-                          <Minus size={9} weight="bold" />
-                        </button>
-                        <span className="w-4 text-center font-black text-[10.5px] text-slate-900 font-mono">
-                          {item.quantity}
-                        </span>
-                        <button
-                          onClick={() =>
-                            updateCartQuantity(item.product.id, item.unit.id, item.quantity + 1)
-                          }
-                          className="w-4.5 h-4.5 rounded flex items-center justify-center text-slate-600 hover:bg-white active:scale-95 transition-all cursor-pointer"
-                        >
-                          <Plus size={9} weight="bold" />
-                        </button>
-                      </div>
-
-                      <span className="font-black text-[11px] text-slate-900 font-mono min-w-14 text-right">
-                        {formatKip(lineTotal)}
+                    {/* Stepper (- Qty +) */}
+                    <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200/80 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateCartQuantity(item.product.id, item.unit.id, item.quantity - 1)
+                        }
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-slate-700 hover:bg-white active:scale-95 transition-all cursor-pointer font-bold"
+                        title="ຫຼຸດຈຳນວນ"
+                      >
+                        <Minus size={11} weight="bold" />
+                      </button>
+                      <span className="w-6 text-center font-black text-xs font-mono text-slate-900">
+                        {item.quantity}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateCartQuantity(item.product.id, item.unit.id, item.quantity + 1)
+                        }
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-teal-800 hover:bg-white active:scale-95 transition-all cursor-pointer font-bold"
+                        title="ເພີ່ມຈຳນວນ"
+                      >
+                        <Plus size={11} weight="bold" />
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Beer Crate Deposit / Missing Crate Option */}
+              {/* Beer Crate Deposit / Missing Crate Option (Slim single line) */}
               {isCrateEligible && (
-                <div className="bg-amber-50/80 px-2 py-1 rounded-lg border border-amber-200/80 flex items-center justify-between gap-1 text-[10px]">
-                  <label className="flex items-center gap-1.5 cursor-pointer select-none min-w-0">
+                <div className="bg-amber-50/70 px-2 py-0.5 rounded-md border border-amber-200/60 flex items-center justify-between gap-1 text-[10px] mt-0.5">
+                  <label className="flex items-center gap-1 cursor-pointer select-none min-w-0">
                     <input
                       type="checkbox"
                       checked={Boolean(item.noEmptyCrates)}
@@ -428,16 +451,16 @@ export default function PosScreen({
                         toggleCartItemCrateDeposit &&
                         toggleCartItemCrateDeposit(item.product.id, item.unit.id, e.target.checked)
                       }
-                      className="w-3.5 h-3.5 accent-amber-600 rounded cursor-pointer shrink-0"
+                      className="w-3 h-3 accent-amber-600 rounded cursor-pointer shrink-0"
                     />
-                    <span className="font-bold text-amber-950 text-[9.5px] truncate">
+                    <span className="font-bold text-amber-950 text-[10px] truncate">
                       ບໍ່ມີແກັດປ່ຽນ (+{formatDots(feePerCrate)} ₭)
                     </span>
                   </label>
 
                   {item.noEmptyCrates && (
                     <div className="flex items-center gap-1 shrink-0">
-                      <div className="flex items-center bg-white rounded border border-amber-300 p-0.5 shadow-2xs">
+                      <div className="flex items-center bg-white rounded border border-amber-300 p-0.2 shadow-2xs">
                         <button
                           type="button"
                           onClick={() =>
@@ -453,7 +476,7 @@ export default function PosScreen({
                         >
                           -
                         </button>
-                        <span className="w-3.5 text-center font-black text-[10px] font-mono text-amber-950">
+                        <span className="w-3.5 text-center font-black text-[9.5px] font-mono text-amber-950">
                           {missingCount}
                         </span>
                         <button
@@ -472,7 +495,7 @@ export default function PosScreen({
                           +
                         </button>
                       </div>
-                      <span className="font-black text-amber-950 font-mono text-[10px]">
+                      <span className="font-black text-amber-950 font-mono text-[9.5px]">
                         +{formatDots(crateFeeTotal)} ₭
                       </span>
                     </div>
@@ -484,38 +507,34 @@ export default function PosScreen({
         })}
 
         {cart.length === 0 && (
-          <div className="py-6 sm:py-8 flex flex-col items-center justify-center text-center text-slate-400">
-            <ShoppingCart size={32} className="mx-auto mb-1 opacity-40" />
+          <div className="py-12 flex flex-col items-center justify-center text-center text-slate-400">
+            <ShoppingCart size={36} className="mx-auto mb-1.5 opacity-40" />
             <p className="text-xs font-bold text-slate-600">ກະຕ່າຍັງວ່າງເປົ່າ</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">
+            <p className="text-[11px] text-slate-400 mt-0.5">
               ກົດປຸ່ມຫົວໜ່ວຍດ້ານຊ້າຍເພື່ອເລີ່ມຂາຍ
             </p>
           </div>
         )}
       </div>
 
-      {/* 3. Cart Summary & Checkout Button (Not fixed! Scrolls up & down naturally with generous bottom padding!) */}
-      <div
-        className="p-2.5 sm:p-3 border-t border-slate-200 bg-slate-50 flex flex-col gap-2 mt-auto shrink-0 pb-16 sm:pb-20"
-        style={{
-          paddingBottom: 'max(2.5rem, calc(env(safe-area-inset-bottom, 0px) + 2rem))',
-        }}
-      >
-        <div className="flex items-center justify-between text-xs">
-          <span className="font-bold text-slate-700">ຍອດເງິນລວມ (Total):</span>
-          <span className="font-black text-sm sm:text-base text-teal-700 font-mono">
+      {/* 4. Sleek Cart Footer: Large Total & Dual Action Buttons */}
+      <div className="p-2.5 px-3 bg-slate-50 border-t border-slate-200 flex flex-col gap-2 shrink-0">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">ຍອດເງິນລວມ (Total):</span>
+          <span className="text-2xl font-black font-mono text-slate-900">
             {formatKip(cartSubtotal)}
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-1.5">
+        <div className="grid grid-cols-2 gap-2">
+          {/* Nút phụ: ໃບບອກລາຄາ (Báo giá) */}
           <button
             type="button"
             onClick={() => setQuotationModalOpen(true)}
             disabled={cart.length === 0}
-            className={`sm:col-span-5 py-2.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+            className={`h-11 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border active:scale-98 ${
               cart.length > 0
-                ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-500 shadow-2xs active:scale-98'
+                ? 'bg-white hover:bg-amber-50 text-amber-700 border-amber-300 shadow-2xs'
                 : 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed'
             }`}
             title="ພິມໃບບອກລາຄາ / ໃບສະເໜີລາຄາຊົ່ວຄາວ (ບໍ່ຕັດສະຕັອກ)"
@@ -524,6 +543,7 @@ export default function PosScreen({
             <span>ໃບບອກລາຄາ</span>
           </button>
 
+          {/* Nút chính: ຊຳລະເງິນ (Thanh toán) */}
           <button
             type="button"
             onClick={() => {
@@ -531,54 +551,39 @@ export default function PosScreen({
               handleOpenCheckout();
             }}
             disabled={cart.length === 0}
-            className={`sm:col-span-7 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-98 min-h-[40px] cursor-pointer ${
+            className={`h-11 px-3 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-98 cursor-pointer ${
               cart.length > 0
-                ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-teal-600/30'
+                ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-teal-600/25'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >
-            <span>{editingOldTransaction ? 'ບັນທຶກການແກ້ໄຂ' : 'ເຊັກບິນ (Checkout)'}</span>
+            <span>{editingOldTransaction ? 'ບັນທຶກການແກ້ໄຂ' : 'ຊຳລະເງິນ'}</span>
           </button>
         </div>
-
-        {cart.length > 0 && (
-          <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm('ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລ້າງສິນຄ້າທັງໝົດໃນກະຕ່າ?')) {
-                  setCart([]);
-                }
-              }}
-              className="text-[10px] text-slate-400 hover:text-red-600 font-bold hover:underline cursor-pointer flex items-center gap-1"
-            >
-              <Trash size={12} />
-              <span>ລ້າງກະຕ່າ (Clear Cart)</span>
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
 
   return (
-    <main className="flex-1 flex overflow-hidden w-full h-full min-h-0 font-sans relative">
+    <main className="flex-1 flex overflow-hidden w-full h-full min-h-0 font-sans relative bg-slate-100">
       {/* =========================================================================
-          LEFT DOCK: PRODUCTS CATALOG (FLEX-1 FULL REMAINING WIDTH)
+          LEFT COLUMN (65% on Tablet & Desktop >= 768px):
+          Danh mục & Lưới sản phẩm (Product Grid - High Density)
       ========================================================================= */}
-      <section className="flex-1 min-w-0 border-r border-slate-200/80 bg-slate-50 flex flex-col h-full min-h-0 overflow-hidden">
+      <section className="flex-1 md:flex-none md:w-[65%] min-w-0 border-r border-slate-200/80 bg-slate-50 flex flex-col h-full min-h-0 overflow-hidden">
         {/* Mobile Editing Order Banner (< 768px) */}
         <div className="md:hidden">
           {renderEditingBanner()}
         </div>
 
-        {/* Top Control Bar: Search, Category chips, Scanner */}
-        <div className="p-2.5 sm:p-3 bg-white border-b border-slate-200/80 flex flex-col gap-2 shrink-0">
+        {/* Top Control Bar: Search & Category tabs */}
+        <div className="p-2.5 bg-white border-b border-slate-200/80 flex flex-col gap-2 shrink-0">
+          {/* Thanh tìm kiếm nhanh kết hợp nút Quét mã vạch cao 44px, nhạy, dễ bấm */}
           <div className="flex items-center gap-2">
-            <div className="relative flex-1">
+            <div className="relative flex-1 h-11">
               <MagnifyingGlass
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                size={18}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
               />
               <input
                 type="text"
@@ -586,97 +591,84 @@ export default function PosScreen({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ ຫຼື ສະແກນບາໂຄດ..."
-                className="w-full pl-9 pr-24 py-2 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 focus:bg-white font-medium shadow-2xs"
+                className="w-full h-11 pl-9 pr-20 bg-slate-100/80 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-600 focus:bg-white font-medium shadow-2xs transition-all"
               />
-              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                {/* Fullscreen Button */}
+              {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => {
-                    try {
-                      if (!document.fullscreenElement) {
-                        document.documentElement.requestFullscreen?.().catch(() => {});
-                      } else {
-                        document.exitFullscreen?.().catch(() => {});
-                      }
-                    } catch (e) {}
-                  }}
-                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-all cursor-pointer border border-slate-200 shadow-2xs flex items-center active:scale-95"
-                  title="ເຕັມຈໍ (Full Screen)"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-xs font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-200/70 rounded-md cursor-pointer transition-colors"
                 >
-                  <CornersOut size={14} weight="bold" />
+                  ລຶບ
                 </button>
-
-                {/* Camera Scanner Button */}
-                <button
-                  type="button"
-                  onClick={() => setScannerOpen(true)}
-                  className="px-2 py-1 rounded-lg bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center gap-1 active:scale-95"
-                  title="ເປີດກ້ອງສະແກນບາໂຄດ (Camera Barcode Scanner)"
-                >
-                  <Barcode size={15} weight="bold" />
-                </button>
-
-                {/* Mobile Cart Trigger Button */}
-                <button
-                  type="button"
-                  onClick={() => setMobileCartOpen(true)}
-                  className="md:hidden relative p-1.5 rounded-lg bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center active:scale-95"
-                  title="ເປີດກະຕ່າ"
-                >
-                  <ShoppingCart size={15} weight="bold" />
-                  {cart.length > 0 && (
-                    <span className="absolute -top-1 -right-1 px-1 py-0.2 rounded-full bg-teal-600 text-white text-[9px] font-black leading-none">
-                      {cart.reduce((s, i) => s + (i.quantity || 1), 0)}
-                    </span>
-                  )}
-                </button>
-              </div>
+              )}
             </div>
 
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="px-2.5 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl cursor-pointer"
-              >
-                ລຶບ
-              </button>
-            )}
+            {/* Nút Quét mã vạch cao 44px */}
+            <button
+              type="button"
+              onClick={() => setScannerOpen(true)}
+              className="h-11 px-3.5 rounded-xl bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white border border-teal-200 shadow-2xs flex items-center gap-1.5 font-bold text-xs sm:text-sm cursor-pointer transition-all active:scale-95 shrink-0"
+              title="ເປີດກ້ອງສະແກນບາໂຄດ (Camera Barcode Scanner)"
+            >
+              <Barcode size={20} weight="bold" />
+              <span className="hidden sm:inline">ສະແກນ</span>
+            </button>
+
+            {/* Mobile Cart Trigger Button (< 768px) */}
+            <button
+              type="button"
+              onClick={() => setMobileCartOpen(true)}
+              className="md:hidden relative h-11 px-3 rounded-xl bg-teal-600 text-white shadow-xs flex items-center justify-center cursor-pointer active:scale-95 shrink-0"
+              title="ເປີດກະຕ່າ"
+            >
+              <ShoppingCart size={18} weight="bold" />
+              {cart.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold font-mono border-2 border-white shadow-2xs">
+                  {cart.reduce((s, i) => s + (i.quantity || 1), 0)}
+                </span>
+              )}
+            </button>
           </div>
 
-          {/* Category Chips Bar */}
+          {/* Thanh phân loại danh mục (Tabs) dạng pill cuộn ngang mượt mà */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  activeCategory === cat
-                    ? 'bg-teal-700 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+            {categories.map((cat) => {
+              const isActive = activeCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setActiveCategory(cat)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer active:scale-95 ${
+                    isActive
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  {cat}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Product Cards Grid: Mobile 2 columns, Tablet 3-4 columns, Desktop 5 columns */}
-        <div className="flex-1 min-h-0 p-2 sm:p-3 overflow-y-auto overscroll-contain pb-24 sm:pb-28">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 w-full">
+        {/* Lưới sản phẩm (High-Density Grid: 2-3 cols mobile, 4-5-6 cols desktop) */}
+        <div className="flex-1 min-h-0 p-2.5 overflow-y-auto overscroll-contain pb-24 sm:pb-12">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-2.5 w-full">
             {filteredProducts.map((p) => {
               return (
                 <div
                   key={p.id}
-                  className="bg-white rounded-xl border border-slate-200/90 hover:border-teal-500/50 hover:shadow-sm transition-all duration-150 flex flex-col justify-between overflow-hidden group"
+                  className="bg-white rounded-xl border border-slate-200/90 hover:border-teal-400 hover:shadow-xs transition-all duration-150 flex flex-col justify-between overflow-hidden group"
                 >
                   {/* Top card area */}
                   <div
                     onClick={() => openUnitSelector(p)}
-                    className="p-2 cursor-pointer"
+                    className="p-2 cursor-pointer flex-1 flex flex-col"
                   >
-                    <div className="relative h-20 sm:h-24 w-full rounded-lg overflow-hidden bg-slate-100 mb-1.5">
+                    {/* Ảnh bo góc 12px với chiều cao chuẩn compact */}
+                    <div className="relative h-24 sm:h-28 w-full rounded-[10px] overflow-hidden bg-slate-100 mb-1.5 shrink-0">
                       <img
                         src={p.imageUrl}
                         alt={p.name}
@@ -687,21 +679,25 @@ export default function PosScreen({
                             'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80';
                         }}
                       />
-                      <span className="absolute bottom-1 left-1 px-1.5 py-0.2 rounded bg-slate-950/70 backdrop-blur-xs text-[9px] text-white font-medium">
-                        {p.category}
-                      </span>
+                      {p.category && (
+                        <span className="absolute bottom-1 left-1 px-1.5 py-0.2 rounded bg-slate-950/70 backdrop-blur-xs text-[9px] text-white font-medium">
+                          {p.category}
+                        </span>
+                      )}
                     </div>
 
+                    {/* Tên sản phẩm 2 dòng rõ ràng */}
                     <h3
-                      className="font-extrabold text-[11px] sm:text-xs text-slate-900 leading-tight line-clamp-1"
+                      className="font-bold text-xs text-slate-900 leading-snug line-clamp-2 min-h-[2rem]"
                       title={p.name}
                     >
                       {p.name}
                     </h3>
 
-                    <div className="flex items-center justify-between mt-1 text-[10px] text-slate-500">
-                      <span className="truncate max-w-[110px] sm:max-w-[130px] font-medium" title={formatCompoundStock(p)}>
-                        ສະຕັອກ: <strong className="text-slate-800">{formatCompoundStock(p)}</strong>
+                    {/* Hiển thị tồn kho hiện tại */}
+                    <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100 text-[10px] text-slate-500">
+                      <span className="truncate font-medium" title={formatCompoundStock(p)}>
+                        ສະຕັອກ: <strong className="text-slate-800 font-mono font-bold">{formatCompoundStock(p)}</strong>
                       </span>
                       <button
                         type="button"
@@ -709,7 +705,8 @@ export default function PosScreen({
                           e.stopPropagation();
                           openUnitSelector(p);
                         }}
-                        className="text-teal-700 hover:text-teal-800 font-bold flex items-center gap-0.5 cursor-pointer"
+                        className="text-teal-700 hover:text-teal-800 font-bold flex items-center gap-0.5 text-[10px] cursor-pointer shrink-0 ml-1"
+                        title="ເລືອກຫົວໜ່ວຍອື່ນ"
                       >
                         <SlidersHorizontal size={11} weight="bold" />
                         <span>ຫົວໜ່ວຍ</span>
@@ -717,8 +714,8 @@ export default function PosScreen({
                     </div>
                   </div>
 
-                  {/* Fast 1-Tap Unit Add Buttons */}
-                  <div className="p-1.5 bg-slate-50 border-t border-slate-100 flex items-center gap-1">
+                  {/* Nút chọn cấp đơn vị (Thùng / Pack / Lẻ) gọn gàng, có giá tiền rõ ràng */}
+                  <div className="p-1 bg-slate-50/90 border-t border-slate-100 flex items-center gap-1">
                     {p.units && p.units.length > 0 ? (
                       p.units.map((unit, idx) => {
                         const isBulk =
@@ -733,10 +730,11 @@ export default function PosScreen({
                         return (
                           <button
                             key={unit.id || idx}
+                            type="button"
                             onClick={() => addToCart(p, unit, 1)}
-                            className={`flex-1 py-1.5 px-0.5 rounded-md text-center transition-all shadow-2xs active:scale-95 cursor-pointer ${
+                            className={`flex-1 py-1 px-0.5 rounded-lg text-center transition-all cursor-pointer active:scale-95 flex flex-col justify-center items-center shadow-2xs ${
                               isBulk
-                                ? 'bg-teal-600 hover:bg-teal-700 border border-teal-600 text-white'
+                                ? 'bg-teal-600 hover:bg-teal-700 text-white'
                                 : isMiddlePack
                                 ? 'bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-slate-900'
                                 : 'bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-400 text-slate-900'
@@ -744,7 +742,7 @@ export default function PosScreen({
                             title={`ຂາຍ 1 ${unit.unitName}`}
                           >
                             <span
-                              className={`text-[9px] font-bold block truncate ${
+                              className={`text-[9.5px] font-bold block truncate max-w-full ${
                                 isBulk
                                   ? 'text-teal-100'
                                   : isMiddlePack
@@ -755,7 +753,7 @@ export default function PosScreen({
                               {unit.unitName}
                             </span>
                             <span
-                              className={`text-[10px] sm:text-[10.5px] font-black block font-mono ${
+                              className={`text-[10.5px] font-black block font-mono leading-tight mt-0.2 ${
                                 isBulk ? 'text-white' : 'text-slate-900'
                               }`}
                             >
@@ -765,7 +763,7 @@ export default function PosScreen({
                         );
                       })
                     ) : (
-                      <span className="text-[10px] text-slate-400 py-1 text-center w-full">ບໍ່ມີຫົວໜ່ວຍ</span>
+                      <span className="text-[11px] text-slate-400 py-1 text-center w-full">ບໍ່ມີຫົວໜ່ວຍ</span>
                     )}
                   </div>
                 </div>
@@ -774,9 +772,9 @@ export default function PosScreen({
           </div>
 
           {filteredProducts.length === 0 && (
-            <div className="py-20 text-center text-slate-400">
-              <Package size={40} className="mx-auto mb-2 opacity-50" />
-              <p className="text-xs font-bold">
+            <div className="py-16 text-center text-slate-400">
+              <Package size={40} className="mx-auto mb-2 opacity-40 text-slate-400" />
+              <p className="text-xs font-bold text-slate-600">
                 {searchQuery || activeCategory !== 'ທັງໝົດ'
                   ? 'ບໍ່ພົບສິນຄ້າທີ່ຄົ້ນຫາ'
                   : 'ຍັງບໍ່ມີສິນຄ້າໃນລະບົບ (ບໍ່ມີຂໍ້ມູນ)'}
@@ -786,25 +784,25 @@ export default function PosScreen({
         </div>
 
         {/* Mobile Floating Cart Summary Bar (< 768px) */}
-        <div className="md:hidden bg-white border-t border-slate-200 p-2 sm:p-2.5 shadow-lg flex items-center justify-between gap-2 shrink-0 z-20">
+        <div className="md:hidden bg-white border-t border-slate-200 p-2 shadow-lg flex items-center justify-between gap-2 shrink-0 z-20">
           <button
             type="button"
             onClick={() => setMobileCartOpen(true)}
-            className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer active:scale-98 transition-transform"
+            className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer active:scale-98 transition-transform"
           >
-            <div className="relative p-2 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 shrink-0">
+            <div className="relative p-1.5 rounded-lg bg-teal-50 text-teal-700 border border-teal-200 shrink-0">
               <ShoppingCart size={18} weight="bold" />
               {cart.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full bg-teal-600 text-white text-[9.5px] font-black leading-none shadow-xs">
+                <span className="absolute -top-1 -right-1 px-1 py-0.2 rounded-full bg-teal-600 text-white text-[9px] font-bold font-mono leading-none shadow-xs">
                   {cart.reduce((s, i) => s + (i.quantity || 1), 0)}
                 </span>
               )}
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-[10px] text-slate-500 font-bold truncate">
+              <span className="text-[11px] text-slate-500 font-bold truncate">
                 {customerName || 'ລູກຄ້າທົ່ວໄປ'} • {cart.length} ລາຍການ
               </span>
-              <span className="text-xs sm:text-sm font-black text-teal-700 font-mono leading-tight">
+              <span className="text-xs font-black text-teal-700 font-mono leading-tight">
                 {formatKip(cartSubtotal)}
               </span>
             </div>
@@ -818,7 +816,7 @@ export default function PosScreen({
               }
             }}
             disabled={cart.length === 0}
-            className={`px-3.5 py-2.5 rounded-xl font-black text-xs shadow-sm flex items-center gap-1 shrink-0 active:scale-95 transition-all cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl font-bold text-xs shadow-sm flex items-center gap-1 shrink-0 active:scale-95 transition-all cursor-pointer ${
               cart.length > 0
                 ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-teal-600/30'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
@@ -831,9 +829,10 @@ export default function PosScreen({
       </section>
 
       {/* =========================================================================
-          RIGHT DOCK: CART & CHECKOUT (SCROLLABLE DOCK ON TABLET & DESKTOP >= 768px)
+          RIGHT COLUMN (35% on Tablet & Desktop >= 768px):
+          Giỏ hàng cố định (Sticky Cart)
       ========================================================================= */}
-      <aside className="hidden md:flex md:w-[300px] lg:w-[340px] xl:w-[380px] bg-white flex-col h-full min-h-0 overflow-y-auto overscroll-contain shadow-xs border-l border-slate-200/80 shrink-0">
+      <aside className="hidden md:flex md:flex-none md:w-[35%] bg-white flex-col h-full min-h-0 overflow-hidden shadow-xs border-l border-slate-200/80 shrink-0">
         {renderCartContent(false)}
       </aside>
 
@@ -848,7 +847,7 @@ export default function PosScreen({
             onClick={() => setMobileCartOpen(false)}
           />
           {/* Drawer Container */}
-          <div className="relative z-10 bg-white rounded-t-3xl max-h-[88dvh] h-[88dvh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200">
+          <div className="relative z-10 bg-white rounded-t-3xl max-h-[90dvh] h-[90dvh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200">
             {/* Drawer Top Handle & Title */}
             <div className="pt-2 px-4 pb-2 border-b border-slate-100 flex flex-col gap-1.5 shrink-0 bg-slate-50">
               <div
@@ -859,7 +858,7 @@ export default function PosScreen({
                 <div className="flex items-center gap-2">
                   <ShoppingCart size={18} className="text-teal-700" weight="bold" />
                   <span className="font-extrabold text-sm text-slate-900">ກະຕ່າສິນຄ້າ</span>
-                  <span className="px-2 py-0.5 bg-teal-100 text-teal-800 rounded text-[11px] font-black">
+                  <span className="px-2 py-0.5 bg-teal-100 text-teal-800 rounded-full text-xs font-bold font-mono">
                     {cart.length} ລາຍການ
                   </span>
                 </div>
@@ -867,7 +866,7 @@ export default function PosScreen({
                   {cart.length > 0 && (
                     <button
                       onClick={() => setCart([])}
-                      className="text-red-500 hover:text-red-700 text-xs font-bold flex items-center gap-1 cursor-pointer py-1 px-2 rounded-lg hover:bg-red-50"
+                      className="text-rose-500 hover:text-rose-700 text-xs font-bold flex items-center gap-1 cursor-pointer py-1 px-2 rounded-lg hover:bg-rose-50"
                     >
                       <Trash size={14} />
                       <span>ລ້າງ</span>

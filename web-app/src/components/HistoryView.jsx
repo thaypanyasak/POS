@@ -204,28 +204,35 @@ export default function HistoryView({
         paddingBottom: 'max(5.5rem, calc(4.5rem + env(safe-area-inset-bottom, 0px)))',
       }}
     >
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-200 mb-4 gap-3">
-        <div>
-          <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-            <ClockCounterClockwise size={24} className="text-teal-600" weight="fill" />
-            <span>ປະຫວັດບິນຂາຍ & ຈັດການໜີ້ສິນ ({transactions.length} ບິນ)</span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            ແຍກໝວດຊຳລະ: ເງິນສົດ, ເງິນໂອນ, ຕິດໜີ້ • ແກ້ໄຂບິນຜ່ານ POS • ຊຳລະໜີ້ລູກຄ້າ (Supabase Realtime)
-          </p>
+      {/* Top Header Bar */}
+      <div className="flex items-center justify-between pb-3 sm:pb-3.5 border-b border-slate-200/80 mb-3 sm:mb-4 gap-2.5 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0">
+            <ClockCounterClockwise size={20} className="sm:w-5 sm:h-5" weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <span className="truncate">ປະຫວັດບິນຂາຍ & ໜີ້ສິນ</span>
+              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                {transactions.length}
+              </span>
+            </h2>
+            <p className="text-[11.5px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block truncate">
+              ລາຍການບິນຂາຍ • ແຍກໝວດຊຳລະ • ແກ້ໄຂບິນ POS • ຊຳລະໜີ້ລູກຄ້າ
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             type="button"
             onClick={onRefreshTransactions}
             disabled={isLoading}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
+            className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
             title="ໂຫຼດຂໍ້ມູນຄືນຈາກ Supabase"
           >
-            <ArrowClockwise size={14} className={isLoading ? 'animate-spin' : ''} weight="bold" />
-            <span>ໂຫຼດຄືນ</span>
+            <ArrowClockwise size={15} className={isLoading ? 'animate-spin' : ''} weight="bold" />
+            <span className="hidden sm:inline">ໂຫຼດຄືນ</span>
           </button>
         </div>
       </div>

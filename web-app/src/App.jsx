@@ -27,6 +27,7 @@ import DashboardView from './components/DashboardView';
 import ProductsView from './components/ProductsView';
 import HistoryView from './components/HistoryView';
 import PurchasesView from './pages/inventory/purchases';
+import SettingsView from './components/SettingsView';
 import PurchaseEntryModal from './components/inventory/PurchaseEntryModal';
 import SupplierManagementModal from './components/inventory/SupplierManagementModal';
 import ReceiptModal from './components/ReceiptModal';
@@ -1753,6 +1754,22 @@ export default function App() {
     };
   }, [transactions, dashboardTimeframe]);
 
+  const outOfStockCount = useMemo(() => {
+    return products.filter(
+      (p) =>
+        p.trackStock !== false &&
+        (Number(p.stockPieces) || 0) <= 0 &&
+        (!p.stockPacks || (Number(p.stockPacks) || 0) <= 0) &&
+        (!p.stockCartons || (Number(p.stockCartons) || 0) <= 0)
+    ).length;
+  }, [products]);
+
+  const totalDebtTransactionsCount = useMemo(() => {
+    return transactions.filter(
+      (t) => (t.paymentMethod === 'debt' || t.isDebt) && t.status !== 'cancelled' && !t.isCancelled
+    ).length;
+  }, [transactions]);
+
   return (
     <div className="flex flex-col md:flex-row h-full h-dvh min-h-screen w-full min-w-full max-w-full bg-slate-100 text-slate-900 overflow-hidden font-sans">
       {/* 1. LEFT SIDEBAR NAVBAR (Bottom bar on Mobile, Icon sidebar on Tablet/Desktop) */}
@@ -1764,6 +1781,8 @@ export default function App() {
         isCloudSynced={isCloudSynced}
         cartCount={cart.length}
         transactionsCount={transactions.length}
+        outOfStockCount={outOfStockCount}
+        debtCount={totalDebtTransactionsCount}
         exchangeRate={exchangeRate}
       />
 
@@ -1804,6 +1823,7 @@ export default function App() {
             transactions={transactions}
             products={products}
             rawCategories={rawCategories}
+            exchangeRate={exchangeRate}
           />
         )}
 
@@ -1847,6 +1867,24 @@ export default function App() {
             onRefresh={handleRefreshAllFromSupabase}
             isLoading={isRefreshing}
             onAlert={openAlert}
+          />
+        )}
+
+        {activeMainTab === 'settings' && (
+          <SettingsView
+            exchangeRate={exchangeRate}
+            isCloudSynced={isCloudSynced}
+            productsCount={products.length}
+            transactionsCount={transactions.length}
+            outOfStockCount={outOfStockCount}
+            debtCount={totalDebtTransactionsCount}
+            receiptPaperWidth={receiptPaperWidth}
+            setReceiptPaperWidth={setReceiptPaperWidth}
+            onOpenCategoryManager={() => setCategoryManagerModalOpen(true)}
+            onOpenSupplierManager={() => setSupplierManagerModalOpen(true)}
+            onAddNewProduct={handleOpenNewProduct}
+            onRefreshAll={handleRefreshAllFromSupabase}
+            isLoading={isRefreshing}
           />
         )}
       </div>

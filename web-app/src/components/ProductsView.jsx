@@ -237,28 +237,35 @@ export default function ProductsView({
       }}
     >
       {/* 1. Header Toolbar: Responsive Flex with Mobile Wrapping */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-200 mb-4 sm:mb-5 gap-3">
-        <div>
-          <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
-            <Warehouse size={22} className="text-teal-600 sm:w-6 sm:h-6" weight="fill" />
-            <span>ລາຍການສິນຄ້າ & ຕົ້ນທຶນບາດ</span>
-          </h2>
-          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-            ສະແດງລາຄາຕົ້ນທຶນບາດ ແລະ ກີບ ຍົກລັງ/ແກັດ (Carton), ພ້ອມຫົວໜ່ວຍຂາຍ ແລະ ສະຕັອກສິນຄ້າ
-          </p>
+      <div className="flex items-center justify-between pb-3 sm:pb-3.5 border-b border-slate-200/80 mb-3 sm:mb-4 gap-2.5 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0">
+            <Warehouse size={20} className="sm:w-5 sm:h-5" weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <span className="truncate">ລາຍການສິນຄ້າ & ຕົ້ນທຶນບາດ</span>
+              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                {products.length}
+              </span>
+            </h2>
+            <p className="text-[11.5px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block truncate">
+              ສະແດງລາຄາຕົ້ນທຶນບາດ ແລະ ກີບ ຍົກລັງ/ແກັດ (Carton), ພ້ອມຫົວໜ່ວຍຂາຍ ແລະ ສະຕັອກສິນຄ້າ
+            </p>
+          </div>
         </div>
 
-        {/* Action Buttons: Stack on mobile with generous touch targets (min-h-[44px]) */}
-        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {onOpenCategoryManager && (
             <button
               type="button"
               onClick={onOpenCategoryManager}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[44px] sm:min-h-0 border border-slate-200 shadow-2xs"
+              className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
               title="ຈັດການໝວດໝູ່ສິນຄ້າ"
             >
               <Folders size={15} weight="bold" className="text-teal-700" />
-              <span>ໝວດໝູ່</span>
+              <span className="hidden sm:inline">ໝວດໝູ່</span>
             </button>
           )}
 
@@ -267,18 +274,18 @@ export default function ProductsView({
               type="button"
               onClick={onRefreshProducts}
               disabled={isLoading}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer min-h-[44px] sm:min-h-0"
+              className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
               title="ໂຫຼດຂໍ້ມູນຄືນຈາກ Supabase"
             >
               <ArrowClockwise size={15} className={isLoading ? 'animate-spin' : ''} weight="bold" />
-              <span>ໂຫຼດຄືນ</span>
+              <span className="hidden sm:inline">ໂຫຼດຄືນ</span>
             </button>
           )}
 
           <button
             type="button"
             onClick={onAddNewProduct}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer min-h-[44px] sm:min-h-0"
+            className="px-3 sm:px-4 py-2 sm:py-2.5 h-9 sm:h-10 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
           >
             <Plus size={16} weight="bold" />
             <span>+ ເພີ່ມສິນຄ້າໃໝ່</span>

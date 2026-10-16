@@ -24,7 +24,7 @@ import {
   TrendDown,
   ArrowsLeftRight,
 } from '@phosphor-icons/react';
-import { formatKip, formatCompoundStock } from '../utils/formatters';
+import { formatKip, formatBaht, formatCompoundStock } from '../utils/formatters';
 import MonthComparisonView from './dashboard/MonthComparisonView';
 import DynamicDailyRevenueChart from './dashboard/DynamicDailyRevenueChart';
 import Annual12MonthSalesChart from './dashboard/Annual12MonthSalesChart';
@@ -36,6 +36,7 @@ export default function DashboardView({
   transactions = [],
   products = [],
   rawCategories = [],
+  exchangeRate = 720,
 }) {
   // Custom Date Range State
   const [customStartDate, setCustomStartDate] = useState('');
@@ -324,33 +325,35 @@ export default function DashboardView({
       }}
     >
       {/* 1. Dashboard Header & Timeframe Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200/80 mb-4">
-        <div>
-          <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center shadow-xs">
-              <ChartBar size={18} weight="bold" />
-            </div>
-            <span>ແຜງຄວບຄຸມລາຍຮັບ & ຕົ້ນທຶນ (Financial Dashboard)</span>
-          </h2>
-          <p className="text-[11px] text-slate-500 mt-0.5">
-            ສະຫຼຸບລາຍຮັບ, ຕົ້ນທຶນສິນຄ້າ, ຍອດເງິນສົດ/ໂອນ/ຕິດໜີ້ ແລະ ວິເຄາະທຸລະກິດ Real-time (ກີບ ₭)
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 sm:pb-3.5 border-b border-slate-200/80 mb-3 sm:mb-4 gap-2.5 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0">
+            <ChartBar size={20} className="sm:w-5 sm:h-5" weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <span className="truncate">ແຜງຄວບຄຸມລາຍຮັບ & ຕົ້ນທຶນ</span>
+            </h2>
+            <p className="text-[11.5px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block truncate">
+              ສະຫຼຸບລາຍຮັບ, ຕົ້ນທຶນສິນຄ້າ, ຍອດເງິນສົດ/ໂອນ/ຕິດໜີ້ ແລະ ວິເຄາະທຸລະກິດ Real-time
+            </p>
+          </div>
         </div>
 
         {/* Timeframe Chips */}
-        <div className="flex items-center bg-white p-0.5 rounded-xl border border-slate-200 shadow-2xs overflow-x-auto no-scrollbar shrink-0">
+        <div className="flex items-center bg-white p-0.5 sm:p-1 rounded-xl border border-slate-200/90 shadow-2xs overflow-x-auto no-scrollbar shrink-0">
           {[
-            { id: 'daily', label: 'ມື້ນີ້ (Today)' },
-            { id: 'weekly', label: '7 ມື້ຜ່ານມາ' },
+            { id: 'daily', label: 'ມື້ນີ້' },
+            { id: 'weekly', label: '7 ມື້' },
             { id: 'monthly', label: 'ເດືອນນີ້' },
             { id: 'all', label: 'ທັງໝົດ' },
-            { id: 'custom', label: 'ເລືອກວັນທີ' },
+            { id: 'custom', label: 'ວັນທີ' },
             { id: 'compare', label: 'ສົມທຽບ 2 ເດືອນ' },
           ].map((item) => (
             <button
               key={item.id}
               onClick={() => setDashboardTimeframe(item.id)}
-              className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+              className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
                 dashboardTimeframe === item.id
                   ? 'bg-teal-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'

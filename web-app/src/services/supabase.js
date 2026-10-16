@@ -1264,6 +1264,74 @@ export async function addSupplierDebtPaymentInSupabase(poId, paymentAmount, curr
 }
 
 /**
+ * 8. Update Purchase Order (GRN) details
+ */
+export async function updatePurchaseOrderInSupabase(poId, poData, draftItems = []) {
+  try {
+    const firstDraft = draftItems && draftItems.length > 0 ? draftItems[0] : null;
+
+    let poPayload = {
+      supplier_id: poData.supplierId || null,
+      product_id: firstDraft?.product?.id || poData.productId || null,
+      product_name: firstDraft?.product?.name || poData.productName || 'ສິນຄ້າຮັບເຂົ້າ',
+      imported_base_units: Number(firstDraft?.importedBaseUnits || poData.importedBaseUnits || 0),
+      tier1_qty: Number(firstDraft?.tier1Qty || poData.tier1Qty || 0),
+      tier2_qty: Number(firstDraft?.tier2Qty || poData.tier2Qty || 0),
+      tier3_qty: Number(firstDraft?.tier3Qty || poData.tier3Qty || 0),
+      cost_thb: Number(firstDraft?.costThb || poData.costThb || 0),
+      cost_lak: Number(firstDraft?.costLak || poData.costLak || 0),
+      cost_per_base_unit: Number(firstDraft?.costPerBaseUnit || poData.costPerBaseUnit || 0),
+      total_cost_lak: Number(poData.totalCostLak) || 0,
+      total_cost_thb: Number(poData.totalCostThb) || 0,
+      paid_amount: Number(poData.paidAmount) || 0,
+      debt_amount: Number(poData.debtAmount) || 0,
+      payment_status: poData.paymentStatus || 'PAID',
+      received_by: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
+      note: poData.note || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    let { error: updateErr } = await supabase
+      .from('purchase_orders')
+      .update(poPayload)
+      .eq('id', poId);
+
+    if (updateErr && (updateErr.code === '42703' || (updateErr.message && (updateErr.message.includes('cost_lak') || updateErr.message.includes('column'))))) {
+      const basePayload = {
+        supplier_id: poData.supplierId || null,
+        total_cost_lak: Number(poData.totalCostLak) || 0,
+        total_cost_thb: Number(poData.totalCostThb) || 0,
+        paid_amount: Number(poData.paidAmount) || 0,
+        debt_amount: Number(poData.debtAmount) || 0,
+        payment_status: poData.paymentStatus || 'PAID',
+        received_by: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
+        note: poData.note || null,
+        updated_at: new Date().toISOString(),
+      };
+      const retryResult = await supabase.from('purchase_orders').update(basePayload).eq('id', poId);
+      updateErr = retryResult.error;
+    }
+
+    if (updateErr) {
+      return { success: false, error: updateErr.message };
+    }
+
+    if (firstDraft?.retailPriceOverrides && typeof firstDraft.retailPriceOverrides === 'object') {
+      for (const [unitId, newPrice] of Object.entries(firstDraft.retailPriceOverrides)) {
+        await supabase.from('product_units').update({
+          retail_price: Number(newPrice) || 0,
+        }).eq('id', unitId);
+      }
+    }
+
+    return { success: true };
+  } catch (e) {
+    console.error('updatePurchaseOrderInSupabase exception:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
  * 11. Record Customer Debt Payment (Thu nợ khách hàng)
  */
 export async function recordCustomerDebtPaymentInSupabase({
