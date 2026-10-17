@@ -28,6 +28,8 @@ import { formatKip, formatBaht, formatCompoundStock } from '../utils/formatters'
 import MonthComparisonView from './dashboard/MonthComparisonView';
 import DynamicDailyRevenueChart from './dashboard/DynamicDailyRevenueChart';
 import Annual12MonthSalesChart from './dashboard/Annual12MonthSalesChart';
+import ExchangeRateBadge from './common/ExchangeRateBadge';
+import queryClient from '../services/queryClient';
 
 export default function DashboardView({
   dashboardTimeframe,
@@ -36,7 +38,8 @@ export default function DashboardView({
   transactions = [],
   products = [],
   rawCategories = [],
-  exchangeRate = 720,
+  exchangeRate = 0,
+  setExchangeRate,
 }) {
   // Custom Date Range State
   const [customStartDate, setCustomStartDate] = useState('');
@@ -89,6 +92,42 @@ export default function DashboardView({
       return true;
     });
   }, [dashboardData.filteredTxs, transactions, dashboardTimeframe, customStartDate, customEndDate]);
+
+  // Point-in-Time Exchange Rate Snapshot Metrics (Accounting Compliant)
+  const snapshotMetrics = useMemo(() => {
+    const totalRevenueLak = currentTxs.reduce((sum, order) => sum + Number(order.total_lak ?? order.grandTotal ?? 0), 0);
+    const totalRevenueThb = currentTxs.reduce((sum, order) => {
+      const explicitThb = Number(order.total_thb ?? order.totalThb ?? 0);
+      return sum + (explicitThb > 0 ? explicitThb : 0);
+    }, 0);
+    const totalCostLak = currentTxs.reduce((sum, order) => sum + Number(order.total_cost ?? order.totalCost ?? 0), 0);
+    const totalCostThb = currentTxs.reduce((sum, order) => {
+      const explicitCostThb = Number(order.total_cost_thb ?? order.totalCostThb ?? 0);
+      return sum + (explicitCostThb > 0 ? explicitCostThb : 0);
+    }, 0);
+    const totalProfitLak = currentTxs.reduce((sum, order) => sum + Number(order.gross_profit_lak ?? order.grossProfit ?? 0), 0);
+    const totalProfitThb = currentTxs.reduce((sum, order) => {
+      const explicitProfitThb = Number(order.gross_profit_thb ?? order.grossProfitThb ?? 0);
+      return sum + (explicitProfitThb > 0 ? explicitProfitThb : 0);
+    }, 0);
+    const margin = totalRevenueLak > 0 ? ((totalProfitLak / totalRevenueLak) * 100).toFixed(1) : '0';
+    const txCount = currentTxs.length;
+    const avgTicketLak = txCount > 0 ? Math.round(totalRevenueLak / txCount) : 0;
+    const avgTicketThb = txCount > 0 ? Number((totalRevenueThb / txCount).toFixed(2)) : 0;
+
+    return {
+      totalRevenueLak,
+      totalRevenueThb,
+      totalCostLak,
+      totalCostThb,
+      totalProfitLak,
+      totalProfitThb,
+      margin,
+      txCount,
+      avgTicketLak,
+      avgTicketThb,
+    };
+  }, [currentTxs]);
 
   // Month-Over-Month Comparison Analytics
   const comparisonStats = useMemo(() => {
@@ -340,28 +379,37 @@ export default function DashboardView({
           </div>
         </div>
 
-        {/* Timeframe Chips */}
-        <div className="flex items-center bg-white p-0.5 sm:p-1 rounded-xl border border-slate-200/90 shadow-2xs overflow-x-auto no-scrollbar shrink-0">
-          {[
-            { id: 'daily', label: 'ມື້ນີ້' },
-            { id: 'weekly', label: '7 ມື້' },
-            { id: 'monthly', label: 'ເດືອນນີ້' },
-            { id: 'all', label: 'ທັງໝົດ' },
-            { id: 'custom', label: 'ວັນທີ' },
-            { id: 'compare', label: 'ສົມທຽບ 2 ເດືອນ' },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setDashboardTimeframe(item.id)}
-              className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
-                dashboardTimeframe === item.id
-                  ? 'bg-teal-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
+        {/* Timeframe Chips & Exchange Rate Pill */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+          <div className="flex items-center bg-white p-0.5 sm:p-1 rounded-xl border border-slate-200/90 shadow-2xs overflow-x-auto no-scrollbar shrink-0">
+            {[
+              { id: 'daily', label: 'ມື້ນີ້' },
+              { id: 'weekly', label: '7 ມື້' },
+              { id: 'monthly', label: 'ເດືອນນີ້' },
+              { id: 'all', label: 'ທັງໝົດ' },
+              { id: 'custom', label: 'ວັນທີ' },
+              { id: 'compare', label: 'ສົມທຽບ 2 ເດືອນ' },
+            ].map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setDashboardTimeframe(item.id)}
+                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                  dashboardTimeframe === item.id
+                    ? 'bg-teal-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          <ExchangeRateBadge
+            exchangeRate={exchangeRate}
+            onRateUpdated={setExchangeRate}
+            queryClient={queryClient}
+            className="!h-8 !px-2.5 text-xs"
+          />
         </div>
       </div>
 
@@ -409,7 +457,7 @@ export default function DashboardView({
         <MonthComparisonView fallbackTransactions={transactions} products={products} />
       ) : (
         <>
-          {/* 2. TOP 4 MAIN KPI CARDS */}
+          {/* 2. TOP 4 MAIN KPI CARDS (Dual Currency: LAK & THB Snapshot) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {/* KPI 1: Revenue */}
         <div className="p-3 sm:p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between hover:border-teal-300 transition-all">
@@ -421,11 +469,14 @@ export default function DashboardView({
           </div>
           <div className="mt-2">
             <span className="text-xl sm:text-2xl font-black text-teal-700 tracking-tight block">
-              {formatKip(dashboardData.totalRevenue)}
+              {formatKip(snapshotMetrics.totalRevenueLak)}
+            </span>
+            <span className="text-xs font-mono font-bold text-teal-600 block mt-0.5">
+              ≈ {formatBaht(snapshotMetrics.totalRevenueThb)}
             </span>
             <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold mt-1 pt-1 border-t border-slate-100">
               <span>ຈຳນວນ:</span>
-              <span className="text-slate-800 font-extrabold">{dashboardData.txCount} ບິນສຳເລັດ</span>
+              <span className="text-slate-800 font-extrabold">{snapshotMetrics.txCount} ບິນສຳເລັດ</span>
             </div>
           </div>
         </div>
@@ -440,7 +491,10 @@ export default function DashboardView({
           </div>
           <div className="mt-2">
             <span className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight block">
-              {formatKip(dashboardData.totalCost)}
+              {formatKip(snapshotMetrics.totalCostLak)}
+            </span>
+            <span className="text-xs font-mono font-bold text-amber-700 block mt-0.5">
+              ≈ {formatBaht(snapshotMetrics.totalCostThb)}
             </span>
             <div className="flex items-center justify-between text-[10px] text-amber-700 font-bold mt-1 pt-1 border-t border-slate-100">
               <span>ຕົ້ນທຶນສິນຄ້າຂາຍອອກ</span>
@@ -459,12 +513,15 @@ export default function DashboardView({
           </div>
           <div className="mt-2">
             <span className="text-xl sm:text-2xl font-black text-emerald-700 tracking-tight block">
-              {formatKip(dashboardData.grossProfit)}
+              {formatKip(snapshotMetrics.totalProfitLak)}
+            </span>
+            <span className="text-xs font-mono font-bold text-emerald-600 block mt-0.5">
+              ≈ {formatBaht(snapshotMetrics.totalProfitThb)}
             </span>
             <div className="flex items-center justify-between text-[10px] text-emerald-700 font-bold mt-1 pt-1 border-t border-slate-100">
               <span>ອັດຕາກຳໄລ:</span>
               <span className="font-extrabold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                {dashboardData.margin}%
+                {snapshotMetrics.margin}%
               </span>
             </div>
           </div>
@@ -480,7 +537,10 @@ export default function DashboardView({
           </div>
           <div className="mt-2">
             <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight block">
-              {formatKip(dashboardData.avgTicket)}
+              {formatKip(snapshotMetrics.avgTicketLak)}
+            </span>
+            <span className="text-xs font-mono font-bold text-purple-600 block mt-0.5">
+              ≈ {formatBaht(snapshotMetrics.avgTicketThb)}
             </span>
             <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold mt-1 pt-1 border-t border-slate-100">
               <span>ສະເລ່ຍຕໍ່ 1 ລູກຄ້າ</span>

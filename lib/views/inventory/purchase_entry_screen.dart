@@ -1,14 +1,17 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/localization/lao_currency_formatter.dart';
 import '../../domain/models/product.dart';
 import '../../domain/models/product_unit.dart';
 import '../../features/pos/presentation/controllers/catalog_controller.dart';
 import '../../features/pos/presentation/widgets/barcode_scanner_modal.dart';
+import '../../models/supplier_model.dart';
 import '../../providers/purchase_provider.dart';
 import 'widgets/supplier_management_dialog.dart';
 
-/// Formatter for Thai Baht (THB / ฿) with thousand dot separators (e.g. 1.600.000)
+/// Formatter for Thai Baht (THB / ฿) with thousand dot separators
 class ThbFormatter {
   static String format(num amount) {
     final isInt = amount == amount.roundToDouble();
@@ -25,1587 +28,883 @@ class ThbFormatter {
     final clean = input.replaceAll('.', '').replaceAll(',', '.').trim();
     return double.tryParse(clean) ?? 0.0;
   }
-
-  static String formatTyping(String input) {
-    if (input.isEmpty) return '';
-    String clean = input.replaceAll(RegExp(r'[^0-9.,]'), '');
-    List<String> parts;
-    if (clean.contains(',')) {
-      parts = clean.split(',');
-    } else if (clean.contains('.') && clean.indexOf('.') == clean.length - 1) {
-      parts = [clean.substring(0, clean.length - 1), ''];
-    } else {
-      parts = [clean.replaceAll('.', '')];
-    }
-
-    final intRaw = parts[0].replaceAll(RegExp(r'\D'), '');
-    if (intRaw.isEmpty && parts.length == 1) return '';
-    final intFormatted =
-        intRaw.isNotEmpty
-            ? LaoCurrencyFormatter.formatNumber(int.tryParse(intRaw) ?? 0)
-            : '0';
-
-    if (parts.length > 1) {
-      final decRaw = parts[1].replaceAll(RegExp(r'\D'), '');
-      final decTrunc = decRaw.length > 2 ? decRaw.substring(0, 2) : decRaw;
-      return '$intFormatted,$decTrunc';
-    }
-    return intFormatted;
-  }
 }
 
-/// Fullscreen View for Goods Receipt Note (GRN - ໃບຮັບສິນຄ້າເຂົ້າສາງ)
-/// Standardized with Product Entry Form Screen (Scaffold + 3 Container Cards)
+/// Touch-First Multi-Product Goods Receipt Note (GRN - ໃບຮັບສິນຄ້າເຂົ້າສາງ)
+/// Optimized for Cashiers, Mobile & iPad POS with Hardware Barcode Scanner integration
 class PurchaseEntryScreen extends ConsumerStatefulWidget {
   const PurchaseEntryScreen({super.key});
 
   @override
-  ConsumerState<PurchaseEntryScreen> createState() =>
-      _PurchaseEntryScreenState();
+  ConsumerState<PurchaseEntryScreen> createState() => _PurchaseEntryScreenState();
 }
 
 class _PurchaseEntryScreenState extends ConsumerState<PurchaseEntryScreen> {
-  final _formKey = GlobalKey<FormState>();
-
-  // Card 1: Supplier & Receiver Info
-  String? _selectedSupplierId;
-  final _receivedByController = TextEditingController(text: 'ໄມ້ຄຳ (Meii)');
-
-  // Card 2: Product & Multi-Tier Inputs
-  Product? _selectedProduct;
-  final _searchProductController = TextEditingController();
-  final Map<String, TextEditingController> _unitQtyControllers = {};
-  final _costThbController = TextEditingController(text: '0');
-  final _costLakController = TextEditingController(text: '0');
-  final Map<String, TextEditingController> _retailPriceControllers = {};
-
-  // Card 3: Total Costs (2 Currencies: LAK & THB) & Debt Management
-  final _totalCostLakController = TextEditingController(text: '0');
-  final _totalCostThbController = TextEditingController(text: '0');
-
-  String _paymentStatus = 'PAID'; // 'PAID', 'PARTIAL', 'DEBT'
-  final _paidAmountController = TextEditingController(text: '0');
-  int _debtAmount = 0;
+  final _searchController = TextEditingController();
+  final _receiverController = TextEditingController(text: 'ໄມ້ຄຳ (Meii)');
   final _noteController = TextEditingController();
+  final _partialPaidController = TextEditingController();
 
-  bool _isSubmitting = false;
+  // Hardware Barcode Scanner buffer & timer
+  String _barcodeBuffer = '';
+  Timer? _barcodeBufferTimer;
+
+  bool _isSearchActive = false;
 
   @override
   void initState() {
     super.initState();
-    // Requirement A/B: Re-fetch fresh products and suppliers from Supabase when entering GRN Form
+    // Hardware Barcode Listener for USB / Bluetooth wireless scanners
+    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(catalogProvider.notifier).fetchFromSupabase();
       ref.read(purchaseProvider.notifier).fetchSuppliers();
+      ref.read(grnCartProvider.notifier).reset();
     });
   }
-
-  /// Form Reset / Cleanup on Unmount / Cancel
-  void _resetForm() {
-    _selectedProduct = null;
-    for (final c in _unitQtyControllers.values) {
-      c.dispose();
-    }
-    _unitQtyControllers.clear();
-    for (final c in _retailPriceControllers.values) {
-      c.dispose();
-    }
-    _retailPriceControllers.clear();
-    _costThbController.text = '0';
-    _costLakController.text = '0';
-    _totalCostLakController.text = '0';
-    _totalCostThbController.text = '0';
-    _paidAmountController.text = '0';
-    _debtAmount = 0;
-    _noteController.clear();
-    _searchProductController.clear();
-  }
-
 
   @override
   void dispose() {
-    _resetForm();
-    _receivedByController.dispose();
-    _searchProductController.dispose();
-    _costThbController.dispose();
-    _costLakController.dispose();
-    _totalCostLakController.dispose();
-    _totalCostThbController.dispose();
-    _paidAmountController.dispose();
+    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
+    _barcodeBufferTimer?.cancel();
+    _searchController.dispose();
+    _receiverController.dispose();
     _noteController.dispose();
+    _partialPaidController.dispose();
     super.dispose();
   }
 
-  // Fixed Hierarchy Sorting: Largest multiplier to smallest (descending)
-  List<ProductUnit> get _sortedUnits {
-    if (_selectedProduct == null) return [];
-    final active = _selectedProduct!.units.where((u) => u.isActive).toList();
-    active.sort((a, b) => b.multiplier.compareTo(a.multiplier));
-    return active;
-  }
-
-  // Compound stock representation based on highest active unit (e.g. "+10 ແກັດ 2 ແພັກ")
-  String _formatCompoundStock(int totalBaseUnits, List<ProductUnit> units) {
-    if (units.isEmpty) return '$totalBaseUnits';
-    if (units.length == 1) return '$totalBaseUnits ${units.first.unitName}';
-    if (totalBaseUnits == 0) return '0 ${units.first.unitName}';
-
-    final isNeg = totalBaseUnits < 0;
-    int remaining = totalBaseUnits.abs();
-    final List<String> parts = [];
-
-    for (int i = 0; i < units.length; i++) {
-      final u = units[i];
-      final m = u.multiplier > 0 ? u.multiplier : 1;
-      if (i < units.length - 1) {
-        if (m > 1) {
-          final count = remaining ~/ m;
-          if (count > 0) {
-            parts.add('$count ${u.unitName}');
-            remaining %= m;
-          }
+  /// Handles hardware key events from physical USB/Bluetooth handheld barcode scanners
+  bool _handleKeyEvent(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.enter) {
+        if (_barcodeBuffer.isNotEmpty) {
+          final code = _barcodeBuffer.trim();
+          _barcodeBuffer = '';
+          _onBarcodeScanned(code);
+          return true;
         }
       } else {
-        if (remaining > 0 || parts.isEmpty) {
-          parts.add('$remaining ${u.unitName}');
+        final char = event.character;
+        if (char != null && char.isNotEmpty) {
+          _barcodeBuffer += char;
+          _barcodeBufferTimer?.cancel();
+          _barcodeBufferTimer = Timer(const Duration(milliseconds: 150), () {
+            _barcodeBuffer = '';
+          });
         }
       }
     }
-
-    final text = parts.join(' ');
-    return isNeg ? '-$text' : text;
+    return false;
   }
 
-  void _onProductSelected(Product product) {
-    setState(() {
-      _selectedProduct = product;
+  void _onBarcodeScanned(String barcode) {
+    if (barcode.trim().isEmpty) return;
+    final catalog = ref.read(catalogProvider).allProducts;
+    final added = ref.read(grnCartProvider.notifier).addByBarcode(barcode, catalog);
 
-      // Clean controllers for clean slate hydration (never prefill old stock)
-      for (final c in _unitQtyControllers.values) {
-        c.dispose();
-      }
-      _unitQtyControllers.clear();
-
-      for (final u in _sortedUnits) {
-        _unitQtyControllers[u.id] = TextEditingController(text: '0');
-      }
-
-      _costThbController.text =
-          product.costBaht > 0 ? ThbFormatter.format(product.costBaht) : '0';
-      _costLakController.text =
-          product.costKip > 0
-              ? LaoCurrencyFormatter.formatNumber(product.costKip)
-              : '0';
-
-      for (final c in _retailPriceControllers.values) {
-        c.dispose();
-      }
-      _retailPriceControllers.clear();
-
-      for (final u in _sortedUnits) {
-        _retailPriceControllers[u.id] = TextEditingController(
-          text: LaoCurrencyFormatter.formatNumber(u.retailPrice),
-        );
-      }
-    });
-
-    _recalcTotals();
-  }
-
-  // Normalization logic: If pack qty exceeds carton ratio, roll over to cartons
-  void _onUnitQtyChanged(ProductUnit unit, int index, String val) {
-    final qty = int.tryParse(val) ?? 0;
-    if (index == 1 && _sortedUnits.length >= 2) {
-      final c1 = _sortedUnits[0];
-      final m1 = c1.multiplier > 0 ? c1.multiplier : 1;
-      final m2 = unit.multiplier > 0 ? unit.multiplier : 1;
-      final ratio = (m1 / m2).round();
-      if (ratio > 1 && qty >= ratio) {
-        final addC1 = qty ~/ ratio;
-        final remC2 = qty % ratio;
-        final c1Ctrl = _unitQtyControllers[c1.id];
-        final currentC1 = int.tryParse(c1Ctrl?.text ?? '0') ?? 0;
-        if (c1Ctrl != null) {
-          c1Ctrl.text = (currentC1 + addC1).toString();
-        }
-        final c2Ctrl = _unitQtyControllers[unit.id];
-        if (c2Ctrl != null) {
-          c2Ctrl.text = remC2.toString();
-        }
-        _recalcTotals();
-        return;
-      }
-    }
-    _recalcTotals();
-  }
-
-  int _calculateImportedBaseUnits() {
-    if (_selectedProduct == null) return 0;
-    int total = 0;
-    for (final u in _sortedUnits) {
-      final ctrl = _unitQtyControllers[u.id];
-      final q = int.tryParse(ctrl?.text ?? '0') ?? 0;
-      final m = u.multiplier > 0 ? u.multiplier : 1;
-      total += q * m;
-    }
-    return total;
-  }
-
-  void _recalcTotals() {
-    final bUnits = _calculateImportedBaseUnits();
-    final c1 = _sortedUnits.isNotEmpty ? _sortedUnits.first : null;
-    final m = (c1 != null && c1.multiplier > 0) ? c1.multiplier : 1;
-    final costLakNum = LaoCurrencyFormatter.parseClean(_costLakController.text);
-    final costThbNum = ThbFormatter.parse(_costThbController.text);
-
-    final calcLak = ((costLakNum / m) * bUnits).round();
-    final calcThb = (costThbNum / m) * bUnits;
-
-    _totalCostLakController.text = LaoCurrencyFormatter.formatNumber(calcLak);
-    _totalCostThbController.text = ThbFormatter.format(calcThb);
-
-    _updateDebt();
-  }
-
-  void _updateDebt() {
-    final totalLak = LaoCurrencyFormatter.parseClean(
-      _totalCostLakController.text,
-    );
-
-    if (_paymentStatus == 'PAID') {
-      _paidAmountController.text = LaoCurrencyFormatter.formatNumber(totalLak);
-      _debtAmount = 0;
-    } else if (_paymentStatus == 'DEBT') {
-      _paidAmountController.text = '0';
-      _debtAmount = totalLak;
-    } else {
-      // PARTIAL
-      final paid = LaoCurrencyFormatter.parseClean(_paidAmountController.text);
-      _debtAmount = (totalLak - paid).clamp(0, totalLak);
-    }
-
-    setState(() {});
-  }
-
-  void _onPaymentStatusSelected(String status) {
-    setState(() => _paymentStatus = status);
-    final totalLak = LaoCurrencyFormatter.parseClean(
-      _totalCostLakController.text,
-    );
-
-    if (status == 'PAID') {
-      _paidAmountController.text = LaoCurrencyFormatter.formatNumber(totalLak);
-      _debtAmount = 0;
-    } else if (status == 'DEBT') {
-      _paidAmountController.text = '0';
-      _debtAmount = totalLak;
-    } else {
-      final half = (totalLak / 2).round();
-      _paidAmountController.text = LaoCurrencyFormatter.formatNumber(half);
-      _debtAmount = totalLak - half;
-    }
-    setState(() {});
-  }
-
-  void _handleBarcodeScanned(String barcode) {
-    final allProducts = ref.read(catalogProvider).allProducts;
-    final trimmed = barcode.trim().toLowerCase();
-    final matched =
-        allProducts.where((p) {
-          if (p.barcode != null && p.barcode!.toLowerCase() == trimmed) {
-            return true;
-          }
-          if (p.units.any(
-            (u) => u.barcode != null && u.barcode!.toLowerCase() == trimmed,
-          )) {
-            return true;
-          }
-          return false;
-        }).firstOrNull;
-
-    if (matched != null) {
-      _onProductSelected(matched);
+    if (added) {
+      HapticFeedback.mediumImpact();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('ພົບສິນຄ້າ: ${matched.name}'),
-          backgroundColor: const Color(0xFF0F766E),
+          content: Text('ສະແກນ Barcode: "$barcode" ສຳເລັດ!'),
+          backgroundColor: Colors.teal.shade700,
           duration: const Duration(seconds: 2),
         ),
       );
     } else {
+      HapticFeedback.vibrate();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('ບໍ່ພົບສິນຄ້າທີ່ມີ Barcode: $barcode'),
-          backgroundColor: const Color(0xFFDC2626),
+          content: Text('ບໍ່ພົບສິນຄ້າທີ່ມີ Barcode: "$barcode"'),
+          backgroundColor: Colors.deepOrange.shade600,
           duration: const Duration(seconds: 2),
         ),
       );
     }
   }
 
-  Future<void> _submitGRN() async {
-    if (_selectedProduct == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('ກະລຸນາເລືອກສິນຄ້າທີ່ຕ້ອງການຮັບເຂົ້າສາງ!'),
-          backgroundColor: Color(0xFFDC2626),
-        ),
-      );
-      return;
-    }
-
-    final baseUnits = _calculateImportedBaseUnits();
-    if (baseUnits <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'ສິນຄ້າ "${_selectedProduct!.name}" ຍັງບໍ່ໄດ້ໃສ່ຈຳນວນຮັບເຂົ້າ (> 0)!',
-          ),
-          backgroundColor: const Color(0xFFDC2626),
-        ),
-      );
-      return;
-    }
-
-    final totalLak = LaoCurrencyFormatter.parseClean(
-      _totalCostLakController.text,
+  void _openCameraScanner() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => BarcodeScannerModal(
+        onScan: (scanned) {
+          _onBarcodeScanned(scanned);
+        },
+      ),
     );
-    final totalThb = ThbFormatter.parse(_totalCostThbController.text);
-    final paid = LaoCurrencyFormatter.parseClean(_paidAmountController.text);
-    final c1 = _sortedUnits.isNotEmpty ? _sortedUnits.first : null;
-    final m = (c1 != null && c1.multiplier > 0) ? c1.multiplier : 1;
-    final costLakNum = LaoCurrencyFormatter.parseClean(_costLakController.text);
-    final costThbNum = ThbFormatter.parse(_costThbController.text);
-    final costPerBase = (costLakNum / m).round();
+  }
 
-    final Map<String, int> retailOverrides = {};
-    for (final e in _retailPriceControllers.entries) {
-      retailOverrides[e.key] = LaoCurrencyFormatter.parseClean(e.value.text);
-    }
+  void _showExchangeRateDialog() {
+    final cartState = ref.read(grnCartProvider);
+    final rateCtrl = TextEditingController(text: cartState.exchangeRate.toString());
 
-    final q1 =
-        _sortedUnits.isNotEmpty
-            ? (int.tryParse(
-                  _unitQtyControllers[_sortedUnits[0].id]?.text ?? '0',
-                ) ??
-                0)
-            : 0;
-    final q2 =
-        _sortedUnits.length > 1
-            ? (int.tryParse(
-                  _unitQtyControllers[_sortedUnits[1].id]?.text ?? '0',
-                ) ??
-                0)
-            : 0;
-    final q3 =
-        _sortedUnits.length > 2
-            ? (int.tryParse(
-                  _unitQtyControllers[_sortedUnits[2].id]?.text ?? '0',
-                ) ??
-                0)
-            : 0;
-
-    final draft = PurchaseItemDraft(
-      product: _selectedProduct!,
-      tier1Qty: q1,
-      tier2Qty: q2,
-      tier3Qty: q3,
-      importedBaseUnits: baseUnits,
-      costPerBaseUnit: costPerBase,
-      costThb: costThbNum,
-      costLak: costLakNum,
-      costVnd: 0,
-      retailPriceOverrides: retailOverrides,
-    );
-
-    setState(() => _isSubmitting = true);
-    final success = await ref
-        .read(purchaseProvider.notifier)
-        .createPurchaseOrder(
-          supplierId: _selectedSupplierId,
-          totalCostLak: totalLak,
-          totalCostThb: totalThb,
-          totalCostVnd: 0,
-          primaryCurrency: 'LAK',
-          paidAmount: paid,
-          debtAmount: _debtAmount,
-          paymentStatus: _paymentStatus,
-          receivedBy: _receivedByController.text,
-          note: _noteController.text,
-          draftItems: [draft],
-        );
-    setState(() => _isSubmitting = false);
-
-    if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'ບັນທຶກຮັບສິນຄ້າ "${_selectedProduct!.name}" ເຂົ້າສາງສຳເລັດແລ້ວ!',
-          ),
-          backgroundColor: const Color(0xFF0F766E),
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.currency_exchange, color: Colors.teal),
+            SizedBox(width: 8),
+            Text('ປັບອັດຕາແລກປ່ຽນ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
         ),
-      );
-      Navigator.pop(context);
-    }
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '1 ฿ (Baht) = ? ₭ (Kip)',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: rateCtrl,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                suffixText: '₭',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ຍົກເລີກ'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+            onPressed: () {
+              final newRate = int.tryParse(rateCtrl.text.replaceAll(RegExp(r'\D'), '')) ?? 720;
+              if (newRate > 0) {
+                ref.read(grnCartProvider.notifier).setExchangeRate(newRate);
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('ຕົກລົງ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmClearCart() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ລ້າງລາຍການຮັບສິນຄ້າ?'),
+        content: const Text('ທ່ານຕ້ອງການລຶບສິນຄ້າທັງໝົດອອກຈາກໃບຮັບສິນຄ້ານີ້ແທ້ບໍ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ຍົກເລີກ'),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(grnCartProvider.notifier).reset();
+              Navigator.pop(ctx);
+            },
+            child: const Text('ລຶບທັງໝົດ', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final cartState = ref.watch(grnCartProvider);
     final purchaseState = ref.watch(purchaseProvider);
-    final suppliers = purchaseState.suppliers;
     final catalogState = ref.watch(catalogProvider);
-    final allProducts = catalogState.allProducts;
-
-    // Default select first supplier if unselected
-    if (_selectedSupplierId == null && suppliers.isNotEmpty) {
-      _selectedSupplierId = suppliers.first.id;
-    }
-
-    final importedUnits = _calculateImportedBaseUnits();
-    final filterQuery = _searchProductController.text.trim().toLowerCase();
-    final filteredProducts =
-        allProducts.where((p) {
-          if (filterQuery.isEmpty) return true;
-          return p.name.toLowerCase().contains(filterQuery) ||
-              p.category.toLowerCase().contains(filterQuery) ||
-              (p.barcode != null &&
-                  p.barcode!.toLowerCase().contains(filterQuery));
-        }).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
-      // ==============================================================
-      // 1. FULLSCREEN TOP HEADER (FLAT APPBAR)
-      // ==============================================================
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(64),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-          ),
-          child: SafeArea(
-            child: Row(
-              children: [
-                // Back Button
-                IconButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(
-                    Icons.arrow_back_rounded,
-                    color: Color(0xFF334155),
-                    size: 20,
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ================================================================
+            // 1. TOP APP BAR (Compact, Modern, Status-rich)
+            // ================================================================
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
+                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'ກັບຄືນ',
                   ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  tooltip: 'ກັບຄືນ',
-                ),
-                const SizedBox(width: 12),
-
-                // Main Title & Subtitle
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.inventory_2_rounded,
-                            color: Color(0xFF0D9488),
-                            size: 20,
-                          ),
-                          const SizedBox(width: 6),
-                          const Flexible(
-                            child: Text(
-                              'ສ້າງໃບຮັບສິນຄ້າເຂົ້າສາງ (Goods Receipt Note - GRN)',
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'ຮັບສິນຄ້າເຂົ້າສາງ',
                               style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 15,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
                                 color: Color(0xFF0F172A),
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFCCFBF1),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: const Color(0xFF99F6E4),
-                              ),
-                            ),
-                            child: const Text(
-                              'Single-Product Entry',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F766E),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'ນຳເຂົ້າສິນຄ້າລາຍການດຽວ, ຕົ້ນທຶນບາດ-ກີບ, ສະຕັອກບວກເພີ່ມ & ຈັດການໜີ້ສິນຜູ້ສະໜອງ',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF64748B),
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Right Actions: Cancel & Save Buttons
-                TextButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(color: Color(0xFFCBD5E1)),
-                    ),
-                  ),
-                  child: const Text(
-                    'ຍົກເລີກ',
-                    style: TextStyle(
-                      color: Color(0xFF475569),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitGRN,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D9488),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    elevation: 1,
-                  ),
-                  child:
-                      _isSubmitting
-                          ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                          : Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.save_rounded, size: 16),
-                              SizedBox(width: 6),
-                              Text(
-                                '💾 ບັນທຶກໃບຮັບສິນຄ້າເຂົ້າສາງ',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-
-      // ==============================================================
-      // 2. FULLSCREEN SCROLLABLE CONTENT (3 MAIN CARDS)
-      // ==============================================================
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          children: [
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1000),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // ==========================================================
-                    // 📦 CARD 1: ຂໍ້ມູນແຫຼ່ງສະໜອງ & ຜູ້ຮັບສິນຄ້າ (Supplier & Receiver Info)
-                    // ==========================================================
-                    _buildContainerCard(
-                      icon: Icons.local_shipping_rounded,
-                      title:
-                          '📦 CARD 1: ຂໍ້ມູນແຫຼ່ງສະໜອງ & ຜູ້ຮັບສິນຄ້າ (Supplier & Receiver Info)',
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final isWide = constraints.maxWidth >= 600;
-                          return Flex(
-                            direction: isWide ? Axis.horizontal : Axis.vertical,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Column 1: Supplier Selector + Manage Button
-                              Expanded(
-                                flex: isWide ? 1 : 0,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        const Text(
-                                          'ຮ້ານສົ່ງ / ແຫຼ່ງນຳເຂົ້າ (Supplier) *',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF1E293B),
-                                          ),
-                                        ),
-                                        InkWell(
-                                          onTap: () {
-                                            showDialog(
-                                              context: context,
-                                              builder:
-                                                  (_) =>
-                                                      const SupplierManagementDialog(),
-                                            );
-                                          },
-                                          child: const Padding(
-                                            padding: EdgeInsets.symmetric(
-                                              horizontal: 4,
-                                              vertical: 2,
-                                            ),
-                                            child: Text(
-                                              '+ ຈັດການຮ້ານສົ່ງ',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                color: Color(0xFF0D9488),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    DropdownButtonFormField<String>(
-                                      value: _selectedSupplierId,
-                                      isExpanded: true,
-                                      decoration: InputDecoration(
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                          borderSide: const BorderSide(
-                                            color: Color(0xFFCBD5E1),
-                                          ),
-                                        ),
-                                        filled: true,
-                                        fillColor: const Color(0xFFF8FAFC),
-                                      ),
-                                      items:
-                                          suppliers.map((s) {
-                                            return DropdownMenuItem<String>(
-                                              value: s.id,
-                                              child: Text(
-                                                '${s.name} ${s.phone != null ? "(ໂທ: ${s.phone})" : ""}',
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            );
-                                          }).toList(),
-                                      onChanged: (val) {
-                                        setState(
-                                          () => _selectedSupplierId = val,
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                              if (isWide)
-                                const SizedBox(width: 16)
-                              else
-                                const SizedBox(height: 12),
-
-                              // Column 2: Received by User
-                              Expanded(
-                                flex: isWide ? 1 : 0,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'ຜູ້ຮັບສິນຄ້າເຂົ້າສາງ (Received by)',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF1E293B),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    TextFormField(
-                                      controller: _receivedByController,
-                                      style: const TextStyle(fontSize: 12),
-                                      decoration: InputDecoration(
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                          borderSide: const BorderSide(
-                                            color: Color(0xFFCBD5E1),
-                                          ),
-                                        ),
-                                        filled: true,
-                                        fillColor: const Color(0xFFF8FAFC),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // ==========================================================
-                    // 🏷️ CARD 2: ຂໍ້ມູນສິນຄ້າ, ຕົ້ນທຶນ & ຈຳນວນຮັບເຂົ້າ (Product, Cost & Stock Summing)
-                    // ==========================================================
-                    _buildContainerCard(
-                      icon: Icons.inventory_2_rounded,
-                      title:
-                          '🏷️ CARD 2: ຂໍ້ມູນສິນຄ້າ, ຕົ້ນທຶນ & ຈຳນວນຮັບເຂົ້າ (Product, Cost & Stock Summing)',
-                      badge:
-                          _selectedProduct != null
-                              ? Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFCCFBF1),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: const Color(0xFF99F6E4),
-                                  ),
-                                ),
-                                child: Text(
-                                  'ສະຕັອກປະຈຸບັນ: ${_selectedProduct!.currentStockBaseUnits} ${_selectedProduct!.baseUnit}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F766E),
-                                  ),
-                                ),
-                              )
-                              : null,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Product Search & Dropdown Picker
-                          Row(
-                            children: [
-                              // Product Picker
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'ເລືອກສິນຄ້າທີ່ຕ້ອງການຮັບເຂົ້າສາງ (Select Product) *',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF1E293B),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    DropdownButtonFormField<Product>(
-                                      value: _selectedProduct,
-                                      isExpanded: true,
-                                      decoration: InputDecoration(
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                          borderSide: const BorderSide(
-                                            color: Color(0xFF99F6E4),
-                                          ),
-                                        ),
-                                        filled: true,
-                                        fillColor: const Color(0xFFF0FDFA),
-                                        hintText: '-- ກົດເພື່ອເລືອກສິນຄ້າ --',
-                                      ),
-                                      items:
-                                          filteredProducts.map((p) {
-                                            return DropdownMenuItem<Product>(
-                                              value: p,
-                                              child: Text(
-                                                '${p.name} (${p.category}) ${p.barcode != null ? "• ${p.barcode}" : ""}',
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF134E4A),
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            );
-                                          }).toList(),
-                                      onChanged: (p) {
-                                        if (p != null) _onProductSelected(p);
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-
-                              // Barcode Scan Button
-                              Padding(
-                                padding: const EdgeInsets.only(top: 22),
-                                child: IconButton.filledTonal(
-                                  onPressed: () {
-                                    showModalBottomSheet(
-                                      context: context,
-                                      isScrollControlled: true,
-                                      backgroundColor: Colors.transparent,
-                                      builder:
-                                          (_) => BarcodeScannerModal(
-                                            onScan: _handleBarcodeScanned,
-                                          ),
-                                    );
-                                  },
-                                  icon: const Icon(
-                                    Icons.qr_code_scanner_rounded,
-                                  ),
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: const Color(0xFFE2E8F0),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                  tooltip: 'ສະແກນ Barcode',
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          if (_selectedProduct != null) ...[
-                            const SizedBox(height: 16),
-
-                            // Dynamic Multi-Tier Stock Inputs Box
+                            const SizedBox(width: 6),
                             Container(
-                              padding: const EdgeInsets.all(14),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0xFFE2E8F0),
-                                ),
+                                color: Colors.teal.shade50,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.teal.shade200),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: const [
-                                      Text(
-                                        'ຈຳນວນຮັບເຂົ້າສາງ (ປ້ອນຈຳນວນທີ່ນຳເຂົ້າໃໝ່ - ບໍ່ນັບສະຕັອກເກົ່າ):',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF0F172A),
-                                        ),
-                                      ),
-                                      Text(
-                                        '* ຖ້າປ້ອນແພັກເກີນອັດຕາສ່ວນ ລະບົບຈະປັບເປັນລັງອັດຕະໂນມັດ',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontStyle: FontStyle.italic,
-                                          color: Color(0xFF64748B),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 10),
-
-                                  LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      final isSmall =
-                                          constraints.maxWidth < 650;
-                                      return Wrap(
-                                        spacing: 10,
-                                        runSpacing: 10,
-                                        children: [
-                                          for (int i = 0; i < _sortedUnits.length; i++) ...[
-                                            Builder(
-                                              builder: (context) {
-                                                final u = _sortedUnits[i];
-                                                final isBase = u.isBaseUnit || u.multiplier == 1 || i == _sortedUnits.length - 1;
-                                                return _buildStockInputItem(
-                                                  width: isSmall ? 140 : 180,
-                                                  label: '${u.unitName} (C${i + 1})',
-                                                  sublabel: isBase ? 'Base' : '1x${u.multiplier}',
-                                                  controller: _unitQtyControllers[u.id] ?? TextEditingController(text: '0'),
-                                                  onChanged: (v) => _onUnitQtyChanged(u, i, v),
-                                                );
-                                              },
-                                            ),
-                                          ],
-
-                                          // Live Summing Box (Compound display)
-                                          Container(
-                                            width: isSmall ? 290 : 260,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 14,
-                                              vertical: 10,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFF0FDFA),
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                              border: Border.all(
-                                                color: const Color(0xFF99F6E4),
-                                              ),
-                                            ),
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                const Text(
-                                                  'ຍອດບວກເພີ່ມເຂົ້າສາງ',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Color(0xFF0F766E),
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  '+${_formatCompoundStock(importedUnits, _sortedUnits)}',
-                                                  style: const TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w900,
-                                                    color: Color(0xFF0D9488),
-                                                    fontFamily: 'monospace',
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  'ລວມສະຕັອກໃໝ່ທັງໝົດ: ${_formatCompoundStock(_selectedProduct!.currentStockBaseUnits + importedUnits, _sortedUnits)}',
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: Color(0xFF14B8A6),
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Cost Breakdown (THB & LAK)
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'ຕົ້ນທຶນ ฿ (THB) / ຍົກລັງ',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1E293B),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      TextFormField(
-                                        controller: _costThbController,
-                                        keyboardType: TextInputType.text,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          fontFamily: 'monospace',
-                                        ),
-                                        decoration: InputDecoration(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 10,
-                                              ),
-                                          suffixText: '฿',
-                                          suffixStyle: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                            borderSide: const BorderSide(
-                                              color: Color(0xFFCBD5E1),
-                                            ),
-                                          ),
-                                          filled: true,
-                                          fillColor: Colors.white,
-                                        ),
-                                        onChanged: (v) {
-                                          final formatted = ThbFormatter.formatTyping(v);
-                                          _costThbController.value = TextEditingValue(
-                                            text: formatted,
-                                            selection: TextSelection.collapsed(offset: formatted.length),
-                                          );
-                                          _recalcTotals();
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'ຕົ້ນທຶນ ₭ (LAK) / ຍົກລັງ *',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1E293B),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      TextFormField(
-                                        controller: _costLakController,
-                                        keyboardType: TextInputType.number,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          fontFamily: 'monospace',
-                                        ),
-                                        decoration: InputDecoration(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 10,
-                                              ),
-                                          suffixText: '₭',
-                                          suffixStyle: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                            borderSide: const BorderSide(
-                                              color: Color(0xFFCBD5E1),
-                                            ),
-                                          ),
-                                          filled: true,
-                                          fillColor: Colors.white,
-                                        ),
-                                        onChanged: (v) {
-                                          final parsed =
-                                              LaoCurrencyFormatter.parseClean(
-                                                v,
-                                              );
-                                          _costLakController
-                                              .value = TextEditingValue(
-                                            text:
-                                                LaoCurrencyFormatter.formatNumber(
-                                                  parsed,
-                                                ),
-                                            selection: TextSelection.collapsed(
-                                              offset:
-                                                  LaoCurrencyFormatter.formatNumber(
-                                                    parsed,
-                                                  ).length,
-                                            ),
-                                          );
-                                          _recalcTotals();
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Retail Price Overrides
-                            if (_sortedUnits.isNotEmpty) ...[
-                              const Divider(color: Color(0xFFE2E8F0)),
-                              const SizedBox(height: 6),
-                              const Text(
-                                'ກວດສອບ & ປັບລາຄາຂາຍຍ່ອຍ (Retail Price Overrides):',
+                              child: Text(
+                                '${cartState.items.length} ລາຍການ',
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w900,
-                                  color: Color(0xFF0F172A),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 12,
-                                runSpacing: 10,
-                                children: [
-                                  for (int i = 0; i < _sortedUnits.length; i++) ...[
-                                    Builder(
-                                      builder: (context) {
-                                        final u = _sortedUnits[i];
-                                        final ctrl = _retailPriceControllers[u.id];
-                                        return Container(
-                                          width: 220,
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFF8FAFC),
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                            border: Border.all(
-                                              color: const Color(0xFFE2E8F0),
-                                            ),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                'ລາຄາຂາຍ: ${u.unitName} (C${i + 1})',
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF334155),
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              TextFormField(
-                                                controller: ctrl,
-                                                keyboardType:
-                                                    TextInputType.number,
-                                                textAlign: TextAlign.right,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontFamily: 'monospace',
-                                                ),
-                                                decoration: InputDecoration(
-                                                  contentPadding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 8,
-                                                      ),
-                                                  suffixText: ' ₭',
-                                                  suffixStyle: const TextStyle(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                  isDense: true,
-                                                  border: OutlineInputBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(8),
-                                                    borderSide: const BorderSide(
-                                                      color: Color(0xFFCBD5E1),
-                                                    ),
-                                                  ),
-                                                  filled: true,
-                                                  fillColor: Colors.white,
-                                                ),
-                                                onChanged: (val) {
-                                                  if (ctrl == null) return;
-                                                  final parsed =
-                                                      LaoCurrencyFormatter.parseClean(
-                                                        val,
-                                                      );
-                                                  ctrl.value = TextEditingValue(
-                                                    text:
-                                                        LaoCurrencyFormatter.formatNumber(
-                                                          parsed,
-                                                        ),
-                                                    selection:
-                                                        TextSelection.collapsed(
-                                                          offset:
-                                                              LaoCurrencyFormatter.formatNumber(
-                                                                parsed,
-                                                              ).length,
-                                                        ),
-                                                  );
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ],
-                          ] else ...[
-                            const SizedBox(height: 24),
-                            Container(
-                              padding: const EdgeInsets.all(24),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0xFFE2E8F0),
-                                  style: BorderStyle.solid,
-                                ),
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'ກະລຸນາເລືອກສິນຄ້າດ້ານເທິງເພື່ອເລີ່ມຕົ້ນປ້ອນຈຳນວນ ແລະ ລາຄາຮັບເຂົ້າສາງ.',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF94A3B8),
-                                  ),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.teal.shade800,
                                 ),
                               ),
                             ),
                           ],
-                        ],
+                        ),
+                        Text(
+                          '${cartState.poCode} • ${cartState.receiverName}',
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Exchange rate chip
+                  ActionChip(
+                    avatar: const Icon(Icons.currency_exchange, size: 14, color: Colors.teal),
+                    label: Text(
+                      '1฿ = ${LaoCurrencyFormatter.formatDots(cartState.exchangeRate)}₭',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.teal),
+                    ),
+                    backgroundColor: Colors.teal.shade50,
+                    side: BorderSide(color: Colors.teal.shade200),
+                    onPressed: _showExchangeRateDialog,
+                  ),
+                  const SizedBox(width: 4),
+                  // Camera Scanner button
+                  IconButton(
+                    icon: const Icon(Icons.qr_code_scanner, color: Colors.teal),
+                    tooltip: 'ສະແກນກ້ອງ',
+                    onPressed: _openCameraScanner,
+                  ),
+                  // Clear cart button
+                  if (cartState.items.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
+                      tooltip: 'ລ້າງລາຍການ',
+                      onPressed: _confirmClearCart,
+                    ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFFE2E8F0)),
+
+            // ================================================================
+            // 2. SCROLLABLE CONTENT BODY (HEADER CARDS + SEARCH + CART ITEMS)
+            // ================================================================
+            Expanded(
+              child: CustomScrollView(
+                slivers: [
+                  // 2.1. General Info Card (Supplier & Note)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                      child: _buildGeneralInfoCard(purchaseState.suppliers, cartState),
+                    ),
+                  ),
+
+                  // 2.2. Product Search & Catalog Picker Card
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      child: _buildProductSearchSection(catalogState.allProducts),
+                    ),
+                  ),
+
+                  // 2.3. Cart Items List or Empty Placeholder
+                  if (cartState.items.isEmpty)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _buildEmptyCartPlaceholder(),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 100),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final item = cartState.items[index];
+                            return _buildCartItemCard(item, index, cartState.exchangeRate);
+                          },
+                          childCount: cartState.items.length,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                ],
+              ),
+            ),
 
-                    // ==========================================================
-                    // 💰 CARD 3: ຍອດລວມຕົ້ນທຶນຊື້ & ຈັດການໜີ້ສິນ (Total Cost & AP)
-                    // ==========================================================
-                    _buildContainerCard(
-                      icon: Icons.payments_rounded,
-                      title:
-                          '💰 CARD 3: ຍອດລວມຕົ້ນທຶນຊື້ & ຈັດການໜີ້ສິນ (Total Cost & Accounts Payable)',
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+            // ================================================================
+            // 3. STICKY BOTTOM CHECKOUT & SUMMARY BAR
+            // ================================================================
+            _buildStickyBottomBar(cartState),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================================
+  // WIDGET BUILDERS: SECTIONS & CARDS
+  // ==========================================================================
+
+  Widget _buildGeneralInfoCard(List<SupplierModel> suppliers, GrnCartState cartState) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: cartState.supplierId,
+                  isDense: true,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'ຮ້ານສົ່ງ (Supplier)',
+                    labelStyle: const TextStyle(fontSize: 12),
+                    prefixIcon: const Icon(Icons.storefront_outlined, size: 18, color: Colors.teal),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  hint: const Text('ເລືອກຮ້ານສົ່ງ...', style: TextStyle(fontSize: 12)),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('— ບໍ່ລະບຸຮ້ານສົ່ງ —', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    ),
+                    ...suppliers.map((s) => DropdownMenuItem<String>(
+                          value: s.id,
+                          child: Text(s.name, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                        )),
+                  ],
+                  onChanged: (val) {
+                    ref.read(grnCartProvider.notifier).setSupplier(val);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                icon: const Icon(Icons.add, size: 20),
+                tooltip: 'ເພີ່ມຮ້ານສົ່ງໃໝ່',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.teal.shade50,
+                  foregroundColor: Colors.teal.shade800,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  minimumSize: const Size(44, 44),
+                ),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => const SupplierManagementDialog(),
+                  ).then((_) {
+                    ref.read(purchaseProvider.notifier).fetchSuppliers();
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _receiverController,
+                  style: const TextStyle(fontSize: 12),
+                  decoration: InputDecoration(
+                    labelText: 'ຜູ້ຮັບສິນຄ້າ (Receiver)',
+                    labelStyle: const TextStyle(fontSize: 11),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onChanged: (val) {
+                    ref.read(grnCartProvider.notifier).setReceiver(val);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _noteController,
+                  style: const TextStyle(fontSize: 12),
+                  decoration: InputDecoration(
+                    labelText: 'ໝາຍເຫດ (Notes)',
+                    labelStyle: const TextStyle(fontSize: 11),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onChanged: (val) {
+                    ref.read(grnCartProvider.notifier).setNote(val);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductSearchSection(List<Product> catalog) {
+    final query = _searchController.text.trim().toLowerCase();
+    final filtered = query.isEmpty
+        ? []
+        : catalog
+            .where((p) =>
+                p.name.toLowerCase().contains(query) ||
+                (p.barcode != null && p.barcode!.toLowerCase().contains(query)) ||
+                p.category.toLowerCase().contains(query))
+            .take(6)
+            .toList();
+
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+            boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 4, offset: Offset(0, 2))],
+          ),
+          child: TextField(
+            controller: _searchController,
+            onChanged: (val) {
+              setState(() {
+                _isSearchActive = val.trim().isNotEmpty;
+              });
+            },
+            decoration: InputDecoration(
+              hintText: 'ຄົ້ນຫາຊື່ສິນຄ້າ ຫຼື Barcode...',
+              hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+              prefixIcon: const Icon(Icons.search, color: Colors.teal),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        setState(() {
+                          _searchController.clear();
+                          _isSearchActive = false;
+                        });
+                      },
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.barcode_reader, color: Colors.teal),
+                      onPressed: _openCameraScanner,
+                    ),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+          ),
+        ),
+
+        // Live Search Results Dropdown List
+        if (_isSearchActive && filtered.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+              boxShadow: const [BoxShadow(color: Color(0x10000000), blurRadius: 10, offset: Offset(0, 4))],
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: filtered.length,
+              separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+              itemBuilder: (ctx, i) {
+                final p = filtered[i];
+                return ListTile(
+                  dense: true,
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.teal.shade50,
+                    child: Text(
+                      p.name.isNotEmpty ? p.name.substring(0, 1) : '?',
+                      style: TextStyle(color: Colors.teal.shade800, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  subtitle: Text(
+                    '${p.category} • ຫຼັກ: ${p.baseUnit} • ຕົ້ນທຶນ: ${LaoCurrencyFormatter.formatDots(p.costPerBaseUnit)} ₭',
+                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                  trailing: const Icon(Icons.add_circle, color: Colors.teal),
+                  onTap: () {
+                    ref.read(grnCartProvider.notifier).addItem(p);
+                    HapticFeedback.lightImpact();
+                    setState(() {
+                      _searchController.clear();
+                      _isSearchActive = false;
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyCartPlaceholder() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.teal.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.inventory_2_outlined, size: 54, color: Colors.teal.shade700),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'ຍັງບໍ່ມີລາຍການສິນຄ້າໃນໃບຮັບ',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'ຄົ້ນຫາຊື່ສິນຄ້າ ຫຼື ໃຊ້ເຄື່ອງສະແກນ Barcode\nເພື່ອເພີ່ມສິນຄ້າເຂົ້າໃບຮັບສິນຄ້າ',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.qr_code_scanner, size: 18),
+              label: const Text('ເປີດກ້ອງສະແກນ Barcode'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+              onPressed: _openCameraScanner,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================================
+  // HIGH-DENSITY TOUCH CARD FOR EACH GRN ITEM
+  // ==========================================================================
+
+  Widget _buildCartItemCard(GrnCartItem item, int index, int exchangeRate) {
+    final units = List<ProductUnit>.from(item.product.units.where((u) => u.isActive));
+    units.sort((a, b) => b.multiplier.compareTo(a.multiplier));
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFFE2E8F0)),
+      ),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Row 1: Product Name, Category Badge & Delete Button
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.product.name,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
                         children: [
-                          // 2 Independent Currency Inputs Row (Grid 2 cols: 50% - 50%)
-                          LayoutBuilder(
-                            builder: (context, constraints) {
-                              final isWide = constraints.maxWidth >= 600;
-                              final lakBox = _buildCurrencyTotalBox(
-                                label: 'ຍອດລວມ ₭ (LAK)',
-                                currencySymbol: '₭',
-                                currencyBadge: 'ເງິນກີບລາວ',
-                                controller: _totalCostLakController,
-                                isKip: true,
-                                primaryColor: const Color(0xFF0D9488),
-                                onChanged: (v) {
-                                  final parsed =
-                                      LaoCurrencyFormatter.parseClean(v);
-                                  _totalCostLakController
-                                      .value = TextEditingValue(
-                                    text: LaoCurrencyFormatter.formatNumber(
-                                      parsed,
-                                    ),
-                                    selection: TextSelection.collapsed(
-                                      offset:
-                                          LaoCurrencyFormatter.formatNumber(
-                                            parsed,
-                                          ).length,
-                                    ),
-                                  );
-                                  _updateDebt();
-                                },
-                              );
-                              final thbBox = _buildCurrencyTotalBox(
-                                label: 'ຍອດລວມ ฿ (THB)',
-                                currencySymbol: '฿',
-                                currencyBadge: 'ເງິນບາດໄທ',
-                                controller: _totalCostThbController,
-                                isKip: false,
-                                primaryColor: const Color(0xFFD97706),
-                              );
-
-                              if (isWide) {
-                                return Row(
-                                  children: [
-                                    Expanded(child: lakBox),
-                                    const SizedBox(width: 14),
-                                    Expanded(child: thbBox),
-                                  ],
-                                );
-                              } else {
-                                return Column(
-                                  children: [
-                                    lakBox,
-                                    const SizedBox(height: 12),
-                                    thbBox,
-                                  ],
-                                );
-                              }
-                            },
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              item.product.category,
+                              style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                            ),
                           ),
-                          const SizedBox(height: 16),
-
-                          // Segmented Payment Buttons
-                          Row(
-                            children: [
-                              const Text(
-                                'ຮູບແບບການຊຳລະ: ',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E293B),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              _buildPaymentStatusChip(
-                                label: 'ຈ່າຍຄົບ (PAID)',
-                                status: 'PAID',
-                                activeColor: const Color(0xFF0D9488),
-                              ),
-                              const SizedBox(width: 8),
-                              _buildPaymentStatusChip(
-                                label: 'ຕິດໜີ້ (DEBT)',
-                                status: 'DEBT',
-                                activeColor: const Color(0xFFDC2626),
-                              ),
-                              const SizedBox(width: 8),
-                              _buildPaymentStatusChip(
-                                label: 'ຈ່າຍບາງສ່ວນ (PARTIAL)',
-                                status: 'PARTIAL',
-                                activeColor: const Color(0xFF2563EB),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Dynamic Debt Calculation Row
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'ຈຳນວນເງິນທີ່ຈ່າຍແລ້ວ (Paid Amount ₭)',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF475569),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    TextFormField(
-                                      controller: _paidAmountController,
-                                      enabled: _paymentStatus == 'PARTIAL',
-                                      keyboardType: TextInputType.number,
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        fontFamily: 'monospace',
-                                      ),
-                                      decoration: InputDecoration(
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                          borderSide: const BorderSide(
-                                            color: Color(0xFFCBD5E1),
-                                          ),
-                                        ),
-                                        filled: true,
-                                        fillColor:
-                                            _paymentStatus == 'PARTIAL'
-                                                ? Colors.white
-                                                : const Color(0xFFF1F5F9),
-                                      ),
-                                      onChanged: (v) {
-                                        final parsed =
-                                            LaoCurrencyFormatter.parseClean(v);
-                                        _paidAmountController
-                                            .value = TextEditingValue(
-                                          text:
-                                              LaoCurrencyFormatter.formatNumber(
-                                                parsed,
-                                              ),
-                                          selection: TextSelection.collapsed(
-                                            offset:
-                                                LaoCurrencyFormatter.formatNumber(
-                                                  parsed,
-                                                ).length,
-                                          ),
-                                        );
-                                        _updateDebt();
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-
-                              // Debt Balance Card
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        _debtAmount > 0
-                                            ? const Color(0xFFFEF2F2)
-                                            : const Color(0xFFF0FDFA),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color:
-                                          _debtAmount > 0
-                                              ? const Color(0xFFFECACA)
-                                              : const Color(0xFF99F6E4),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'ຍອດໜີ້ຄ້າງຊຳລະ (DEBT BALANCE)',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w900,
-                                              color:
-                                                  _debtAmount > 0
-                                                      ? const Color(0xFF991B1B)
-                                                      : const Color(0xFF0F766E),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            _debtAmount > 0
-                                                ? 'ຍັງຄ້າງຈ່າຍຜູ້ສະໜອງ'
-                                                : 'ຊຳລະຄົບຖ້ວນ 100% (PAID)',
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: Color(0xFF475569),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Text(
-                                        '${LaoCurrencyFormatter.formatNumber(_debtAmount)} ₭',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w900,
-                                          color:
-                                              _debtAmount > 0
-                                                  ? const Color(0xFFDC2626)
-                                                  : const Color(0xFF0D9488),
-                                          fontFamily: 'monospace',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Note Textarea
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'ໝາຍເຫດ (Note)',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF475569),
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _noteController,
-                                maxLines: 3,
-                                style: const TextStyle(fontSize: 12),
-                                decoration: InputDecoration(
-                                  hintText:
-                                      'ຕົວຢ່າງ: ຄ່າສິນຄ້າຄ້າງຈ່າຍ, ນັດຊຳລະວັນທີ...',
-                                  hintStyle: const TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFF94A3B8),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFFCBD5E1),
-                                    ),
-                                  ),
-                                  filled: true,
-                                  fillColor: const Color(0xFFF8FAFC),
-                                ),
-                              ),
-                            ],
+                          const SizedBox(width: 6),
+                          Text(
+                            'ຂັ້ນ: ${item.unitName} (×${item.multiplier})',
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                           ),
                         ],
                       ),
+                    ],
+                  ),
+                ),
+                // 48x48 Touch-Friendly Delete Button
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.redAccent, size: 20),
+                  tooltip: 'ລຶບສິນຄ້າ',
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    ref.read(grnCartProvider.notifier).removeItem(index);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Row 2: Packaging Unit Selector & Large Touch Steppers
+            Row(
+              children: [
+                // Packaging Unit Dropdown
+                if (units.isNotEmpty)
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: item.unitId,
+                      isDense: true,
+                      decoration: InputDecoration(
+                        labelText: 'ຫົວໜ່ວຍຮັບເຂົ້າ',
+                        labelStyle: const TextStyle(fontSize: 11),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: units.map((u) {
+                        return DropdownMenuItem<String>(
+                          value: u.id,
+                          child: Text('${u.unitName} (×${u.multiplier})', style: const TextStyle(fontSize: 12)),
+                        );
+                      }).toList(),
+                      onChanged: (newUnitId) {
+                        final matched = units.firstWhere((u) => u.id == newUnitId);
+                        ref.read(grnCartProvider.notifier).updateItemUnit(index, matched);
+                      },
                     ),
-                    const SizedBox(height: 24),
+                  )
+                else
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(item.unitName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+
+                const SizedBox(width: 12),
+
+                // Touch Steppers (>= 48x48 dp)
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                  ),
+                  child: Row(
+                    children: [
+                      // Minus Button
+                      IconButton(
+                        icon: const Icon(Icons.remove, size: 18),
+                        style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+                        onPressed: () {
+                          ref.read(grnCartProvider.notifier).stepItemQuantity(index, -1);
+                        },
+                      ),
+                      // Editable Qty Input
+                      SizedBox(
+                        width: 44,
+                        child: Text(
+                          '${item.quantity}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                      // Plus Button
+                      IconButton(
+                        icon: const Icon(Icons.add, size: 18),
+                        style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+                        onPressed: () {
+                          ref.read(grnCartProvider.notifier).stepItemQuantity(index, 1);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Row 3: Dual Currency Costs (THB & LAK)
+            Row(
+              children: [
+                // Cost THB Input
+                Expanded(
+                  child: TextFormField(
+                    initialValue: item.costThb > 0 ? ThbFormatter.format(item.costThb) : '0',
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    decoration: InputDecoration(
+                      labelText: 'ຕົ້ນທຶນ ฿',
+                      labelStyle: const TextStyle(fontSize: 11),
+                      suffixText: '฿',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onChanged: (val) {
+                      final thb = ThbFormatter.parse(val);
+                      ref.read(grnCartProvider.notifier).updateItemCostThb(index, thb);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Cost LAK Input (Direct edit won't overwrite THB)
+                Expanded(
+                  child: TextFormField(
+                    initialValue: LaoCurrencyFormatter.formatDots(item.costLak),
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    decoration: InputDecoration(
+                      labelText: 'ຕົ້ນທຶນ ₭',
+                      labelStyle: const TextStyle(fontSize: 11),
+                      suffixText: '₭',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onChanged: (val) {
+                      final lak = LaoCurrencyFormatter.parseClean(val);
+                      ref.read(grnCartProvider.notifier).updateItemCostLak(index, lak);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Row 4: Line Total & Expandable Retail Overrides
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'ລວມ: ${item.quantity} × ${LaoCurrencyFormatter.formatDots(item.costLak)} ₭',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                ),
+                Text(
+                  '${LaoCurrencyFormatter.formatDots(item.lineTotalLak)} ₭',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF0F766E),
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+
+            // Collapsible Section: Retail Price Override
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(top: 4, bottom: 4),
+                title: const Row(
+                  children: [
+                    Icon(Icons.edit_note, size: 16, color: Colors.teal),
+                    SizedBox(width: 4),
+                    Text(
+                      'ປັບລາຄາຂາຍ (Chỉnh giá bán lẻ)',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.teal),
+                    ),
                   ],
                 ),
+                children: units.map((u) {
+                  final overridePrice = item.retailPriceOverrides[u.id] ?? u.retailPrice;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            'ລາຄາ ${u.unitName} (ປົກກະຕິ: ${LaoCurrencyFormatter.formatDots(u.retailPrice)} ₭)',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            initialValue: LaoCurrencyFormatter.formatDots(overridePrice),
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            decoration: InputDecoration(
+                              suffixText: '₭',
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onChanged: (val) {
+                              final newP = LaoCurrencyFormatter.parseClean(val);
+                              ref.read(grnCartProvider.notifier).updateRetailOverride(index, u.id, newP);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ),
             ),
           ],
@@ -1614,268 +913,238 @@ class _PurchaseEntryScreenState extends ConsumerState<PurchaseEntryScreen> {
     );
   }
 
-  // --- REUSABLE UI BUILDER HELPERS ---
+  // ==========================================================================
+  // STICKY BOTTOM BAR: REALTIME SUM, PAYMENT TABS, SAVE GRN BUTTON
+  // ==========================================================================
 
-  Widget _buildContainerCard({
-    required IconData icon,
-    required String title,
-    Widget? badge,
-    required Widget child,
-  }) {
+  Widget _buildStickyBottomBar(GrnCartState cartState) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 4,
-            offset: Offset(0, 1),
-          ),
-        ],
+        border: Border(top: BorderSide(color: Color(0xFFCBD5E1))),
+        boxShadow: [BoxShadow(color: Color(0x10000000), blurRadius: 12, offset: Offset(0, -3))],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
+          // Total Summary Numbers
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFCCFBF1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(icon, size: 16, color: const Color(0xFF0F766E)),
-                  ),
-                  const SizedBox(width: 8),
+                  const Text('ຍອດລວມທັງໝົດ (Total LAK):', style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
                   Text(
-                    title,
+                    '${LaoCurrencyFormatter.formatDots(cartState.totalLak)} ₭',
                     style: const TextStyle(
+                      fontSize: 18,
                       fontWeight: FontWeight.w900,
-                      fontSize: 12,
                       color: Color(0xFF0F172A),
+                      fontFeatures: [FontFeature.tabularFigures()],
                     ),
                   ),
                 ],
               ),
-              if (badge != null) badge,
-            ],
-          ),
-          const SizedBox(height: 14),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStockInputItem({
-    required double width,
-    required String label,
-    required String sublabel,
-    required TextEditingController controller,
-    required ValueChanged<String> onChanged,
-  }) {
-    return Container(
-      width: width,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-              Text(
-                sublabel,
-                style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          TextFormField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-              fontFamily: 'monospace',
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 8,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-              ),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-            ),
-            onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCurrencyTotalBox({
-    required String label,
-    required String currencySymbol,
-    required String currencyBadge,
-    required TextEditingController controller,
-    required bool isKip,
-    required Color primaryColor,
-    ValueChanged<String>? onChanged,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      color: primaryColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      currencySymbol,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        color: primaryColor,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
+                  const Text('ຍອດບາດ (THB):', style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
                   Text(
-                    label,
+                    '≈ ${ThbFormatter.format(cartState.totalThb)} ฿',
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF334155),
+                      color: Color(0xFF0F766E),
+                      fontFeatures: [FontFeature.tabularFigures()],
                     ),
                   ),
                 ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: primaryColor.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: primaryColor.withValues(alpha: 0.25),
-                  ),
-                ),
-                child: Text(
-                  currencyBadge,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
-                  ),
-                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          TextFormField(
-            controller: controller,
-            keyboardType:
-                isKip
-                    ? TextInputType.number
-                    : const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-              fontFamily: 'monospace',
-              color: Color(0xFF0F172A),
+
+          // 3 Payment Status Tabs (PAID / DEBT / PARTIAL)
+          Row(
+            children: [
+              Expanded(
+                child: _buildPaymentStatusTab(
+                  label: 'ຈ່າຍຄົບ',
+                  sub: 'PAID',
+                  status: 'PAID',
+                  activeColor: const Color(0xFF059669),
+                  cartState: cartState,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildPaymentStatusTab(
+                  label: 'ຕິດໜີ້',
+                  sub: 'DEBT',
+                  status: 'DEBT',
+                  activeColor: Colors.amber.shade800,
+                  cartState: cartState,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildPaymentStatusTab(
+                  label: 'ຈ່າຍບາງສ່ວນ',
+                  sub: 'PARTIAL',
+                  status: 'PARTIAL',
+                  activeColor: Colors.blue.shade700,
+                  cartState: cartState,
+                ),
+              ),
+            ],
+          ),
+
+          // Advance payment & Debt amount if PARTIAL
+          if (cartState.paymentStatus == 'PARTIAL') ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _partialPaidController,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    decoration: InputDecoration(
+                      labelText: 'ຈ່າຍກ່ອນ (LAK)',
+                      labelStyle: const TextStyle(fontSize: 11),
+                      suffixText: '₭',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onChanged: (val) {
+                      final p = LaoCurrencyFormatter.parseClean(val);
+                      ref.read(grnCartProvider.notifier).setPaidAmount(p);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text('ຍັງຄ້າງໜີ້ (Debt):', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                      Text(
+                        '${LaoCurrencyFormatter.formatDots(cartState.debtAmountLak)} ₭',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
+          ],
+          const SizedBox(height: 10),
+
+          // Primary Save GRN Button (Height 50dp, Teal, High-Contrast)
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              icon: cartState.isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined, size: 20),
+              label: Text(
+                cartState.isSubmitting
+                    ? 'ກຳລັງບັນທຶກ...'
+                    : 'ບັນທຶກໃບຮັບສິນຄ້າ (${cartState.items.length})',
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F766E), // Teal 700
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 1,
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: primaryColor, width: 1.5),
-              ),
-              filled: true,
-              fillColor: Colors.white,
+              onPressed: cartState.isSubmitting || cartState.items.isEmpty
+                  ? null
+                  : () async {
+                      final success = await ref.read(grnCartProvider.notifier).submitGRN();
+                      if (success && mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('ບັນທຶກໃບຮັບສິນຄ້າເຂົ້າສາງສຳເລັດແລ້ວ!'),
+                            backgroundColor: Color(0xFF0F766E),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                        Navigator.of(context).pop();
+                      } else if (!success && mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(cartState.errorMessage ?? 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກ'),
+                            backgroundColor: Colors.red.shade700,
+                          ),
+                        );
+                      }
+                    },
             ),
-            onChanged: onChanged,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPaymentStatusChip({
+  Widget _buildPaymentStatusTab({
     required String label,
+    required String sub,
     required String status,
     required Color activeColor,
+    required GrnCartState cartState,
   }) {
-    final isSelected = _paymentStatus == status;
+    final isSelected = cartState.paymentStatus == status;
     return InkWell(
-      onTap: () => _onPaymentStatusSelected(status),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
+      onTap: () {
+        ref.read(grnCartProvider.notifier).setPaymentStatus(status);
+        if (status == 'PARTIAL') {
+          _partialPaidController.text = LaoCurrencyFormatter.formatDots(cartState.paidAmountLak);
+        }
+      },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? activeColor : Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          color: isSelected ? activeColor.withValues(alpha: 0.12) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected ? activeColor : const Color(0xFFCBD5E1),
+            color: isSelected ? activeColor : const Color(0xFFE2E8F0),
+            width: isSelected ? 1.8 : 1,
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: isSelected ? Colors.white : const Color(0xFF475569),
-          ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? activeColor : const Color(0xFF475569),
+              ),
+            ),
+            Text(
+              sub,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? activeColor : const Color(0xFF94A3B8),
+              ),
+            ),
+          ],
         ),
       ),
     );

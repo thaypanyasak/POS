@@ -12,7 +12,7 @@ export const formatBaht = (val) => {
 /**
  * Calculates whole carton (nguyên thùng / ແກັດ / ລັງ) cost in Kip and Baht
  */
-export const getCartonUnitInfo = (product, exchangeRate = 720) => {
+export const getCartonUnitInfo = (product, exchangeRate = 0) => {
   if (!product) return { cartonMultiplier: 1, cartonUnitName: 'ລັງ', cartonCostKip: 0, cartonCostBaht: 0 };
   
   const units = product.units || [];
@@ -42,8 +42,10 @@ export const getCartonUnitInfo = (product, exchangeRate = 720) => {
 
   if (product.costBaht !== undefined && product.costBaht !== null && product.costBaht !== '') {
     cartonCostBaht = Number(product.costBaht);
-  } else if (exchangeRate > 0 && cartonCostKip > 0) {
-    cartonCostBaht = Math.round(cartonCostKip / exchangeRate);
+  } else if (product.cost_thb !== undefined && product.cost_thb !== null && product.cost_thb !== '') {
+    cartonCostBaht = Number(product.cost_thb);
+  } else {
+    cartonCostBaht = 0;
   }
 
   return {
@@ -70,6 +72,15 @@ export const formatDots = (val) => {
  * Parses dot-formatted string back to integer (e.g. "240.000" -> 240000)
  */
 export const parseDots = (val) => {
+  if (val === null || val === undefined || val === '') return 0;
+  const clean = String(val).replace(/\D/g, '');
+  return clean ? parseInt(clean, 10) : 0;
+};
+
+/**
+ * Safe currency parser that strips thousands separators and symbols (e.g. "200.000 ₭" -> 200000)
+ */
+export const parseCurrencyInput = (val) => {
   if (val === null || val === undefined || val === '') return 0;
   const clean = String(val).replace(/\D/g, '');
   return clean ? parseInt(clean, 10) : 0;
@@ -286,3 +297,32 @@ export const formatCompoundStockUnits = (totalBaseUnits, sortedUnits = []) => {
   const text = parts.join(' ');
   return isNeg ? `-${text}` : text;
 };
+
+/**
+ * Resolves the unit price according to selected price tier:
+ * Tier 1: Standard retail price (retailPrice) - Default on POS
+ * Tier 2: Regular customer price (price_2), fallbacks to Tier 1 if 0/empty
+ * Tier 3: Wholesale / VIP price (price_3), fallbacks to Tier 1 if 0/empty
+ */
+export const getEffectiveUnitPrice = (unit, tier = 1) => {
+  if (!unit) return 0;
+  const p1 = Number(unit.retailPrice ?? unit.retail_price ?? unit.price ?? 0);
+  if (tier === 2) {
+    const p2 = Number(unit.price_2 ?? unit.price2 ?? 0);
+    return p2 > 0 ? p2 : p1;
+  }
+  if (tier === 3) {
+    const p3 = Number(unit.price_3 ?? unit.price3 ?? 0);
+    return p3 > 0 ? p3 : p1;
+  }
+  return p1;
+};
+
+/**
+ * Price tier configurations for POS selection
+ */
+export const PRICE_TIERS = [
+  { tier: 1, label: 'ລາຄາ 1', desc: 'ມາດຕະຖານ', shortDesc: 'ມາດຕະຖານ' },
+  { tier: 2, label: 'ລາຄາ 2', desc: 'ລູກຄ້າປະຈຳ', shortDesc: 'ລູກຄ້າປະຈຳ' },
+  { tier: 3, label: 'ລາຄາ 3', desc: 'ລາຄາສົ່ງ / VIP', shortDesc: 'ຂາຍສົ່ງ/VIP' },
+];

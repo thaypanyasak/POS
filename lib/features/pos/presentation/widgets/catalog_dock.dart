@@ -6,6 +6,7 @@ import '../../../../domain/models/product.dart';
 import '../controllers/cart_controller.dart';
 import '../controllers/catalog_controller.dart';
 import '../controllers/printer_controller.dart';
+import '../../../common/widgets/exchange_rate_chip.dart';
 import 'barcode_scanner_modal.dart';
 import 'product_card.dart';
 import 'unit_selector_modal.dart';
@@ -424,6 +425,10 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 6),
+
+                        // Point-in-Time Exchange Rate Badge
+                        ExchangeRateChip(compact: isNarrow || isCompactLandscape),
                       ],
                     ),
 

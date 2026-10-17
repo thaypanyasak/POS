@@ -20,6 +20,7 @@ import {
   WarningCircle,
   CurrencyCircleDollar,
   PencilSimple,
+  Trash,
 } from '@phosphor-icons/react';
 import {
   formatKip,
@@ -31,11 +32,16 @@ import {
   formatCompoundStockUnits,
 } from '../../utils/formatters';
 import {
+  processMultiProductGRN,
   createPurchaseOrderInSupabase,
   updatePurchaseOrderInSupabase,
+  deletePurchaseOrderInSupabase,
   addSupplierDebtPaymentInSupabase,
+  fetchExchangeRate,
 } from '../../services/supabase';
+import { queryClient } from '../../services/queryClient';
 import BarcodeScannerModal from '../../components/BarcodeScannerModal';
+import MultiProductGRNForm from '../../components/inventory/MultiProductGRNForm';
 
 export default function PurchasesView({
   purchaseOrders = [],
@@ -46,6 +52,7 @@ export default function PurchasesView({
   onRefresh,
   isLoading,
   onAlert,
+  exchangeRate = 0,
 }) {
   // Navigation State: 'LIST' (GRN History Table) or 'ENTRY' (Fullscreen 3-Card Form)
   const [viewMode, setViewMode] = useState('LIST');
@@ -61,37 +68,99 @@ export default function PurchasesView({
   const [repayMethod, setRepayMethod] = useState('CASH');
   const [repayNote, setRepayNote] = useState('');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const [poToDelete, setPoToDelete] = useState(null);
+  const [isDeletingPo, setIsDeletingPo] = useState(false);
 
   // =========================================================================
-  // FULLSCREEN FORM STATE (PART 2)
+  // FULLSCREEN FORM STATE (MULTI-PRODUCT GRN)
   // =========================================================================
-  // Card 1: Supplier & Receiver
+  // 1. Header Information
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
   const [receivedBy, setReceivedBy] = useState('ໄມ້ຄຳ (Meii)');
+  const [poCode, setPoCode] = useState('');
+  const [note, setNote] = useState('');
+  const [currentExchangeRate, setCurrentExchangeRate] = useState(exchangeRate || 0);
+  const [isEditingExchangeRate, setIsEditingExchangeRate] = useState(false);
+  const [tempExchangeRate, setTempExchangeRate] = useState(String(exchangeRate || 0));
 
-  // Card 2: Product & Dynamic Multi-Tier Inputs
-  const [selectedProductId, setSelectedProductId] = useState('');
+  // Sync prop changes for exchange rate
+  useEffect(() => {
+    if (exchangeRate && exchangeRate > 0) {
+      setCurrentExchangeRate(exchangeRate);
+      setTempExchangeRate(String(exchangeRate));
+    }
+  }, [exchangeRate]);
+
+  // Real-time synchronization from store_settings & queryClient
+  useEffect(() => {
+    let mounted = true;
+    fetchExchangeRate().then((rate) => {
+      if (mounted && rate && rate > 0) {
+        setCurrentExchangeRate(rate);
+        setTempExchangeRate(String(rate));
+      }
+    });
+
+    const unsubscribe = queryClient.subscribe(['exchange_rate'], async () => {
+      const rate = await fetchExchangeRate();
+      if (mounted && rate && rate > 0) {
+        setCurrentExchangeRate(rate);
+        setTempExchangeRate(String(rate));
+      }
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  // 2. Multi-Product Cart Items Array
+  // Item: { product, unitId, unitName, multiplier, tierLevel, quantity, costThb, costLak, retailPriceOverrides, isRetailOpen }
+  const [grnCartItems, setGrnCartItems] = useState([]);
+
+  // 3. Catalog Picker & Scanner
   const [productSearch, setProductSearch] = useState('');
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
 
-  // Dynamic Map of Quantities by Unit ID { [unitId]: number }
-  const [unitQuantities, setUnitQuantities] = useState({});
-  const [costThb, setCostThb] = useState('0');
-  const [costLak, setCostLak] = useState('0');
-  const [retailPriceOverrides, setRetailPriceOverrides] = useState({});
-
-  // Card 3: Total Costs (2 Currencies: LAK & THB, NO VND) & Debt Management
-  const [totalCostLak, setTotalCostLak] = useState('0');
-  const [totalCostThb, setTotalCostThb] = useState('0');
-
+  // 4. Payment & Debt Management
   const [paymentStatus, setPaymentStatus] = useState('PAID'); // 'PAID' | 'PARTIAL' | 'DEBT'
   const [paidAmount, setPaidAmount] = useState('0');
-  const [debtAmount, setDebtAmount] = useState(0);
-  const [note, setNote] = useState('');
-
   const [editingPoId, setEditingPoId] = useState(null);
   const [isSubmittingGRN, setIsSubmittingGRN] = useState(false);
+
+  // Bottom-up realtime sum calculation
+  const totalCostLakNumber = useMemo(() => {
+    return grnCartItems.reduce((sum, it) => {
+      const q = Number(it.quantity) || 0;
+      const c = parseDots(it.costLak);
+      return sum + q * c;
+    }, 0);
+  }, [grnCartItems]);
+
+  const totalCostThbNumber = useMemo(() => {
+    return grnCartItems.reduce((sum, it) => {
+      const q = Number(it.quantity) || 0;
+      const c = parseThb(it.costThb);
+      return sum + q * c;
+    }, 0);
+  }, [grnCartItems]);
+
+  // Auto-sync paidAmount when total or status changes
+  useEffect(() => {
+    if (paymentStatus === 'PAID') {
+      setPaidAmount(formatDots(totalCostLakNumber));
+    } else if (paymentStatus === 'DEBT') {
+      setPaidAmount('0');
+    }
+  }, [totalCostLakNumber, paymentStatus]);
+
+  const debtAmountNumber = useMemo(() => {
+    if (paymentStatus === 'PAID') return 0;
+    if (paymentStatus === 'DEBT') return totalCostLakNumber;
+    return Math.max(0, totalCostLakNumber - parseDots(paidAmount));
+  }, [paymentStatus, totalCostLakNumber, paidAmount]);
 
   // =========================================================================
   // 1.1. TOP KPI METRICS (CALCULATED FROM ORDERS)
@@ -132,23 +201,29 @@ export default function PurchasesView({
     });
   }, [purchaseOrders, filterStatus, searchQuery]);
 
+  // Filter products for the searchable picker
+  const filteredProducts = useMemo(() => {
+    if (!productSearch.trim()) return products.slice(0, 30);
+    const q = productSearch.toLowerCase().trim();
+    return products.filter((p) => (
+      p.name?.toLowerCase().includes(q) ||
+      p.category?.toLowerCase().includes(q) ||
+      p.barcode?.toLowerCase().includes(q) ||
+      (p.units && p.units.some((u) => u.barcode && u.barcode.toLowerCase().includes(q)))
+    )).slice(0, 30);
+  }, [products, productSearch]);
+
   // =========================================================================
   // 2.3. STATE & LIFECYCLE MANAGEMENT (CLEANUP & RESET)
   // =========================================================================
   const resetGRNForm = () => {
     setEditingPoId(null);
-    setSelectedProductId('');
+    setGrnCartItems([]);
+    setPoCode('');
     setProductSearch('');
     setIsProductDropdownOpen(false);
-    setUnitQuantities({});
-    setCostThb('0');
-    setCostLak('0');
-    setRetailPriceOverrides({});
-    setTotalCostLak('0');
-    setTotalCostThb('0');
     setPaymentStatus('PAID');
     setPaidAmount('0');
-    setDebtAmount(0);
     setNote('');
     setIsSubmittingGRN(false);
   };
@@ -158,8 +233,16 @@ export default function PurchasesView({
     setViewMode('LIST');
   };
 
+  const generatePoCode = () => {
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+    const randomSuffix = String(Math.floor(1000 + Math.random() * 9000));
+    return `PO-${dateStr}-${randomSuffix}`;
+  };
+
   const handleOpenCreateGRN = () => {
     resetGRNForm();
+    setPoCode(generatePoCode());
     if (suppliers.length > 0 && !selectedSupplierId) {
       setSelectedSupplierId(suppliers[0].id);
     }
@@ -169,199 +252,320 @@ export default function PurchasesView({
   const handleEditPo = (po) => {
     resetGRNForm();
     setEditingPoId(po.id);
+    setPoCode(po.id);
     setSelectedSupplierId(po.supplier_id || (suppliers[0]?.id || ''));
     setReceivedBy(po.received_by || 'ໄມ້ຄຳ (Meii)');
-
-    const targetProd = products.find(
-      (p) => p.id === po.product_id || p.name === po.product_name
-    ) || (po.purchase_order_items && po.purchase_order_items[0] && products.find((p) => p.id === po.purchase_order_items[0].product_id));
-
-    if (targetProd) {
-      setSelectedProductId(targetProd.id);
-      const prodUnits = (targetProd.units || []).filter((u) => u.isActive !== false);
-      const sorted = [...prodUnits].sort((a, b) => (b.multiplier || 1) - (a.multiplier || 1));
-
-      const newQtys = {};
-      if (sorted.length > 0) newQtys[sorted[0].id] = po.tier1_qty || (po.purchase_order_items?.[0]?.tier1_qty || 0);
-      if (sorted.length > 1) newQtys[sorted[1].id] = po.tier2_qty || (po.purchase_order_items?.[0]?.tier2_qty || 0);
-      if (sorted.length > 2) newQtys[sorted[2].id] = po.tier3_qty || (po.purchase_order_items?.[0]?.tier3_qty || 0);
-      setUnitQuantities(newQtys);
-    }
-
-    setCostLak(formatDots(po.cost_lak || 0));
-    setCostThb(formatThb(po.cost_thb || 0));
-    setTotalCostLak(formatDots(po.total_cost_lak || 0));
-    setTotalCostThb(formatThb(po.total_cost_thb || 0));
     setPaymentStatus(po.payment_status || 'PAID');
     setPaidAmount(formatDots(po.paid_amount || 0));
-    setDebtAmount(Number(po.debt_amount) || 0);
     setNote(po.note || '');
+
+    if (po.purchase_order_items && po.purchase_order_items.length > 0) {
+      const loadedItems = po.purchase_order_items.map((it) => {
+        const prod = products.find((p) => p.id === it.product_id) || {
+          id: it.product_id,
+          name: it.product_name,
+          baseUnit: it.unit_name || 'ອັນ',
+          units: [],
+        };
+        const activeUnits = (prod.units || []).filter((u) => u.isActive !== false);
+        const sorted = [...activeUnits].sort((a, b) => (b.multiplier || 1) - (a.multiplier || 1));
+        const matchedUnit = activeUnits.find((u) => u.id === it.unit_id) ||
+          activeUnits.find((u) => u.unitName === it.unit_name) ||
+          sorted[0] ||
+          { id: it.unit_id || 'base', unitName: it.unit_name || prod.baseUnit || 'ອັນ', multiplier: 1 };
+        const tierIdx = sorted.findIndex((u) => u.id === matchedUnit.id);
+
+        const initialRetail = {};
+        activeUnits.forEach((u) => {
+          initialRetail[u.id] = u.retailPrice || 0;
+        });
+
+        return {
+          product: prod,
+          unitId: matchedUnit.id,
+          unitName: matchedUnit.unitName,
+          multiplier: matchedUnit.multiplier || 1,
+          tierLevel: tierIdx >= 0 ? tierIdx + 1 : 1,
+          quantity: Number(it.quantity) || 1,
+          costThb: formatThb(it.cost_thb || 0),
+          costLak: formatDots(it.cost_lak || 0),
+          retailPriceOverrides: initialRetail,
+          isRetailOpen: false,
+        };
+      });
+      setGrnCartItems(loadedItems);
+    } else {
+      const targetProd = products.find(
+        (p) => p.id === po.product_id || p.name === po.product_name
+      );
+      if (targetProd) {
+        const activeUnits = (targetProd.units || []).filter((u) => u.isActive !== false);
+        const sorted = [...activeUnits].sort((a, b) => (b.multiplier || 1) - (a.multiplier || 1));
+        const firstUnit = sorted[0] || { id: 'base', unitName: targetProd.baseUnit || 'ອັນ', multiplier: 1 };
+        const qty = po.tier1_qty || (po.imported_base_units ? Math.floor(po.imported_base_units / (firstUnit.multiplier || 1)) : 1);
+
+        const initialRetail = {};
+        activeUnits.forEach((u) => {
+          initialRetail[u.id] = u.retailPrice || 0;
+        });
+
+        setGrnCartItems([
+          {
+            product: targetProd,
+            unitId: firstUnit.id,
+            unitName: firstUnit.unitName,
+            multiplier: firstUnit.multiplier || 1,
+            tierLevel: 1,
+            quantity: Math.max(1, qty),
+            costThb: formatThb(po.cost_thb || 0),
+            costLak: formatDots(po.cost_lak || 0),
+            retailPriceOverrides: initialRetail,
+            isRetailOpen: false,
+          },
+        ]);
+      }
+    }
     setViewMode('ENTRY');
   };
 
-  // Re-sync selected product with fresh data when products change or re-opened
-  useEffect(() => {
-    if (viewMode === 'ENTRY' && selectedProductId) {
-      const freshProd = products.find((p) => p.id === selectedProductId);
-      if (freshProd) {
-        setCostThb(freshProd.costBaht > 0 ? formatThb(freshProd.costBaht) : '0');
-        setCostLak(freshProd.costKip > 0 ? formatDots(freshProd.costKip) : '0');
-
-        const prodUnits = (freshProd.units || []).filter((u) => u.isActive !== false);
-        setRetailPriceOverrides((prev) => {
-          const updated = {};
-          prodUnits.forEach((u) => {
-            updated[u.id] = prev[u.id] !== undefined ? prev[u.id] : (u.retailPrice || 0);
-          });
-          return updated;
-        });
-      }
-    }
-  }, [products, viewMode, selectedProductId]);
-
-  // Selected Product Reference & Sorting (Largest to Smallest Multiplier)
-  const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
-  const activeUnits = (selectedProduct?.units || []).filter((u) => u.isActive !== false);
-  const sortedUnits = [...activeUnits].sort((a, b) => (b.multiplier || 1) - (a.multiplier || 1));
-
-  // Hydrate Product Data into Form When Product is Picked
-  const handleSelectProduct = (prodId) => {
-    setSelectedProductId(prodId);
-    setIsProductDropdownOpen(false);
-    const prod = products.find((p) => p.id === prodId);
-    if (!prod) return;
-
-    // Reset Quantities (Default to 0 per spec - DO NOT PRE-FILL CURRENT STOCK)
-    const prodUnits = (prod.units || []).filter((u) => u.isActive !== false);
+  // Add product to Cart (or increment if matching productId and unitId)
+  const handleAddToCart = (product, unitToSelect = null) => {
+    if (!product) return;
+    const prodUnits = (product.units || []).filter((u) => u.isActive !== false);
     const sorted = [...prodUnits].sort((a, b) => (b.multiplier || 1) - (a.multiplier || 1));
-    const initialQty = {};
-    sorted.forEach((u) => {
-      initialQty[u.id] = 0;
-    });
-    setUnitQuantities(initialQty);
+    const unit = unitToSelect || sorted[0] || { id: 'base', unitName: product.baseUnit || 'ອັນ', multiplier: 1 };
+    const tierIdx = sorted.findIndex((u) => u.id === unit.id);
 
-    // Pre-fill Cost without double multiplier
-    setCostThb(prod.costBaht > 0 ? formatThb(prod.costBaht) : '0');
-    setCostLak(prod.costKip > 0 ? formatDots(prod.costKip) : '0');
+    setGrnCartItems((prev) => {
+      const existingIdx = prev.findIndex(
+        (it) => it.product.id === product.id && it.unitId === unit.id
+      );
 
-    // Pre-fill Retail Prices
-    const initialRetail = {};
-    sorted.forEach((u) => {
-      initialRetail[u.id] = u.retailPrice || 0;
-    });
-    setRetailPriceOverrides(initialRetail);
-
-    // Initial Totals
-    setTotalCostLak('0');
-    setTotalCostThb('0');
-    setPaidAmount('0');
-    setDebtAmount(0);
-  };
-
-  // Calculate Imported Base Units
-  const importedBaseUnits = sortedUnits.reduce((sum, u) => {
-    const q = unitQuantities[u.id] || 0;
-    return sum + q * (u.multiplier || 1);
-  }, 0);
-
-  // Auto Recalculate Totals
-  const recalcTotals = (currentQuantities, cLakStr, cThbStr, pStatus) => {
-    const bUnits = sortedUnits.reduce((sum, u) => {
-      const q = currentQuantities[u.id] || 0;
-      return sum + q * (u.multiplier || 1);
-    }, 0);
-
-    const m = (sortedUnits[0]?.multiplier && sortedUnits[0].multiplier > 0) ? sortedUnits[0].multiplier : 1;
-    const cLakNum = parseDots(cLakStr);
-    const cThbNum = parseThb(cThbStr);
-
-    const calcLak = Math.round((cLakNum / m) * bUnits);
-    const calcThb = (cThbNum / m) * bUnits;
-
-    setTotalCostLak(formatDots(calcLak));
-    setTotalCostThb(formatThb(calcThb));
-
-    if (pStatus === 'PAID') {
-      setPaidAmount(formatDots(calcLak));
-      setDebtAmount(0);
-    } else if (pStatus === 'DEBT') {
-      setPaidAmount('0');
-      setDebtAmount(calcLak);
-    } else {
-      const currentPaid = parseDots(paidAmount);
-      setDebtAmount(Math.max(0, calcLak - currentPaid));
-    }
-  };
-
-  // Normalization Rule: Pack count exceeds carton ratio -> auto roll over into cartons
-  const handleUnitQtyChange = (unit, val, index) => {
-    let count = Math.max(0, parseInt(val, 10) || 0);
-    const next = { ...unitQuantities };
-
-    // If typing in middle unit (index 1) and carton (index 0) exists, auto-rollover
-    if (index === 1 && sortedUnits.length >= 2) {
-      const c1 = sortedUnits[0];
-      const ratio = Math.round((c1.multiplier || 1) / (unit.multiplier || 1));
-      if (ratio > 1 && count >= ratio) {
-        const extraC1 = Math.floor(count / ratio);
-        const remC2 = count % ratio;
-        next[c1.id] = (next[c1.id] || 0) + extraC1;
-        next[unit.id] = remC2;
-        setUnitQuantities(next);
-        recalcTotals(next, costLak, costThb, paymentStatus);
-        return;
+      if (existingIdx >= 0) {
+        const next = [...prev];
+        next[existingIdx] = {
+          ...next[existingIdx],
+          quantity: (Number(next[existingIdx].quantity) || 0) + 1,
+        };
+        return next;
       }
-    }
 
-    next[unit.id] = count;
-    setUnitQuantities(next);
-    recalcTotals(next, costLak, costThb, paymentStatus);
+      let initCostThb = product.costBaht > 0 ? product.costBaht : 0;
+      let initCostLak = product.costKip > 0 ? product.costKip : 0;
+      if (initCostThb > 0 && initCostLak === 0) {
+        initCostLak = Math.round(initCostThb * currentExchangeRate);
+      } else if (initCostLak > 0 && initCostThb === 0) {
+        initCostThb = Math.round(initCostLak / currentExchangeRate);
+      }
+
+      const initialRetail = {};
+      sorted.forEach((u) => {
+        initialRetail[u.id] = u.retailPrice || 0;
+      });
+
+      return [
+        ...prev,
+        {
+          product,
+          unitId: unit.id,
+          unitName: unit.unitName,
+          multiplier: unit.multiplier || 1,
+          tierLevel: tierIdx >= 0 ? tierIdx + 1 : 1,
+          quantity: 1,
+          costThb: formatThb(initCostThb),
+          costLak: formatDots(initCostLak),
+          retailPriceOverrides: initialRetail,
+          isRetailOpen: false,
+        },
+      ];
+    });
+
+    setProductSearch('');
+    setIsProductDropdownOpen(false);
   };
 
-  const handleStepQty = (unit, delta, index) => {
-    const current = unitQuantities[unit.id] || 0;
-    const nextVal = Math.max(0, current + delta);
-    handleUnitQtyChange(unit, nextVal, index);
+  const handleUpdateItemQuantity = (index, val) => {
+    const q = Math.max(1, parseInt(val, 10) || 1);
+    setGrnCartItems((prev) => {
+      const next = [...prev];
+      if (next[index]) next[index] = { ...next[index], quantity: q };
+      return next;
+    });
   };
 
-  const handleCostLakChange = (val) => {
-    const raw = parseDots(val);
-    const formatted = formatDots(raw);
-    setCostLak(formatted);
-    recalcTotals(unitQuantities, formatted, costThb, paymentStatus);
+  const handleStepItemQuantity = (index, delta) => {
+    setGrnCartItems((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      const current = Number(next[index].quantity) || 1;
+      const newQty = Math.max(1, current + delta);
+      next[index] = { ...next[index], quantity: newQty };
+      return next;
+    });
   };
 
-  const handleCostThbChange = (val) => {
-    const formatted = formatThbTyping(val);
-    setCostThb(formatted);
-    recalcTotals(unitQuantities, costLak, formatted, paymentStatus);
+  const handleUpdateItemUnit = (index, newUnitId) => {
+    setGrnCartItems((prev) => {
+      const next = [...prev];
+      const item = next[index];
+      if (!item) return prev;
+      const prodUnits = (item.product.units || []).filter((u) => u.isActive !== false);
+      const sorted = [...prodUnits].sort((a, b) => (b.multiplier || 1) - (a.multiplier || 1));
+      const newUnit = sorted.find((u) => u.id === newUnitId) || { id: newUnitId, unitName: item.product.baseUnit || 'ອັນ', multiplier: 1 };
+      const tierIdx = sorted.findIndex((u) => u.id === newUnit.id);
+
+      next[index] = {
+        ...item,
+        unitId: newUnit.id,
+        unitName: newUnit.unitName,
+        multiplier: newUnit.multiplier || 1,
+        tierLevel: tierIdx >= 0 ? tierIdx + 1 : 1,
+      };
+      return next;
+    });
+  };
+
+  const handleUpdateItemCostThb = (index, thbVal) => {
+    const cleanDigits = String(thbVal ?? '').replace(/\D/g, '');
+    const numThb = cleanDigits ? parseInt(cleanDigits, 10) : 0;
+    const formatted = cleanDigits ? formatDots(cleanDigits) : (thbVal === '0' ? '0' : '');
+    const rate = Number(currentExchangeRate) || 0;
+    const autoLak = rate > 0 ? Math.round(numThb * rate) : 0;
+
+    setGrnCartItems((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      const isManual = Boolean(next[index].isManualMode);
+      next[index] = {
+        ...next[index],
+        costThb: formatted,
+        // In manual mode, do not touch costLak! In auto mode, compute costLak
+        costLak: isManual ? next[index].costLak : (numThb > 0 ? formatDots(autoLak) : (cleanDigits === '' ? '' : '0')),
+      };
+      return next;
+    });
+  };
+
+  const handleUpdateItemCostLak = (index, lakVal) => {
+    const cleanDigits = String(lakVal ?? '').replace(/\D/g, '');
+    const numLak = cleanDigits ? parseInt(cleanDigits, 10) : 0;
+    const formatted = cleanDigits ? formatDots(cleanDigits) : (lakVal === '0' ? '0' : '');
+    const rate = Number(currentExchangeRate) || 0;
+    const autoThb = rate > 0 ? Math.round(numLak / rate) : 0;
+
+    setGrnCartItems((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      const isManual = Boolean(next[index].isManualMode);
+      next[index] = {
+        ...next[index],
+        costLak: formatted,
+        // In manual mode, do not touch costThb! In auto mode, compute costThb
+        costThb: isManual ? next[index].costThb : (numLak > 0 ? formatDots(autoThb) : (cleanDigits === '' ? '' : '0')),
+      };
+      return next;
+    });
+  };
+
+  const handleToggleItemCostMode = (index) => {
+    setGrnCartItems((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      next[index] = {
+        ...next[index],
+        isManualMode: !next[index].isManualMode,
+      };
+      return next;
+    });
+  };
+
+  const handleToggleAllItemsCostMode = (targetMode) => {
+    setGrnCartItems((prev) => {
+      return prev.map((item) => ({
+        ...item,
+        isManualMode: targetMode !== undefined ? targetMode : !item.isManualMode,
+      }));
+    });
+  };
+
+  const handleToggleItemRetail = (index) => {
+    setGrnCartItems((prev) => {
+      const next = [...prev];
+      if (next[index]) {
+        next[index] = { ...next[index], isRetailOpen: !next[index].isRetailOpen };
+      }
+      return next;
+    });
+  };
+
+  const handleUpdateItemRetailPrice = (index, unitId, priceVal) => {
+    const priceNum = parseDots(priceVal);
+    setGrnCartItems((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      next[index] = {
+        ...next[index],
+        retailPriceOverrides: {
+          ...next[index].retailPriceOverrides,
+          [unitId]: priceNum,
+        },
+      };
+      return next;
+    });
+  };
+
+  const handleRemoveItem = (index) => {
+    setGrnCartItems((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handlePaymentStatusClick = (status) => {
     setPaymentStatus(status);
-    const totalLak = parseDots(totalCostLak);
     if (status === 'PAID') {
-      setPaidAmount(formatDots(totalLak));
-      setDebtAmount(0);
+      setPaidAmount(formatDots(totalCostLakNumber));
     } else if (status === 'DEBT') {
       setPaidAmount('0');
-      setDebtAmount(totalLak);
     } else {
-      // PARTIAL: default half paid
-      const half = Math.round(totalLak / 2);
+      const half = Math.round(totalCostLakNumber / 2);
       setPaidAmount(formatDots(half));
-      setDebtAmount(totalLak - half);
     }
   };
 
   const handlePaidAmountChange = (val) => {
-    const paidNum = parseDots(val);
-    setPaidAmount(formatDots(paidNum));
-    const totalLak = parseDots(totalCostLak);
-    setDebtAmount(Math.max(0, totalLak - paidNum));
+    const num = parseDots(val);
+    setPaidAmount(formatDots(num));
   };
 
-  // Barcode scanned callback
+  // Hardware Scanner & Search Keydown (Enter key)
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const trimmed = productSearch.trim().toLowerCase();
+      if (!trimmed) return;
+
+      // Exact barcode search first
+      const exactMatch = products.find((p) => {
+        if (p.barcode && p.barcode.toLowerCase() === trimmed) return true;
+        if (p.units && p.units.some((u) => u.barcode && u.barcode.toLowerCase() === trimmed)) return true;
+        return false;
+      });
+
+      if (exactMatch) {
+        const matchedUnit = exactMatch.units?.find((u) => u.barcode && u.barcode.toLowerCase() === trimmed);
+        handleAddToCart(exactMatch, matchedUnit || null);
+        onAlert?.(`ເພີ່ມ "${exactMatch.name}" ເຂົ້າລາຍການຮັບສິນຄ້າແລ້ວ!`, 'ສຳເລັດ', 'success');
+        return;
+      }
+
+      // If partial search returned products, add first one
+      if (filteredProducts.length > 0) {
+        handleAddToCart(filteredProducts[0]);
+        onAlert?.(`ເພີ່ມ "${filteredProducts[0].name}" ເຂົ້າລາຍການຮັບສິນຄ້າແລ້ວ!`, 'ສຳເລັດ', 'success');
+      } else {
+        onAlert?.(`ບໍ່ພົບສິນຄ້າ "${productSearch}"`, 'ແຈ້ງເຕືອນ', 'warning');
+      }
+    }
+  };
+
   const handleBarcodeScanned = (scannedCode) => {
     setScannerOpen(false);
     if (!scannedCode) return;
@@ -373,92 +577,136 @@ export default function PurchasesView({
     });
 
     if (matched) {
-      handleSelectProduct(matched.id);
-      onAlert?.(`ພົບສິນຄ້າ: ${matched.name}`, 'ສະແກນສຳເລັດ', 'success');
+      const matchedUnit = matched.units?.find((u) => u.barcode && u.barcode.toLowerCase() === trimmed);
+      handleAddToCart(matched, matchedUnit || null);
+      onAlert?.(`ເພີ່ມ "${matched.name}" ເຂົ້າລາຍການຮັບສິນຄ້າແລ້ວ!`, 'ສະແກນສຳເລັດ', 'success');
     } else {
       onAlert?.(`ບໍ່ພົບສິນຄ້າທີ່ມີ Barcode "${scannedCode}"`, 'ແຈ້ງເຕືອນ', 'warning');
     }
   };
 
-  // Submit GRN Form
-  const handleSubmitGRN = async (e) => {
-    e.preventDefault();
-    if (!selectedProductId || !selectedProduct) {
-      onAlert?.('ກະລຸນາເລືອກສິນຄ້າທີ່ຕ້ອງການຮັບເຂົ້າສາງ!', 'ແຈ້ງເຕືອນ', 'warning');
-      return;
+  // Cache sync helper
+  const syncAllCaches = async () => {
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['products'] }),
+        queryClient.invalidateQueries({ queryKey: ['purchase_orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['suppliers'] }),
+      ]);
+    } catch (err) {
+      console.warn('React query cache invalidation warning:', err);
+    }
+  };
+
+  // Submit GRN Form (Multi-Product Atomic Transaction)
+  const handleSubmitGRN = async (payloadOverrides) => {
+    if (payloadOverrides && payloadOverrides.preventDefault) {
+      payloadOverrides.preventDefault();
+      payloadOverrides = null;
     }
 
-    if (importedBaseUnits <= 0) {
-      onAlert?.('ກະລຸນາປ້ອນຈຳນວນຮັບເຂົ້າສາງ (> 0)!', 'ແຈ້ງເຕືອນ', 'warning');
+    if (grnCartItems.length === 0) {
+      onAlert?.('ກະລຸນາເລືອກຢ່າງໜ້ອຍ 1 ສິນຄ້າເພື່ອຮັບເຂົ້າສາງ!', 'ແຈ້ງເຕືອນ', 'warning');
       return;
     }
 
     setIsSubmittingGRN(true);
     try {
-      const m = (sortedUnits[0]?.multiplier && sortedUnits[0].multiplier > 0) ? sortedUnits[0].multiplier : 1;
-      const cLakNum = parseDots(costLak);
-      const costPerBaseUnit = Math.round(cLakNum / m);
+      const items = grnCartItems.map((it) => {
+        const qty = Number(it.quantity) || 1;
+        const mult = Number(it.multiplier) || 1;
+        const costLak = parseDots(it.costLak);
+        const costThb = parseThb(it.costThb);
+        const baseUnitsAdded = Math.round(qty * mult);
+        const costPerBaseUnit = baseUnitsAdded > 0 ? Math.round((costLak * qty) / baseUnitsAdded) : costLak;
 
-      const tier1Qty = sortedUnits.length > 0 ? (unitQuantities[sortedUnits[0].id] || 0) : 0;
-      const tier2Qty = sortedUnits.length > 1 ? (unitQuantities[sortedUnits[1].id] || 0) : 0;
-      const tier3Qty = sortedUnits.length > 2 ? (unitQuantities[sortedUnits[2].id] || 0) : 0;
+        return {
+          product_id: it.product.id,
+          product_name: it.product.name,
+          unit_id: it.unitId,
+          unit_name: it.unitName,
+          tier_level: it.tierLevel || 1,
+          quantity: qty,
+          base_units_added: baseUnitsAdded,
+          cost_lak_entered: costLak,
+          cost_thb_entered: costThb,
+          cost_per_base_unit: costPerBaseUnit,
+          line_total_lak: Math.round(costLak * qty),
+          line_total_thb: Number((costThb * qty).toFixed(2)),
+          retail_price_overrides: it.retailPriceOverrides || {},
+        };
+      });
 
-      const singleDraft = {
-        product: selectedProduct,
-        tier1Qty,
-        tier2Qty,
-        tier3Qty,
-        importedBaseUnits,
-        costPerBaseUnit,
-        costThb: parseThb(costThb),
-        costLak: cLakNum,
-        costVnd: 0,
-        retailPriceOverrides,
+      const effectivePoCode = poCode || generatePoCode();
+      const finalTotalLak = payloadOverrides?.total_lak !== undefined ? payloadOverrides.total_lak : totalCostLakNumber;
+      const finalTotalThb = payloadOverrides?.total_thb !== undefined ? payloadOverrides.total_thb : totalCostThbNumber;
+      const finalPaymentStatus = payloadOverrides?.payment_status || paymentStatus;
+      const finalPaidAmount = payloadOverrides?.paid_amount_lak !== undefined
+        ? payloadOverrides.paid_amount_lak
+        : (finalPaymentStatus === 'DEBT' ? 0 : parseDots(paidAmount));
+      const finalDebtAmount = payloadOverrides?.debt_amount_lak !== undefined
+        ? payloadOverrides.debt_amount_lak
+        : debtAmountNumber;
+
+      const grnPayload = {
+        po_code: effectivePoCode,
+        supplier_id: selectedSupplierId || null,
+        receiver_name: receivedBy.trim() || 'ໄມ້ຄຳ (Meii)',
+        total_lak: finalTotalLak,
+        total_thb: finalTotalThb,
+        payment_status: finalPaymentStatus,
+        paid_amount_lak: finalPaidAmount,
+        debt_amount_lak: finalDebtAmount,
+        notes: note.trim(),
+        items,
       };
 
-      const poData = {
-        supplierId: selectedSupplierId || null,
-        productId: selectedProduct.id,
-        productName: selectedProduct.name,
-        importedBaseUnits,
-        tier1Qty,
-        tier2Qty,
-        tier3Qty,
-        costThb: parseThb(costThb),
-        costLak: cLakNum,
-        costPerBaseUnit,
-        totalCostLak: parseDots(totalCostLak),
-        totalCostThb: parseThb(totalCostThb),
-        totalCostVnd: 0,
-        paidAmount: parseDots(paidAmount),
-        debtAmount,
-        paymentStatus,
-        receivedBy: receivedBy.trim() || 'ໄມ້ຄຳ (Meii)',
-        note,
-      };
-
-      let res;
-      if (editingPoId) {
-        res = await updatePurchaseOrderInSupabase(editingPoId, poData, [singleDraft]);
-      } else {
-        res = await createPurchaseOrderInSupabase(poData, [singleDraft]);
-      }
+      const res = await processMultiProductGRN(grnPayload);
 
       if (res.success) {
+        handleBackToList();
         onAlert?.(
           editingPoId
-            ? `ອັບເດດໃບຮັບສິນຄ້າ "${selectedProduct.name}" ສຳເລັດແລ້ວ!`
-            : `ບັນທຶກຮັບສິນຄ້າ "${selectedProduct.name}" ເຂົ້າສາງ & ອັບເດດລາຄາສຳເລັດແລ້ວ!`,
+            ? `ອັບເດດໃບຮັບສິນຄ້າ ${effectivePoCode} (${items.length} ລາຍການ) ສຳເລັດ!`
+            : `ບັນທຶກຮັບສິນຄ້າ ${items.length} ລາຍການເຂົ້າສາງສຳເລັດແລ້ວ!`,
           'ສຳເລັດ',
           'success'
         );
-        onRefresh?.();
-        handleBackToList();
+        await syncAllCaches();
+        await onRefresh?.();
       } else {
         onAlert?.(res.error || 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກ', 'ຂໍ້ຜິດພາດ', 'error');
       }
     } finally {
       setIsSubmittingGRN(false);
+    }
+  };
+
+  // Delete GRN Confirmation Submission (VẤN ĐỀ 4: Xóa phiếu nhập & hoàn kho)
+  const handleConfirmDeletePo = async () => {
+    if (!poToDelete) return;
+
+    setIsDeletingPo(true);
+    try {
+      const res = await deletePurchaseOrderInSupabase(poToDelete.id);
+      if (res.success) {
+        const delName = getOrderProductName(poToDelete);
+        // Đóng modal xác nhận xóa ngay lập tức
+        setPoToDelete(null);
+
+        onAlert?.(
+          `ລຶບໃບຮັບສິນຄ້າ "${delName}" ແລະ ຫັກລົບສະຕັອກຄືນສຳເລັດແລ້ວ!`,
+          'ສຳເລັດ',
+          'success'
+        );
+        await syncAllCaches();
+        await onRefresh?.();
+      } else {
+        onAlert?.(res.error || 'ເກີດຂໍ້ຜິດພາດໃນການລຶບໃບຮັບສິນຄ້າ', 'ຂໍ້ຜິດພາດ', 'error');
+      }
+    } finally {
+      setIsDeletingPo(false);
     }
   };
 
@@ -486,7 +734,8 @@ export default function PurchasesView({
       if (res.success) {
         onAlert?.('ບັນທຶກການຊຳລະໜີ້ສຳເລັດແລ້ວ!', 'ສຳເລັດ', 'success');
         setPayingPo(null);
-        onRefresh?.();
+        await syncAllCaches();
+        await onRefresh?.();
       } else {
         onAlert?.(res.error || 'ເກີດຂໍ້ຜິດພາດ', 'ຂໍ້ຜິດພາດ', 'error');
       }
@@ -495,16 +744,6 @@ export default function PurchasesView({
     }
   };
 
-  // Filter products for the searchable picker
-  const filteredProducts = useMemo(() => {
-    if (!productSearch.trim()) return products;
-    const q = productSearch.toLowerCase().trim();
-    return products.filter((p) => (
-      p.name?.toLowerCase().includes(q) ||
-      p.category?.toLowerCase().includes(q) ||
-      p.barcode?.toLowerCase().includes(q)
-    ));
-  }, [products, productSearch]);
 
   // Helper to format quantity of an order in largest units
   const formatOrderQuantity = (po) => {
@@ -545,655 +784,50 @@ export default function PurchasesView({
   };
 
   // =========================================================================
-  // RENDER: FULLSCREEN ENTRY FORM (PART 2)
+  // RENDER: FULLSCREEN ENTRY FORM (PART 2 - MULTI-PRODUCT GRN)
   // =========================================================================
   if (viewMode === 'ENTRY') {
-    const currentStock = selectedProduct ? (selectedProduct.currentStockBaseUnits || 0) : 0;
-    const baseUnitName = selectedProduct ? (selectedProduct.baseUnit || 'ອັນ') : 'ອັນ';
-    const newTotalStock = currentStock + importedBaseUnits;
-
     return (
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-100 select-none font-sans">
-        {/* ============================================================== */}
-        {/* 2.1. STICKY TOP HEADER                                         */}
-        {/* ============================================================== */}
-        <header className="bg-white border-b border-slate-200/90 px-4 sm:px-6 py-3.5 flex items-center justify-between shrink-0 shadow-xs z-20 sticky top-0">
-          {/* Left: Back Button, Title & Badge */}
-          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <button
-              type="button"
-              onClick={handleBackToList}
-              className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-all active:scale-95 cursor-pointer shadow-2xs border border-slate-200 shrink-0"
-              title="ກັບຄືນໜ້າລາຍການ"
-            >
-              <ArrowLeft size={20} weight="bold" />
-            </button>
-            <div className="min-w-0">
-              <h2 className="text-sm sm:text-base font-black text-slate-900 flex flex-wrap items-center gap-2 truncate">
-                <span>ສ້າງໃບຮັບສິນຄ້າເຂົ້າສາງ (Goods Receipt Note - GRN)</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 shrink-0">
-                  Single-Product Entry
-                </span>
-              </h2>
-              <p className="text-[11px] text-slate-500 hidden sm:block truncate mt-0.5">
-                ນຳເຂົ້າສິນຄ້າລາຍການດຽວ, ຕົ້ນທຶນບາດ-ກີບ, ສະຕັອກບວກເພີ່ມ & ຈັດການໜີ້ສິນຜູ້ສະໜອງ
-              </p>
-            </div>
-          </div>
-
-          {/* Right: Cancel & Primary Save Button */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={handleBackToList}
-              className="px-4 py-2.5 border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 transition-all cursor-pointer shadow-2xs"
-            >
-              ຍົກເລີກ
-            </button>
-            <button
-              type="submit"
-              form="grn-fullscreen-form"
-              disabled={isSubmittingGRN}
-              className="px-5 py-2.5 h-12 bg-teal-600 hover:bg-teal-700 text-white font-black text-xs rounded-xl shadow-md shadow-teal-700/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              <FloppyDisk size={18} weight="bold" />
-              <span>{isSubmittingGRN ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກໃບຮັບສິນຄ້າເຂົ້າສາງ'}</span>
-            </button>
-          </div>
-        </header>
-
-        {/* ============================================================== */}
-        {/* 2.2. SCROLLABLE BODY (3 CONTAINER CARDS)                        */}
-        {/* ============================================================== */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
-          <form
-            id="grn-fullscreen-form"
-            onSubmit={handleSubmitGRN}
-            className="max-w-6xl mx-auto space-y-5 pb-10"
-          >
-            {/* ============================================================ */}
-            {/* 📦 CARD 1: ຂໍ້ມູນຮ້ານສົ່ງ & ຜູ້ຮັບສິນຄ້າ (Supplier & Receiver Info) */}
-            {/* ============================================================ */}
-            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col gap-4">
-              <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
-                <div className="w-8 h-8 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700">
-                  <Truck size={20} weight="duotone" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                    ຂໍ້ມູນຮ້ານສົ່ງ & ຜູ້ຮັບສິນຄ້າ (Supplier & Receiver Info)
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    ລະບຸແຫຼ່ງນຳເຂົ້າ ແລະ ຊື່ພະນັກງານຜູ້ກວດຮັບເຄື່ອງຕົວຈິງ
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Left Column: Supplier Selector with + ຈັດການຮ້ານສົ່ງ */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-slate-800">
-                      ຮ້ານສົ່ງ / ແຫຼ່ງນຳເຂົ້າ (Supplier) *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={onOpenSupplierManager}
-                      className="text-[11px] text-teal-700 hover:text-teal-800 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Plus size={12} weight="bold" />
-                      <span>+ ຈັດການຮ້ານສົ່ງ</span>
-                    </button>
-                  </div>
-                  <select
-                    value={selectedSupplierId}
-                    onChange={(e) => setSelectedSupplierId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs cursor-pointer"
-                  >
-                    <option value="">-- ເລືອກຮ້ານສົ່ງ / ແຫຼ່ງນຳເຂົ້າ --</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} {s.phone ? `(ໂທ: ${s.phone})` : ''} {s.contact_person ? `• ${s.contact_person}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Right Column: Received by User */}
-                <div>
-                  <label className="text-xs font-bold text-slate-800 block mb-1.5">
-                    ຜູ້ຮັບສິນຄ້າເຂົ້າສາງ (Received by)
-                  </label>
-                  <input
-                    type="text"
-                    value={receivedBy}
-                    onChange={(e) => setReceivedBy(e.target.value)}
-                    placeholder="ໄມ້ຄຳ (Meii)"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* ============================================================ */}
-            {/* 🏷️ CARD 2: ຂໍ້ມູນສິນຄ້າ, ຕົ້ນທຶນ & ຈຳນວນຮັບເຂົ້າ (Product & Cost) */}
-            {/* ============================================================ */}
-            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col gap-5">
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700">
-                    <Package size={20} weight="duotone" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                       ຂໍ້ມູນສິນຄ້າ, ຕົ້ນທຶນ & ຈຳນວນຮັບເຂົ້າ (Product, Cost & Dynamic Stock Summing)
-                    </h3>
-                    <p className="text-[11px] text-slate-500">
-                      ເລືອກສິນຄ້າ, ປັບຕົ້ນທຶນ ແລະ ປ້ອນຈຳນວນຮັບເຂົ້າຕາມລະດັບຫົວໜ່ວຍ
-                    </p>
-                  </div>
-                </div>
-
-                {/* Current Stock Badge */}
-                {selectedProduct && (
-                  <div className="px-3 py-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl text-xs font-bold font-mono shadow-2xs">
-                    ສະຕັອກປະຈຸບັນ: {currentStock} {baseUnitName}
-                  </div>
-                )}
-              </div>
-
-              {/* 1. Product Selector with Search & Barcode Camera */}
-              <div className="flex flex-col gap-2 relative">
-                <label className="text-xs font-bold text-slate-800">
-                  ເລືອກສິນຄ້າທີ່ຕ້ອງການຮັບເຂົ້າສາງ (Select Product) *
-                </label>
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      placeholder="ພິມຊື່ສິນຄ້າ, ໝວດໝູ່ ຫຼື ຍິງບາໂຄດ..."
-                      value={productSearch}
-                      onFocus={() => setIsProductDropdownOpen(true)}
-                      onChange={(e) => {
-                        setProductSearch(e.target.value);
-                        setIsProductDropdownOpen(true);
-                      }}
-                      className="w-full pl-9 pr-8 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs"
-                    />
-                    <MagnifyingGlass
-                      size={16}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
-                    {productSearch && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setProductSearch('');
-                          setIsProductDropdownOpen(false);
-                        }}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Open Barcode Scanner Modal Button */}
-                  <button
-                    type="button"
-                    onClick={() => setScannerOpen(true)}
-                    className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs shrink-0"
-                    title="ສະແກນບາໂຄດດ້ວຍກ້ອງ"
-                  >
-                    <Camera size={16} weight="bold" />
-                    <span className="hidden sm:inline">ສະແກນບາໂຄດ</span>
-                  </button>
-                </div>
-
-                {/* Dropdown Results list */}
-                {isProductDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white rounded-xl border border-slate-200 shadow-xl z-30 divide-y divide-slate-100">
-                    {filteredProducts.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-slate-400">
-                        ບໍ່ພົບສິນຄ້າທີ່ກົງກັບ "{productSearch}"
-                      </div>
-                    ) : (
-                      filteredProducts.map((p) => {
-                        const isSelected = p.id === selectedProductId;
-                        return (
-                          <div
-                            key={p.id}
-                            onClick={() => {
-                              handleSelectProduct(p.id);
-                              setProductSearch(p.name);
-                            }}
-                            className={`p-2.5 px-3.5 flex items-center justify-between cursor-pointer transition-colors ${
-                              isSelected
-                                ? 'bg-teal-50/80 text-teal-900 font-bold'
-                                : 'hover:bg-slate-50 text-slate-800'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              {p.imageUrl ? (
-                                <img
-                                  src={p.imageUrl}
-                                  alt=""
-                                  className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0"
-                                />
-                              ) : (
-                                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
-                                  <Package size={16} />
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <div className="text-xs truncate font-bold">{p.name}</div>
-                                <div className="text-[10.5px] text-slate-400 truncate">
-                                  {p.category || 'ທົ່ວໄປ'} • Barcode: {p.barcode || '-'}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="text-right shrink-0 font-mono text-xs">
-                              <span className="text-slate-500 font-normal">
-                                ສະຕັອກ: {p.currentStockBaseUnits || 0} {p.baseUnit || 'ອັນ'}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Product Details Section (Shown when product is selected) */}
-              {selectedProduct ? (
-                <div className="flex flex-col gap-5 pt-2">
-                  {/* Selected Product Card Banner */}
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {selectedProduct.imageUrl ? (
-                        <img
-                          src={selectedProduct.imageUrl}
-                          alt=""
-                          className="w-12 h-12 rounded-xl object-cover border border-slate-200"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700">
-                          <Package size={24} />
-                        </div>
-                      )}
-                      <div>
-                        <h4 className="text-sm font-black text-slate-900">
-                          {selectedProduct.name}
-                        </h4>
-                        <p className="text-[11px] text-slate-500">
-                          ໝວດໝູ່: {selectedProduct.category || 'ທົ່ວໄປ'} • ຫົວໜ່ວຍຍ່ອຍ: {selectedProduct.baseUnit || 'ອັນ'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedProductId('');
-                        setProductSearch('');
-                      }}
-                      className="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer"
-                    >
-                      ປ່ຽນສິນຄ້າ
-                    </button>
-                  </div>
-
-                  {/* 2. Auto-fill original cost (THB & LAK per crate) */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-800 block mb-2">
-                      ຕົ້ນທຶນຮັບເຂົ້າຕໍ່ຫົວໜ່ວຍໃຫຍ່ສຸດ (Cost per Crate / Highest Unit)
-                    </label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Cost THB */}
-                      <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200">
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">
-                          ຕົ້ນທຶນ ฿ (THB) / ຍົກລັງ
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={costThb}
-                            onChange={(e) => handleCostThbChange(e.target.value)}
-                            placeholder="0"
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 shadow-2xs pr-8"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                            ฿
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Cost LAK */}
-                      <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200">
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">
-                          ຕົ້ນທຶນ ₭ (LAK) / ຍົກລັງ *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={costLak}
-                            onChange={(e) => handleCostLakChange(e.target.value)}
-                            placeholder="0"
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 shadow-2xs pr-8"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                            ₭
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 3. Dynamic Touch-Friendly Stock Boxes (Sorted Large to Small) */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-800 block mb-2">
-                      ຊ່ອງປ້ອນຈຳນວນຮັບເຂົ້າສາງ (Dynamic Touch-Friendly Stock Boxes)
-                    </label>
-                    <div className={`grid gap-3 ${
-                      sortedUnits.length === 1
-                        ? 'grid-cols-1 max-w-xs'
-                        : sortedUnits.length === 2
-                        ? 'grid-cols-1 sm:grid-cols-2'
-                        : 'grid-cols-1 sm:grid-cols-3'
-                    }`}>
-                      {sortedUnits.map((u, idx) => {
-                        const qty = unitQuantities[u.id] || 0;
-                        const isTopUnit = idx === 0;
-
-                        return (
-                          <div
-                            key={u.id}
-                            className={`p-3.5 rounded-xl border flex flex-col gap-2 shadow-2xs transition-all ${
-                              isTopUnit
-                                ? 'bg-teal-50/50 border-teal-200'
-                                : 'bg-slate-50/70 border-slate-200'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-black text-slate-800">
-                                {u.unitName}
-                              </span>
-                              <span className="text-[10px] font-mono text-slate-500 font-bold">
-                                {u.multiplier > 1 ? `x${u.multiplier} ${baseUnitName}` : `(1 ${baseUnitName})`}
-                              </span>
-                            </div>
-
-                            {/* Stepper with height 50px */}
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleStepQty(u, -1, idx)}
-                                className="w-11 h-[50px] rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-black text-lg border border-slate-200 flex items-center justify-center transition-all active:scale-95 cursor-pointer shadow-2xs shrink-0"
-                              >
-                                -
-                              </button>
-                              <input
-                                type="number"
-                                min="0"
-                                value={qty === 0 ? '0' : qty}
-                                onChange={(e) => handleUnitQtyChange(u, e.target.value, idx)}
-                                className="flex-1 h-[50px] bg-white border border-slate-200 rounded-lg text-center font-mono font-black text-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 shadow-2xs"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleStepQty(u, 1, idx)}
-                                className="w-11 h-[50px] rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-black text-lg flex items-center justify-center transition-all active:scale-95 cursor-pointer shadow-2xs shrink-0"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Summary Badge */}
-                    <div className="mt-3 p-3 rounded-xl bg-teal-50/80 border border-teal-200 flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-xs font-bold text-teal-900">
-                        <span>ຍອດບວກເພີ່ມເຂົ້າສາງ: </span>
-                        <span className="font-mono text-teal-700 font-black">
-                          +{formatCompoundStockUnits(importedBaseUnits, sortedUnits)} ({importedBaseUnits} {baseUnitName})
-                        </span>
-                      </div>
-                      <div className="text-xs font-bold text-slate-700">
-                        <span>ລວມສະຕັອກໃໝ່ທັງໝົດ: </span>
-                        <span className="font-mono text-slate-900 font-black">
-                          {formatCompoundStockUnits(newTotalStock, sortedUnits)} ({newTotalStock} {baseUnitName})
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 4. Retail Price Overrides */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-800 block mb-2">
-                      ກວດສອບ & ປັບລາຄາຂາຍຍ່ອຍ (Retail Price Overrides)
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      {sortedUnits.map((u) => (
-                        <div
-                          key={u.id}
-                          className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5"
-                        >
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-slate-800">
-                              ລາຄາຂາຍ {u.unitName}
-                            </span>
-                            <span className="text-[10.5px] text-slate-400 font-mono">
-                              (ເດີມ: {formatDots(u.retailPrice)} ₭)
-                            </span>
-                          </div>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={formatDots(retailPriceOverrides[u.id] ?? u.retailPrice ?? 0)}
-                              onChange={(e) => {
-                                const p = parseDots(e.target.value);
-                                setRetailPriceOverrides((prev) => ({
-                                  ...prev,
-                                  [u.id]: p,
-                                }));
-                              }}
-                              className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-right pr-7 focus:outline-none focus:ring-1 focus:ring-teal-500 shadow-2xs"
-                            />
-                            <span className="absolute right-2.5 top-2 text-[11px] text-slate-400 font-bold">
-                              ₭
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs">
-                  <Package size={36} className="mx-auto mb-2 text-slate-300" weight="duotone" />
-                  ກະລຸນາເລືອກສິນຄ້າດ້ານເທິງເພື່ອເລີ່ມຕົ້ນປ້ອນຈຳນວນ ແລະ ລາຄາຮັບເຂົ້າສາງ.
-                </div>
-              )}
-            </div>
-
-            {/* ============================================================ */}
-            {/* 💰 CARD 3: ຍອດລວມຕົ້ນທຶນຊື້ & ຈັດການໜີ້ສິນ (Total Cost & AP)    */}
-            {/* ============================================================ */}
-            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col gap-5">
-              <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
-                <div className="w-8 h-8 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700">
-                  <Coins size={20} weight="duotone" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                    ຍອດລວມຕົ້ນທຶນຊື້ & ຈັດການໜີ້ສິນ (Total Cost & Accounts Payable)
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    ຄຳນວນຍອດຕົ້ນທຶນລວມ (LAK & THB, ລົບ VND ອອກແລ້ວ) ແລະ ຮູບແບບການຊຳລະ
-                  </p>
-                </div>
-              </div>
-
-              {/* 2 Columns: 50% / 50% for LAK & THB */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* LAK Total */}
-                <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200 shadow-2xs">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <span className="w-5 h-5 rounded-md bg-teal-100 text-teal-800 font-black text-[11px] flex items-center justify-center">₭</span>
-                      <span>ຍອດລວມ ₭ (LAK)</span>
-                    </label>
-                    <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                      ເງິນກີບລາວ
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    value={totalCostLak}
-                    onChange={(e) => {
-                      const v = formatDots(parseDots(e.target.value));
-                      setTotalCostLak(v);
-                      if (paymentStatus === 'PAID') {
-                        setPaidAmount(v);
-                        setDebtAmount(0);
-                      } else if (paymentStatus === 'DEBT') {
-                        setDebtAmount(parseDots(v));
-                      } else {
-                        setDebtAmount(Math.max(0, parseDots(v) - parseDots(paidAmount)));
-                      }
-                    }}
-                    placeholder="0"
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xl font-mono font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 shadow-2xs"
-                  />
-                </div>
-
-                {/* THB Total */}
-                <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200 shadow-2xs">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 font-black text-[11px] flex items-center justify-center">฿</span>
-                      <span>ຍອດລວມ ฿ (THB)</span>
-                    </label>
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                      ເງິນບາດໄທ
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    value={totalCostThb}
-                    onChange={(e) => setTotalCostThb(formatThbTyping(e.target.value))}
-                    placeholder="0"
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xl font-mono font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 shadow-2xs"
-                  />
-                </div>
-              </div>
-
-              {/* Segmented Payment Buttons (Height 48px) */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-1">
-                <span className="text-xs font-bold text-slate-700 shrink-0">
-                  ຮູບແບບການຊຳລະ:
-                </span>
-                <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => handlePaymentStatusClick('PAID')}
-                    className={`flex-1 sm:flex-none px-5 h-12 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
-                      paymentStatus === 'PAID'
-                        ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    ຈ່າຍຄົບ (PAID)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePaymentStatusClick('DEBT')}
-                    className={`flex-1 sm:flex-none px-5 h-12 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
-                      paymentStatus === 'DEBT'
-                        ? 'bg-[#EF4444] text-white border-[#EF4444] shadow-sm'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    ຕິດໜີ້ (DEBT)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePaymentStatusClick('PARTIAL')}
-                    className={`flex-1 sm:flex-none px-5 h-12 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
-                      paymentStatus === 'PARTIAL'
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    ຈ່າຍບາງສ່ວນ (PARTIAL)
-                  </button>
-                </div>
-              </div>
-
-              {/* Dynamic Debt Calculation Area (Visible if PARTIAL or DEBT) */}
-              {paymentStatus === 'PARTIAL' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                      ຈຳນວນເງິນທີ່ຈ່າຍແລ້ວ (Paid Amount ₭)
-                    </label>
-                    <input
-                      type="text"
-                      value={paidAmount}
-                      onChange={(e) => handlePaidAmountChange(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 shadow-2xs"
-                    />
-                  </div>
-
-                  <div className="p-3.5 rounded-xl border bg-rose-50/90 border-rose-200 text-rose-900 shadow-2xs">
-                    <span className="text-[10px] font-bold block uppercase tracking-wider text-rose-600">
-                      ຍອດໜີ້ຄ້າງຊຳລະ (DEBT BALANCE)
-                    </span>
-                    <span className="text-base font-mono font-black text-rose-700">
-                      {formatDots(debtAmount)} ₭
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {paymentStatus === 'DEBT' && (
-                <div className="p-3.5 rounded-xl border bg-rose-50/90 border-rose-200 text-rose-900 shadow-2xs flex items-center justify-between">
-                  <span className="text-xs font-bold">ຍອດໜີ້ຄ້າງຊຳລະຮ້ານສົ່ງ (100% DEBT):</span>
-                  <span className="text-lg font-mono font-black text-rose-700">
-                    {formatDots(debtAmount)} ₭
-                  </span>
-                </div>
-              )}
-
-              {/* Note Textarea */}
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                  ໝາຍເຫດ (Note)
-                </label>
-                <textarea
-                  rows={2}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="ເຊັ່ນ: ນຳເຂົ້າງວດຕົ້ນເດືອນ, ຈ່າຍແລ້ວເຄິ່ງໜຶ່ງ, ສິນຄ້າມາສົ່ງຮອດສາງຄົບຖ້ວນ..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs resize-none"
-                />
-              </div>
-            </div>
-          </form>
-        </div>
-
-        {/* Barcode Scanner Modal Component */}
-        <BarcodeScannerModal
-          isOpen={scannerOpen}
-          onClose={() => setScannerOpen(false)}
-          onScanSuccess={handleBarcodeScanned}
-          title="ສະແກນບາໂຄດສິນຄ້າຮັບເຂົ້າສາງ"
-        />
-      </div>
+      <MultiProductGRNForm
+        editingPoId={editingPoId}
+        poCode={poCode}
+        setPoCode={setPoCode}
+        suppliers={suppliers}
+        products={products}
+        selectedSupplierId={selectedSupplierId}
+        setSelectedSupplierId={setSelectedSupplierId}
+        receivedBy={receivedBy}
+        setReceivedBy={setReceivedBy}
+        note={note}
+        setNote={setNote}
+        currentExchangeRate={currentExchangeRate}
+        setCurrentExchangeRate={setCurrentExchangeRate}
+        grnCartItems={grnCartItems}
+        setGrnCartItems={setGrnCartItems}
+        paymentStatus={paymentStatus}
+        setPaymentStatus={setPaymentStatus}
+        paidAmount={paidAmount}
+        setPaidAmount={setPaidAmount}
+        totalCostLakNumber={totalCostLakNumber}
+        totalCostThbNumber={totalCostThbNumber}
+        debtAmountNumber={debtAmountNumber}
+        isSubmittingGRN={isSubmittingGRN}
+        onBackToList={handleBackToList}
+        onAddToCart={handleAddToCart}
+        onUpdateItemQuantity={handleUpdateItemQuantity}
+        onStepItemQuantity={handleStepItemQuantity}
+        onUpdateItemUnit={handleUpdateItemUnit}
+        onUpdateItemCostThb={handleUpdateItemCostThb}
+        onUpdateItemCostLak={handleUpdateItemCostLak}
+        onToggleItemCostMode={handleToggleItemCostMode}
+        onToggleAllItemsCostMode={handleToggleAllItemsCostMode}
+        onToggleItemRetail={handleToggleItemRetail}
+        onUpdateItemRetailPrice={handleUpdateItemRetailPrice}
+        onRemoveItem={handleRemoveItem}
+        onSubmitGRN={handleSubmitGRN}
+        onOpenSupplierManager={onOpenSupplierManager}
+        onAlert={onAlert}
+      />
     );
   }
 
@@ -1512,6 +1146,15 @@ export default function PurchasesView({
 
                         <button
                           type="button"
+                          onClick={() => setPoToDelete(po)}
+                          className="p-1.5 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer transition-colors border border-rose-200"
+                          title="ລຶບໃບຮັບສິນຄ້າ"
+                        >
+                          <Trash size={15} />
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => setSelectedPoForDetails(po)}
                           className="p-1.5 text-slate-600 hover:text-teal-700 bg-slate-100 hover:bg-teal-50 rounded-lg cursor-pointer transition-colors border border-slate-200"
                           title="ເບິ່ງລາຍລະອຽດ"
@@ -1652,6 +1295,15 @@ export default function PurchasesView({
                                 title="ແກ້ໄຂ"
                               >
                                 <PencilSimple size={16} />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setPoToDelete(po)}
+                                className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                                title="ລຶບໃບຮັບສິນຄ້າ"
+                              >
+                                <Trash size={16} />
                               </button>
 
                               <button
@@ -1909,6 +1561,87 @@ export default function PurchasesView({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL 3: Confirm Delete GRN Modal & Stock Reversion            */}
+      {/* ============================================================== */}
+      {poToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                  <Trash size={20} weight="bold" />
+                </div>
+                <h3 className="text-sm font-black text-slate-900">
+                  ຢືນຢັນການລຶບໃບຮັບສິນຄ້າ
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPoToDelete(null)}
+                className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Warning Box */}
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-2.5">
+              <WarningCircle size={20} className="text-rose-600 shrink-0 mt-0.5" weight="fill" />
+              <div className="text-xs text-rose-900 font-semibold leading-relaxed">
+                ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບໃບຮັບສິນຄ້ານີ້? ລະບົບຈະຫັກລົບສະຕັອກທີ່ເຄີຍນຳເຂົ້າອອກຈາກສາງອັດຕະໂນມັດ.
+              </div>
+            </div>
+
+            {/* Details Summary */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/90 text-xs space-y-1.5 font-mono">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-sans">ລະຫັດບິນ:</span>
+                <span className="font-bold text-slate-900">{poToDelete.id}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-sans">ສິນຄ້າ:</span>
+                <span className="font-bold text-slate-900 truncate max-w-[200px]">
+                  {getOrderProductName(poToDelete)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-sans">ຈຳນວນຫັກລົບ:</span>
+                <span className="font-bold text-rose-600">
+                  - {formatOrderQuantity(poToDelete)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-1 border-t border-slate-200/80">
+                <span className="text-slate-500 font-sans">ມູນຄ່າລວມ:</span>
+                <span className="font-bold text-slate-900">
+                  {formatKip(poToDelete.total_cost_lak)}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPoToDelete(null)}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                ຍົກເລີກ
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingPo}
+                onClick={handleConfirmDeletePo}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black cursor-pointer disabled:opacity-50 shadow-xs flex items-center gap-1.5"
+              >
+                <Trash size={15} weight="bold" />
+                <span>{isDeletingPo ? 'ກຳລັງລຶບ...' : 'ຢືນຢັນລຶບ & ຫັກສະຕັອກ'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

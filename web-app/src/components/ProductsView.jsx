@@ -18,7 +18,7 @@ import BarcodeScannerModal from './BarcodeScannerModal';
 /**
  * Shared helper to resolve unit tiers, cost conversions, and stock counts for both Mobile Card & Desktop Table
  */
-export function getProductStockDetails(p, exchangeRate = 720) {
+export function getProductStockDetails(p, exchangeRate = 0) {
   const { cartonUnitName, cartonCostKip, cartonCostBaht } = getCartonUnitInfo(p, exchangeRate);
 
   const isUntracked = p.trackStock === false;

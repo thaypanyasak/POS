@@ -56,6 +56,11 @@ class SupabaseSyncService {
         'change_amount': transaction.changeAmount,
         'total_cost': transaction.totalCostOfGoods,
         'gross_profit': transaction.grossProfit,
+        'exchange_rate': transaction.exchangeRate,
+        'total_lak': transaction.totalLak,
+        'total_thb': double.parse(transaction.totalThb.toStringAsFixed(2)),
+        'gross_profit_lak': transaction.grossProfitLak,
+        'gross_profit_thb': double.parse(transaction.grossProfitThb.toStringAsFixed(2)),
       });
 
       // 2. Insert line items
@@ -200,7 +205,6 @@ class SupabaseSyncService {
       // 2. Delete existing units and re-insert fresh active units
       await client.from('product_units').delete().eq('product_id', product.id);
 
-      // Matches Supabase 'product_units' table schema
       final unitsData = product.units.map((u) {
         return {
           'id': u.id,
@@ -209,13 +213,26 @@ class SupabaseSyncService {
           'multiplier': u.multiplier,
           'retail_price': u.retailPrice,
           'wholesale_price': u.wholesalePrice,
+          'price_2': u.price2 ?? u.retailPrice,
+          'price_3': u.price3 ?? u.retailPrice,
           'barcode': u.barcode,
           'is_base_unit': u.isBaseUnit,
         };
       }).toList();
 
       if (unitsData.isNotEmpty) {
-        await client.from('product_units').insert(unitsData);
+        try {
+          await client.from('product_units').insert(unitsData);
+        } catch (_) {
+          // Retry without price_2 / price_3 if migration pending
+          final fallbackUnits = unitsData.map((map) {
+            final copy = Map<String, dynamic>.from(map);
+            copy.remove('price_2');
+            copy.remove('price_3');
+            return copy;
+          }).toList();
+          await client.from('product_units').insert(fallbackUnits);
+        }
       }
       return true;
     } catch (e, stack) {
@@ -631,6 +648,11 @@ class SupabaseSyncService {
         'paid_amount': paid,
         'remaining_debt': remaining,
         'payment_status': pStatus,
+        'exchange_rate': newTransaction.exchangeRate,
+        'total_lak': newTransaction.totalLak,
+        'total_thb': double.parse(newTransaction.totalThb.toStringAsFixed(2)),
+        'gross_profit_lak': newTransaction.grossProfitLak,
+        'gross_profit_thb': double.parse(newTransaction.grossProfitThb.toStringAsFixed(2)),
       }).eq('id', txId);
 
       return true;

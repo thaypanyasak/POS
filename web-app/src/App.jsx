@@ -17,8 +17,11 @@ import {
   fetchSuppliersFromSupabase,
   fetchPurchaseOrdersFromSupabase,
   updateExistingSaleTransactionInSupabase,
+  fetchExchangeRate,
+  updateExchangeRateInSupabase,
   supabase
 } from './services/supabase';
+import queryClient from './services/queryClient';
 
 // Modular Components
 import Navbar from './components/Navbar';
@@ -37,7 +40,7 @@ import ProductFormModal from './components/ProductFormModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import ConfirmDialogModal from './components/ConfirmDialogModal';
 
-import { formatDots, parseDots, formatCompoundStock } from './utils/formatters';
+import { formatDots, parseDots, parseCurrencyInput, formatCompoundStock, getEffectiveUnitPrice, PRICE_TIERS } from './utils/formatters';
 
 export default function App() {
   // Navigation Tabs: 'pos' | 'dashboard' | 'products' | 'history'
@@ -74,7 +77,39 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Global POS configuration
-  const [exchangeRate] = useState(720); // 1 ฿ = 720 ₭ (Only for cost calculation & product list)
+  const [exchangeRate, setExchangeRate] = useState(() => {
+    try {
+      const local = localStorage.getItem('meiishop_setting_thb_lak_exchange_rate');
+      if (local) {
+        const parsed = JSON.parse(local);
+        return Number(parsed.rate) || 690;
+      }
+    } catch (_) {}
+    return 690;
+  }); // Default 1 ฿ = 690 ₭ (Dynamic Point-in-Time Snapshot)
+
+  // Listen & synchronize exchange rate from store_settings
+  useEffect(() => {
+    let mounted = true;
+    fetchExchangeRate().then((rate) => {
+      if (mounted && rate && rate > 0) {
+        setExchangeRate(rate);
+      }
+    });
+
+    const unsubscribe = queryClient.subscribe(['exchange_rate'], async () => {
+      const rate = await fetchExchangeRate();
+      if (mounted && rate && rate > 0) {
+        setExchangeRate(rate);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
+
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Default collapsed: chỉ thấy icon
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('ທັງໝົດ');
@@ -82,6 +117,7 @@ export default function App() {
   // Cart & Customer Name
   const [cart, setCart] = useState([]);
   const [customerName, setCustomerName] = useState('ລູກຄ້າທົ່ວໄປ');
+  const [globalPriceTier, setGlobalPriceTier] = useState(1); // 1: standard (default), 2: regular customer, 3: wholesale/vip
 
   // Transactions History (Supabase Live Sync with cache)
   const [transactions, setTransactions] = useState(() => {
@@ -173,22 +209,28 @@ export default function App() {
   const [imageCompressionStats, setImageCompressionStats] = useState(null);
   const [isCompressingImage, setIsCompressingImage] = useState(false);
 
-  // 3-Tier Switches & Tier-specific Barcodes
+  // 3-Tier Switches & Multi-Price Tiers (Price 1, 2, 3) & Tier-specific Barcodes
   const [enablePiece, setEnablePiece] = useState(true);
   const [pieceUnitName, setPieceUnitName] = useState('ອັນ');
   const [piecePrice, setPiecePrice] = useState('10.000');
+  const [piecePrice2, setPiecePrice2] = useState('');
+  const [piecePrice3, setPiecePrice3] = useState('');
   const [pieceBarcode, setPieceBarcode] = useState('');
 
   const [enablePack, setEnablePack] = useState(true);
   const [packUnitName, setPackUnitName] = useState('ແພັກ');
   const [packMultiplier, setPackMultiplier] = useState('6');
   const [packPrice, setPackPrice] = useState('55.000');
+  const [packPrice2, setPackPrice2] = useState('');
+  const [packPrice3, setPackPrice3] = useState('');
   const [packBarcode, setPackBarcode] = useState('');
 
   const [enableCarton, setEnableCarton] = useState(true);
   const [cartonUnitName, setCartonUnitName] = useState('ແກັດ');
   const [cartonMultiplier, setCartonMultiplier] = useState('24');
   const [cartonPrice, setCartonPrice] = useState('210.000');
+  const [cartonPrice2, setCartonPrice2] = useState('');
+  const [cartonPrice3, setCartonPrice3] = useState('');
   const [cartonBarcode, setCartonBarcode] = useState('');
 
   // Crate Deposit Setting (For Beer crates / glass bottles)
@@ -285,6 +327,33 @@ export default function App() {
     handleRefreshAllFromSupabase();
   }, []);
 
+  // Subscribe to React Query Cache Invalidation
+  useEffect(() => {
+    const unsubProducts = queryClient.subscribe('products', () => {
+      handleRefreshAllFromSupabase();
+    });
+    const unsubPOs = queryClient.subscribe('purchase_orders', () => {
+      handleRefreshAllFromSupabase();
+    });
+    const unsubTx = queryClient.subscribe('transactions', () => {
+      handleRefreshAllFromSupabase();
+    });
+    const unsubSuppliers = queryClient.subscribe('suppliers', () => {
+      handleRefreshAllFromSupabase();
+    });
+    const unsubDashboard = queryClient.subscribe('dashboard', () => {
+      handleRefreshAllFromSupabase();
+    });
+
+    return () => {
+      unsubProducts();
+      unsubPOs();
+      unsubTx();
+      unsubSuppliers();
+      unsubDashboard();
+    };
+  }, []);
+
   // Save changes to localStorage as cache
   useEffect(() => {
     localStorage.setItem('meiishop_products_v5', JSON.stringify(products));
@@ -294,14 +363,69 @@ export default function App() {
     localStorage.setItem('meiishop_transactions_v7', JSON.stringify(transactions));
   }, [transactions]);
 
-  // Dual Currency 2-Way Sync (Only inside product form)
-  // Purchase Cost Handlers: THB (reference only) & LAK (store accounting) with dot formatting
-  const handleBahtCostChange = (val) => {
-    setNewProdCostBaht(formatDots(val));
+  // Dual Currency 2-Way Reactive Sync for Product Form (Card 2)
+  // State Machine tracking the source of last modification ('THB' | 'LAK' | null) to prevent infinite loops
+  const [lastModifiedCostField, setLastModifiedCostField] = useState(null);
+
+  // Direction 1: User types Baht (THB) -> auto-computes Kip (LAK) = Math.round(costThb * rate) (unless mode === 'manual')
+  const handleBahtCostChange = (val, mode = 'auto') => {
+    setLastModifiedCostField('THB');
+    const cleanDigits = String(val ?? '').replace(/\D/g, '');
+    if (!cleanDigits) {
+      setNewProdCostBaht('');
+      if (mode !== 'manual') setNewProdCostKip('');
+      return;
+    }
+
+    const costThb = parseInt(cleanDigits, 10);
+    if (isNaN(costThb) || costThb === 0) {
+      setNewProdCostBaht(cleanDigits === '0' ? '0' : '');
+      if (mode !== 'manual') setNewProdCostKip(cleanDigits === '0' ? '0' : '');
+      return;
+    }
+
+    setNewProdCostBaht(formatDots(costThb));
+
+    // In manual independent mode, DO NOT touch Kip!
+    if (mode === 'manual') return;
+
+    const activeRate = Number(exchangeRate) || 0;
+    if (activeRate > 0) {
+      // Lao Kip is atomic integer, zero decimal places
+      const costLak = Math.round(costThb * activeRate);
+      setNewProdCostKip(formatDots(costLak));
+    }
   };
 
-  const handleKipCostChange = (val) => {
-    setNewProdCostKip(formatDots(val));
+  // Direction 2: User types Kip (LAK) -> auto-computes Baht (THB) = Math.round(costLak / rate) (unless mode === 'manual')
+  // Standard Commercial Half-Up Rounding (e.g. 200.000 / 690 = 289.855... -> 290 ฿; 289.4 -> 289 ฿)
+  const handleKipCostChange = (val, mode = 'auto') => {
+    setLastModifiedCostField('LAK');
+    const cleanDigits = String(val ?? '').replace(/\D/g, '');
+    if (!cleanDigits) {
+      setNewProdCostKip('');
+      if (mode !== 'manual') setNewProdCostBaht('');
+      return;
+    }
+
+    const costLak = parseInt(cleanDigits, 10);
+    if (isNaN(costLak) || costLak === 0) {
+      setNewProdCostKip(cleanDigits === '0' ? '0' : '');
+      if (mode !== 'manual') setNewProdCostBaht(cleanDigits === '0' ? '0' : '');
+      return;
+    }
+
+    setNewProdCostKip(formatDots(costLak));
+
+    // In manual independent mode, DO NOT touch Baht!
+    if (mode === 'manual') return;
+
+    const activeRate = Number(exchangeRate) || 0;
+    if (activeRate > 0) {
+      // Eliminates all decimals; standard commercial integer rounding
+      const costThb = Math.round(costLak / activeRate);
+      setNewProdCostBaht(formatDots(costThb));
+    }
   };
 
   // Presets demonstrating flexible packaging combinations
@@ -313,8 +437,12 @@ export default function App() {
     setCartonUnitName('ລັງ');
     setCartonMultiplier('1');
     setCartonPrice('265.000');
-    setNewProdCostBaht('250');
-    setNewProdCostKip('180.000');
+    const rate = Number(exchangeRate) || 0;
+    const thb = 250;
+    const lak = rate > 0 ? Math.round(thb * rate) : 0;
+    setNewProdCostBaht(formatDots(thb));
+    setNewProdCostKip(lak > 0 ? formatDots(lak) : '');
+    setLastModifiedCostField(null);
     setHasCrateDeposit(true);
     setCrateDepositFee('30.000');
     setTrackStock(true);
@@ -336,8 +464,12 @@ export default function App() {
     setCartonUnitName('ແກັດ');
     setCartonMultiplier('4'); // 4 packs/carton (24 cans total)
     setCartonPrice('210.000');
-    setNewProdCostBaht('250');
-    setNewProdCostKip('180.000');
+    const rate = Number(exchangeRate) || 0;
+    const thb = 250;
+    const lak = rate > 0 ? Math.round(thb * rate) : 0;
+    setNewProdCostBaht(formatDots(thb));
+    setNewProdCostKip(lak > 0 ? formatDots(lak) : '');
+    setLastModifiedCostField(null);
     setHasCrateDeposit(false);
     setTrackStock(true);
     setStockCartons('10');
@@ -356,8 +488,12 @@ export default function App() {
     setCartonUnitName('ແກັດ');
     setCartonMultiplier('6'); // 6 packs/carton
     setCartonPrice('200.000');
-    setNewProdCostBaht('250');
-    setNewProdCostKip('180.000');
+    const rate = Number(exchangeRate) || 0;
+    const thb = 250;
+    const lak = rate > 0 ? Math.round(thb * rate) : 0;
+    setNewProdCostBaht(formatDots(thb));
+    setNewProdCostKip(lak > 0 ? formatDots(lak) : '');
+    setLastModifiedCostField(null);
     setHasCrateDeposit(false);
     setTrackStock(true);
     setStockCartons('10');
@@ -375,8 +511,12 @@ export default function App() {
     setCartonUnitName('ເປົາ');
     setCartonMultiplier('25'); // 25 bags/sack
     setCartonPrice('350.000');
-    setNewProdCostBaht('87');
-    setNewProdCostKip('62.640');
+    const rate = Number(exchangeRate) || 0;
+    const thb = 87;
+    const lak = rate > 0 ? Math.round(thb * rate) : 0;
+    setNewProdCostBaht(formatDots(thb));
+    setNewProdCostKip(lak > 0 ? formatDots(lak) : '');
+    setLastModifiedCostField(null);
     setHasCrateDeposit(false);
     setTrackStock(true);
     setStockCartons('5');
@@ -391,8 +531,12 @@ export default function App() {
     setPiecePrice('25.000');
     setEnablePack(false);
     setEnableCarton(false);
-    setNewProdCostBaht('25');
-    setNewProdCostKip('18.000');
+    const rate = Number(exchangeRate) || 0;
+    const thb = 25;
+    const lak = rate > 0 ? Math.round(thb * rate) : 0;
+    setNewProdCostBaht(formatDots(thb));
+    setNewProdCostKip(lak > 0 ? formatDots(lak) : '');
+    setLastModifiedCostField(null);
     setHasCrateDeposit(false);
     setTrackStock(true);
     setStockCartons('0');
@@ -417,21 +561,28 @@ export default function App() {
     setImageCompressionStats(null);
     setNewProdCostBaht('');
     setNewProdCostKip('');
+    setLastModifiedCostField(null);
 
     // Default to 3-tier beverage setup with reasonable defaults
     setEnableCarton(true);
     setCartonUnitName('ແກັດ');
     setCartonMultiplier('24');
     setCartonPrice('210.000');
+    setCartonPrice2('');
+    setCartonPrice3('');
 
     setEnablePack(true);
     setPackUnitName('ແພັກ');
     setPackMultiplier('6');
     setPackPrice('55.000');
+    setPackPrice2('');
+    setPackPrice3('');
 
     setEnablePiece(true);
     setPieceUnitName('ອັນ');
     setPiecePrice('10.000');
+    setPiecePrice2('');
+    setPiecePrice3('');
 
     setHasCrateDeposit(false);
     setCrateDepositFee('30.000');
@@ -464,8 +615,21 @@ export default function App() {
     setTrackStock(p.trackStock !== false);
 
     // Purchase Cost: THB (reference only) & LAK
-    setNewProdCostBaht(formatDots(p.costBaht ?? ''));
-    setNewProdCostKip(formatDots(p.costKip ?? ''));
+    const pKip = parseCurrencyInput(p.costKip ?? p.cost_lak ?? '');
+    const pBaht = parseCurrencyInput(p.costBaht ?? p.cost_thb ?? '');
+    const rate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 690;
+
+    if (pKip > 0 && pBaht === 0) {
+      setNewProdCostKip(formatDots(pKip));
+      setNewProdCostBaht(formatDots(Math.round(pKip / rate)));
+    } else if (pBaht > 0 && pKip === 0) {
+      setNewProdCostBaht(formatDots(pBaht));
+      setNewProdCostKip(formatDots(Math.round(pBaht * rate)));
+    } else {
+      setNewProdCostBaht(formatDots(p.costBaht ?? p.cost_thb ?? ''));
+      setNewProdCostKip(formatDots(p.costKip ?? p.cost_lak ?? ''));
+    }
+    setLastModifiedCostField(null);
 
     // Crate Deposit setting
     setHasCrateDeposit(Boolean(p.hasCrateDeposit || p.category === 'ເບຍ/ເຄື່ອງດື່ມມີທາດເຫຼົ້າ' || p.name?.includes('ເບຍ')));
@@ -534,8 +698,16 @@ export default function App() {
     setPieceUnitName(resolvedPieceName);
 
     setCartonPrice(cartonU ? formatDots(cartonU.retailPrice) : (p.tierSettings?.cartonPrice || ''));
+    setCartonPrice2(cartonU && Number(cartonU.price_2 || cartonU.price2) > 0 ? formatDots(cartonU.price_2 || cartonU.price2) : (p.tierSettings?.cartonPrice2 || ''));
+    setCartonPrice3(cartonU && Number(cartonU.price_3 || cartonU.price3) > 0 ? formatDots(cartonU.price_3 || cartonU.price3) : (p.tierSettings?.cartonPrice3 || ''));
+
     setPackPrice(packU ? formatDots(packU.retailPrice) : (p.tierSettings?.packPrice || ''));
+    setPackPrice2(packU && Number(packU.price_2 || packU.price2) > 0 ? formatDots(packU.price_2 || packU.price2) : (p.tierSettings?.packPrice2 || ''));
+    setPackPrice3(packU && Number(packU.price_3 || packU.price3) > 0 ? formatDots(packU.price_3 || packU.price3) : (p.tierSettings?.packPrice3 || ''));
+
     setPiecePrice(pieceU ? formatDots(pieceU.retailPrice) : (p.tierSettings?.piecePrice || ''));
+    setPiecePrice2(pieceU && Number(pieceU.price_2 || pieceU.price2) > 0 ? formatDots(pieceU.price_2 || pieceU.price2) : (p.tierSettings?.piecePrice2 || ''));
+    setPiecePrice3(pieceU && Number(pieceU.price_3 || pieceU.price3) > 0 ? formatDots(pieceU.price_3 || pieceU.price3) : (p.tierSettings?.piecePrice3 || ''));
 
     // Resolve Tier Barcodes from units or fallback
     setCartonBarcode(cartonU?.barcode || '');
@@ -635,6 +807,7 @@ export default function App() {
           }
 
           setProducts(products.filter((p) => p.id !== productId));
+          await queryClient.invalidateQueries({ queryKey: ['products'] });
           openAlert(`ລຶບສິນຄ້າ "${productName}" ອອກຈາກຖານຂໍ້ມູນ Supabase ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
         } catch (err) {
           console.error('Delete product error:', err);
@@ -681,6 +854,19 @@ export default function App() {
       let calculatedStock = 0;
       const units = [];
 
+      // Multi-Price Tiers: Price 1 (Mandatory), Price 2 & 3 (Optional: strictly 0 if empty, NEVER auto-copy Price 1)
+      const cP1 = parseDots(cartonPrice);
+      const cP2 = parseDots(cartonPrice2) > 0 ? parseDots(cartonPrice2) : 0;
+      const cP3 = parseDots(cartonPrice3) > 0 ? parseDots(cartonPrice3) : 0;
+
+      const pP1 = parseDots(packPrice);
+      const pP2 = parseDots(packPrice2) > 0 ? parseDots(packPrice2) : 0;
+      const pP3 = parseDots(packPrice3) > 0 ? parseDots(packPrice3) : 0;
+
+      const pcP1 = parseDots(piecePrice);
+      const pcP2 = parseDots(piecePrice2) > 0 ? parseDots(piecePrice2) : 0;
+      const pcP3 = parseDots(piecePrice3) > 0 ? parseDots(piecePrice3) : 0;
+
       // STRICT BASE UNIT & MULTIPLIERS RESOLUTION ACCORDING TO ACTIVE TIERS
       if (isPieceActive) {
         // CASE 1: Cấp 3 (Piece) BẬT -> Piece BẮT BUỘC là Base Unit (multiplier = 1)
@@ -698,8 +884,12 @@ export default function App() {
             tier: 3,
             unitName: cartonUnitName.trim() || 'ແກັດ',
             multiplier: tier1Multiplier,
-            retailPrice: parseDots(cartonPrice),
-            wholesalePrice: Math.round(parseDots(cartonPrice) * 0.95),
+            retailPrice: cP1,
+            wholesalePrice: cP3 > 0 ? cP3 : Math.round(cP1 * 0.95),
+            price_2: cP2,
+            price_3: cP3,
+            price2: cP2,
+            price3: cP3,
             barcode: cartonBarcode.trim() || null,
             isBaseUnit: false,
           });
@@ -712,8 +902,12 @@ export default function App() {
             tier: 2,
             unitName: packUnitName.trim() || 'ແພັກ',
             multiplier: tier2Multiplier,
-            retailPrice: parseDots(packPrice),
-            wholesalePrice: Math.round(parseDots(packPrice) * 0.95),
+            retailPrice: pP1,
+            wholesalePrice: pP3 > 0 ? pP3 : Math.round(pP1 * 0.95),
+            price_2: pP2,
+            price_3: pP3,
+            price2: pP2,
+            price3: pP3,
             barcode: packBarcode.trim() || null,
             isBaseUnit: false,
           });
@@ -725,8 +919,12 @@ export default function App() {
           tier: 1,
           unitName: actualBaseUnitName,
           multiplier: 1,
-          retailPrice: parseDots(piecePrice),
-          wholesalePrice: Math.round(parseDots(piecePrice) * 0.95),
+          retailPrice: pcP1,
+          wholesalePrice: pcP3 > 0 ? pcP3 : Math.round(pcP1 * 0.95),
+          price_2: pcP2,
+          price_3: pcP3,
+          price2: pcP2,
+          price3: pcP3,
           barcode: pieceBarcode.trim() || null,
           isBaseUnit: true,
         });
@@ -754,8 +952,12 @@ export default function App() {
             tier: 3,
             unitName: cartonUnitName.trim() || 'ແກັດ',
             multiplier: tier1Multiplier, // Chỉ là số pack trong thùng (ví dụ: 8)
-            retailPrice: parseDots(cartonPrice),
-            wholesalePrice: Math.round(parseDots(cartonPrice) * 0.95),
+            retailPrice: cP1,
+            wholesalePrice: cP3 > 0 ? cP3 : Math.round(cP1 * 0.95),
+            price_2: cP2,
+            price_3: cP3,
+            price2: cP2,
+            price3: cP3,
             barcode: cartonBarcode.trim() || null,
             isBaseUnit: false,
           });
@@ -767,8 +969,12 @@ export default function App() {
           tier: 2,
           unitName: actualBaseUnitName,
           multiplier: 1, // Bắt buộc = 1
-          retailPrice: parseDots(packPrice),
-          wholesalePrice: Math.round(parseDots(packPrice) * 0.95),
+          retailPrice: pP1,
+          wholesalePrice: pP3 > 0 ? pP3 : Math.round(pP1 * 0.95),
+          price_2: pP2,
+          price_3: pP3,
+          price2: pP2,
+          price3: pP3,
           barcode: packBarcode.trim() || null,
           isBaseUnit: true,
         });
@@ -793,8 +999,12 @@ export default function App() {
           tier: 3,
           unitName: actualBaseUnitName,
           multiplier: 1,
-          retailPrice: parseDots(cartonPrice),
-          wholesalePrice: Math.round(parseDots(cartonPrice) * 0.95),
+          retailPrice: cP1,
+          wholesalePrice: cP3 > 0 ? cP3 : Math.round(cP1 * 0.95),
+          price_2: cP2,
+          price_3: cP3,
+          price2: cP2,
+          price3: cP3,
           barcode: cartonBarcode.trim() || null,
           isBaseUnit: true,
         });
@@ -852,9 +1062,11 @@ export default function App() {
         barcode: primaryBarcode,
         imageUrl: finalImageUrl,
         baseUnit: actualBaseUnitName,
-        costPerBaseUnit,
-        costBaht: costBaht,
-        costKip: costKip,
+        costPerBaseUnit: Math.round(Number(costPerBaseUnit) || 0),
+        costBaht: Math.round(Number(costBaht) || 0),
+        costKip: Math.round(Number(costKip) || 0),
+        cost_thb: Math.round(Number(costBaht) || 0),
+        cost_lak: Math.round(Number(costKip) || 0),
         tier1_active: isCartonActive,
         tier2_active: isPackActive,
         tier3_active: isPieceActive,
@@ -867,6 +1079,15 @@ export default function App() {
           cartonUnitName: cartonUnitName.trim() || 'ແກັດ',
           packMultiplier: isPieceActive ? piecesPerPack : 1,
           cartonMultiplier: packsPerCarton,
+          cartonPrice,
+          cartonPrice2,
+          cartonPrice3,
+          packPrice,
+          packPrice2,
+          packPrice3,
+          piecePrice,
+          piecePrice2,
+          piecePrice3,
         },
         currentStockBaseUnits: totalStock,
         trackStock: Boolean(trackStock),
@@ -892,6 +1113,7 @@ export default function App() {
       setProductToEdit(null);
       setImageFileToUpload(null);
       setImageCompressionStats(null);
+      await queryClient.invalidateQueries({ queryKey: ['products'] });
       openAlert(`ບັນທຶກສິນຄ້າ "${newProdName}" ລົງຖານຂໍ້ມູນ Supabase ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
     } catch (err) {
       console.error('Save product error:', err);
@@ -919,9 +1141,39 @@ export default function App() {
           product,
           unit,
           quantity: qty,
+          selectedPriceTier: 1, // Default 100% is always Price 1 (Giá 1 - Chuẩn)
+          customPrice: null,
         },
       ]);
     }
+  };
+
+  const changeCartItemPriceTier = (productId, unitId, newTier) => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        if (item.product.id === productId && item.unit.id === unitId) {
+          return {
+            ...item,
+            selectedPriceTier: newTier,
+            customPrice: null, // Clear manual override when cashier selects a standard tier
+            overrideReason: '',
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const setGlobalCartPriceTier = (newTier) => {
+    setGlobalPriceTier(newTier);
+    setCart((prevCart) =>
+      prevCart.map((item) => ({
+        ...item,
+        selectedPriceTier: newTier,
+        customPrice: null,
+        overrideReason: '',
+      }))
+    );
   };
 
   const updateCartQuantity = (productId, unitId, newQty) => {
@@ -1008,6 +1260,7 @@ export default function App() {
       updated[oldIndex] = {
         ...oldItem,
         unit: newUnit,
+        selectedPriceTier: oldItem.selectedPriceTier || 1,
         customPrice: null,
         overrideReason: '',
         noEmptyCrates: false,
@@ -1019,10 +1272,11 @@ export default function App() {
 
   const cartSubtotal = useMemo(() => {
     return cart.reduce((sum, item) => {
+      const tierPrice = getEffectiveUnitPrice(item.unit, item.selectedPriceTier || 1);
       const price =
         item.customPrice !== undefined && item.customPrice !== null
           ? item.customPrice
-          : item.unit.retailPrice;
+          : tierPrice;
       const baseLine = price * item.quantity;
       const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
       const crateFee = item.noEmptyCrates
@@ -1151,11 +1405,11 @@ export default function App() {
       const grossProfit = cartSubtotal - totalCost;
 
       const receiptItems = cart.map((it) => {
-        const originalPrice = it.unit.retailPrice;
+        const tierPrice = getEffectiveUnitPrice(it.unit, it.selectedPriceTier || 1);
         const effectivePrice =
           it.customPrice !== undefined && it.customPrice !== null
             ? it.customPrice
-            : originalPrice;
+            : tierPrice;
         const feePerCrate = Number(it.product?.crateDepositFee) || 30000;
         const missingCount = it.noEmptyCrates ? (Number(it.missingCratesCount ?? it.quantity) || 0) : 0;
         const crateDepositTotal = missingCount * feePerCrate;
@@ -1165,6 +1419,8 @@ export default function App() {
         return {
           ...it,
           customPrice: effectivePrice,
+          unitPrice: effectivePrice,
+          selectedPriceTier: it.selectedPriceTier || 1,
           noEmptyCrates: Boolean(it.noEmptyCrates),
           missingCratesCount: missingCount,
           crateDepositFee: feePerCrate,
@@ -1181,6 +1437,13 @@ export default function App() {
       const debtStatus = isDebt
         ? (actualPaid <= 0 ? 'unpaid' : (remainingDebt > 0 ? 'partial' : 'paid'))
         : 'paid';
+
+      // Point-in-Time Exchange Rate Snapshot calculations
+      const currentRate = Number(exchangeRate) || 0;
+      const totalLak = Number(cartSubtotal) || 0;
+      const totalThb = currentRate > 0 ? Number((totalLak / currentRate).toFixed(2)) : 0;
+      const grossProfitLak = Number(grossProfit) || 0;
+      const grossProfitThb = currentRate > 0 ? Number((grossProfitLak / currentRate).toFixed(2)) : 0;
 
       const receipt = {
         id: txId,
@@ -1206,6 +1469,17 @@ export default function App() {
         paymentMethod: isDebt ? 'debt' : (paymentMethod === 'transfer' || paymentMethod === 'onepay' ? 'transfer' : 'cash'),
         paymentStatus: isDebt ? (remainingDebt > 0 ? (actualPaid > 0 ? 'PARTIAL' : 'DEBT') : 'PAID') : 'PAID',
         remainingDebt,
+        // Point-in-time Snapshot properties
+        exchange_rate: currentRate,
+        exchangeRate: currentRate,
+        total_lak: totalLak,
+        totalLak,
+        total_thb: totalThb,
+        totalThb,
+        gross_profit_lak: grossProfitLak,
+        grossProfitLak,
+        gross_profit_thb: grossProfitThb,
+        grossProfitThb,
       };
 
       // Cache local tx metadata for rich offline/receipt re-rendering with crate deposit and debt info
@@ -1271,6 +1545,10 @@ export default function App() {
 
         setProducts(updatedProducts);
         setTransactions([receipt, ...transactions]);
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['products'] }),
+          queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        ]);
       }
 
       setSelectedReceiptForView(receipt);
@@ -1481,6 +1759,10 @@ export default function App() {
             return p;
           });
           setProducts(updatedProducts);
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['products'] }),
+            queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+          ]);
 
           openAlert(`ຍົກເລີກບິນ "${tx.receiptNumber}" ສຳເລັດແລ້ວ!\n\n• ສິນຄ້າທັງໝົດໄດ້ຖືກສົ່ງຄືນສະຕັອກຮຽບຮ້ອຍ\n• ຍອດຂາຍ ແລະ ກຳໄລຖືກຫັກອອກຈາກ Dashboard ແລ້ວ`, 'ສຳເລັດ', 'success');
         } catch (err) {
@@ -1535,6 +1817,11 @@ export default function App() {
             });
             setProducts(updatedProducts);
           }
+
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['products'] }),
+            queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+          ]);
 
           openAlert(`ລຶບບິນ "${tx.receiptNumber}" ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
         } catch (err) {
@@ -1712,12 +1999,20 @@ export default function App() {
       return true;
     });
 
-    const totalRevenue = filteredTxs.reduce((sum, t) => sum + (Number(t.grandTotal) || 0), 0);
-    const totalCost = filteredTxs.reduce((sum, t) => sum + (Number(t.totalCost) || 0), 0);
-    const grossProfit = filteredTxs.reduce((sum, t) => sum + (Number(t.grossProfit) || 0), 0);
-    const margin = totalRevenue > 0 ? ((grossProfit / totalRevenue) * 100).toFixed(1) : '0';
+    // Point-in-time Snapshot Aggregations (Accounting Compliant)
+    const totalRevenueLak = filteredTxs.reduce((sum, order) => sum + Number(order.total_lak ?? order.grandTotal ?? 0), 0);
+    const totalRevenueThb = filteredTxs.reduce((sum, order) => sum + Number(order.total_thb ?? (Number(order.total_lak ?? order.grandTotal ?? 0) / Number(order.exchange_rate ?? 690))), 0);
+    const totalCostLak = filteredTxs.reduce((sum, order) => sum + Number(order.total_cost ?? order.totalCost ?? 0), 0);
+    const totalCostThb = filteredTxs.reduce((sum, order) => sum + (Number(order.total_cost ?? order.totalCost ?? 0) / Number(order.exchange_rate ?? 690)), 0);
+    const totalProfitLak = filteredTxs.reduce((sum, order) => sum + Number(order.gross_profit_lak ?? order.grossProfit ?? 0), 0);
+    const totalProfitThb = filteredTxs.reduce((sum, order) => sum + Number(order.gross_profit_thb ?? (Number(order.gross_profit_lak ?? order.grossProfit ?? 0) / Number(order.exchange_rate ?? 690))), 0);
+
+    const totalRevenue = totalRevenueLak;
+    const totalCost = totalCostLak;
+    const grossProfit = totalProfitLak;
+    const margin = totalRevenueLak > 0 ? ((totalProfitLak / totalRevenueLak) * 100).toFixed(1) : '0';
     const txCount = filteredTxs.length;
-    const avgTicket = txCount > 0 ? Math.round(totalRevenue / txCount) : 0;
+    const avgTicket = txCount > 0 ? Math.round(totalRevenueLak / txCount) : 0;
 
     // 1:1 Payment Breakdown with POS Checkout (Cash, Transfer, Debt)
     // Rule: Total Revenue = Cash + Transfer + Debt (100% reconciled)
@@ -1739,8 +2034,14 @@ export default function App() {
 
     return {
       totalRevenue,
+      totalRevenueLak,
+      totalRevenueThb,
       totalCost,
+      totalCostLak,
+      totalCostThb,
       grossProfit,
+      totalProfitLak,
+      totalProfitThb,
       margin,
       txCount,
       avgTicket,
@@ -1800,6 +2101,8 @@ export default function App() {
             addToCart={addToCart}
             openUnitSelector={openUnitSelector}
             cart={cart}
+            exchangeRate={exchangeRate}
+            setExchangeRate={setExchangeRate}
             customerName={customerName}
             setCustomerName={setCustomerName}
             updateCartQuantity={updateCartQuantity}
@@ -1810,6 +2113,9 @@ export default function App() {
             toggleCartItemCrateDeposit={toggleCartItemCrateDeposit}
             updateMissingCrates={updateMissingCrates}
             changeCartItemUnit={changeCartItemUnit}
+            globalPriceTier={globalPriceTier}
+            setGlobalPriceTier={setGlobalCartPriceTier}
+            changeCartItemPriceTier={changeCartItemPriceTier}
             editingOldTransaction={editingOldTransaction}
             onCancelEditOrder={handleCancelEditingOrder}
           />
@@ -1859,6 +2165,7 @@ export default function App() {
             purchaseOrders={purchaseOrders}
             suppliers={suppliers}
             products={products}
+            exchangeRate={exchangeRate}
             onOpenNewGRN={() => {
               handleRefreshAllFromSupabase();
               setPurchaseEntryModalOpen(true);
@@ -1873,7 +2180,9 @@ export default function App() {
         {activeMainTab === 'settings' && (
           <SettingsView
             exchangeRate={exchangeRate}
+            setExchangeRate={setExchangeRate}
             isCloudSynced={isCloudSynced}
+            onAlert={openAlert}
             productsCount={products.length}
             transactionsCount={transactions.length}
             outOfStockCount={outOfStockCount}
@@ -1895,6 +2204,7 @@ export default function App() {
         onClose={() => setPurchaseEntryModalOpen(false)}
         products={products}
         suppliers={suppliers}
+        exchangeRate={exchangeRate}
         onOpenSupplierManager={() => setSupplierManagerModalOpen(true)}
         onSuccess={handleRefreshAllFromSupabase}
         onAlert={openAlert}
@@ -1942,8 +2252,11 @@ export default function App() {
         setIsCompressingImage={setIsCompressingImage}
         newProdCostKip={newProdCostKip}
         newProdCostBaht={newProdCostBaht}
+        setNewProdCostKip={setNewProdCostKip}
+        setNewProdCostBaht={setNewProdCostBaht}
         handleBahtCostChange={handleBahtCostChange}
         handleKipCostChange={handleKipCostChange}
+        lastModifiedCostField={lastModifiedCostField}
         exchangeRate={exchangeRate}
         applyPresetBeer={applyPresetBeer}
         applyPresetDrink3Tiers={applyPresetDrink3Tiers}
@@ -1956,6 +2269,10 @@ export default function App() {
         setPieceUnitName={setPieceUnitName}
         piecePrice={piecePrice}
         setPiecePrice={setPiecePrice}
+        piecePrice2={piecePrice2}
+        setPiecePrice2={setPiecePrice2}
+        piecePrice3={piecePrice3}
+        setPiecePrice3={setPiecePrice3}
         pieceBarcode={pieceBarcode}
         setPieceBarcode={setPieceBarcode}
         enablePack={enablePack}
@@ -1966,6 +2283,10 @@ export default function App() {
         setPackMultiplier={setPackMultiplier}
         packPrice={packPrice}
         setPackPrice={setPackPrice}
+        packPrice2={packPrice2}
+        setPackPrice2={setPackPrice2}
+        packPrice3={packPrice3}
+        setPackPrice3={setPackPrice3}
         packBarcode={packBarcode}
         setPackBarcode={setPackBarcode}
         enableCarton={enableCarton}
@@ -1976,6 +2297,10 @@ export default function App() {
         setCartonMultiplier={setCartonMultiplier}
         cartonPrice={cartonPrice}
         setCartonPrice={setCartonPrice}
+        cartonPrice2={cartonPrice2}
+        setCartonPrice2={setCartonPrice2}
+        cartonPrice3={cartonPrice3}
+        setCartonPrice3={setCartonPrice3}
         cartonBarcode={cartonBarcode}
         setCartonBarcode={setCartonBarcode}
         hasCrateDeposit={hasCrateDeposit}

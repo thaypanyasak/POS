@@ -8,6 +8,7 @@ import '../../../domain/models/product.dart';
 import '../../../domain/models/sale_transaction.dart';
 import '../../pos/presentation/controllers/catalog_controller.dart';
 import '../../pos/presentation/controllers/transaction_controller.dart';
+import '../../common/widgets/exchange_rate_chip.dart';
 import 'widgets/annual_12_month_sales_chart.dart';
 import 'widgets/month_comparison_dashboard_view.dart';
 
@@ -111,19 +112,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final products = catalogState.allProducts;
     final txs = _filterTransactions(historyState.transactions);
 
-    // 1. Core KPIs Aggregations
-    int totalRevenue = 0;
-    int totalCost = 0;
-    int totalProfit = 0;
+    // 1. Core KPIs Aggregations (Point-in-Time Snapshot)
+    double totalRevenueLak = 0.0;
+    double totalRevenueThb = 0.0;
+    double totalCostLak = 0.0;
+    double totalCostThb = 0.0;
+    double totalProfitLak = 0.0;
+    double totalProfitThb = 0.0;
     int cashTotal = 0;
     int transferTotal = 0;
     int debtTotal = 0;
     int debtCount = 0;
 
     for (final tx in txs) {
-      totalRevenue += tx.grandTotal;
-      totalCost += tx.totalCostOfGoods;
-      totalProfit += tx.grossProfit;
+      final double rLak = tx.totalLak;
+      final double rThb = tx.totalThb;
+      final double cLak = tx.totalCostOfGoods.toDouble();
+      final double cThb = tx.exchangeRate > 0 ? (cLak / tx.exchangeRate) : 0.0;
+      final double pLak = tx.grossProfitLak;
+      final double pThb = tx.grossProfitThb;
+
+      totalRevenueLak += rLak;
+      totalRevenueThb += rThb;
+      totalCostLak += cLak;
+      totalCostThb += cThb;
+      totalProfitLak += pLak;
+      totalProfitThb += pThb;
 
       if (tx.isDebt || tx.paymentMethod == PaymentMethod.debt) {
         debtTotal += (tx.debtAmount > 0 ? tx.debtAmount : tx.grandTotal);
@@ -135,8 +149,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
     }
 
-    final double margin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0.0;
-    final int avgTicket = txs.isNotEmpty ? (totalRevenue / txs.length).round() : 0;
+    final double margin = totalRevenueLak > 0 ? (totalProfitLak / totalRevenueLak) * 100 : 0.0;
+    final int avgTicketLak = txs.isNotEmpty ? (totalRevenueLak / txs.length).round() : 0;
+    final double avgTicketThb = txs.isNotEmpty ? (totalRevenueThb / txs.length) : 0.0;
 
     // 2. Hourly Sales Breakdown (07:00 - 22:00)
     final List<_HourlyBucket> hourlyBuckets = [];
@@ -283,7 +298,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         // KPI 1: Revenue
                         _buildKpiCard(
                           title: 'ຍອດຂາຍລວມ (Revenue)',
-                          value: LaoCurrencyFormatter.format(totalRevenue),
+                          value: LaoCurrencyFormatter.format(totalRevenueLak.round()),
+                          subValueThb: '≈ ${NumberFormat('#,##0').format(totalRevenueThb.round())} ฿',
                           subLeft: 'ຈຳນວນ:',
                           subRight: '${txs.length} ບິນສຳເລັດ',
                           icon: Icons.monetization_on_outlined,
@@ -296,7 +312,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         // KPI 2: COGS
                         _buildKpiCard(
                           title: 'ຕົ້ນທຶນສິນຄ້າລວມ (COGS)',
-                          value: LaoCurrencyFormatter.format(totalCost),
+                          value: LaoCurrencyFormatter.format(totalCostLak.round()),
+                          subValueThb: '≈ ${NumberFormat('#,##0').format(totalCostThb.round())} ฿',
                           subLeft: 'ຕົ້ນທຶນສິນຄ້າຂາຍອອກ',
                           subRight: 'ທຶນຈິງ',
                           icon: Icons.calendar_today_outlined,
@@ -309,7 +326,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         // KPI 3: Gross Profit
                         _buildKpiCard(
                           title: 'ກຳໄລຂັ້ນຕົ້ນ (Gross Profit)',
-                          value: LaoCurrencyFormatter.format(totalProfit),
+                          value: LaoCurrencyFormatter.format(totalProfitLak.round()),
+                          subValueThb: '≈ ${NumberFormat('#,##0').format(totalProfitThb.round())} ฿',
                           subLeft: 'ອັດຕາກຳໄລ:',
                           subRight: '${margin.toStringAsFixed(1)}%',
                           isMarginBadge: true,
@@ -323,7 +341,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         // KPI 4: Avg Basket
                         _buildKpiCard(
                           title: 'ຍອດສະເລ່ຍຕໍ່ບິນ (Avg Basket)',
-                          value: LaoCurrencyFormatter.format(avgTicket),
+                          value: LaoCurrencyFormatter.format(avgTicketLak),
+                          subValueThb: '≈ ${NumberFormat('#,##0').format(avgTicketThb.round())} ฿',
                           subLeft: 'ສະເລ່ຍຕໍ່ 1 ລູກຄ້າ',
                           subRight: 'ບິນ/ລູກຄ້າ',
                           icon: Icons.bar_chart_rounded,
@@ -340,7 +359,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 const SizedBox(height: 16),
 
                 // 3. Payment Reconciled Breakdown Section
-                _buildPaymentBreakdownSection(totalRevenue, cashTotal, transferTotal, debtTotal, debtCount),
+                _buildPaymentBreakdownSection(totalRevenueLak.round(), cashTotal, transferTotal, debtTotal, debtCount),
 
                 const SizedBox(height: 16),
 
@@ -462,28 +481,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ],
           ),
 
-          // Timeframe Segmented Switcher
-          Container(
-            padding: const EdgeInsets.all(2.5),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildTimeframePill(DashboardTimeframe.daily, 'ມື້ນີ້ (Today)'),
-                  _buildTimeframePill(DashboardTimeframe.weekly, '7 ມື້ຜ່ານມາ'),
-                  _buildTimeframePill(DashboardTimeframe.monthly, 'ເດືອນນີ້'),
-                  _buildTimeframePill(DashboardTimeframe.all, 'ທັງໝົດ'),
-                  _buildTimeframePill(DashboardTimeframe.custom, 'ເລືອກວັນທີ'),
-                  _buildTimeframePill(DashboardTimeframe.compare, 'ສົມທຽບ 2 ເດືອນ'),
-                ],
+          // Exchange Rate Badge & Timeframe Segmented Switcher
+          Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              const ExchangeRateChip(),
+              Container(
+                padding: const EdgeInsets.all(2.5),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildTimeframePill(DashboardTimeframe.daily, 'ມື້ນີ້ (Today)'),
+                      _buildTimeframePill(DashboardTimeframe.weekly, '7 ມື້ຜ່ານມາ'),
+                      _buildTimeframePill(DashboardTimeframe.monthly, 'ເດືອນນີ້'),
+                      _buildTimeframePill(DashboardTimeframe.all, 'ທັງໝົດ'),
+                      _buildTimeframePill(DashboardTimeframe.custom, 'ເລືອກວັນທີ'),
+                      _buildTimeframePill(DashboardTimeframe.compare, 'ສົມທຽບ 2 ເດືອນ'),
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
@@ -526,6 +554,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildKpiCard({
     required String title,
     required String value,
+    String? subValueThb,
     required String subLeft,
     required String subRight,
     required IconData icon,
@@ -581,6 +610,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               letterSpacing: -0.3,
             ),
           ),
+          if (subValueThb != null && subValueThb.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              subValueThb,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: valueColor.withValues(alpha: 0.75),
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
           const SizedBox(height: 7),
           Container(
             padding: const EdgeInsets.only(top: 6),

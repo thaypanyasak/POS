@@ -431,17 +431,13 @@ class Product {
     }
     if (cKip == 0 && costBase > 0) cKip = costBase;
 
-    // Baht cost: priority cost_thb -> cost_baht -> localMeta -> fallback cKip / 720 (matching Web)
+    // Baht cost: priority cost_thb -> cost_baht -> localMeta -> strictly 0 if domestic
     int cBaht = (json['cost_thb'] as num?)?.toInt() ??
         (json['cost_baht'] as num?)?.toInt() ??
         (json['costBaht'] as num?)?.toInt() ??
         (json['costThb'] as num?)?.toInt() ??
         localMeta?['costBaht'] ??
         0;
-
-    if (cBaht <= 0 && cKip > 0) {
-      cBaht = (cKip / 720).round();
-    }
 
     return Product(
       id: json['id']?.toString() ?? '',

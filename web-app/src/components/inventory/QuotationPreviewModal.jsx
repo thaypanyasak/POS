@@ -6,7 +6,7 @@ import {
   WarningCircle,
   ShareNetwork,
 } from '@phosphor-icons/react';
-import { formatKip, formatDots } from '../../utils/formatters';
+import { formatKip, formatDots, getEffectiveUnitPrice } from '../../utils/formatters';
 
 export default function QuotationPreviewModal({
   isOpen,
@@ -133,7 +133,7 @@ export default function QuotationPreviewModal({
                 const effectivePrice =
                   it.customPrice !== undefined && it.customPrice !== null
                     ? it.customPrice
-                    : it.unit?.retailPrice || 0;
+                    : getEffectiveUnitPrice(it.unit, it.selectedPriceTier || 1);
                 const baseTotal = effectivePrice * it.quantity;
 
                 const hasMissingCrates = Boolean(it.noEmptyCrates);

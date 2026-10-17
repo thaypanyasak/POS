@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS product_units (
     multiplier INT NOT NULL DEFAULT 1,
     retail_price BIGINT NOT NULL DEFAULT 0,
     wholesale_price BIGINT NOT NULL DEFAULT 0,
+    price_2 BIGINT NOT NULL DEFAULT 0,
+    price_3 BIGINT NOT NULL DEFAULT 0,
     barcode TEXT,
     is_base_unit BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()

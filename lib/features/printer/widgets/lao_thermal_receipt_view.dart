@@ -225,6 +225,15 @@ class LaoThermalReceiptView extends StatelessWidget {
             fontSize: 20,
             isBold: true,
           ),
+          if (transaction.exchangeRate > 0) ...[
+            const SizedBox(height: 2),
+            _buildTotalRow(
+              'ທຽບເທົ່າເງິນບາດ (1฿ = ${transaction.exchangeRate.round()}₭):',
+              '${(transaction.totalThb).toStringAsFixed(2)} ฿',
+              fontSize: 12,
+              isBold: false,
+            ),
+          ],
 
           const SizedBox(height: 8),
           _buildDashedLine(),

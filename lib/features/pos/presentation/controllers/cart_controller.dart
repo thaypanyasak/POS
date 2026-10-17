@@ -8,6 +8,7 @@ import '../../../../domain/models/sale_transaction.dart';
 class CartState {
   final List<CartItem> items;
   final bool isWholesaleMode;
+  final int globalPriceTier; // 1: standard (default), 2: regular customer, 3: wholesale/vip
   final PosCustomer customer;
   final List<List<CartItem>> heldOrders;
   final bool isEditingOldOrder;
@@ -23,6 +24,7 @@ class CartState {
   const CartState({
     this.items = const [],
     this.isWholesaleMode = false,
+    this.globalPriceTier = 1,
     this.customer = PosCustomer.walkIn,
     this.heldOrders = const [],
     this.isEditingOldOrder = false,
@@ -95,6 +97,7 @@ class CartState {
   CartState copyWith({
     List<CartItem>? items,
     bool? isWholesaleMode,
+    int? globalPriceTier,
     PosCustomer? customer,
     List<List<CartItem>>? heldOrders,
     bool? isEditingOldOrder,
@@ -111,6 +114,7 @@ class CartState {
     return CartState(
       items: items ?? this.items,
       isWholesaleMode: isWholesaleMode ?? this.isWholesaleMode,
+      globalPriceTier: globalPriceTier ?? this.globalPriceTier,
       customer: customer ?? this.customer,
       heldOrders: heldOrders ?? this.heldOrders,
       isEditingOldOrder: clearEditingTransaction ? false : (isEditingOldOrder ?? this.isEditingOldOrder),
@@ -169,6 +173,7 @@ class CartNotifier extends StateNotifier<CartState> {
         selectedUnit: selectedUnit,
         quantity: quantity,
         isWholesaleMode: state.isWholesaleMode,
+        selectedPriceTier: state.globalPriceTier,
       );
       state = state.copyWith(items: [...state.items, newItem]);
     }
@@ -278,6 +283,36 @@ class CartNotifier extends StateNotifier<CartState> {
     state = state.copyWith(items: newItems);
   }
 
+  /// Sets price tier (1: standard, 2: regular, 3: wholesale/vip) for a specific item
+  void selectPriceTier(String cartItemId, int tier) {
+    final newItems = state.items.map((item) {
+      if (item.id == cartItemId) {
+        return item.copyWith(
+          selectedPriceTier: tier,
+          clearOverride: true,
+        );
+      }
+      return item;
+    }).toList();
+
+    state = state.copyWith(items: newItems);
+  }
+
+  /// Sets global price tier (1, 2, or 3) and applies it to all items in cart
+  void setGlobalPriceTier(int tier) {
+    final newItems = state.items.map((item) {
+      return item.copyWith(
+        selectedPriceTier: tier,
+        clearOverride: true,
+      );
+    }).toList();
+
+    state = state.copyWith(
+      globalPriceTier: tier,
+      items: newItems,
+    );
+  }
+
   /// Toggles missing crate deposit fee (ບໍ່ມີແກັດປ່ຽນ) for an item
   void toggleCrateDeposit(String cartItemId, bool noEmptyCrates) {
     final newItems = state.items.map((item) {
@@ -374,6 +409,7 @@ class CartNotifier extends StateNotifier<CartState> {
   void clearCart() {
     state = state.copyWith(
       items: [],
+      globalPriceTier: 1,
       customer: PosCustomer.walkIn,
       clearEditingTransaction: true,
     );

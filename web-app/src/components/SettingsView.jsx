@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Gear,
   CurrencyCircleDollar,
@@ -13,11 +13,19 @@ import {
   DeviceTablet,
   CheckCircle,
   Tag,
-  ClockCounterClockwise
+  ClockCounterClockwise,
+  PencilSimple,
+  FloppyDisk,
+  X,
 } from '@phosphor-icons/react';
+import { updateExchangeRateInSupabase } from '../services/supabase';
+import queryClient from '../services/queryClient';
+import { formatDots, parseDots } from '../utils/formatters';
 
 export default function SettingsView({
-  exchangeRate = 720,
+  exchangeRate = 0,
+  setExchangeRate,
+  onAlert,
   isCloudSynced = false,
   productsCount = 0,
   transactionsCount = 0,
@@ -31,6 +39,35 @@ export default function SettingsView({
   onRefreshAll,
   isLoading = false,
 }) {
+  const [isEditingRate, setIsEditingRate] = useState(false);
+  const [rateInput, setRateInput] = useState(String(exchangeRate || ''));
+  const [isSavingRate, setIsSavingRate] = useState(false);
+
+  useEffect(() => {
+    if (exchangeRate) setRateInput(String(exchangeRate));
+  }, [exchangeRate]);
+
+  const handleSaveRate = async () => {
+    const val = parseInt(rateInput, 10);
+    if (!val || val <= 0) {
+      onAlert?.('ກະລຸນາປ້ອນອັດຕາແລກປ່ຽນທີ່ຖືກຕ້ອງ (> 0)!', 'ແຈ້ງເຕືອນ', 'warning');
+      return;
+    }
+    setIsSavingRate(true);
+    try {
+      await updateExchangeRateInSupabase(val);
+      setExchangeRate?.(val);
+      await queryClient.invalidateQueries({ queryKey: ['exchange_rate'] });
+      await queryClient.invalidateQueries({ queryKey: ['store_settings'] });
+      setIsEditingRate(false);
+      onAlert?.(`ອັບເດດອັດຕາແລກປ່ຽນ: 1 ฿ = ${formatDots(val)} ₭ ສຳເລັດ!`, 'ສຳເລັດ', 'success');
+    } catch (err) {
+      onAlert?.(err.message || 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກອັດຕາແລກປ່ຽນ', 'ຂໍ້ຜິດພາດ', 'error');
+    } finally {
+      setIsSavingRate(false);
+    }
+  };
+
   const [localPaperWidth, setLocalPaperWidth] = useState(receiptPaperWidth);
   const paperWidth = setReceiptPaperWidth ? receiptPaperWidth : localPaperWidth;
   const handlePaperWidthChange = (val) => {
@@ -95,23 +132,70 @@ export default function SettingsView({
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
-                <div>
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="min-w-0">
                   <span className="text-xs text-slate-500 font-semibold block">
                     ອັດຕາແລກປ່ຽນປະຈຸບັນ
                   </span>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className="font-mono text-2xl font-bold text-slate-900 tabular-nums">
-                      1 ฿ = {exchangeRate} ₭
-                    </span>
-                  </div>
+                  {!isEditingRate ? (
+                    <div className="mt-1 flex items-baseline gap-2">
+                      <span className="font-mono text-2xl font-black text-slate-900 tabular-nums">
+                        1 ฿ = {formatDots(exchangeRate)} ₭
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold text-slate-500">1 ฿ =</span>
+                      <input
+                        type="number"
+                        value={rateInput}
+                        onChange={(e) => setRateInput(e.target.value)}
+                        className="w-28 px-2.5 py-1.5 bg-white border border-teal-400 rounded-lg text-sm font-mono font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                        placeholder="0"
+                      />
+                      <span className="text-xs font-mono font-bold text-slate-500">₭</span>
+                    </div>
+                  )}
                 </div>
-                <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200/80">
-                  ອັດຕາຄົງທີ່ POS
-                </span>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {!isEditingRate ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingRate(true)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-teal-700 border border-teal-200 shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                    >
+                      <PencilSimple size={14} weight="bold" />
+                      <span>ແກ້ໄຂ</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRateInput(String(exchangeRate));
+                          setIsEditingRate(false);
+                        }}
+                        disabled={isSavingRate}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 cursor-pointer"
+                      >
+                        <X size={14} weight="bold" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveRate}
+                        disabled={isSavingRate}
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95 transition-all"
+                      >
+                        <FloppyDisk size={14} weight="bold" />
+                        <span>{isSavingRate ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກ'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
               <p className="text-xs text-slate-500 mt-3 leading-relaxed">
-                ໝາຍເຫດ: ລາຄາຕົ້ນທຶນບາດຂອງສິນຄ້າຈະຖືກຄິດໄລ່ອັດຕະໂນມັດຕາມອັດຕານີ້ (1 ບາດ = {exchangeRate} ກີບ) ເພື່ອຮັບປະກັນກຳໄລຂັ້ນຕົ້ນທີ່ຖືກຕ້ອງ.
+                ໝາຍເຫດ: ລາຄາຕົ້ນທຶນບາດຂອງສິນຄ້າຈະຖືກຄິດໄລ່ອັດຕະໂນມັດຕາມອັດຕານີ້ (1 ບາດ = {formatDots(exchangeRate)} ກີບ) ເພື່ອຮັບປະກັນກຳໄລຂັ້ນຕົ້ນທີ່ຖືກຕ້ອງ.
               </p>
             </div>
           </div>

@@ -17,11 +17,14 @@ import {
   Money,
   QrCode,
   HandCoins,
+  Check,
 } from '@phosphor-icons/react';
-import { formatKip, formatCompoundStock, formatDots } from '../utils/formatters';
+import { formatKip, formatCompoundStock, formatDots, getEffectiveUnitPrice, PRICE_TIERS } from '../utils/formatters';
 import PriceOverrideModal from './PriceOverrideModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import QuotationPreviewModal from './inventory/QuotationPreviewModal';
+import ExchangeRateBadge from './common/ExchangeRateBadge';
+import queryClient from '../services/queryClient';
 
 export default function PosScreen({
   categories,
@@ -44,11 +47,17 @@ export default function PosScreen({
   toggleCartItemCrateDeposit,
   updateMissingCrates,
   changeCartItemUnit,
+  globalPriceTier = 1,
+  setGlobalPriceTier,
+  changeCartItemPriceTier,
   editingOldTransaction = null,
   onCancelEditOrder,
+  exchangeRate = 0,
+  setExchangeRate,
 }) {
   // Modal for editing line item price (familiar customer / price override)
   const [overrideModalItem, setOverrideModalItem] = useState(null);
+  const [openPriceMenuKey, setOpenPriceMenuKey] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanToast, setScanToast] = useState(null);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
@@ -272,20 +281,58 @@ export default function PosScreen({
             ))}
           </div>
         </div>
+
+        {/* Global Price Mode (Cách 2: Chọn nhanh mức giá cho toàn bộ đơn hàng POS) */}
+        <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-200/80">
+          <div className="flex items-center gap-1 shrink-0">
+            <SlidersHorizontal size={12} className="text-slate-500" />
+            <span className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider">
+              ຕາຕະລາງລາຄາ:
+            </span>
+          </div>
+
+          <div className="inline-flex items-center bg-slate-200/90 p-0.5 rounded-lg border border-slate-300 gap-0.5">
+            {[
+              { id: 1, label: 'ລາຄາ 1', desc: 'ມາດຕະຖານ', activeClass: 'bg-teal-600 text-white shadow-2xs font-black' },
+              { id: 2, label: 'ລາຄາ 2', desc: 'ລູກຄ້າປະຈຳ', activeClass: 'bg-sky-600 text-white shadow-2xs font-black' },
+              { id: 3, label: 'ລາຄາ 3', desc: 'ຂາຍສົ່ງ/VIP', activeClass: 'bg-amber-600 text-white shadow-2xs font-black' },
+            ].map((tier) => {
+              const isSelected = (globalPriceTier || 1) === tier.id;
+              return (
+                <button
+                  key={tier.id}
+                  type="button"
+                  onClick={() => setGlobalPriceTier && setGlobalPriceTier(tier.id)}
+                  className={`h-6 px-2 rounded-md text-[10.5px] transition-all cursor-pointer flex items-center justify-center ${
+                    isSelected
+                      ? tier.activeClass
+                      : 'text-slate-600 font-bold hover:text-slate-900 hover:bg-slate-300/60'
+                  }`}
+                  title={`ນຳໃຊ້ ${tier.label} (${tier.desc}) ໃຫ້ທຸກລາຍການໃນກະຕ່າ`}
+                >
+                  <span>{tier.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* 3. High-Density Cart Item List (Thumbnail on left + 2 clean rows on right) */}
       <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5 overscroll-contain">
         {cart.map((item) => {
-          const originalPrice = item.unit.retailPrice;
+          const itemKey = `${item.product.id}_${item.unit.id}`;
+          const currentTier = item.selectedPriceTier || 1;
+          const tierPrice = getEffectiveUnitPrice(item.unit, currentTier);
+          const originalPrice = tierPrice;
           const effectivePrice =
             item.customPrice !== undefined && item.customPrice !== null
               ? item.customPrice
-              : originalPrice;
+              : tierPrice;
           const isOverridden =
             item.customPrice !== undefined &&
             item.customPrice !== null &&
-            item.customPrice !== originalPrice;
+            item.customPrice !== tierPrice;
 
           // Specialized Crate Deposit / Missing Crate Fee Logic
           const isCrateEligible =
@@ -306,10 +353,14 @@ export default function PosScreen({
 
           const imgUrl = item.product?.imageUrl || item.product?.image_url;
 
+          const isPriceMenuOpen = openPriceMenuKey === itemKey;
+
           return (
             <div
               key={`${item.product.id}_${item.unit.id}`}
               className={`p-2 rounded-xl border bg-white flex flex-col gap-1 transition-all shadow-2xs ${
+                isPriceMenuOpen ? 'relative z-30 overflow-visible' : 'relative z-0'
+              } ${
                 isOverridden ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200/80 hover:border-slate-300'
               }`}
             >
@@ -327,7 +378,7 @@ export default function PosScreen({
                       }}
                     />
                   ) : (
-                    <span className="text-base select-none">📦</span>
+                    <Package size={22} className="text-slate-300" weight="duotone" />
                   )}
                 </div>
 
@@ -408,6 +459,92 @@ export default function PosScreen({
                           </span>
                         )}
                       </button>
+
+                      {/* Multi-Price Tier Selector Dropdown/Pill: [ ລາຄາ 1 ▾ ] */}
+                      <div className={`relative shrink-0 ${isPriceMenuOpen ? 'z-40' : ''}`}>
+                        <button
+                          type="button"
+                          onClick={() => setOpenPriceMenuKey(isPriceMenuOpen ? null : itemKey)}
+                          className={`h-6 px-1.5 rounded-md text-[10.5px] font-black flex items-center gap-0.5 transition-all border cursor-pointer shadow-2xs ${
+                            currentTier === 3
+                              ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300 ring-1 ring-amber-400/40'
+                              : currentTier === 2
+                              ? 'bg-sky-100 hover:bg-sky-200 text-sky-900 border-sky-300 ring-1 ring-sky-400/40'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                          }`}
+                          title={`ລະດັບລາຄາປະຈຸບັນ: ລາຄາ ${currentTier} (ກົດເພື່ອປ່ຽນ)`}
+                        >
+                          <span>{`ລາຄາ ${currentTier}`}</span>
+                          <span className="text-[9px] opacity-70">▾</span>
+                        </button>
+
+                        {/* Floating Price Selector Dropdown Menu */}
+                        {isPriceMenuOpen && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-40"
+                              onClick={() => setOpenPriceMenuKey(null)}
+                            />
+                            <div className="absolute left-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-1 min-w-[260px] w-max max-w-[320px] flex flex-col gap-0.5 animate-in fade-in-50 zoom-in-95">
+                              <div className="px-2.5 py-1.5 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                                <span>ເລືອກລະດັບລາຄາ:</span>
+                                <span className="text-teal-700 font-extrabold">{item.unit.unitName}</span>
+                              </div>
+                              {(() => {
+                                const tiers = [
+                                  {
+                                    tierNum: 1,
+                                    label: 'ລາຄາ 1 (ມາດຕະຖານ)',
+                                    price: Number(item.unit.retailPrice ?? item.unit.retail_price ?? item.unit.price ?? 0),
+                                  },
+                                  {
+                                    tierNum: 2,
+                                    label: 'ລາຄາ 2 (ລູກຄ້າປະຈຳ)',
+                                    price: Number(item.unit.price_2 ?? item.unit.price2 ?? 0),
+                                  },
+                                  {
+                                    tierNum: 3,
+                                    label: 'ລາຄາ 3 (ລາຄາສົ່ງ / VIP)',
+                                    price: Number(item.unit.price_3 ?? item.unit.price3 ?? 0),
+                                  },
+                                ];
+                                // Conditional rendering: show only configured tiers (> 0)
+                                const availableTiers = tiers.filter((t) => t.price > 0);
+                                const displayTiers = availableTiers.length > 0 ? availableTiers : [tiers[0]];
+
+                                return displayTiers.map(({ tierNum, label, price }) => {
+                                  const isSelected = currentTier === tierNum;
+                                  return (
+                                    <button
+                                      key={tierNum}
+                                      type="button"
+                                      onClick={() => {
+                                        changeCartItemPriceTier && changeCartItemPriceTier(item.product.id, item.unit.id, tierNum);
+                                        setOpenPriceMenuKey(null);
+                                      }}
+                                      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-md hover:bg-slate-50 cursor-pointer text-xs transition-colors ${
+                                        isSelected
+                                          ? 'bg-teal-50 text-teal-900 font-bold'
+                                          : 'text-slate-700 font-medium'
+                                      }`}
+                                    >
+                                      <span className={`whitespace-nowrap font-medium ${isSelected ? 'text-teal-950 font-bold' : 'text-slate-700'}`}>
+                                        {label}
+                                      </span>
+                                      <div className="font-bold text-slate-900 whitespace-nowrap flex items-center gap-1.5 font-mono shrink-0">
+                                        <span>{formatDots(price)} ₭</span>
+                                        {isSelected && (
+                                          <Check size={14} weight="bold" className="text-teal-600 shrink-0" />
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                });
+                              })()}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     {/* Stepper (- Qty +) */}
@@ -614,6 +751,13 @@ export default function PosScreen({
               <Barcode size={20} weight="bold" />
               <span className="hidden sm:inline">ສະແກນ</span>
             </button>
+
+            {/* Pill Badge hiển thị & điều chỉnh tỷ giá THB/LAK (Point-in-Time Snapshot) */}
+            <ExchangeRateBadge
+              exchangeRate={exchangeRate}
+              onRateUpdated={setExchangeRate}
+              queryClient={queryClient}
+            />
 
             {/* Mobile Cart Trigger Button (< 768px) */}
             <button

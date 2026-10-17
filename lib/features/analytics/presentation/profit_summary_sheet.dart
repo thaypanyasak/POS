@@ -156,6 +156,7 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
                 child: _buildMetricCard(
                   title: LaoStrings.totalRevenue,
                   value: LaoCurrencyFormatter.format(summary.totalRevenue),
+                  subValueThb: '≈ ${LaoCurrencyFormatter.formatDots(summary.totalRevenueThb.round())} ฿',
                   icon: Icons.payments,
                   color: AppColors.info,
                 ),
@@ -165,6 +166,7 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
                 child: _buildMetricCard(
                   title: LaoStrings.totalCost,
                   value: LaoCurrencyFormatter.format(summary.totalCostOfGoods),
+                  subValueThb: '≈ ${LaoCurrencyFormatter.formatDots(summary.totalCostThb.round())} ฿',
                   icon: Icons.inventory_2,
                   color: AppColors.textSecondary,
                 ),
@@ -174,6 +176,7 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
                 child: _buildMetricCard(
                   title: LaoStrings.grossProfit,
                   value: '+${LaoCurrencyFormatter.format(summary.totalGrossProfit)}',
+                  subValueThb: '≈ +${LaoCurrencyFormatter.formatDots(summary.totalProfitThb.round())} ฿',
                   icon: Icons.trending_up,
                   color: AppColors.primary,
                   isBold: true,
@@ -294,6 +297,7 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
   Widget _buildMetricCard({
     required String title,
     required String value,
+    String? subValueThb,
     required IconData icon,
     required Color color,
     bool isBold = false,
@@ -340,6 +344,18 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
               color: color == AppColors.textSecondary ? AppColors.textPrimary : color,
             ),
           ),
+          if (subValueThb != null && subValueThb.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              subValueThb,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: (color == AppColors.textSecondary ? AppColors.textPrimary : color).withValues(alpha: 0.75),
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -88,16 +88,24 @@ Modal hoặc Fullscreen Dialog thêm & sửa sản phẩm hỗ trợ 2 chế đ�
 
 ---
 
-### Phần 2: Giá vốn mua vào (Purchase Cost)
+### Phần 2: Giá vốn mua vào (Purchase Cost) - Quy đổi 2 chiều & Làm tròn thương mại
 
-Bao gồm 2 ô nhập số độc lập:
+Bao gồm 2 ô nhập số quy đổi tương tác 2 chiều mượt mà (Two-way Reactive Conversion):
 1. **Giá vốn Baht Thái (ຕົ້ນທຶນ ฿ THB):**
    - Dùng để chủ quán đối soát hóa đơn nhập khẩu từ Thái Lan.
-   - Nhập dạng số nguyên/số thực.
+   - Khi người dùng gõ ô Baht: Tự động tính ô Tiền Kíp: `costLak = Math.round(costThb * rate)`. Tiền Kíp là số nguyên nguyên tử, không có số thập phân.
 2. **Giá vốn Kíp Lào (ຕົ້ນທຶນ ₭ LAK):**
    - Bắt buộc dùng để tính toán **Giá vốn hàng bán (COGS)** và **Lợi nhuận gộp (Gross Profit)** trên Financial Dashboard.
-   - Khi nhập ô Baht, tự động gợi ý quy đổi Kíp theo tỷ giá: `costKip = costBaht * exchangeRate` (cho phép chủ quán tự sửa số lẻ theo ý muốn).
-   - Format hiển thị dạng phân cách hàng nghìn dấu chấm (VD: `240.000 ₭`).
+   - Khi người dùng gõ ô Kíp: Tự động tính ô Tiền Baht: `costThb = Math.round(costLak / rate)`. Áp dụng chuẩn làm tròn số thương mại (Commercial Half-Up Rounding): $\ge 0.5$ làm tròn lên, $< 0.5$ làm tròn xuống. Loại bỏ hoàn toàn phần thập phân để tiền Baht là số nguyên tròn trịa.
+3. **Cơ chế chống vòng lặp (Infinite Loop Prevention):**
+   - Áp dụng cơ chế State Machine với `lastModifiedField` (`'THB'` hoặc `'LAK'`).
+   - Chỉ tính toán ô còn lại khi nhận sự kiện `onChange` từ bàn phím người dùng.
+   - Loại bỏ các dấu phân cách hàng nghìn bằng `parseCurrencyInput` trước khi tính toán.
+   - Khi xóa trống một ô, ô còn lại cũng tự động xóa về trống/0 (không gây lỗi `NaN`).
+4. **Hiển thị & Lưu Database:**
+   - Cả 2 ô format phân cách hàng nghìn bằng dấu chấm (`formatDots`), font `font-mono tabular-nums`.
+   - Hiển thị tỷ giá thời gian thực từ hệ thống: `1 ฿ = {formatDots(rate)} ₭`.
+   - Payload gửi lên Supabase: `cost_thb` (integer), `cost_lak` (integer), và `cost_per_base_unit = Math.round(cost_lak / baseUnitMultiplier)`.
 
 ---
 

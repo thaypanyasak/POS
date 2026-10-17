@@ -12,7 +12,7 @@ import {
   Money,
   HandCoins,
 } from '@phosphor-icons/react';
-import { formatKip, formatDots, parseDots } from '../utils/formatters';
+import { formatKip, formatDots, parseDots, getEffectiveUnitPrice } from '../utils/formatters';
 
 export default function CheckoutModal({
   isOpen,
@@ -143,7 +143,7 @@ export default function CheckoutModal({
                   const effectivePrice =
                     item.customPrice !== undefined && item.customPrice !== null
                       ? item.customPrice
-                      : item.unit?.retailPrice || 0;
+                      : getEffectiveUnitPrice(item.unit, item.selectedPriceTier || 1);
                   const baseTotal = effectivePrice * item.quantity;
                   const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
                   const missingCount = item.noEmptyCrates

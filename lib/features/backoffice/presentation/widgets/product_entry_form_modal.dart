@@ -9,6 +9,7 @@ import '../../../../data/remote/supabase_sync_service.dart';
 import '../../../../domain/models/category_model.dart';
 import '../../../../domain/models/product.dart';
 import '../../../../domain/models/product_unit.dart';
+import '../../../../providers/exchange_rate_provider.dart';
 import '../../../pos/presentation/controllers/catalog_controller.dart';
 import '../../../pos/presentation/widgets/barcode_scanner_modal.dart';
 import 'category_management_modal.dart';
@@ -56,6 +57,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
   late TextEditingController _costKipController;
   final FocusNode _costBahtFocusNode = FocusNode();
   final FocusNode _costKipFocusNode = FocusNode();
+  bool _isConvertingCost = false;
 
   // Track Stock
   bool _trackStock = true;
@@ -73,6 +75,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
   late TextEditingController _cartonBarcodeController;
   late TextEditingController _cartonMultiplierController; // packs per carton
   late TextEditingController _cartonPriceController;
+  late TextEditingController _cartonPrice2Controller;
+  late TextEditingController _cartonPrice3Controller;
   bool _hasCrateDeposit = false;
   late TextEditingController _crateDepositFeeController;
 
@@ -81,11 +85,15 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
   late TextEditingController _packBarcodeController;
   late TextEditingController _packMultiplierController; // pieces per pack
   late TextEditingController _packPriceController;
+  late TextEditingController _packPrice2Controller;
+  late TextEditingController _packPrice3Controller;
 
   // Tier 3 (Piece / Retail)
   late TextEditingController _pieceUnitNameController;
   late TextEditingController _pieceBarcodeController;
   late TextEditingController _piecePriceController;
+  late TextEditingController _piecePrice2Controller;
+  late TextEditingController _piecePrice3Controller;
 
   bool _isSaving = false;
 
@@ -117,16 +125,22 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
     _cartonBarcodeController = TextEditingController();
     _cartonMultiplierController = TextEditingController(text: '8');
     _cartonPriceController = TextEditingController();
+    _cartonPrice2Controller = TextEditingController();
+    _cartonPrice3Controller = TextEditingController();
     _crateDepositFeeController = TextEditingController(text: '30.000');
 
     _packUnitNameController = TextEditingController(text: 'ແພັກ');
     _packBarcodeController = TextEditingController();
     _packMultiplierController = TextEditingController(text: '6');
     _packPriceController = TextEditingController();
+    _packPrice2Controller = TextEditingController();
+    _packPrice3Controller = TextEditingController();
 
     _pieceUnitNameController = TextEditingController(text: 'ອັນ');
     _pieceBarcodeController = TextEditingController();
     _piecePriceController = TextEditingController();
+    _piecePrice2Controller = TextEditingController();
+    _piecePrice3Controller = TextEditingController();
   }
 
   /// Clean slate reset and hydration strictly adhering to Anti-State Leak Architecture
@@ -165,6 +179,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
       _cartonUnitNameController.text = 'ແກັດ';
       _cartonMultiplierController.text = '8';
       _cartonPriceController.text = '210.000';
+      _cartonPrice2Controller.clear();
+      _cartonPrice3Controller.clear();
       _cartonBarcodeController.clear();
       _hasCrateDeposit = false;
       _crateDepositFeeController.text = '30.000';
@@ -173,11 +189,15 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
       _packUnitNameController.text = 'ແພັກ';
       _packMultiplierController.text = '6';
       _packPriceController.text = '55.000';
+      _packPrice2Controller.clear();
+      _packPrice3Controller.clear();
       _packBarcodeController.clear();
 
       _enablePiece = true;
       _pieceUnitNameController.text = 'ອັນ';
       _piecePriceController.text = '10.000';
+      _piecePrice2Controller.clear();
+      _piecePrice3Controller.clear();
       _pieceBarcodeController.clear();
     } else {
       // 2. EDIT MODE: Clean Slate Reset First
@@ -207,7 +227,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
 
       final int resolvedInitialBaht = p.costBaht > 0
           ? p.costBaht
-          : (initialCartonCost > 0 ? (initialCartonCost / 720).round() : 0);
+          : 0;
       _costBahtController.text =
           resolvedInitialBaht > 0 ? LaoCurrencyFormatter.formatNumber(resolvedInitialBaht) : '';
 
@@ -259,25 +279,49 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
       if (cartonU != null) {
         _cartonUnitNameController.text = cartonU.unitName;
         _cartonPriceController.text = LaoCurrencyFormatter.formatNumber(cartonU.retailPrice);
+        _cartonPrice2Controller.text = (cartonU.price2 != null && cartonU.price2! > 0)
+            ? LaoCurrencyFormatter.formatNumber(cartonU.price2!)
+            : '';
+        _cartonPrice3Controller.text = (cartonU.price3 != null && cartonU.price3! > 0)
+            ? LaoCurrencyFormatter.formatNumber(cartonU.price3!)
+            : '';
         _cartonBarcodeController.text = cartonU.barcode ?? '';
       } else {
         _cartonUnitNameController.text = p.cName;
+        _cartonPrice2Controller.clear();
+        _cartonPrice3Controller.clear();
       }
 
       if (packU != null) {
         _packUnitNameController.text = packU.unitName;
         _packPriceController.text = LaoCurrencyFormatter.formatNumber(packU.retailPrice);
+        _packPrice2Controller.text = (packU.price2 != null && packU.price2! > 0)
+            ? LaoCurrencyFormatter.formatNumber(packU.price2!)
+            : '';
+        _packPrice3Controller.text = (packU.price3 != null && packU.price3! > 0)
+            ? LaoCurrencyFormatter.formatNumber(packU.price3!)
+            : '';
         _packBarcodeController.text = packU.barcode ?? '';
       } else {
         _packUnitNameController.text = p.pName;
+        _packPrice2Controller.clear();
+        _packPrice3Controller.clear();
       }
 
       if (pieceU != null) {
         _pieceUnitNameController.text = pieceU.unitName;
         _piecePriceController.text = LaoCurrencyFormatter.formatNumber(pieceU.retailPrice);
+        _piecePrice2Controller.text = (pieceU.price2 != null && pieceU.price2! > 0)
+            ? LaoCurrencyFormatter.formatNumber(pieceU.price2!)
+            : '';
+        _piecePrice3Controller.text = (pieceU.price3 != null && pieceU.price3! > 0)
+            ? LaoCurrencyFormatter.formatNumber(pieceU.price3!)
+            : '';
         _pieceBarcodeController.text = pieceU.barcode ?? '';
       } else {
         _pieceUnitNameController.text = p.pcName;
+        _piecePrice2Controller.clear();
+        _piecePrice3Controller.clear();
       }
 
       // Multipliers
@@ -359,19 +403,97 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
     _cartonBarcodeController.dispose();
     _cartonMultiplierController.dispose();
     _cartonPriceController.dispose();
+    _cartonPrice2Controller.dispose();
+    _cartonPrice3Controller.dispose();
     _crateDepositFeeController.dispose();
     _packUnitNameController.dispose();
     _packBarcodeController.dispose();
     _packMultiplierController.dispose();
     _packPriceController.dispose();
+    _packPrice2Controller.dispose();
+    _packPrice3Controller.dispose();
     _pieceUnitNameController.dispose();
     _pieceBarcodeController.dispose();
     _piecePriceController.dispose();
+    _piecePrice2Controller.dispose();
+    _piecePrice3Controller.dispose();
     super.dispose();
+  }
+
+  // 2-Way Reactive Currency Sync with Infinite Loop Prevention
+  void _onBahtChanged(String val, double activeRate) {
+    if (_isConvertingCost) return;
+    final clean = val.replaceAll(RegExp(r'\D'), '');
+    if (clean.isEmpty) {
+      _isConvertingCost = true;
+      _costBahtController.text = '';
+      _costKipController.text = '';
+      _isConvertingCost = false;
+      setState(() {});
+      return;
+    }
+    final thb = int.tryParse(clean) ?? 0;
+    if (thb == 0) {
+      _isConvertingCost = true;
+      _costBahtController.text = clean == '0' ? '0' : '';
+      _costKipController.text = clean == '0' ? '0' : '';
+      _isConvertingCost = false;
+      setState(() {});
+      return;
+    }
+    final rate = activeRate > 0 ? activeRate : 0.0;
+    if (rate <= 0) {
+      _isConvertingCost = false;
+      setState(() {});
+      return;
+    }
+    // Direction 1: costLak = Math.round(costThb * rate) - integer atom
+    final lak = (thb * rate).round();
+    _isConvertingCost = true;
+    _costKipController.text = lak > 0 ? LaoCurrencyFormatter.formatNumber(lak) : '';
+    _isConvertingCost = false;
+    setState(() {});
+  }
+
+  void _onKipChanged(String val, double activeRate) {
+    if (_isConvertingCost) return;
+    final clean = val.replaceAll(RegExp(r'\D'), '');
+    if (clean.isEmpty) {
+      _isConvertingCost = true;
+      _costKipController.text = '';
+      _costBahtController.text = '';
+      _isConvertingCost = false;
+      setState(() {});
+      return;
+    }
+    final lak = int.tryParse(clean) ?? 0;
+    if (lak == 0) {
+      _isConvertingCost = true;
+      _costKipController.text = clean == '0' ? '0' : '';
+      _costBahtController.text = clean == '0' ? '0' : '';
+      _isConvertingCost = false;
+      setState(() {});
+      return;
+    }
+    final rate = activeRate > 0 ? activeRate : 0.0;
+    if (rate <= 0) {
+      _isConvertingCost = false;
+      setState(() {});
+      return;
+    }
+    // Direction 2: costThb = Math.round(costLak / rate) - Standard Commercial Half-Up Rounding
+    final thb = (lak / rate).round();
+    _isConvertingCost = true;
+    _costBahtController.text = thb > 0 ? LaoCurrencyFormatter.formatNumber(thb) : '';
+    _isConvertingCost = false;
+    setState(() {});
   }
 
   // --- PRESETS ---
   void _applyPresetBeer() {
+    final rate = ref.read(exchangeRateProvider).rate;
+    const thb = 250;
+    final lak = (thb * rate).round();
     setState(() {
       _enablePiece = false;
       _enablePack = false;
@@ -379,8 +501,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
       _cartonUnitNameController.text = 'ລັງ';
       _cartonMultiplierController.text = '1';
       _cartonPriceController.text = '265.000';
-      _costBahtController.text = '250';
-      _costKipController.text = '180.000';
+      _costBahtController.text = LaoCurrencyFormatter.formatNumber(thb);
+      _costKipController.text = LaoCurrencyFormatter.formatNumber(lak);
       _hasCrateDeposit = true;
       _crateDepositFeeController.text = '30.000';
       _trackStock = true;
@@ -391,6 +513,9 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
   }
 
   void _applyPresetDrink3Tiers() {
+    final rate = ref.read(exchangeRateProvider).rate;
+    const thb = 250;
+    final lak = (thb * rate).round();
     setState(() {
       _enablePiece = true;
       _pieceUnitNameController.text = 'ກະປ໋ອງ';
@@ -403,8 +528,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
       _cartonUnitNameController.text = 'ແກັດ';
       _cartonMultiplierController.text = '4';
       _cartonPriceController.text = '210.000';
-      _costBahtController.text = '250';
-      _costKipController.text = '180.000';
+      _costBahtController.text = LaoCurrencyFormatter.formatNumber(thb);
+      _costKipController.text = LaoCurrencyFormatter.formatNumber(lak);
       _hasCrateDeposit = false;
       _trackStock = true;
       _stockCartonController.text = '10';
@@ -414,6 +539,9 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
   }
 
   void _applyPresetSnack3Tiers() {
+    final rate = ref.read(exchangeRateProvider).rate;
+    const thb = 250;
+    final lak = (thb * rate).round();
     setState(() {
       _enablePiece = false;
       _enablePack = true;
@@ -424,8 +552,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
       _cartonUnitNameController.text = 'ແກັດ';
       _cartonMultiplierController.text = '6';
       _cartonPriceController.text = '200.000';
-      _costBahtController.text = '250';
-      _costKipController.text = '180.000';
+      _costBahtController.text = LaoCurrencyFormatter.formatNumber(thb);
+      _costKipController.text = LaoCurrencyFormatter.formatNumber(lak);
       _hasCrateDeposit = false;
       _trackStock = true;
       _stockCartonController.text = '10';
@@ -435,6 +563,9 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
   }
 
   void _applyPresetSugarSack() {
+    final rate = ref.read(exchangeRateProvider).rate;
+    const thb = 87;
+    final lak = (thb * rate).round();
     setState(() {
       _enablePiece = true;
       _pieceUnitNameController.text = 'ຖົງ';
@@ -444,8 +575,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
       _cartonUnitNameController.text = 'ເປົາ';
       _cartonMultiplierController.text = '25';
       _cartonPriceController.text = '350.000';
-      _costBahtController.text = '87';
-      _costKipController.text = '62.640';
+      _costBahtController.text = LaoCurrencyFormatter.formatNumber(thb);
+      _costKipController.text = LaoCurrencyFormatter.formatNumber(lak);
       _hasCrateDeposit = false;
       _trackStock = true;
       _stockCartonController.text = '5';
@@ -455,14 +586,17 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
   }
 
   void _applyPresetPieceOnly() {
+    final rate = ref.read(exchangeRateProvider).rate;
+    const thb = 25;
+    final lak = (thb * rate).round();
     setState(() {
       _enablePiece = true;
       _pieceUnitNameController.text = 'ອັນ';
       _piecePriceController.text = '25.000';
       _enablePack = false;
       _enableCarton = false;
-      _costBahtController.text = '25';
-      _costKipController.text = '18.000';
+      _costBahtController.text = LaoCurrencyFormatter.formatNumber(thb);
+      _costKipController.text = LaoCurrencyFormatter.formatNumber(lak);
       _hasCrateDeposit = false;
       _trackStock = true;
       _stockCartonController.text = '0';
@@ -552,7 +686,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
       final prodId = widget.productToEdit?.id ?? const Uuid().v4();
       final costKip = LaoCurrencyFormatter.parseClean(_costKipController.text);
       final enteredBaht = LaoCurrencyFormatter.parseClean(_costBahtController.text);
-      final costBaht = enteredBaht > 0 ? enteredBaht : (costKip > 0 ? (costKip / 720).round() : 0);
+      final costBaht = enteredBaht > 0 ? enteredBaht : 0;
       final crateDepositFee = LaoCurrencyFormatter.parseClean(_crateDepositFeeController.text);
 
       // 1. Upload compressed image if selected
@@ -571,8 +705,16 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
       final packsPerCarton = int.tryParse(_cartonMultiplierController.text.trim()) ?? 8;
       final piecesPerPack = int.tryParse(_packMultiplierController.text.trim()) ?? 6;
       final cartonPrice = LaoCurrencyFormatter.parseClean(_cartonPriceController.text);
+      final cartonPrice2 = LaoCurrencyFormatter.parseClean(_cartonPrice2Controller.text);
+      final cartonPrice3 = LaoCurrencyFormatter.parseClean(_cartonPrice3Controller.text);
+
       final packPrice = LaoCurrencyFormatter.parseClean(_packPriceController.text);
+      final packPrice2 = LaoCurrencyFormatter.parseClean(_packPrice2Controller.text);
+      final packPrice3 = LaoCurrencyFormatter.parseClean(_packPrice3Controller.text);
+
       final piecePrice = LaoCurrencyFormatter.parseClean(_piecePriceController.text);
+      final piecePrice2 = LaoCurrencyFormatter.parseClean(_piecePrice2Controller.text);
+      final piecePrice3 = LaoCurrencyFormatter.parseClean(_piecePrice3Controller.text);
 
       final List<ProductUnit> units = [];
       String actualBaseUnit = 'ອັນ';
@@ -592,6 +734,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
             multiplier: tier1Mult,
             retailPrice: cartonPrice,
             wholesalePrice: (cartonPrice * 0.95).round(),
+            price2: cartonPrice2 > 0 ? cartonPrice2 : null,
+            price3: cartonPrice3 > 0 ? cartonPrice3 : null,
             barcode: _cartonBarcodeController.text.trim().isNotEmpty ? _cartonBarcodeController.text.trim() : null,
             isBaseUnit: false,
             isActive: true,
@@ -607,6 +751,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
             multiplier: tier2Mult,
             retailPrice: packPrice,
             wholesalePrice: (packPrice * 0.95).round(),
+            price2: packPrice2 > 0 ? packPrice2 : null,
+            price3: packPrice3 > 0 ? packPrice3 : null,
             barcode: _packBarcodeController.text.trim().isNotEmpty ? _packBarcodeController.text.trim() : null,
             isBaseUnit: false,
             isActive: true,
@@ -621,6 +767,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
           multiplier: 1,
           retailPrice: piecePrice,
           wholesalePrice: (piecePrice * 0.95).round(),
+          price2: piecePrice2 > 0 ? piecePrice2 : null,
+          price3: piecePrice3 > 0 ? piecePrice3 : null,
           barcode: _pieceBarcodeController.text.trim().isNotEmpty ? _pieceBarcodeController.text.trim() : null,
           isBaseUnit: true,
           isActive: true,
@@ -639,6 +787,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
             multiplier: tier1Mult,
             retailPrice: cartonPrice,
             wholesalePrice: (cartonPrice * 0.95).round(),
+            price2: cartonPrice2 > 0 ? cartonPrice2 : null,
+            price3: cartonPrice3 > 0 ? cartonPrice3 : null,
             barcode: _cartonBarcodeController.text.trim().isNotEmpty ? _cartonBarcodeController.text.trim() : null,
             isBaseUnit: false,
             isActive: true,
@@ -653,6 +803,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
           multiplier: 1,
           retailPrice: packPrice,
           wholesalePrice: (packPrice * 0.95).round(),
+          price2: packPrice2 > 0 ? packPrice2 : null,
+          price3: packPrice3 > 0 ? packPrice3 : null,
           barcode: _packBarcodeController.text.trim().isNotEmpty ? _packBarcodeController.text.trim() : null,
           isBaseUnit: true,
           isActive: true,
@@ -669,6 +821,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
           multiplier: 1,
           retailPrice: cartonPrice,
           wholesalePrice: (cartonPrice * 0.95).round(),
+          price2: cartonPrice2 > 0 ? cartonPrice2 : null,
+          price3: cartonPrice3 > 0 ? cartonPrice3 : null,
           barcode: _cartonBarcodeController.text.trim().isNotEmpty ? _cartonBarcodeController.text.trim() : null,
           isBaseUnit: true,
           isActive: true,
@@ -775,6 +929,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
   Widget build(BuildContext context) {
     final catalogState = ref.watch(catalogProvider);
     final rawCats = catalogState.rawCategories;
+    final exchangeRate = ref.watch(exchangeRateProvider).rate;
 
     final isEditMode = widget.productToEdit != null;
     final totalBaseUnits = _calculateTotalBaseUnits();
@@ -1045,7 +1200,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                             const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                                       ),
-                                      onChanged: (_) => setState(() {}),
+                                      onChanged: (v) => _onBahtChanged(v, exchangeRate),
                                     ),
                                   ],
                                 ),
@@ -1066,10 +1221,11 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                         InkWell(
                                           onTap: () {
                                             final bVal = LaoCurrencyFormatter.parseClean(_costBahtController.text);
+                                            final kVal = LaoCurrencyFormatter.parseClean(_costKipController.text);
                                             if (bVal > 0) {
-                                              final kVal = bVal * 720;
-                                              _costKipController.text = LaoCurrencyFormatter.formatNumber(kVal);
-                                              setState(() {});
+                                              _onBahtChanged(_costBahtController.text, exchangeRate);
+                                            } else if (kVal > 0) {
+                                              _onKipChanged(_costKipController.text, exchangeRate);
                                             }
                                           },
                                           borderRadius: BorderRadius.circular(6),
@@ -1080,13 +1236,13 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                               borderRadius: BorderRadius.circular(6),
                                               border: Border.all(color: const Color(0xFF99F6E4)),
                                             ),
-                                            child: const Row(
+                                            child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Icon(Icons.bolt_rounded, size: 12, color: Color(0xFF0D9488)),
-                                                SizedBox(width: 2),
-                                                Text('ແປງ 1฿=720₭',
-                                                    style: TextStyle(
+                                                const Icon(Icons.bolt_rounded, size: 12, color: Color(0xFF0D9488)),
+                                                const SizedBox(width: 2),
+                                                Text('1฿=${LaoCurrencyFormatter.formatNumber(exchangeRate.round())}₭',
+                                                    style: const TextStyle(
                                                         fontSize: 9.5,
                                                         fontWeight: FontWeight.bold,
                                                         color: Color(0xFF0F766E))),
@@ -1122,7 +1278,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                           borderSide: const BorderSide(color: Color(0xFF0D9488), width: 1.8),
                                         ),
                                       ),
-                                      onChanged: (_) => setState(() {}),
+                                      onChanged: (v) => _onKipChanged(v, exchangeRate),
                                     ),
                                   ],
                                 ),
@@ -1336,6 +1492,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                             unitController: _cartonUnitNameController,
                             barcodeController: _cartonBarcodeController,
                             priceController: _cartonPriceController,
+                            price2Controller: _cartonPrice2Controller,
+                            price3Controller: _cartonPrice3Controller,
                             multiplierController: _cartonMultiplierController,
                             multiplierLabel: '1 ${_cartonUnitNameController.text} = N ${_enablePack ? _packUnitNameController.text : (_enablePiece ? _pieceUnitNameController.text : "ໜ່ວຍ")}',
                             commonUnits: _commonCartonUnits,
@@ -1383,6 +1541,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                             unitController: _packUnitNameController,
                             barcodeController: _packBarcodeController,
                             priceController: _packPriceController,
+                            price2Controller: _packPrice2Controller,
+                            price3Controller: _packPrice3Controller,
                             multiplierController: _enablePiece ? _packMultiplierController : null,
                             multiplierLabel: _enablePiece ? '1 ${_packUnitNameController.text} = N ${_pieceUnitNameController.text}' : null,
                             commonUnits: _commonPackUnits,
@@ -1398,6 +1558,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                             unitController: _pieceUnitNameController,
                             barcodeController: _pieceBarcodeController,
                             priceController: _piecePriceController,
+                            price2Controller: _piecePrice2Controller,
+                            price3Controller: _piecePrice3Controller,
                             commonUnits: _commonPieceUnits,
                           ),
                         ],
@@ -1759,6 +1921,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
     required TextEditingController unitController,
     required TextEditingController barcodeController,
     required TextEditingController priceController,
+    required TextEditingController price2Controller,
+    required TextEditingController price3Controller,
     TextEditingController? multiplierController,
     String? multiplierLabel,
     required List<String> commonUnits,
@@ -1825,6 +1989,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Row 1: Unit Name, Multiplier (if applicable), Barcode
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1834,7 +1999,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('ຊື່ຫົວໜ່ວຍ', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                            const Text('ຊື່ຫົວໜ່ວຍ *', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 4),
                             TextFormField(
                               controller: unitController,
@@ -1849,34 +2014,8 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 10),
 
-                      // 2. Selling Price (Auto Formatted with Dots)
-                      Expanded(
-                        flex: 4,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('ລາຄາຂາຍ (₭)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            TextFormField(
-                              controller: priceController,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [LaoCurrencyInputFormatter()],
-                              style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace', fontWeight: FontWeight.bold),
-                              decoration: InputDecoration(
-                                hintText: '10.000',
-                                suffixText: '₭',
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // 3. Multiplier (if applicable)
+                      // 2. Multiplier (if applicable)
                       if (multiplierController != null) ...[
                         const SizedBox(width: 10),
                         Expanded(
@@ -1884,7 +2023,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(multiplierLabel ?? 'ອັດຕາສ່ວນ', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                              Text(multiplierLabel ?? 'ອັດຕາສ່ວນ *', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                               const SizedBox(height: 4),
                               TextFormField(
                                 controller: multiplierController,
@@ -1904,7 +2043,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
 
                       const SizedBox(width: 10),
 
-                      // 4. Barcode at the END of the row
+                      // 3. Barcode
                       Expanded(
                         flex: 4,
                         child: Column(
@@ -1967,6 +2106,191 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                         ),
                       );
                     }).toList(),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Row 2: 3 Horizontal Price Inputs (Grid 3 cols)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'ຕາຕະລາງ 3 ລາຄາຂາຍ (Multi-Price Tiers):',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF334155)),
+                        ),
+                        const SizedBox(height: 8),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isMobile = constraints.maxWidth < 560;
+
+                            final price1Widget = Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFD1FAE5),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text('ລາຄາ 1', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: Color(0xFF065F46))),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Text('ມາດຕະຖານ *', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                TextFormField(
+                                  controller: priceController,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [LaoCurrencyInputFormatter()],
+                                  style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace', fontWeight: FontWeight.w800, color: Color(0xFF047857)),
+                                  decoration: InputDecoration(
+                                    hintText: '10.000',
+                                    suffixText: '₭',
+                                    isDense: true,
+                                    filled: true,
+                                    fillColor: const Color(0xFFF0FDF4),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: Color(0xFFA7F3D0)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: Color(0xFF10B981), width: 1.5),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                const Text('ຂາຍປົກກະຕິ POS (ເລີ່ມຕົ້ນ)', style: TextStyle(fontSize: 9.5, color: Color(0xFF059669))),
+                              ],
+                            );
+
+                            final price2Widget = Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFE0F2FE),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text('ລາຄາ 2', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: Color(0xFF0369A1))),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Text('ລູກຄ້າປະຈຳ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                TextFormField(
+                                  controller: price2Controller,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [LaoCurrencyInputFormatter()],
+                                  style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace', fontWeight: FontWeight.w800, color: Color(0xFF0284C7)),
+                                  decoration: InputDecoration(
+                                    hintText: '(ບໍ່ກຳນົດ)',
+                                    suffixText: '₭',
+                                    isDense: true,
+                                    filled: true,
+                                    fillColor: const Color(0xFFF0F9FF),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: Color(0xFFBAE6FD)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: Color(0xFF0EA5E9), width: 1.5),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                const Text('(ບໍ່ບັງຄັບ)', style: TextStyle(fontSize: 9.5, color: Color(0xFF64748B))),
+                              ],
+                            );
+
+                            final price3Widget = Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF3E8FF),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text('ລາຄາ 3', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: Color(0xFF7E22CE))),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Text('ລາຄາສົ່ງ / VIP', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                TextFormField(
+                                  controller: price3Controller,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [LaoCurrencyInputFormatter()],
+                                  style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace', fontWeight: FontWeight.w800, color: Color(0xFF9333EA)),
+                                  decoration: InputDecoration(
+                                    hintText: '(ບໍ່ກຳນົດ)',
+                                    suffixText: '₭',
+                                    isDense: true,
+                                    filled: true,
+                                    fillColor: const Color(0xFFFAF5FF),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: Color(0xFFE9D5FF)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: Color(0xFFA855F7), width: 1.5),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                const Text('(ບໍ່ບັງຄັບ)', style: TextStyle(fontSize: 9.5, color: Color(0xFF64748B))),
+                              ],
+                            );
+
+                            if (isMobile) {
+                              return Column(
+                                children: [
+                                  price1Widget,
+                                  const SizedBox(height: 8),
+                                  price2Widget,
+                                  const SizedBox(height: 8),
+                                  price3Widget,
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(child: price1Widget),
+                                const SizedBox(width: 10),
+                                Expanded(child: price2Widget),
+                                const SizedBox(width: 10),
+                                Expanded(child: price3Widget),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
 
                   if (extraWidgets != null) ...extraWidgets,

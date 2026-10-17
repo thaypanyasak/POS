@@ -9,6 +9,7 @@ class CartItem {
   final ProductUnit selectedUnit;
   final int quantity;
   final bool isWholesaleMode;
+  final int selectedPriceTier; // 1: standard (default), 2: regular customer, 3: wholesale/vip
   final int? customPrice; // On-the-fly override price per unit
   final String? overrideReason; // e.g., "ລູກຄ້າປະຈຳ"
   final bool noEmptyCrates; // Checkbox for missing empty crate (ບໍ່ມີແກັດປ່ຽນ)
@@ -20,6 +21,7 @@ class CartItem {
     required this.selectedUnit,
     this.quantity = 1,
     this.isWholesaleMode = false,
+    this.selectedPriceTier = 1,
     this.customPrice,
     this.overrideReason,
     this.noEmptyCrates = false,
@@ -54,6 +56,9 @@ class CartItem {
 
   /// Catalog price before any custom override
   int get originalUnitPrice {
+    if (selectedPriceTier == 2 || selectedPriceTier == 3) {
+      return selectedUnit.priceForTier(selectedPriceTier);
+    }
     return selectedUnit.priceForMode(isWholesale: isWholesaleMode);
   }
 
@@ -133,6 +138,7 @@ class CartItem {
     ProductUnit? selectedUnit,
     int? quantity,
     bool? isWholesaleMode,
+    int? selectedPriceTier,
     int? customPrice,
     String? overrideReason,
     bool clearOverride = false,
@@ -145,6 +151,7 @@ class CartItem {
       selectedUnit: selectedUnit ?? this.selectedUnit,
       quantity: quantity ?? this.quantity,
       isWholesaleMode: isWholesaleMode ?? this.isWholesaleMode,
+      selectedPriceTier: selectedPriceTier ?? this.selectedPriceTier,
       customPrice: clearOverride ? null : (customPrice ?? this.customPrice),
       overrideReason:
           clearOverride ? null : (overrideReason ?? this.overrideReason),
@@ -160,6 +167,7 @@ class CartItem {
       'selected_unit': selectedUnit.toJson(),
       'quantity': quantity,
       'is_wholesale_mode': isWholesaleMode,
+      'selected_price_tier': selectedPriceTier,
       'custom_price': customPrice,
       'override_reason': overrideReason,
       'no_empty_crates': noEmptyCrates,
@@ -183,6 +191,7 @@ class CartItem {
           ProductUnit.fromJson(json['selected_unit'] as Map<String, dynamic>),
       quantity: (json['quantity'] as num).toInt(),
       isWholesaleMode: json['is_wholesale_mode'] as bool? ?? false,
+      selectedPriceTier: (json['selected_price_tier'] as num?)?.toInt() ?? 1,
       customPrice: (json['custom_price'] as num?)?.toInt(),
       overrideReason: json['override_reason'] as String?,
       noEmptyCrates: json['no_empty_crates'] as bool? ??

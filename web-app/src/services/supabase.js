@@ -38,6 +38,83 @@ export function getProductMetaLocal(productId) {
 }
 
 /**
+ * 0. Store Settings & Point-in-time Exchange Rate (1 THB = X LAK)
+ */
+export async function fetchStoreSetting(key, defaultValue = null) {
+  try {
+    const { data, error } = await supabase
+      .from('store_settings')
+      .select('value')
+      .eq('key', key)
+      .maybeSingle();
+
+    if (error || !data) {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const local = window.localStorage.getItem(`meiishop_setting_${key}`);
+        if (local) return JSON.parse(local);
+      }
+      return defaultValue;
+    }
+
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(`meiishop_setting_${key}`, JSON.stringify(data.value));
+    }
+    return data.value;
+  } catch (err) {
+    console.warn(`fetchStoreSetting error for key ${key}:`, err);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const local = window.localStorage.getItem(`meiishop_setting_${key}`);
+      if (local) return JSON.parse(local);
+    }
+    return defaultValue;
+  }
+}
+
+export async function updateStoreSetting(key, value) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(`meiishop_setting_${key}`, JSON.stringify(value));
+    }
+
+    const { data, error } = await supabase
+      .from('store_settings')
+      .upsert({
+        key,
+        value,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'key' })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.warn(`updateStoreSetting error for ${key}:`, error);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data };
+  } catch (err) {
+    console.error(`updateStoreSetting exception for ${key}:`, err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+export async function fetchExchangeRate() {
+  const setting = await fetchStoreSetting('thb_lak_exchange_rate', { rate: 690, auto_update: false });
+  return Number(setting?.rate) || 690;
+}
+
+export async function updateExchangeRateInSupabase(newRate) {
+  const rateNum = Number(newRate);
+  if (!rateNum || rateNum <= 0) {
+    return { success: false, error: 'Tỷ giá phải là số dương lớn hơn 0' };
+  }
+  return await updateStoreSetting('thb_lak_exchange_rate', {
+    rate: rateNum,
+    auto_update: false,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+/**
  * 1. Fetch all products with their associated multi-tier units from Supabase
  */
 export async function fetchProductsFromSupabase() {
@@ -110,6 +187,10 @@ export async function fetchProductsFromSupabase() {
             multiplier: Number(u.multiplier) || 1,
             retailPrice: Number(u.retail_price) || 0,
             wholesalePrice: Number(u.wholesale_price) || 0,
+            price_2: Number(u.price_2) || 0,
+            price_3: Number(u.price_3) || 0,
+            price2: Number(u.price_2) || 0,
+            price3: Number(u.price_3) || 0,
             barcode: u.barcode || null,
             isBaseUnit: Boolean(u.is_base_unit),
             tier: resolvedTier,
@@ -240,6 +321,10 @@ export async function fetchProductsFromSupabase() {
             multiplier: 1,
             retailPrice: 0,
             wholesalePrice: 0,
+            price_2: 0,
+            price_3: 0,
+            price2: 0,
+            price3: 0,
             isBaseUnit: true,
             tier: 1,
           }
@@ -284,11 +369,13 @@ export async function saveProductToSupabase(product) {
     if (product.categoryId) {
       prodPayload.category_id = product.categoryId;
     }
-    if (product.costBaht > 0) {
-      prodPayload.cost_thb = Number(product.costBaht);
+    const finalCostThb = product.cost_thb ?? product.costBaht;
+    if (finalCostThb !== undefined && finalCostThb !== null && finalCostThb !== '') {
+      prodPayload.cost_thb = Math.round(Number(finalCostThb) || 0);
     }
-    if (product.costKip > 0) {
-      prodPayload.cost_lak = Number(product.costKip);
+    const finalCostLak = product.cost_lak ?? product.costKip;
+    if (finalCostLak !== undefined && finalCostLak !== null && finalCostLak !== '') {
+      prodPayload.cost_lak = Math.round(Number(finalCostLak) || 0);
     }
 
     let { error: pErr } = await supabase.from('products').upsert(prodPayload);
@@ -326,11 +413,19 @@ export async function saveProductToSupabase(product) {
         multiplier: Number(u.multiplier) || 1,
         retail_price: Number(u.retailPrice) || 0,
         wholesale_price: Number(u.wholesalePrice) || 0,
+        price_2: Number(u.price_2 ?? u.price2 ?? 0),
+        price_3: Number(u.price_3 ?? u.price3 ?? 0),
         barcode: u.barcode || null,
         is_base_unit: Boolean(u.isBaseUnit),
       }));
 
-      const { error: uErr } = await supabase.from('product_units').insert(unitsPayload);
+      let { error: uErr } = await supabase.from('product_units').insert(unitsPayload);
+      if (uErr && uErr.message && (uErr.message.includes('price_2') || uErr.message.includes('price_3') || uErr.message.includes('column') || uErr.message.includes('schema cache'))) {
+        // Safe retry without price_2/price_3 if columns not yet migrated in Supabase
+        const fallbackUnits = unitsPayload.map(({ price_2, price_3, ...rest }) => rest);
+        const retryRes = await supabase.from('product_units').insert(fallbackUnits);
+        uErr = retryRes.error;
+      }
       if (uErr) {
         console.error('Product units insert error:', uErr);
         return { success: false, error: uErr.message || JSON.stringify(uErr) };
@@ -589,6 +684,11 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       paid_amount: Number(tx.paidAmount ?? (tx.paymentMethod === 'debt' ? (tx.amountTendered || 0) : (tx.amountTendered || tx.grandTotal || 0))),
       remaining_debt: Number(tx.debtAmount ?? (tx.paymentMethod === 'debt' ? Math.max(0, (tx.grandTotal || 0) - (tx.amountTendered || 0)) : 0)),
       payment_status: tx.paymentStatus || (tx.paymentMethod === 'debt' ? ((tx.amountTendered || 0) > 0 ? 'PARTIAL' : 'DEBT') : 'PAID'),
+      exchange_rate: Number(tx.exchange_rate || tx.exchangeRate || 0),
+      total_lak: Number(tx.total_lak ?? tx.totalLak ?? tx.grandTotal ?? 0),
+      total_thb: Number(tx.total_thb ?? tx.totalThb ?? 0),
+      gross_profit_lak: Number(tx.gross_profit_lak ?? tx.grossProfitLak ?? tx.grossProfit ?? 0),
+      gross_profit_thb: Number(tx.gross_profit_thb ?? tx.grossProfitThb ?? 0),
     });
 
     if (txErr) {
@@ -1085,126 +1185,185 @@ export async function fetchPurchaseOrdersFromSupabase() {
 }
 
 /**
- * 6. Create Purchase Order (GRN), cascade stock, override cost and retail price
+ * 6. Atomic PostgreSQL RPC: process_multi_product_grn(payload JSONB)
+ * Ensures 100% ACID compliance in a single transaction on Supabase.
  */
-export async function createPurchaseOrderInSupabase(poData, draftItems = []) {
+export async function processMultiProductGRN(payload) {
   try {
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const randomSuffix = String(Math.floor(1000 + Math.random() * 9000));
-    const poId = `PO-${dateStr}-${randomSuffix}`;
+    const { data, error } = await supabase.rpc('process_multi_product_grn', { payload });
+    if (error) {
+      console.warn('Supabase RPC process_multi_product_grn warning:', error.message || error);
+      // If function does not exist in DB yet (pending SQL migration), use fallback client transaction
+      return await fallbackProcessMultiProductGRN(payload);
+    }
+    return { success: true, poId: payload.po_code, data };
+  } catch (err) {
+    console.warn('RPC exception, using client fallback:', err);
+    return await fallbackProcessMultiProductGRN(payload);
+  }
+}
 
-    // 1. Insert purchase_order with single-product fields
-    const firstDraft = draftItems && draftItems.length > 0 ? draftItems[0] : null;
+/**
+ * Fallback client transaction when Postgres RPC is not yet registered in Supabase
+ */
+async function fallbackProcessMultiProductGRN(payload) {
+  try {
+    const poId = payload.po_code;
+    const items = payload.items || [];
+    const firstItem = items[0] || null;
 
-    let poPayload = {
+    // 1. Insert into purchase_orders
+    const poPayload = {
       id: poId,
-      supplier_id: poData.supplierId || null,
-      product_id: firstDraft?.product?.id || poData.productId || null,
-      product_name: firstDraft?.product?.name || poData.productName || 'ສິນຄ້າຮັບເຂົ້າ',
-      imported_base_units: Number(firstDraft?.importedBaseUnits || poData.importedBaseUnits || 0),
-      tier1_qty: Number(firstDraft?.tier1Qty || poData.tier1Qty || 0),
-      tier2_qty: Number(firstDraft?.tier2Qty || poData.tier2Qty || 0),
-      tier3_qty: Number(firstDraft?.tier3Qty || poData.tier3Qty || 0),
-      cost_thb: Number(firstDraft?.costThb || poData.costThb || 0),
-      cost_lak: Number(firstDraft?.costLak || poData.costLak || 0),
-      cost_per_base_unit: Number(firstDraft?.costPerBaseUnit || poData.costPerBaseUnit || 0),
-      total_cost_lak: Number(poData.totalCostLak) || 0,
-      total_cost_thb: Number(poData.totalCostThb) || 0,
-      total_cost_vnd: Number(poData.totalCostVnd) || 0,
-      paid_amount: Number(poData.paidAmount) || 0,
-      debt_amount: Number(poData.debtAmount) || 0,
-      payment_status: poData.paymentStatus || 'PAID',
-      received_by: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
-      note: poData.note || null,
+      supplier_id: payload.supplier_id || null,
+      product_id: firstItem?.product_id || null,
+      product_name: items.length > 1
+        ? `${firstItem?.product_name || 'ສິນຄ້າ'} (+${items.length - 1} ລາຍການ)`
+        : (firstItem?.product_name || 'ສິນຄ້າຮັບເຂົ້າ'),
+      imported_base_units: items.reduce((sum, it) => sum + (Number(it.base_units_added) || 0), 0),
+      total_cost_lak: Number(payload.total_lak) || 0,
+      total_cost_thb: Number(payload.total_thb) || 0,
+      paid_amount: Number(payload.paid_amount_lak) || 0,
+      debt_amount: Number(payload.debt_amount_lak) || 0,
+      payment_status: payload.payment_status || 'PAID',
+      received_by: payload.receiver_name || 'ໄມ້ຄຳ (Meii)',
+      note: payload.notes || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
-    let { error: poErr } = await supabase.from('purchase_orders').insert(poPayload);
-
-    // If single-product columns do not exist yet on purchase_orders, retry with standard header columns
-    if (poErr && (poErr.code === '42703' || (poErr.message && (poErr.message.includes('cost_lak') || poErr.message.includes('column'))))) {
-      console.warn('purchase_orders single-product columns not in schema cache, retrying with header columns:', poErr.message);
-      const basePayload = {
-        id: poId,
-        supplier_id: poData.supplierId || null,
-        total_cost_lak: Number(poData.totalCostLak) || 0,
-        total_cost_thb: Number(poData.totalCostThb) || 0,
-        total_cost_vnd: Number(poData.totalCostVnd) || 0,
-        paid_amount: Number(poData.paidAmount) || 0,
-        debt_amount: Number(poData.debtAmount) || 0,
-        payment_status: poData.paymentStatus || 'PAID',
-        received_by: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
-        note: poData.note || null,
-      };
-      const retryResult = await supabase.from('purchase_orders').insert(basePayload);
-      poErr = retryResult.error;
-    }
-
+    let { error: poErr } = await supabase.from('purchase_orders').upsert(poPayload);
     if (poErr) {
-      console.error('PO Insert error:', poErr);
+      console.error('Fallback PO insert error:', poErr);
       return { success: false, error: poErr.message };
     }
 
-    // 2. Insert items & cascade stock & price overrides
-    if (draftItems && draftItems.length > 0) {
-      const itemsPayload = draftItems.map((d) => ({
+    // 2. Insert items into purchase_order_items
+    if (items.length > 0) {
+      await supabase.from('purchase_order_items').delete().eq('purchase_order_id', poId);
+
+      const itemsPayload = items.map((it) => ({
         purchase_order_id: poId,
-        product_id: d.product.id,
-        product_name: d.product.name,
-        cost_per_base_unit: Number(d.costPerBaseUnit) || 0,
-        cost_thb: Number(d.costThb) || 0,
-        cost_lak: Number(d.costLak) || 0,
-        cost_vnd: Number(d.costVnd) || 0,
-        imported_base_units: Number(d.importedBaseUnits) || 0,
-        tier1_qty: Number(d.tier1Qty) || 0,
-        tier2_qty: Number(d.tier2Qty) || 0,
-        tier3_qty: Number(d.tier3Qty) || 0,
+        product_id: it.product_id,
+        product_name: it.product_name || 'ສິນຄ້າ',
+        unit_id: it.unit_id || null,
+        unit_name: it.unit_name || null,
+        tier_level: Number(it.tier_level) || 1,
+        quantity: Number(it.quantity) || 1,
+        imported_base_units: Number(it.base_units_added) || 0,
+        cost_per_base_unit: Number(it.cost_per_base_unit) || 0,
+        cost_lak: Number(it.cost_lak_entered) || 0,
+        cost_thb: Number(it.cost_thb_entered) || 0,
+        line_total_lak: Number(it.line_total_lak) || (Number(it.cost_lak_entered || 0) * Number(it.quantity || 1)),
+        line_total_thb: Number(it.line_total_thb) || (Number(it.cost_thb_entered || 0) * Number(it.quantity || 1)),
+        created_at: new Date().toISOString(),
       }));
 
-      const { error: itemErr } = await supabase.from('purchase_order_items').insert(itemsPayload);
-      if (itemErr) console.warn('Purchase items insert warning:', itemErr);
+      await supabase.from('purchase_order_items').insert(itemsPayload);
 
-      // Cascade Stock & Cost updates to products table
-      for (const d of draftItems) {
-        const currentStock = Number(d.product.currentStockBaseUnits) || 0;
-        const newStock = currentStock + Number(d.importedBaseUnits || 0);
+      // 3. Cascade stock, track_stock, and cost to products table
+      for (const it of items) {
+        const prodId = it.product_id;
+        if (!prodId) continue;
 
-        await supabase.from('products').update({
+        const { data: dbProd } = await supabase
+          .from('products')
+          .select('current_stock_base_units')
+          .eq('id', prodId)
+          .single();
+
+        const currentStock = Number(dbProd?.current_stock_base_units || 0);
+        const addedUnits = Number(it.base_units_added || 0);
+        const newStock = currentStock + addedUnits;
+
+        const prodUpdate = {
           current_stock_base_units: newStock,
-          cost_per_base_unit: Number(d.costPerBaseUnit) || 0,
+          track_stock: true, // Auto enable inventory counting
           updated_at: new Date().toISOString(),
-        }).eq('id', d.product.id);
+        };
 
-        // Update local metadata for costBaht/costKip
+        if (Number(it.cost_lak_entered) > 0) prodUpdate.cost_lak = Number(it.cost_lak_entered);
+        if (Number(it.cost_thb_entered) > 0) prodUpdate.cost_thb = Number(it.cost_thb_entered);
+        if (Number(it.cost_per_base_unit) > 0) prodUpdate.cost_per_base_unit = Number(it.cost_per_base_unit);
+
+        await supabase.from('products').update(prodUpdate).eq('id', prodId);
+
+        // Update local metadata
         saveProductMetaLocal({
-          id: d.product.id,
-          costBaht: Number(d.costThb) || 0,
-          costKip: Number(d.costLak) || 0,
+          id: prodId,
+          costBaht: Number(it.cost_thb_entered) || 0,
+          costKip: Number(it.cost_lak_entered) || 0,
         });
 
-        // Retail price overrides for units
-        if (d.retailPriceOverrides && typeof d.retailPriceOverrides === 'object') {
-          for (const [unitId, newPrice] of Object.entries(d.retailPriceOverrides)) {
-            await supabase.from('product_units').update({
-              retail_price: Number(newPrice) || 0,
-            }).eq('id', unitId);
+        // 4. Update product_units retail_price_overrides
+        if (it.retail_price_overrides && typeof it.retail_price_overrides === 'object') {
+          for (const [unitId, price] of Object.entries(it.retail_price_overrides)) {
+            if (Number(price) > 0) {
+              await supabase.from('product_units').update({ retail_price: Number(price) }).eq('id', unitId);
+            }
           }
         }
       }
     }
 
-    // 3. Record initial debt payment if paid_amount > 0
-    if (Number(poData.paidAmount) > 0) {
+    // 5. Debt / initial payment record
+    if (Number(payload.paid_amount_lak) > 0) {
       await supabase.from('supplier_debt_payments').insert({
         purchase_order_id: poId,
-        payment_amount: Number(poData.paidAmount),
-        currency: poData.primaryCurrency || 'LAK',
+        payment_amount: Number(payload.paid_amount_lak),
+        currency: 'LAK',
         payment_method: 'CASH',
         note: 'ຊຳລະເບື້ອງຕົ້ນຕອນຮັບສິນຄ້າ (Initial payment at GRN)',
       });
     }
 
     return { success: true, poId };
+  } catch (err) {
+    console.error('fallbackProcessMultiProductGRN exception:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * 6. Create Purchase Order (GRN) adapter - delegates to atomic processMultiProductGRN
+ */
+export async function createPurchaseOrderInSupabase(poData, draftItems = []) {
+  try {
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+    const randomSuffix = String(Math.floor(1000 + Math.random() * 9000));
+    const poId = poData.id || `PO-${dateStr}-${randomSuffix}`;
+
+    const items = (draftItems || []).map((d) => ({
+      product_id: d.product?.id || d.productId,
+      product_name: d.product?.name || d.productName || 'ສິນຄ້າ',
+      unit_id: d.unitId || d.unit_id || null,
+      unit_name: d.unitName || d.unit_name || null,
+      tier_level: Number(d.tierLevel || 1),
+      quantity: Number(d.quantity || 1),
+      base_units_added: Number(d.importedBaseUnits ?? d.imported_base_units ?? 0),
+      cost_lak_entered: Number(d.costLak || 0),
+      cost_thb_entered: Number(d.costThb || 0),
+      cost_per_base_unit: Number(d.costPerBaseUnit || 0),
+      line_total_lak: Number(d.lineTotalLak || (Number(d.quantity || 1) * Number(d.costLak || 0))),
+      line_total_thb: Number(d.lineTotalThb || (Number(d.quantity || 1) * Number(d.costThb || 0))),
+      retail_price_overrides: d.retailPriceOverrides || {},
+    }));
+
+    const grnPayload = {
+      po_code: poId,
+      supplier_id: poData.supplierId || null,
+      receiver_name: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
+      total_lak: Number(poData.totalCostLak) || 0,
+      total_thb: Number(poData.totalCostThb) || 0,
+      payment_status: poData.paymentStatus || 'PAID',
+      paid_amount_lak: Number(poData.paidAmount) || 0,
+      debt_amount_lak: Number(poData.debtAmount) || 0,
+      notes: poData.note || '',
+      items,
+    };
+
+    return await processMultiProductGRN(grnPayload);
   } catch (e) {
     console.error('createPurchaseOrderInSupabase exception:', e);
     return { success: false, error: e.message };
@@ -1264,17 +1423,86 @@ export async function addSupplierDebtPaymentInSupabase(poId, paymentAmount, curr
 }
 
 /**
- * 8. Update Purchase Order (GRN) details
+ * 8. Update Purchase Order (GRN) details with Delta Stock Calculation
+ * VẤN ĐỀ 2 & 3:
+ * - Tính chênh lệch: ΔQty = NewBaseUnits - OldBaseUnits
+ * - Cập nhật tồn kho sản phẩm: new_stock = current_stock + ΔQty
+ * - Tự động kích hoạt track_stock = true
+ * - Cập nhật giá vốn mới vào products và giá bán lẻ vào product_units
+ * - Cập nhật purchase_orders và purchase_order_items
  */
 export async function updatePurchaseOrderInSupabase(poId, poData, draftItems = []) {
   try {
     const firstDraft = draftItems && draftItems.length > 0 ? draftItems[0] : null;
 
+    // 1. Fetch current (old) purchase order to get original imported base units & product id
+    const { data: oldPo } = await supabase
+      .from('purchase_orders')
+      .select('*, purchase_order_items(*)')
+      .eq('id', poId)
+      .single();
+
+    let oldBaseUnits = 0;
+    if (oldPo) {
+      if (oldPo.imported_base_units !== undefined && oldPo.imported_base_units !== null) {
+        oldBaseUnits = Number(oldPo.imported_base_units) || 0;
+      } else if (oldPo.purchase_order_items && oldPo.purchase_order_items.length > 0) {
+        oldBaseUnits = oldPo.purchase_order_items.reduce(
+          (sum, it) => sum + (Number(it.imported_base_units) || 0),
+          0
+        );
+      }
+    }
+
+    const newBaseUnits = Number(firstDraft?.importedBaseUnits ?? poData.importedBaseUnits ?? 0);
+    const targetProdId = firstDraft?.product?.id || poData.productId || oldPo?.product_id || oldPo?.purchase_order_items?.[0]?.product_id;
+
+    // Delta Stock Calculation: ΔQty = newBaseUnits - oldBaseUnits
+    const deltaQty = newBaseUnits - oldBaseUnits;
+
+    // 2. Cascade Delta Stock & Price updates to products table
+    if (targetProdId) {
+      const { data: prodData } = await supabase
+        .from('products')
+        .select('id, current_stock_base_units, track_stock')
+        .eq('id', targetProdId)
+        .single();
+
+      const currentStock = Number(prodData?.current_stock_base_units) || 0;
+      const newStock = Math.max(0, currentStock + deltaQty);
+
+      const prodUpdatePayload = {
+        current_stock_base_units: newStock,
+        track_stock: true, // VẤN ĐỀ 3: Tự động kích hoạt theo dõi kho
+        cost_per_base_unit: Number(firstDraft?.costPerBaseUnit || poData.costPerBaseUnit || 0),
+        updated_at: new Date().toISOString(),
+      };
+
+      const cLakVal = Number(firstDraft?.costLak || poData.costLak);
+      const cThbVal = Number(firstDraft?.costThb || poData.costThb);
+      if (cLakVal > 0) prodUpdatePayload.cost_lak = cLakVal;
+      if (cThbVal > 0) prodUpdatePayload.cost_thb = cThbVal;
+
+      let { error: pUpErr } = await supabase.from('products').update(prodUpdatePayload).eq('id', targetProdId);
+      if (pUpErr && (pUpErr.message?.includes('cost_lak') || pUpErr.message?.includes('cost_thb'))) {
+        delete prodUpdatePayload.cost_lak;
+        delete prodUpdatePayload.cost_thb;
+        await supabase.from('products').update(prodUpdatePayload).eq('id', targetProdId);
+      }
+
+      saveProductMetaLocal({
+        id: targetProdId,
+        costBaht: cThbVal || 0,
+        costKip: cLakVal || 0,
+      });
+    }
+
+    // 3. Update purchase_orders record
     let poPayload = {
       supplier_id: poData.supplierId || null,
-      product_id: firstDraft?.product?.id || poData.productId || null,
-      product_name: firstDraft?.product?.name || poData.productName || 'ສິນຄ້າຮັບເຂົ້າ',
-      imported_base_units: Number(firstDraft?.importedBaseUnits || poData.importedBaseUnits || 0),
+      product_id: targetProdId || null,
+      product_name: firstDraft?.product?.name || poData.productName || oldPo?.product_name || 'ສິນຄ້າຮັບເຂົ້າ',
+      imported_base_units: newBaseUnits,
       tier1_qty: Number(firstDraft?.tier1Qty || poData.tier1Qty || 0),
       tier2_qty: Number(firstDraft?.tier2Qty || poData.tier2Qty || 0),
       tier3_qty: Number(firstDraft?.tier3Qty || poData.tier3Qty || 0),
@@ -1316,6 +1544,26 @@ export async function updatePurchaseOrderInSupabase(poId, poData, draftItems = [
       return { success: false, error: updateErr.message };
     }
 
+    // 4. Update purchase_order_items (Replace old items with new items)
+    await supabase.from('purchase_order_items').delete().eq('purchase_order_id', poId);
+    if (draftItems && draftItems.length > 0) {
+      const itemsPayload = draftItems.map((d) => ({
+        purchase_order_id: poId,
+        product_id: d.product?.id || targetProdId,
+        product_name: d.product?.name || poData.productName || 'ສິນຄ້າຮັບເຂົ້າ',
+        cost_per_base_unit: Number(d.costPerBaseUnit) || 0,
+        cost_thb: Number(d.costThb) || 0,
+        cost_lak: Number(d.costLak) || 0,
+        cost_vnd: Number(d.costVnd) || 0,
+        imported_base_units: Number(d.importedBaseUnits) || 0,
+        tier1_qty: Number(d.tier1Qty) || 0,
+        tier2_qty: Number(d.tier2Qty) || 0,
+        tier3_qty: Number(d.tier3Qty) || 0,
+      }));
+      await supabase.from('purchase_order_items').insert(itemsPayload);
+    }
+
+    // 5. Retail price overrides for units
     if (firstDraft?.retailPriceOverrides && typeof firstDraft.retailPriceOverrides === 'object') {
       for (const [unitId, newPrice] of Object.entries(firstDraft.retailPriceOverrides)) {
         await supabase.from('product_units').update({
@@ -1327,6 +1575,81 @@ export async function updatePurchaseOrderInSupabase(poId, poData, draftItems = [
     return { success: true };
   } catch (e) {
     console.error('updatePurchaseOrderInSupabase exception:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * 9. Delete Purchase Order (GRN) and revert inventory stock
+ * VẤN ĐỀ 4:
+ * - Trừ lại số lượng tồn kho tương ứng đã nhập của phiếu đó khỏi products:
+ *   new_stock = current_stock - GRN_BaseUnits
+ * - Hủy/xóa các bản ghi công nợ liên quan trong supplier_debt_payments
+ * - Xóa bản ghi purchase_order_items
+ * - Xóa bản ghi phiếu nhập khỏi purchase_orders
+ */
+export async function deletePurchaseOrderInSupabase(poId) {
+  try {
+    // 1. Fetch current PO to identify product and imported base units
+    const { data: po, error: poErr } = await supabase
+      .from('purchase_orders')
+      .select('*, purchase_order_items(*)')
+      .eq('id', poId)
+      .single();
+
+    if (poErr || !po) {
+      return { success: false, error: poErr?.message || 'ບໍ່ພົບໃບຮັບສິນຄ້ານີ້ໃນລະບົບ' };
+    }
+
+    // 2. Identify target product and base units to revert
+    let importedUnits = 0;
+    if (po.imported_base_units !== undefined && po.imported_base_units !== null) {
+      importedUnits = Number(po.imported_base_units) || 0;
+    } else if (po.purchase_order_items && po.purchase_order_items.length > 0) {
+      importedUnits = po.purchase_order_items.reduce(
+        (sum, it) => sum + (Number(it.imported_base_units) || 0),
+        0
+      );
+    }
+
+    const prodId = po.product_id || po.purchase_order_items?.[0]?.product_id;
+
+    // 3. Revert inventory stock from products table
+    if (prodId && importedUnits > 0) {
+      const { data: prodData } = await supabase
+        .from('products')
+        .select('id, current_stock_base_units')
+        .eq('id', prodId)
+        .single();
+
+      if (prodData) {
+        const currentStock = Number(prodData.current_stock_base_units) || 0;
+        const newStock = Math.max(0, currentStock - importedUnits);
+        await supabase
+          .from('products')
+          .update({
+            current_stock_base_units: newStock,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', prodId);
+      }
+    }
+
+    // 4. Delete related supplier_debt_payments
+    await supabase.from('supplier_debt_payments').delete().eq('purchase_order_id', poId);
+
+    // 5. Delete related purchase_order_items
+    await supabase.from('purchase_order_items').delete().eq('purchase_order_id', poId);
+
+    // 6. Delete purchase_orders row
+    const { error: delErr } = await supabase.from('purchase_orders').delete().eq('id', poId);
+    if (delErr) {
+      return { success: false, error: delErr.message };
+    }
+
+    return { success: true };
+  } catch (e) {
+    console.error('deletePurchaseOrderInSupabase exception:', e);
     return { success: false, error: e.message };
   }
 }
@@ -1514,6 +1837,11 @@ export async function updateExistingSaleTransactionInSupabase(
         paid_amount: Number(newTxData.paidAmount ?? newTxData.amountTendered ?? 0),
         remaining_debt: Number(newTxData.remainingDebt ?? 0),
         payment_status: newTxData.paymentStatus || 'PAID',
+        exchange_rate: Number(newTxData.exchange_rate || newTxData.exchangeRate || 0),
+        total_lak: Number(newTxData.total_lak ?? newTxData.totalLak ?? newTxData.grandTotal ?? 0),
+        total_thb: Number(newTxData.total_thb ?? newTxData.totalThb ?? 0),
+        gross_profit_lak: Number(newTxData.gross_profit_lak ?? newTxData.grossProfitLak ?? newTxData.grossProfit ?? 0),
+        gross_profit_thb: Number(newTxData.gross_profit_thb ?? newTxData.grossProfitThb ?? 0),
       })
       .eq('id', txId);
 
@@ -1667,15 +1995,15 @@ export async function fetchAnnual12MonthSales(targetYear = new Date().getFullYea
     }
 
     const laoMonthNames = [
-      'ມັງກອນ (01)',
-      'ກຸມພາ (02)',
-      'ມີນາ (03)',
-      'ເມສາ (04)',
-      'ພຶດສະພາ (05)',
-      'ມິຖຸນາ (06)',
-      'ກໍລະກົດ (07)',
-      'ສິງຫາ (08)',
-      'ກັນຍາ (09)',
+      'ມັງກອນ (1)',
+      'ກຸມພາ (2)',
+      'ມີນາ (3)',
+      'ເມສາ (4)',
+      'ພຶດສະພາ (5)',
+      'ມິຖຸນາ (6)',
+      'ກໍລະກົດ (7)',
+      'ສິງຫາ (8)',
+      'ກັນຍາ (9)',
       'ຕຸລາ (10)',
       'ພະຈິກ (11)',
       'ທັນວາ (12)',

@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/models/product.dart';
+import '../../domain/models/product_unit.dart';
 import '../../models/purchase_order_model.dart';
 import '../../models/supplier_model.dart';
 import '../features/pos/presentation/controllers/catalog_controller.dart';
@@ -434,4 +436,509 @@ class PurchaseItemDraft {
 
 final purchaseProvider = StateNotifierProvider<PurchaseProvider, PurchaseState>((ref) {
   return PurchaseProvider(ref);
+});
+
+// ============================================================================
+// MULTI-PRODUCT GRN STATE MANAGEMENT (RIVERPOD)
+// ============================================================================
+
+/// Represents an item in the Multi-Product GRN Cart
+class GrnCartItem {
+  final Product product;
+  final String unitId;
+  final String unitName;
+  final int tierLevel;
+  final int multiplier;
+  final int quantity;
+  final double costThb;
+  final int costLak;
+  final Map<String, int> retailPriceOverrides; // unitId -> override retail price
+
+  const GrnCartItem({
+    required this.product,
+    required this.unitId,
+    required this.unitName,
+    required this.tierLevel,
+    required this.multiplier,
+    required this.quantity,
+    required this.costThb,
+    required this.costLak,
+    this.retailPriceOverrides = const {},
+  });
+
+  int get baseUnitsAdded => quantity * multiplier;
+  int get lineTotalLak => quantity * costLak;
+  double get lineTotalThb => quantity * costThb;
+  int get costPerBaseUnit =>
+      baseUnitsAdded > 0 ? (lineTotalLak / baseUnitsAdded).round() : costLak;
+
+  GrnCartItem copyWith({
+    Product? product,
+    String? unitId,
+    String? unitName,
+    int? tierLevel,
+    int? multiplier,
+    int? quantity,
+    double? costThb,
+    int? costLak,
+    Map<String, int>? retailPriceOverrides,
+  }) {
+    return GrnCartItem(
+      product: product ?? this.product,
+      unitId: unitId ?? this.unitId,
+      unitName: unitName ?? this.unitName,
+      tierLevel: tierLevel ?? this.tierLevel,
+      multiplier: multiplier ?? this.multiplier,
+      quantity: quantity ?? this.quantity,
+      costThb: costThb ?? this.costThb,
+      costLak: costLak ?? this.costLak,
+      retailPriceOverrides: retailPriceOverrides ?? this.retailPriceOverrides,
+    );
+  }
+}
+
+/// State of the Multi-Product GRN Cart
+class GrnCartState {
+  final List<GrnCartItem> items;
+  final String? supplierId;
+  final String receiverName;
+  final String poCode;
+  final int exchangeRate; // default 720 Kip / 1 Baht
+  final String paymentStatus; // 'PAID', 'DEBT', 'PARTIAL'
+  final int paidAmountLak;
+  final String note;
+  final bool isSubmitting;
+  final String? errorMessage;
+
+  const GrnCartState({
+    this.items = const [],
+    this.supplierId,
+    this.receiverName = 'ໄມ້ຄຳ (Meii)',
+    this.poCode = '',
+    this.exchangeRate = 720,
+    this.paymentStatus = 'PAID',
+    this.paidAmountLak = 0,
+    this.note = '',
+    this.isSubmitting = false,
+    this.errorMessage,
+  });
+
+  int get totalLak => items.fold(0, (sum, it) => sum + it.lineTotalLak);
+  double get totalThb => items.fold(0.0, (sum, it) => sum + it.lineTotalThb);
+
+  int get debtAmountLak {
+    if (paymentStatus == 'PAID') return 0;
+    if (paymentStatus == 'DEBT') return totalLak;
+    return (totalLak - paidAmountLak).clamp(0, totalLak);
+  }
+
+  GrnCartState copyWith({
+    List<GrnCartItem>? items,
+    String? supplierId,
+    String? receiverName,
+    String? poCode,
+    int? exchangeRate,
+    String? paymentStatus,
+    int? paidAmountLak,
+    String? note,
+    bool? isSubmitting,
+    String? errorMessage,
+  }) {
+    return GrnCartState(
+      items: items ?? this.items,
+      supplierId: supplierId ?? this.supplierId,
+      receiverName: receiverName ?? this.receiverName,
+      poCode: poCode ?? this.poCode,
+      exchangeRate: exchangeRate ?? this.exchangeRate,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      paidAmountLak: paidAmountLak ?? this.paidAmountLak,
+      note: note ?? this.note,
+      isSubmitting: isSubmitting ?? this.isSubmitting,
+      errorMessage: errorMessage,
+    );
+  }
+}
+
+/// Notifier managing Multi-Product GRN Cart operations & atomic Supabase RPC execution
+class GrnCartNotifier extends StateNotifier<GrnCartState> {
+  final Ref ref;
+
+  GrnCartNotifier(this.ref) : super(GrnCartState(poCode: _generatePoCode()));
+
+  static String _generatePoCode() {
+    final now = DateTime.now();
+    final y = now.year.toString().substring(2);
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    final r = (now.millisecondsSinceEpoch % 10000).toString().padLeft(4, '0');
+    return 'PO-$y$m$d-$r';
+  }
+
+  void reset({String? defaultReceiver}) {
+    state = GrnCartState(
+      poCode: _generatePoCode(),
+      receiverName: defaultReceiver ?? 'ໄມ້ຄຳ (Meii)',
+      exchangeRate: state.exchangeRate,
+    );
+  }
+
+  void setSupplier(String? id) => state = state.copyWith(supplierId: id);
+  void setReceiver(String name) => state = state.copyWith(receiverName: name);
+  void setExchangeRate(int rate) => state = state.copyWith(exchangeRate: rate);
+
+  void setPaymentStatus(String s) {
+    int newPaid = state.paidAmountLak;
+    if (s == 'PAID') newPaid = state.totalLak;
+    if (s == 'DEBT') newPaid = 0;
+    state = state.copyWith(paymentStatus: s, paidAmountLak: newPaid);
+  }
+
+  void setPaidAmount(int amt) => state = state.copyWith(paidAmountLak: amt);
+  void setNote(String n) => state = state.copyWith(note: n);
+
+  void addItem(Product product, {ProductUnit? selectedUnit}) {
+    final unit = selectedUnit ??
+        (product.units.isNotEmpty ? product.units.first : null);
+    final unitId = unit?.id ?? 'base_${product.id}';
+    final unitName = unit?.unitName ?? product.baseUnit;
+    final multiplier = unit?.multiplier ?? 1;
+    final tierLevel = unit?.tier ?? 1;
+
+    // Determine initial unit purchase costs
+    int costLak = product.costKip > 0
+        ? product.costKip
+        : (product.costPerBaseUnit * multiplier);
+    double costThb = product.costBaht > 0
+        ? product.costBaht.toDouble()
+        : (costLak > 0 && state.exchangeRate > 0 ? (costLak / state.exchangeRate) : 0.0);
+
+    // If already in cart with same product and unit
+    final existingIndex = state.items.indexWhere(
+      (it) => it.product.id == product.id && it.unitId == unitId,
+    );
+
+    if (existingIndex >= 0) {
+      final current = state.items[existingIndex];
+      final updatedList = List<GrnCartItem>.from(state.items);
+      updatedList[existingIndex] = current.copyWith(quantity: current.quantity + 1);
+      state = state.copyWith(items: updatedList);
+    } else {
+      final newItem = GrnCartItem(
+        product: product,
+        unitId: unitId,
+        unitName: unitName,
+        tierLevel: tierLevel,
+        multiplier: multiplier,
+        quantity: 1,
+        costThb: costThb,
+        costLak: costLak,
+      );
+      state = state.copyWith(items: [...state.items, newItem]);
+    }
+
+    if (state.paymentStatus == 'PAID') {
+      state = state.copyWith(paidAmountLak: state.totalLak);
+    }
+  }
+
+  bool addByBarcode(String barcode, List<Product> catalog) {
+    if (barcode.trim().isEmpty) return false;
+    final code = barcode.trim().toLowerCase();
+
+    for (final p in catalog) {
+      if (p.barcode != null && p.barcode!.toLowerCase() == code) {
+        addItem(p);
+        return true;
+      }
+      for (final u in p.units) {
+        if (u.barcode != null && u.barcode!.toLowerCase() == code) {
+          addItem(p, selectedUnit: u);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  void updateItemQuantity(int index, int qty) {
+    if (index < 0 || index >= state.items.length) return;
+    final clamped = qty < 1 ? 1 : qty;
+    final updatedList = List<GrnCartItem>.from(state.items);
+    updatedList[index] = updatedList[index].copyWith(quantity: clamped);
+    state = state.copyWith(items: updatedList);
+    if (state.paymentStatus == 'PAID') {
+      state = state.copyWith(paidAmountLak: state.totalLak);
+    }
+  }
+
+  void stepItemQuantity(int index, int delta) {
+    if (index < 0 || index >= state.items.length) return;
+    updateItemQuantity(index, state.items[index].quantity + delta);
+  }
+
+  void updateItemUnit(int index, ProductUnit unit) {
+    if (index < 0 || index >= state.items.length) return;
+    final current = state.items[index];
+    final costLak = current.product.costPerBaseUnit * unit.multiplier;
+    final costThb = state.exchangeRate > 0 ? (costLak / state.exchangeRate) : 0.0;
+
+    final updated = current.copyWith(
+      unitId: unit.id,
+      unitName: unit.unitName,
+      multiplier: unit.multiplier,
+      tierLevel: unit.tier ?? 1,
+      costLak: costLak,
+      costThb: costThb,
+    );
+    final updatedList = List<GrnCartItem>.from(state.items);
+    updatedList[index] = updated;
+    state = state.copyWith(items: updatedList);
+    if (state.paymentStatus == 'PAID') {
+      state = state.copyWith(paidAmountLak: state.totalLak);
+    }
+  }
+
+  void updateItemCostThb(int index, double thb) {
+    if (index < 0 || index >= state.items.length) return;
+    final current = state.items[index];
+    final lak = (thb * state.exchangeRate).round();
+    final updatedList = List<GrnCartItem>.from(state.items);
+    updatedList[index] = current.copyWith(costThb: thb, costLak: lak);
+    state = state.copyWith(items: updatedList);
+    if (state.paymentStatus == 'PAID') {
+      state = state.copyWith(paidAmountLak: state.totalLak);
+    }
+  }
+
+  void updateItemCostLak(int index, int lak) {
+    if (index < 0 || index >= state.items.length) return;
+    final current = state.items[index];
+    // Rule: modifying LAK should not overwrite THB
+    final updatedList = List<GrnCartItem>.from(state.items);
+    updatedList[index] = current.copyWith(costLak: lak);
+    state = state.copyWith(items: updatedList);
+    if (state.paymentStatus == 'PAID') {
+      state = state.copyWith(paidAmountLak: state.totalLak);
+    }
+  }
+
+  void updateRetailOverride(int index, String unitId, int newPrice) {
+    if (index < 0 || index >= state.items.length) return;
+    final current = state.items[index];
+    final overrides = Map<String, int>.from(current.retailPriceOverrides);
+    overrides[unitId] = newPrice;
+    final updatedList = List<GrnCartItem>.from(state.items);
+    updatedList[index] = current.copyWith(retailPriceOverrides: overrides);
+    state = state.copyWith(items: updatedList);
+  }
+
+  void removeItem(int index) {
+    if (index < 0 || index >= state.items.length) return;
+    final updatedList = List<GrnCartItem>.from(state.items)..removeAt(index);
+    state = state.copyWith(items: updatedList);
+    if (state.paymentStatus == 'PAID') {
+      state = state.copyWith(paidAmountLak: state.totalLak);
+    }
+  }
+
+  /// Atomic Postgres RPC GRN Submission with automatic cache invalidation
+  Future<bool> submitGRN() async {
+    if (state.items.isEmpty) {
+      state = state.copyWith(errorMessage: 'ກະລຸນາເລືອກຢ່າງໜ້ອຍ 1 ສິນຄ້າ');
+      return false;
+    }
+
+    state = state.copyWith(isSubmitting: true, errorMessage: null);
+
+    SupabaseClient? client;
+    try {
+      client = Supabase.instance.client;
+    } catch (_) {}
+
+    if (client == null) {
+      state = state.copyWith(
+        isSubmitting: false,
+        errorMessage: 'Supabase client not initialized',
+      );
+      return false;
+    }
+
+    final itemsPayload = state.items.map((it) {
+      return {
+        'product_id': it.product.id,
+        'product_name': it.product.name,
+        'unit_id': it.unitId,
+        'unit_name': it.unitName,
+        'tier_level': it.tierLevel,
+        'quantity': it.quantity,
+        'base_units_added': it.baseUnitsAdded,
+        'cost_lak_entered': it.costLak,
+        'cost_thb_entered': it.costThb,
+        'cost_per_base_unit': it.costPerBaseUnit,
+        'line_total_lak': it.lineTotalLak,
+        'line_total_thb': it.lineTotalThb,
+        'retail_price_overrides': it.retailPriceOverrides,
+      };
+    }).toList();
+
+    final payload = {
+      'po_code': state.poCode,
+      'supplier_id': state.supplierId,
+      'receiver_name': state.receiverName.trim().isNotEmpty
+          ? state.receiverName.trim()
+          : 'ໄມ້ຄຳ (Meii)',
+      'total_lak': state.totalLak,
+      'total_thb': state.totalThb,
+      'payment_status': state.paymentStatus,
+      'paid_amount_lak':
+          state.paymentStatus == 'DEBT' ? 0 : state.paidAmountLak,
+      'debt_amount_lak': state.debtAmountLak,
+      'notes': state.note.trim(),
+      'items': itemsPayload,
+    };
+
+    try {
+      // 1. Try atomic PostgreSQL RPC first
+      try {
+        final rpcRes = await client.rpc(
+          'process_multi_product_grn',
+          params: {'payload': payload},
+        );
+        debugPrint('GRN RPC Success: $rpcRes');
+      } catch (rpcErr) {
+        debugPrint('RPC process_multi_product_grn fallback due to: $rpcErr');
+        // Fallback: Client-side sequential execution
+        await _fallbackClientExecution(client, payload);
+      }
+
+      // 2. Refetch and synchronize local and Riverpod caches
+      await Future.wait([
+        ref.read(catalogProvider.notifier).fetchFromSupabase(),
+        ref.read(purchaseProvider.notifier).fetchPurchaseOrders(),
+        ref.read(purchaseProvider.notifier).fetchSuppliers(),
+      ]);
+
+      reset();
+      state = state.copyWith(isSubmitting: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSubmitting: false,
+        errorMessage: 'Failed to save GRN: $e',
+      );
+      return false;
+    }
+  }
+
+  Future<void> _fallbackClientExecution(
+    SupabaseClient client,
+    Map<String, dynamic> payload,
+  ) async {
+    final now = DateTime.now().toIso8601String();
+    final poId = payload['po_code'] as String;
+    final items = payload['items'] as List<dynamic>;
+
+    // Step 1: Insert purchase_orders
+    await client.from('purchase_orders').insert({
+      'id': poId,
+      if (payload['supplier_id'] != null) 'supplier_id': payload['supplier_id'],
+      'total_cost_lak': payload['total_lak'],
+      'total_cost_thb': payload['total_thb'],
+      'paid_amount': payload['paid_amount_lak'],
+      'debt_amount': payload['debt_amount_lak'],
+      'payment_status': payload['payment_status'],
+      'received_by': payload['receiver_name'],
+      'note': payload['notes'],
+      'created_at': now,
+      'updated_at': now,
+    });
+
+    // Step 2 & 3: Insert items and update products
+    for (final rawItem in items) {
+      final it = rawItem as Map<String, dynamic>;
+      final productId = it['product_id'] as String;
+      final baseUnitsAdded = (it['base_units_added'] as num).toInt();
+      final costLak = (it['cost_lak_entered'] as num).toInt();
+      final costThb = (it['cost_thb_entered'] as num).toDouble();
+      final costPerBaseUnit = (it['cost_per_base_unit'] as num).toInt();
+
+      try {
+        await client.from('purchase_order_items').insert({
+          'purchase_order_id': poId,
+          'product_id': productId,
+          'product_name': it['product_name'],
+          'unit_id': it['unit_id'],
+          'unit_name': it['unit_name'],
+          'tier_level': it['tier_level'],
+          'quantity': it['quantity'],
+          'base_units_added': baseUnitsAdded,
+          'cost_per_base_unit': costPerBaseUnit,
+          'cost_lak': costLak,
+          'cost_thb': costThb,
+          'line_total_lak': it['line_total_lak'],
+          'line_total_thb': it['line_total_thb'],
+          'created_at': now,
+        });
+      } catch (itemErr) {
+        debugPrint('Item insert fallback note: $itemErr');
+      }
+
+      try {
+        final prodRes = await client
+            .from('products')
+            .select('current_stock_base_units')
+            .eq('id', productId)
+            .maybeSingle();
+
+        final currentStock =
+            (prodRes?['current_stock_base_units'] as num?)?.toInt() ?? 0;
+        final newStock = currentStock + baseUnitsAdded;
+
+        await client.from('products').update({
+          'current_stock_base_units': newStock,
+          'track_stock': true,
+          'cost_per_base_unit': costPerBaseUnit,
+          'cost_kip': costLak,
+          'cost_baht': costThb.round(),
+          'updated_at': now,
+        }).eq('id', productId);
+      } catch (prodErr) {
+        debugPrint('Product update error: $prodErr');
+      }
+
+      final overrides = it['retail_price_overrides'] as Map<dynamic, dynamic>?;
+      if (overrides != null && overrides.isNotEmpty) {
+        for (final entry in overrides.entries) {
+          try {
+            await client.from('product_units').update({
+              'retail_price': entry.value,
+            }).eq('id', entry.key);
+          } catch (_) {}
+        }
+      }
+    }
+
+    // Step 4: Debt payment if applicable
+    if (payload['payment_status'] == 'DEBT' ||
+        payload['payment_status'] == 'PARTIAL') {
+      final debtAmt = (payload['debt_amount_lak'] as num).toInt();
+      if (debtAmt > 0) {
+        try {
+          await client.from('supplier_debt_payments').insert({
+            'purchase_order_id': poId,
+            'payment_amount': 0,
+            'currency': 'LAK',
+            'payment_method': 'DEBT_RECORD',
+            'note': 'ບັນທຶກຍອດໜີ້ຄ້າງຊຳລະເລີ່ມຕົ້ນ (Initial debt record)',
+            'created_at': now,
+          });
+        } catch (_) {}
+      }
+    }
+  }
+}
+
+final grnCartProvider =
+    StateNotifierProvider<GrnCartNotifier, GrnCartState>((ref) {
+  return GrnCartNotifier(ref);
 });

@@ -4,6 +4,7 @@ import '../../../../data/local/pos_database.dart';
 import '../../../../data/mock/mock_grocery_data.dart';
 import '../../../../data/remote/supabase_sync_service.dart';
 import '../../../../domain/models/sale_transaction.dart';
+import '../../../../providers/exchange_rate_provider.dart';
 import 'cart_controller.dart';
 import 'catalog_controller.dart';
 
@@ -151,6 +152,15 @@ class TransactionHistoryNotifier
         customer = customer.copyWith(name: 'ລູກຄ້າຄ້າງຊຳລະ');
       }
 
+      final currentRate = _ref.read(exchangeRateProvider).rate;
+      final rateToUse = (isEditing && oldTx != null && oldTx.exchangeRate > 0)
+          ? oldTx.exchangeRate
+          : currentRate;
+      final totalLak = cartState.grandTotal.toDouble();
+      final totalThb = rateToUse > 0 ? (totalLak / rateToUse) : 0.0;
+      final profitLak = cartState.grossProfit.toDouble();
+      final profitThb = rateToUse > 0 ? (profitLak / rateToUse) : 0.0;
+
       final transaction = SaleTransaction(
         id: txId,
         receiptNumber: receiptNumber,
@@ -171,6 +181,11 @@ class TransactionHistoryNotifier
         debtAmount: effectiveDebtAmount,
         debtStatus: effectiveDebtStatus,
         debtNote: debtNote?.trim(),
+        exchangeRate: rateToUse,
+        totalLakValue: totalLak,
+        totalThbValue: totalThb,
+        grossProfitLakValue: profitLak,
+        grossProfitThbValue: profitThb,
       );
 
       if (isEditing && oldTx != null) {

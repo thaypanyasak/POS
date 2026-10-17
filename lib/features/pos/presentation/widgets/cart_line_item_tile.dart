@@ -19,6 +19,7 @@ class CartLineItemTile extends StatelessWidget {
   final VoidCallback onDecrement;
   final VoidCallback onRemove;
   final ValueChanged<ProductUnit> onSwitchUnit;
+  final ValueChanged<int>? onSelectPriceTier;
   final Function(int newPrice, String reason) onPriceOverride;
   final VoidCallback onResetPriceOverride;
   final ValueChanged<int>? onSetQuantity;
@@ -32,6 +33,7 @@ class CartLineItemTile extends StatelessWidget {
     required this.onDecrement,
     required this.onRemove,
     required this.onSwitchUnit,
+    this.onSelectPriceTier,
     required this.onPriceOverride,
     required this.onResetPriceOverride,
     this.onSetQuantity,
@@ -218,6 +220,186 @@ class CartLineItemTile extends StatelessWidget {
                                   ),
                                 ),
                               ),
+
+                            const SizedBox(width: 3),
+
+                            // Nút chọn bảng giá dạng Dropdown Pill [ ລ1 ▾ ]
+                            PopupMenuButton<int>(
+                              initialValue: item.selectedPriceTier,
+                              tooltip: 'ປ່ຽນລະດັບລາຄາ (Price Tier)',
+                              onSelected: onSelectPriceTier,
+                              color: Colors.white,
+                              elevation: 3,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              ),
+                              itemBuilder: (context) {
+                                final p1 = item.selectedUnit.priceForTier(1);
+                                final p2 = item.selectedUnit.price2 ?? 0;
+                                final p3 = item.selectedUnit.price3 ?? 0;
+
+                                final menuItems = <PopupMenuEntry<int>>[];
+
+                                menuItems.add(
+                                  PopupMenuItem<int>(
+                                    value: 1,
+                                    height: 34,
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'ລາຄາ 1 (ມາດຕະຖານ)',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: item.selectedPriceTier == 1 ? FontWeight.w800 : FontWeight.w500,
+                                            color: item.selectedPriceTier == 1 ? const Color(0xFF047857) : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              '${LaoCurrencyFormatter.formatDots(p1)} ₭',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                fontFamily: 'monospace',
+                                                color: item.selectedPriceTier == 1 ? const Color(0xFF047857) : const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                            if (item.selectedPriceTier == 1) ...[
+                                              const SizedBox(width: 4),
+                                              const Icon(Icons.check_rounded, size: 14, color: Color(0xFF047857)),
+                                            ],
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+
+                                if (p2 > 0) {
+                                  menuItems.add(
+                                    PopupMenuItem<int>(
+                                      value: 2,
+                                      height: 34,
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'ລາຄາ 2 (ລູກຄ້າປະຈຳ)',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: item.selectedPriceTier == 2 ? FontWeight.w800 : FontWeight.w500,
+                                              color: item.selectedPriceTier == 2 ? const Color(0xFF0284C7) : const Color(0xFF1E293B),
+                                            ),
+                                          ),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                '${LaoCurrencyFormatter.formatDots(p2)} ₭',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontFamily: 'monospace',
+                                                  color: item.selectedPriceTier == 2 ? const Color(0xFF0284C7) : const Color(0xFF0F172A),
+                                                ),
+                                              ),
+                                              if (item.selectedPriceTier == 2) ...[
+                                                const SizedBox(width: 4),
+                                                const Icon(Icons.check_rounded, size: 14, color: Color(0xFF0284C7)),
+                                              ],
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                if (p3 > 0) {
+                                  menuItems.add(
+                                    PopupMenuItem<int>(
+                                      value: 3,
+                                      height: 34,
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'ລາຄາ 3 (ຂາຍສົ່ງ/VIP)',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: item.selectedPriceTier == 3 ? FontWeight.w800 : FontWeight.w500,
+                                              color: item.selectedPriceTier == 3 ? const Color(0xFF7E22CE) : const Color(0xFF1E293B),
+                                            ),
+                                          ),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                '${LaoCurrencyFormatter.formatDots(p3)} ₭',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontFamily: 'monospace',
+                                                  color: item.selectedPriceTier == 3 ? const Color(0xFF7E22CE) : const Color(0xFF0F172A),
+                                                ),
+                                              ),
+                                              if (item.selectedPriceTier == 3) ...[
+                                                const SizedBox(width: 4),
+                                                const Icon(Icons.check_rounded, size: 14, color: Color(0xFF7E22CE)),
+                                              ],
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                return menuItems;
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: item.selectedPriceTier == 3
+                                      ? const Color(0xFFFAF5FF)
+                                      : (item.selectedPriceTier == 2 ? const Color(0xFFF0F9FF) : const Color(0xFFF0FDF4)),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: item.selectedPriceTier == 3
+                                        ? const Color(0xFFD8B4FE)
+                                        : (item.selectedPriceTier == 2 ? const Color(0xFFBAE6FD) : const Color(0xFFA7F3D0)),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'ລ${item.selectedPriceTier}',
+                                      style: TextStyle(
+                                        fontSize: isNarrow ? 8.5 : 9.0,
+                                        fontWeight: FontWeight.w800,
+                                        color: item.selectedPriceTier == 3
+                                            ? const Color(0xFF7E22CE)
+                                            : (item.selectedPriceTier == 2 ? const Color(0xFF0369A1) : const Color(0xFF047857)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 1),
+                                    Icon(
+                                      Icons.arrow_drop_down_rounded,
+                                      size: 13,
+                                      color: item.selectedPriceTier == 3
+                                          ? const Color(0xFF7E22CE)
+                                          : (item.selectedPriceTier == 2 ? const Color(0xFF0369A1) : const Color(0xFF047857)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
 
                             const SizedBox(width: 3),
 

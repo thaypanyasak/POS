@@ -23,7 +23,7 @@ export default function Navbar({
   transactionsCount = 0,
   outOfStockCount = 0,
   debtCount = 0,
-  exchangeRate = 720,
+  exchangeRate = 0,
   isCollapsed,
   setIsCollapsed,
 }) {

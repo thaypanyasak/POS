@@ -411,6 +411,145 @@ class _CartDockState extends ConsumerState<CartDock> {
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 7),
+
+                // Row 3: Global Price Tier Segmented Control [ ລາຄາ 1 | ລາຄາ 2 | ລາຄາ 3 ]
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9), // slate-100
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      // Tier 1: Standard
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => ref.read(cartProvider.notifier).setGlobalPriceTier(1),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            decoration: BoxDecoration(
+                              color: cartState.globalPriceTier == 1 ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: cartState.globalPriceTier == 1
+                                  ? const [BoxShadow(color: Color(0x10000000), blurRadius: 2, offset: Offset(0, 1))]
+                                  : null,
+                            ),
+                            alignment: Alignment.center,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (cartState.globalPriceTier == 1)
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    margin: const EdgeInsets.only(right: 4),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF10B981),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                Text(
+                                  'ລາຄາ 1',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: cartState.globalPriceTier == 1 ? FontWeight.w900 : FontWeight.w600,
+                                    color: cartState.globalPriceTier == 1 ? const Color(0xFF047857) : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Tier 2: Regular Customer
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => ref.read(cartProvider.notifier).setGlobalPriceTier(2),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            decoration: BoxDecoration(
+                              color: cartState.globalPriceTier == 2 ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: cartState.globalPriceTier == 2
+                                  ? const [BoxShadow(color: Color(0x10000000), blurRadius: 2, offset: Offset(0, 1))]
+                                  : null,
+                            ),
+                            alignment: Alignment.center,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (cartState.globalPriceTier == 2)
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    margin: const EdgeInsets.only(right: 4),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF0284C7),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                Text(
+                                  'ລາຄາ 2 (ປະຈຳ)',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: cartState.globalPriceTier == 2 ? FontWeight.w900 : FontWeight.w600,
+                                    color: cartState.globalPriceTier == 2 ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Tier 3: Wholesale / VIP
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => ref.read(cartProvider.notifier).setGlobalPriceTier(3),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            decoration: BoxDecoration(
+                              color: cartState.globalPriceTier == 3 ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: cartState.globalPriceTier == 3
+                                  ? const [BoxShadow(color: Color(0x10000000), blurRadius: 2, offset: Offset(0, 1))]
+                                  : null,
+                            ),
+                            alignment: Alignment.center,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (cartState.globalPriceTier == 3)
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    margin: const EdgeInsets.only(right: 4),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF9333EA),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                Text(
+                                  'ລາຄາ 3 (VIP)',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: cartState.globalPriceTier == 3 ? FontWeight.w900 : FontWeight.w600,
+                                    color: cartState.globalPriceTier == 3 ? const Color(0xFF7E22CE) : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -477,6 +616,9 @@ class _CartDockState extends ConsumerState<CartDock> {
                         onSwitchUnit: (newUnit) => ref
                             .read(cartProvider.notifier)
                             .switchUnit(item.id, newUnit),
+                        onSelectPriceTier: (tier) => ref
+                            .read(cartProvider.notifier)
+                            .selectPriceTier(item.id, tier),
                         onPriceOverride: (newPrice, reason) => ref
                             .read(cartProvider.notifier)
                             .applyPriceOverride(item.id, newPrice,

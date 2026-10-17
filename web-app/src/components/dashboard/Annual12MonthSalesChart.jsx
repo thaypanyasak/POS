@@ -14,15 +14,15 @@ import { formatKip } from '../../utils/formatters';
 import { ChartLineUp, CalendarBlank } from '@phosphor-icons/react';
 
 const LAO_MONTHS = [
-  'ມັງກອນ (01)',
-  'ກຸມພາ (02)',
-  'ມີນາ (03)',
-  'ເມສາ (04)',
-  'ພຶດສະພາ (05)',
-  'ມິຖຸນາ (06)',
-  'ກໍລະກົດ (07)',
-  'ສິງຫາ (08)',
-  'ກັນຍາ (09)',
+  'ມັງກອນ (1)',
+  'ກຸມພາ (2)',
+  'ມີນາ (3)',
+  'ເມສາ (4)',
+  'ພຶດສະພາ (5)',
+  'ມິຖຸນາ (6)',
+  'ກໍລະກົດ (7)',
+  'ສິງຫາ (8)',
+  'ກັນຍາ (9)',
   'ຕຸລາ (10)',
   'ພະຈິກ (11)',
   'ທັນວາ (12)',
@@ -40,6 +40,15 @@ export default function Annual12MonthSalesChart({
   const [selectedYear, setSelectedYear] = useState(initialYear);
   const [data, setData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Fallback calculation helper if remote fetch fails or is empty
   const computeLocalMonths = (year) => {
@@ -225,11 +234,17 @@ export default function Annual12MonthSalesChart({
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
               <XAxis
-                dataKey="shortLabel"
+                dataKey="monthIndex"
                 tickLine={false}
                 axisLine={{ stroke: '#E2E8F0' }}
                 tick={{ fontSize: 10, fill: '#64748B', fontWeight: 600 }}
                 interval={0}
+                tickFormatter={(mIdx) => {
+                  if (isMobile) {
+                    return `ດ${mIdx}`;
+                  }
+                  return LAO_MONTHS[mIdx - 1] || `ດ${mIdx}`;
+                }}
               />
               <YAxis
                 tickLine={false}

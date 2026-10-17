@@ -104,6 +104,18 @@ class SaleTransaction {
   final DateTime? cancelledAt;
   final String? voidReason;
 
+  // Point-in-Time Exchange Rate Snapshot Fields
+  final double exchangeRate;
+  final double? totalLakValue;
+  final double? totalThbValue;
+  final double? grossProfitLakValue;
+  final double? grossProfitThbValue;
+
+  double get totalLak => totalLakValue ?? grandTotal.toDouble();
+  double get totalThb => totalThbValue ?? (exchangeRate > 0 ? totalLak / exchangeRate : 0.0);
+  double get grossProfitLak => grossProfitLakValue ?? grossProfit.toDouble();
+  double get grossProfitThb => grossProfitThbValue ?? (exchangeRate > 0 ? grossProfitLak / exchangeRate : 0.0);
+
   const SaleTransaction({
     required this.id,
     required this.receiptNumber,
@@ -130,6 +142,11 @@ class SaleTransaction {
     this.isCancelled = false,
     this.cancelledAt,
     this.voidReason,
+    this.exchangeRate = 690.0,
+    this.totalLakValue,
+    this.totalThbValue,
+    this.grossProfitLakValue,
+    this.grossProfitThbValue,
   });
 
   /// Total count of physical units sold
@@ -199,6 +216,11 @@ class SaleTransaction {
     bool? isCancelled,
     DateTime? cancelledAt,
     String? voidReason,
+    double? exchangeRate,
+    double? totalLakValue,
+    double? totalThbValue,
+    double? grossProfitLakValue,
+    double? grossProfitThbValue,
   }) {
     return SaleTransaction(
       id: id ?? this.id,
@@ -226,6 +248,11 @@ class SaleTransaction {
       isCancelled: isCancelled ?? this.isCancelled,
       cancelledAt: cancelledAt ?? this.cancelledAt,
       voidReason: voidReason ?? this.voidReason,
+      exchangeRate: exchangeRate ?? this.exchangeRate,
+      totalLakValue: totalLakValue ?? this.totalLakValue,
+      totalThbValue: totalThbValue ?? this.totalThbValue,
+      grossProfitLakValue: grossProfitLakValue ?? this.grossProfitLakValue,
+      grossProfitThbValue: grossProfitThbValue ?? this.grossProfitThbValue,
     );
   }
 
@@ -256,6 +283,11 @@ class SaleTransaction {
       'is_cancelled': isCancelled,
       'cancelled_at': cancelledAt?.toIso8601String(),
       'void_reason': voidReason,
+      'exchange_rate': exchangeRate,
+      'total_lak': totalLak,
+      'total_thb': totalThb,
+      'gross_profit_lak': grossProfitLak,
+      'gross_profit_thb': grossProfitThb,
     };
   }
 
@@ -307,6 +339,14 @@ class SaleTransaction {
     final isCancelled = json['is_cancelled'] as bool? ??
         (rawStatus == 'cancelled' || rawStatus == 'voided' || isMethodCancelled);
 
+    final rate = (json['exchange_rate'] as num?)?.toDouble() ?? 690.0;
+    final grandTot = (json['grand_total'] as num?)?.toInt() ?? 0;
+    final tLak = (json['total_lak'] as num?)?.toDouble() ?? grandTot.toDouble();
+    final tThb = (json['total_thb'] as num?)?.toDouble() ?? (rate > 0 ? (tLak / rate) : 0.0);
+    final gProfit = (json['gross_profit'] as num?)?.toInt() ?? 0;
+    final pLak = (json['gross_profit_lak'] as num?)?.toDouble() ?? gProfit.toDouble();
+    final pThb = (json['gross_profit_thb'] as num?)?.toDouble() ?? (rate > 0 ? (pLak / rate) : 0.0);
+
     return SaleTransaction(
       id: json['id'] as String,
       receiptNumber: json['receipt_number'] as String? ?? 'RC-${json['id']}',
@@ -319,13 +359,13 @@ class SaleTransaction {
       paymentMethod: method,
       subtotal: (json['subtotal'] as num?)?.toInt() ?? 0,
       discountTotal: (json['discount_total'] as num?)?.toInt() ?? 0,
-      grandTotal: (json['grand_total'] as num?)?.toInt() ?? 0,
+      grandTotal: grandTot,
       amountTendered: (json['amount_tendered'] as num?)?.toInt() ?? 0,
       changeAmount: (json['change_amount'] as num?)?.toInt() ?? 0,
       totalCostOfGoods: (json['total_cost_of_goods'] as num?)?.toInt() ??
           (json['total_cost'] as num?)?.toInt() ??
           0,
-      grossProfit: (json['gross_profit'] as num?)?.toInt() ?? 0,
+      grossProfit: gProfit,
       isSynced: json['is_synced'] as bool? ?? false,
       cashierName: json['cashier_name'] as String? ?? 'ໄມ້ຄຳ (Meii)',
       isDebt: isDebt,
@@ -339,6 +379,11 @@ class SaleTransaction {
           ? DateTime.tryParse(json['cancelled_at'] as String)
           : (json['voided_at'] != null ? DateTime.tryParse(json['voided_at'] as String) : null),
       voidReason: json['void_reason'] as String?,
+      exchangeRate: rate,
+      totalLakValue: tLak,
+      totalThbValue: tThb,
+      grossProfitLakValue: pLak,
+      grossProfitThbValue: pThb,
     );
   }
 }
@@ -351,6 +396,12 @@ class ProfitSummary {
   final int totalDiscounts; // Total discounts given
   final int transactionCount; // Number of sales receipts
   final int totalItemsSold; // Total item units
+  final double totalRevenueLak;
+  final double totalRevenueThb;
+  final double totalCostLak;
+  final double totalCostThb;
+  final double totalProfitLak;
+  final double totalProfitThb;
 
   const ProfitSummary({
     required this.totalRevenue,
@@ -359,6 +410,12 @@ class ProfitSummary {
     required this.totalDiscounts,
     required this.transactionCount,
     required this.totalItemsSold,
+    this.totalRevenueLak = 0.0,
+    this.totalRevenueThb = 0.0,
+    this.totalCostLak = 0.0,
+    this.totalCostThb = 0.0,
+    this.totalProfitLak = 0.0,
+    this.totalProfitThb = 0.0,
   });
 
   double get profitMarginPercent {
@@ -372,6 +429,12 @@ class ProfitSummary {
     int profit = 0;
     int discount = 0;
     int items = 0;
+    double revLak = 0.0;
+    double revThb = 0.0;
+    double cLak = 0.0;
+    double cThb = 0.0;
+    double pLak = 0.0;
+    double pThb = 0.0;
 
     for (final tx in txs) {
       if (tx.isCancelled || tx.status == 'cancelled' || tx.status == 'voided') {
@@ -382,6 +445,14 @@ class ProfitSummary {
       profit += tx.grossProfit;
       discount += tx.discountTotal;
       items += tx.totalPiecesSold;
+
+      revLak += tx.totalLak;
+      revThb += tx.totalThb;
+      final double costItemLak = tx.totalCostOfGoods.toDouble();
+      cLak += costItemLak;
+      cThb += tx.exchangeRate > 0 ? (costItemLak / tx.exchangeRate) : 0.0;
+      pLak += tx.grossProfitLak;
+      pThb += tx.grossProfitThb;
     }
 
     return ProfitSummary(
@@ -391,6 +462,12 @@ class ProfitSummary {
       totalDiscounts: discount,
       transactionCount: txs.length,
       totalItemsSold: items,
+      totalRevenueLak: revLak,
+      totalRevenueThb: revThb,
+      totalCostLak: cLak,
+      totalCostThb: cThb,
+      totalProfitLak: pLak,
+      totalProfitThb: pThb,
     );
   }
 }

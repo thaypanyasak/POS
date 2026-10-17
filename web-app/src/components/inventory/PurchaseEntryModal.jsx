@@ -23,6 +23,7 @@ import {
   formatCompoundStockUnits,
 } from '../../utils/formatters';
 import { createPurchaseOrderInSupabase } from '../../services/supabase';
+import { queryClient } from '../../services/queryClient';
 import BarcodeScannerModal from '../BarcodeScannerModal';
 
 export default function PurchaseEntryModal({
@@ -346,13 +347,19 @@ export default function PurchaseEntryModal({
 
       const res = await createPurchaseOrderInSupabase(poData, [singleDraft]);
       if (res.success) {
+        const prodName = selectedProduct?.name || 'ສິນຄ້າ';
+        handleClose();
         onAlert?.(
-          `ບັນທຶກຮັບສິນຄ້າ "${selectedProduct.name}" ເຂົ້າສາງ & ອັບເດດລາຄາສຳເລັດແລ້ວ!`,
+          `ບັນທຶກຮັບສິນຄ້າ "${prodName}" ເຂົ້າສາງ & ອັບເດດລາຄາສຳເລັດແລ້ວ!`,
           'ສຳເລັດ',
           'success'
         );
-        onSuccess?.();
-        handleClose();
+        // Cache Invalidation per requirement 2:
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['products'] }),
+          queryClient.invalidateQueries({ queryKey: ['purchase_orders'] }),
+        ]);
+        await onSuccess?.();
       } else {
         onAlert?.(res.error || 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກ', 'ຂໍ້ຜິດພາດ', 'error');
       }
