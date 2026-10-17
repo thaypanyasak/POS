@@ -43,24 +43,11 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
       final product = match.product;
       final unit = match.unit;
 
-      final isOutOfStock = product.trackStock && product.currentStockBaseUnits <= 0;
-      final success = !isOutOfStock &&
-          ref.read(cartProvider.notifier).addProduct(
-                product,
-                unit: unit,
-                quantity: 1,
-              );
-
-      if (!success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('ສິນຄ້າ "${product.name}" ໝົດສາງແລ້ວ! (ຍອດເຫຼືອ: ${product.currentStockBaseUnits} ${product.baseUnit})'),
-            duration: const Duration(seconds: 2),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return;
-      }
+      ref.read(cartProvider.notifier).addProduct(
+            product,
+            unit: unit,
+            quantity: 1,
+          );
 
       _searchController.clear();
       ref.read(catalogProvider.notifier).clearSearch();

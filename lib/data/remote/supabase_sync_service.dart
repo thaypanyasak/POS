@@ -35,35 +35,13 @@ class SupabaseSyncService {
 
   static bool get isConnected => _isInitialized && _client != null;
 
-  /// Uploads a completed sale transaction to Supabase
+  /// Uploads a completed sale transaction to Supabase using atomic RPC with ledger logging
   static Future<bool> syncTransaction(SaleTransaction transaction) async {
     if (!isConnected) return false;
 
     try {
       final client = _client!;
-      // 1. Insert header
-      await client.from('sale_transactions').insert({
-        'id': transaction.id,
-        'receipt_number': transaction.receiptNumber,
-        'created_at': transaction.createdAt.toIso8601String(),
-        'is_wholesale': transaction.isWholesale,
-        'customer_name': transaction.customer.name,
-        'payment_method': transaction.paymentMethod.name,
-        'subtotal': transaction.subtotal,
-        'discount_total': transaction.discountTotal,
-        'grand_total': transaction.grandTotal,
-        'amount_tendered': transaction.amountTendered,
-        'change_amount': transaction.changeAmount,
-        'total_cost': transaction.totalCostOfGoods,
-        'gross_profit': transaction.grossProfit,
-        'exchange_rate': transaction.exchangeRate,
-        'total_lak': transaction.totalLak,
-        'total_thb': double.parse(transaction.totalThb.toStringAsFixed(2)),
-        'gross_profit_lak': transaction.grossProfitLak,
-        'gross_profit_thb': double.parse(transaction.grossProfitThb.toStringAsFixed(2)),
-      });
 
-      // 2. Insert line items
       final itemsPayload = transaction.items.map((item) {
         return {
           'id': item.id,
@@ -79,6 +57,72 @@ class SupabaseSyncService {
           'line_profit': item.lineProfit,
         };
       }).toList();
+
+      final checkoutPayload = {
+        'id': transaction.id,
+        'receipt_number': transaction.receiptNumber,
+        'created_at': transaction.createdAt.toIso8601String(),
+        'is_wholesale': transaction.isWholesale,
+        'customer_name': transaction.customer.name,
+        'payment_method': transaction.paymentMethod.name,
+        'subtotal': transaction.subtotal,
+        'discount_total': transaction.discountTotal,
+        'grand_total': transaction.grandTotal,
+        'amount_tendered': transaction.amountTendered,
+        'change_amount': transaction.changeAmount,
+        'total_cost': transaction.totalCostOfGoods,
+        'total_cost_lak': transaction.totalCostLak,
+        'total_cost_thb': double.parse(transaction.totalCostThb.toStringAsFixed(2)),
+        'gross_profit': transaction.grossProfit,
+        'gross_profit_lak': transaction.grossProfitLak,
+        'gross_profit_thb': double.parse(transaction.grossProfitThb.toStringAsFixed(2)),
+        'cashier_name': transaction.cashierName ?? 'ໄມ້ຄຳ (Meii)',
+        'paid_amount': transaction.paidAmount,
+        'remaining_debt': transaction.debtAmount,
+        'payment_status': transaction.isDebt ? (transaction.debtAmount > 0 ? (transaction.paidAmount > 0 ? 'PARTIAL' : 'DEBT') : 'PAID') : 'PAID',
+        'exchange_rate': transaction.exchangeRate,
+        'total_lak': transaction.totalLak,
+        'total_thb': double.parse(transaction.totalThb.toStringAsFixed(2)),
+        'items': itemsPayload,
+      };
+
+      // 1. Try atomic PostgreSQL RPC first
+      try {
+        final rpcRes = await client.rpc(
+          'process_pos_checkout',
+          params: {'payload': checkoutPayload},
+        );
+        if (rpcRes != null && (rpcRes['success'] == true || rpcRes is Map)) {
+          return true;
+        }
+      } catch (_) {
+        // Fallback to direct insert if RPC is not yet registered
+      }
+
+      // 2. Direct insert fallback
+      await client.from('sale_transactions').insert({
+        'id': transaction.id,
+        'receipt_number': transaction.receiptNumber,
+        'created_at': transaction.createdAt.toIso8601String(),
+        'is_wholesale': transaction.isWholesale,
+        'customer_name': transaction.customer.name,
+        'payment_method': transaction.paymentMethod.name,
+        'subtotal': transaction.subtotal,
+        'discount_total': transaction.discountTotal,
+        'grand_total': transaction.grandTotal,
+        'amount_tendered': transaction.amountTendered,
+        'change_amount': transaction.changeAmount,
+        'total_cost': transaction.totalCostOfGoods,
+        'total_cost_lak': transaction.totalCostLak,
+        'total_cost_thb': double.parse(transaction.totalCostThb.toStringAsFixed(2)),
+        'gross_profit': transaction.grossProfit,
+        'gross_profit_lak': transaction.grossProfitLak,
+        'gross_profit_thb': double.parse(transaction.grossProfitThb.toStringAsFixed(2)),
+        'exchange_rate': transaction.exchangeRate,
+        'total_lak': transaction.totalLak,
+        'total_thb': double.parse(transaction.totalThb.toStringAsFixed(2)),
+        'cashier_name': transaction.cashierName ?? 'ໄມ້ຄຳ (Meii)',
+      });
 
       await client.from('sale_transaction_items').insert(itemsPayload);
       return true;
@@ -454,18 +498,47 @@ class SupabaseSyncService {
     }
   }
 
-  /// Cancels / Voids a transaction in Supabase
-  static Future<bool> cancelTransaction(String transactionId, String paymentMethod) async {
+  /// Cancels / Voids a transaction in Supabase with atomic stock restore & ledger recording
+  static Future<bool> cancelTransaction(
+    String transactionId,
+    String paymentMethod, {
+    String? voidReason,
+    String? voidedBy,
+  }) async {
     if (!isConnected) return false;
     try {
       final client = _client!;
+
+      // 1. Try atomic PostgreSQL RPC process_pos_void first
+      try {
+        final rpcRes = await client.rpc('process_pos_void', params: {
+          'payload': {
+            'transaction_id': transactionId,
+            'reason': voidReason ?? 'ຍົກເລີກບິນຂາຍ (Void Order)',
+            'voided_by': voidedBy ?? 'ໄມ້ຄຳ (Meii)',
+          }
+        });
+        if (rpcRes != null && (rpcRes['success'] == true || rpcRes is Map)) {
+          return true;
+        }
+      } catch (_) {
+        // Fallback to direct update if RPC is not registered
+      }
+
+      // 2. Direct update fallback
       final cancelledMethod = paymentMethod.startsWith('cancelled')
           ? paymentMethod
           : 'cancelled:$paymentMethod';
 
       await client
           .from('sale_transactions')
-          .update({'payment_method': cancelledMethod})
+          .update({
+            'payment_method': cancelledMethod,
+            'status': 'VOIDED',
+            'voided_at': DateTime.now().toIso8601String(),
+            'voided_by': voidedBy ?? 'ໄມ້ຄຳ (Meii)',
+            'void_reason': voidReason ?? 'ຍົກເລີກບິນຂາຍ',
+          })
           .eq('id', transactionId);
       return true;
     } catch (_) {

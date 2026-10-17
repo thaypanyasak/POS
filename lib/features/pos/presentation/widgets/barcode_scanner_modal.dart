@@ -73,22 +73,11 @@ class _BarcodeScannerModalState extends ConsumerState<BarcodeScannerModal>
       final product = match.product;
       final unit = match.unit;
 
-      // Check stock if product tracks stock
-      final isOutOfStock = product.trackStock && product.currentStockBaseUnits <= 0;
-      final success = !isOutOfStock &&
-          ref.read(cartProvider.notifier).addProduct(
-                product,
-                unit: unit,
-                quantity: 1,
-              );
-
-      if (!success) {
-        setState(() {
-          _errorMsg = 'ສິນຄ້າ "${product.name}" ໝົດສາງແລ້ວ! (ຍອດເຫຼືອ: ${product.currentStockBaseUnits} ${product.baseUnit})';
-          _isProcessing = false;
-        });
-        return;
-      }
+      ref.read(cartProvider.notifier).addProduct(
+            product,
+            unit: unit,
+            quantity: 1,
+          );
 
       if (mounted) {
         Navigator.of(context).pop();

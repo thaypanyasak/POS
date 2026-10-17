@@ -262,7 +262,12 @@ class TransactionHistoryNotifier
     await PosDatabase.instance.saveTransaction(updatedTx);
 
     // 3. Update Supabase
-    await SupabaseSyncService.cancelTransaction(tx.id, tx.paymentMethod.name);
+    await SupabaseSyncService.cancelTransaction(
+      tx.id,
+      tx.paymentMethod.name,
+      voidReason: voidReason,
+      voidedBy: tx.cashierName,
+    );
 
     // 4. Update state
     final updatedList = state.transactions.map((t) => t.id == tx.id ? updatedTx : t).toList();

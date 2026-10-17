@@ -243,7 +243,47 @@ class PurchaseProvider extends StateNotifier<PurchaseState> {
       final randomSuffix = (now.millisecondsSinceEpoch % 10000).toString().padLeft(4, '0');
       final poId = 'PO-$dateStr-$randomSuffix';
 
-      // 2. Insert purchase_order with single-product fields
+      // 1A. Try Atomic RPC process_multi_product_grn with ledger logging
+      try {
+        final Map<String, dynamic> rpcPayload = {
+          'po_code': poId,
+          'supplier_id': (supplierId != null && supplierId.isNotEmpty) ? supplierId : null,
+          'receiver_name': receivedBy.trim().isNotEmpty ? receivedBy.trim() : 'ໄມ້ຄຳ (Meii)',
+          'total_lak': totalCostLak,
+          'total_thb': totalCostThb,
+          'payment_status': paymentStatus,
+          'paid_amount_lak': paidAmount,
+          'debt_amount_lak': debtAmount,
+          'notes': note.trim(),
+          'items': draftItems.map((d) => {
+            'product_id': d.product.id,
+            'product_name': d.product.name,
+            'quantity': 1,
+            'base_units_added': d.importedBaseUnits,
+            'cost_per_base_unit': d.costPerBaseUnit,
+            'cost_lak_entered': d.costLak,
+            'cost_thb_entered': d.costThb,
+            'line_total_lak': d.costLak,
+            'line_total_thb': d.costThb,
+            'retail_price_overrides': d.retailPriceOverrides,
+          }).toList(),
+        };
+
+        final rpcRes = await client.rpc(
+          'process_multi_product_grn',
+          params: {'payload': rpcPayload},
+        );
+        if (rpcRes != null && (rpcRes['success'] == true || rpcRes is Map)) {
+          await fetchPurchaseOrders();
+          await fetchSuppliers();
+          state = state.copyWith(isLoading: false);
+          return true;
+        }
+      } catch (rpcErr) {
+        debugPrint('createPurchaseOrder RPC fallback: $rpcErr');
+      }
+
+      // 2. Insert purchase_order with single-product fields (Legacy fallback)
       final firstDraft = draftItems.isNotEmpty ? draftItems.first : null;
 
       final Map<String, dynamic> poPayload = {

@@ -591,6 +591,7 @@ export default function PurchasesView({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['products'] }),
         queryClient.invalidateQueries({ queryKey: ['purchase_orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['suppliers'] }),
       ]);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MagnifyingGlass,
   Plus,
@@ -99,6 +99,49 @@ export default function PosScreen({
       setTimeout(() => setScanToast(null), 4000);
     }
   };
+
+  // Global Hardware Barcode Scanner Wedge Listener
+  // Tự động bắt máy quét phần cứng USB / Bluetooth (< 45ms giữa các phím)
+  // ngay cả khi con trỏ chuột không focus vào ô tìm kiếm
+  useEffect(() => {
+    let barcodeBuffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleGlobalKeyDown = (e) => {
+      const now = Date.now();
+      const delta = now - lastKeyTime;
+      lastKeyTime = now;
+
+      // Khi phím Enter được kích hoạt và đệm đã tích lũy chuỗi quét siêu tốc (>= 3 ký tự)
+      if (e.key === 'Enter') {
+        if (barcodeBuffer.length >= 3) {
+          e.preventDefault();
+          e.stopPropagation();
+          const scannedCode = barcodeBuffer.trim();
+          barcodeBuffer = '';
+          handleScanBarcode(scannedCode);
+          return;
+        }
+        barcodeBuffer = '';
+        return;
+      }
+
+      // Nếu khoảng cách giữa 2 phím > 45ms, đó là người dùng gõ tay thông thường -> reset đệm
+      if (delta > 45) {
+        barcodeBuffer = '';
+      }
+
+      // Chỉ tích lũy các ký tự in được thông thường, không gom phím Control/Alt/Meta
+      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        barcodeBuffer += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown, true);
+    };
+  }, [products, filteredProducts, addToCart]);
 
   const handleSearchKeyDown = (e) => {
     if (e.key === 'Enter' && searchQuery.trim()) {

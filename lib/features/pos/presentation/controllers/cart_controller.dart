@@ -138,19 +138,6 @@ class CartNotifier extends StateNotifier<CartState> {
   /// Adds a product to the cart with strict stock validation for tracked items
   bool addProduct(Product product, {ProductUnit? unit, int quantity = 1}) {
     final selectedUnit = unit ?? product.defaultBaseUnit;
-    final multiplier = selectedUnit.multiplier > 0 ? selectedUnit.multiplier : 1;
-
-    // Check inventory constraint if trackStock == true
-    if (product.trackStock) {
-      final currentBaseInCart = state.items
-          .where((it) => it.product.id == product.id)
-          .fold<int>(0, (sum, it) => sum + (it.selectedUnit.multiplier * it.quantity));
-      final requestedBase = currentBaseInCart + (multiplier * quantity);
-
-      if (requestedBase > product.currentStockBaseUnits) {
-        return false; // Exceeds available stock
-      }
-    }
 
     final existingIndex = state.items.indexWhere(
       (item) =>
@@ -180,7 +167,7 @@ class CartNotifier extends StateNotifier<CartState> {
     return true;
   }
 
-  /// Updates quantity of a specific cart item with stock check
+  /// Updates quantity of a specific cart item
   bool updateQuantity(String cartItemId, int newQuantity) {
     if (newQuantity <= 0) {
       removeItem(cartItemId);
@@ -189,23 +176,6 @@ class CartNotifier extends StateNotifier<CartState> {
 
     final itemIndex = state.items.indexWhere((it) => it.id == cartItemId);
     if (itemIndex < 0) return false;
-
-    final targetItem = state.items[itemIndex];
-    final product = targetItem.product;
-
-    if (product.trackStock) {
-      final otherBaseInCart = state.items
-          .where((it) => it.product.id == product.id && it.id != cartItemId)
-          .fold<int>(0, (sum, it) => sum + (it.selectedUnit.multiplier * it.quantity));
-      final targetMultiplier = targetItem.selectedUnit.multiplier > 0
-          ? targetItem.selectedUnit.multiplier
-          : 1;
-      final requestedTotalBase = otherBaseInCart + (targetMultiplier * newQuantity);
-
-      if (requestedTotalBase > product.currentStockBaseUnits) {
-        return false;
-      }
-    }
 
     final newItems = state.items.map((item) {
       if (item.id == cartItemId) {

@@ -93,23 +93,28 @@ export default function DashboardView({
     });
   }, [dashboardData.filteredTxs, transactions, dashboardTimeframe, customStartDate, customEndDate]);
 
-  // Point-in-Time Exchange Rate Snapshot Metrics (Accounting Compliant)
+  // Point-in-Time Exchange Rate Snapshot Metrics (IAS 21 Presentation Standard)
   const snapshotMetrics = useMemo(() => {
     const totalRevenueLak = currentTxs.reduce((sum, order) => sum + Number(order.total_lak ?? order.grandTotal ?? 0), 0);
+    const totalCostLak = currentTxs.reduce((sum, order) => sum + Number(order.total_cost_lak ?? order.total_cost ?? order.totalCost ?? 0), 0);
+    const totalProfitLak = currentTxs.reduce((sum, order) => sum + Number(order.gross_profit_lak ?? order.grossProfit ?? 0), 0);
+
     const totalRevenueThb = currentTxs.reduce((sum, order) => {
       const explicitThb = Number(order.total_thb ?? order.totalThb ?? 0);
-      return sum + (explicitThb > 0 ? explicitThb : 0);
+      if (explicitThb > 0) return sum + explicitThb;
+      const rate = Number(order.exchange_rate || order.exchangeRate) || 0;
+      return sum + (rate > 0 ? Number(((order.total_lak ?? order.grandTotal ?? 0) / rate).toFixed(2)) : 0);
     }, 0);
-    const totalCostLak = currentTxs.reduce((sum, order) => sum + Number(order.total_cost ?? order.totalCost ?? 0), 0);
+
     const totalCostThb = currentTxs.reduce((sum, order) => {
       const explicitCostThb = Number(order.total_cost_thb ?? order.totalCostThb ?? 0);
-      return sum + (explicitCostThb > 0 ? explicitCostThb : 0);
+      if (explicitCostThb > 0) return sum + explicitCostThb;
+      const rate = Number(order.exchange_rate || order.exchangeRate) || 0;
+      const costLak = Number(order.total_cost_lak ?? order.total_cost ?? order.totalCost ?? 0);
+      return sum + (rate > 0 ? Number((costLak / rate).toFixed(2)) : 0);
     }, 0);
-    const totalProfitLak = currentTxs.reduce((sum, order) => sum + Number(order.gross_profit_lak ?? order.grossProfit ?? 0), 0);
-    const totalProfitThb = currentTxs.reduce((sum, order) => {
-      const explicitProfitThb = Number(order.gross_profit_thb ?? order.grossProfitThb ?? 0);
-      return sum + (explicitProfitThb > 0 ? explicitProfitThb : 0);
-    }, 0);
+
+    const totalProfitThb = Number((totalRevenueThb - totalCostThb).toFixed(2));
     const margin = totalRevenueLak > 0 ? ((totalProfitLak / totalRevenueLak) * 100).toFixed(1) : '0';
     const txCount = currentTxs.length;
     const avgTicketLak = txCount > 0 ? Math.round(totalRevenueLak / txCount) : 0;

@@ -23,18 +23,31 @@ class QueryClient {
   // Invalidate queries matching queryKey and trigger immediate re-fetch
   async invalidateQueries({ queryKey } = {}) {
     if (!queryKey) return;
-    const key = Array.isArray(queryKey) ? queryKey[0] : String(queryKey);
-    const cbs = this.listeners.get(key);
-    if (cbs && cbs.size > 0) {
-      const promises = Array.from(cbs).map(async (cb) => {
-        try {
-          return await cb();
-        } catch (err) {
-          console.warn(`Query invalidation error for [${key}]:`, err);
+    const rawKey = Array.isArray(queryKey) ? queryKey[0] : String(queryKey);
+
+    // Support query key aliases: 'transactions' <-> 'sale_transactions'
+    const keysToInvalidate = new Set([rawKey]);
+    if (rawKey === 'transactions') keysToInvalidate.add('sale_transactions');
+    if (rawKey === 'sale_transactions') keysToInvalidate.add('transactions');
+
+    const allPromises = [];
+    for (const key of keysToInvalidate) {
+      const cbs = this.listeners.get(key);
+      if (cbs && cbs.size > 0) {
+        for (const cb of cbs) {
+          allPromises.push(
+            (async () => {
+              try {
+                return await cb();
+              } catch (err) {
+                console.warn(`Query invalidation error for [${key}]:`, err);
+              }
+            })()
+          );
         }
-      });
-      await Promise.all(promises);
+      }
     }
+    await Promise.all(allPromises);
   }
 }
 

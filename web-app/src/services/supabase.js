@@ -394,18 +394,9 @@ export async function saveProductToSupabase(product) {
       return { success: false, error: pErr.message || JSON.stringify(pErr) };
     }
 
-    // 2. Clean up old units for this product in 'product_units'
-    const { error: delUnitsErr } = await supabase
-      .from('product_units')
-      .delete()
-      .eq('product_id', product.id);
-
-    if (delUnitsErr) {
-      console.warn('Could not clear old units:', delUnitsErr);
-    }
-
-    // 3. Insert fresh active units
+    // 2. Smart Upsert active units to preserve historical Foreign Key integrity
     if (product.units && product.units.length > 0) {
+      const activeUnitIds = product.units.map((u) => u.id).filter(Boolean);
       const unitsPayload = product.units.map((u) => ({
         id: u.id,
         product_id: product.id,
@@ -419,16 +410,30 @@ export async function saveProductToSupabase(product) {
         is_base_unit: Boolean(u.isBaseUnit),
       }));
 
-      let { error: uErr } = await supabase.from('product_units').insert(unitsPayload);
+      // Upsert active units in-place without deleting to prevent Foreign Key Violation
+      let { error: uErr } = await supabase.from('product_units').upsert(unitsPayload, { onConflict: 'id' });
       if (uErr && uErr.message && (uErr.message.includes('price_2') || uErr.message.includes('price_3') || uErr.message.includes('column') || uErr.message.includes('schema cache'))) {
         // Safe retry without price_2/price_3 if columns not yet migrated in Supabase
         const fallbackUnits = unitsPayload.map(({ price_2, price_3, ...rest }) => rest);
-        const retryRes = await supabase.from('product_units').insert(fallbackUnits);
+        const retryRes = await supabase.from('product_units').upsert(fallbackUnits, { onConflict: 'id' });
         uErr = retryRes.error;
       }
       if (uErr) {
-        console.error('Product units insert error:', uErr);
+        console.error('Product units upsert error:', uErr);
         return { success: false, error: uErr.message || JSON.stringify(uErr) };
+      }
+
+      // Clean up only obsolete units that were explicitly disabled/removed
+      if (activeUnitIds.length > 0) {
+        const { error: delObsoleteErr } = await supabase
+          .from('product_units')
+          .delete()
+          .eq('product_id', product.id)
+          .not('id', 'in', `(${activeUnitIds.map((id) => `"${id}"`).join(',')})`);
+
+        if (delObsoleteErr) {
+          console.warn('Could not remove obsolete units (may have historical transactions):', delObsoleteErr);
+        }
       }
     }
 
@@ -665,7 +670,94 @@ export async function uploadProductImageToSupabase(fileOrBlob, productId, extens
  */
 export async function createSaleTransactionInSupabase(tx, stockDeductions = []) {
   try {
-    // 1. Insert into sale_transactions
+    const rate = Number(tx.exchange_rate || tx.exchangeRate || 0);
+    const totalLak = Number(tx.total_lak ?? tx.totalLak ?? tx.grandTotal ?? 0);
+    const totalCostLak = Number(tx.total_cost_lak ?? tx.totalCostLak ?? tx.totalCost ?? 0);
+    const totalThb = Number(tx.total_thb ?? tx.totalThb ?? (rate > 0 ? Number((totalLak / rate).toFixed(2)) : 0));
+    const totalCostThb = Number(tx.total_cost_thb ?? tx.totalCostThb ?? (rate > 0 ? Number((totalCostLak / rate).toFixed(2)) : 0));
+    const grossProfitLak = Number(tx.gross_profit_lak ?? tx.grossProfitLak ?? tx.grossProfit ?? 0);
+    const grossProfitThb = Number(tx.gross_profit_thb ?? tx.grossProfitThb ?? Number((totalThb - totalCostThb).toFixed(2)));
+
+    const checkoutItems = (tx.items || []).map((item) => {
+      const prodId = item.product?.id || item.productId || 'p_custom';
+      const unitPrice = Number(
+        item.customPrice !== undefined
+          ? item.customPrice
+          : tx.isWholesale
+          ? item.unit?.wholesalePrice
+          : item.unit?.retailPrice
+      ) || 0;
+      const qty = Number(item.quantity) || 1;
+      const lineTotal = Number(item.lineTotal || (unitPrice * qty));
+      const multiplier = Number(item.unit?.multiplier) || 1;
+      const baseCost = Number(item.product?.costPerBaseUnit) || 0;
+      const lineCost = baseCost * multiplier * qty;
+      const lineProfit = lineTotal - lineCost;
+
+      return {
+        id: generateUUID(),
+        product_id: prodId,
+        product_name: item.productName || item.product?.name || 'ສິນຄ້າ',
+        unit_name: item.unit?.unitName || item.unitName || 'ອັນ',
+        multiplier,
+        quantity: qty,
+        unit_price: unitPrice,
+        line_total: lineTotal,
+        line_cost: lineCost,
+        line_profit: lineProfit,
+      };
+    });
+
+    const checkoutPayload = {
+      id: tx.id,
+      receipt_number: tx.receiptNumber,
+      created_at: tx.createdAt,
+      is_wholesale: Boolean(tx.isWholesale),
+      customer_name: tx.customerName || 'ລູກຄ້າທົ່ວໄປ',
+      payment_method: tx.paymentMethod || 'cash',
+      subtotal: Number(tx.subtotal) || 0,
+      discount_total: Number(tx.discountTotal) || 0,
+      grand_total: Number(tx.grandTotal) || 0,
+      amount_tendered: Number(tx.amountTendered) || 0,
+      change_amount: Number(tx.changeAmount) || 0,
+      total_cost_lak: totalCostLak,
+      total_cost_thb: totalCostThb,
+      gross_profit_lak: grossProfitLak,
+      gross_profit_thb: grossProfitThb,
+      cashier_name: tx.cashierName || 'ໄມ້ຄຳ (Meii)',
+      paid_amount: Number(tx.paidAmount ?? (tx.paymentMethod === 'debt' ? (tx.amountTendered || 0) : (tx.amountTendered || tx.grandTotal || 0))),
+      remaining_debt: Number(tx.debtAmount ?? (tx.paymentMethod === 'debt' ? Math.max(0, (tx.grandTotal || 0) - (tx.amountTendered || 0)) : 0)),
+      payment_status: tx.paymentStatus || (tx.paymentMethod === 'debt' ? ((tx.amountTendered || 0) > 0 ? 'PARTIAL' : 'DEBT') : 'PAID'),
+      exchange_rate: rate,
+      total_lak: totalLak,
+      total_thb: totalThb,
+      items: checkoutItems,
+    };
+
+    // 1. GỌI POSTGRES RPC NGUYÊN TỬ VỚI KHÓA HÀNG FOR UPDATE VÀ GHI THẺ KHO
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('process_pos_checkout', { payload: checkoutPayload });
+    if (!rpcErr && rpcData?.success) {
+      return { success: true, via: 'atomic_rpc' };
+    }
+
+    if (rpcErr) {
+      const errMsg = rpcErr.message || '';
+      const isRpcMissing = rpcErr.code === '42883' || rpcErr.code === 'PGRST202' || errMsg.includes('Could not find the function') || errMsg.includes('function process_pos_checkout');
+      
+      if (!isRpcMissing) {
+        // Business logic exception thrown by Postgres (e.g. insufficient stock)!
+        console.error('process_pos_checkout RPC business rejection:', rpcErr);
+        let userFriendly = errMsg;
+        if (errMsg.includes('không đủ tồn kho') || errMsg.includes('out of stock')) {
+          userFriendly = 'ສິນຄ້າໃນສາງບໍ່ພໍຂາຍ! ' + errMsg;
+        }
+        return { success: false, error: userFriendly, code: rpcErr.code };
+      }
+
+      console.warn('process_pos_checkout RPC not available yet in Supabase, using standard client fallback:', rpcErr.message);
+    }
+
+    // 2. Fallback thủ công nếu RPC chưa được chạy migration trong SQL Editor
     const { error: txErr } = await supabase.from('sale_transactions').insert({
       id: tx.id,
       receipt_number: tx.receiptNumber,
@@ -678,17 +770,19 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       grand_total: Number(tx.grandTotal) || 0,
       amount_tendered: Number(tx.amountTendered) || 0,
       change_amount: Number(tx.changeAmount) || 0,
-      total_cost: Number(tx.totalCost) || 0,
-      gross_profit: Number(tx.grossProfit) || 0,
+      total_cost: totalCostLak,
+      total_cost_lak: totalCostLak,
+      total_cost_thb: totalCostThb,
+      gross_profit: grossProfitLak,
+      gross_profit_lak: grossProfitLak,
+      gross_profit_thb: grossProfitThb,
       cashier_name: tx.cashierName || 'ໄມ້ຄຳ (Meii)',
       paid_amount: Number(tx.paidAmount ?? (tx.paymentMethod === 'debt' ? (tx.amountTendered || 0) : (tx.amountTendered || tx.grandTotal || 0))),
       remaining_debt: Number(tx.debtAmount ?? (tx.paymentMethod === 'debt' ? Math.max(0, (tx.grandTotal || 0) - (tx.amountTendered || 0)) : 0)),
       payment_status: tx.paymentStatus || (tx.paymentMethod === 'debt' ? ((tx.amountTendered || 0) > 0 ? 'PARTIAL' : 'DEBT') : 'PAID'),
-      exchange_rate: Number(tx.exchange_rate || tx.exchangeRate || 0),
-      total_lak: Number(tx.total_lak ?? tx.totalLak ?? tx.grandTotal ?? 0),
-      total_thb: Number(tx.total_thb ?? tx.totalThb ?? 0),
-      gross_profit_lak: Number(tx.gross_profit_lak ?? tx.grossProfitLak ?? tx.grossProfit ?? 0),
-      gross_profit_thb: Number(tx.gross_profit_thb ?? tx.grossProfitThb ?? 0),
+      exchange_rate: rate,
+      total_lak: totalLak,
+      total_thb: totalThb,
     });
 
     if (txErr) {
@@ -696,47 +790,16 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       return { success: false, error: txErr.message || JSON.stringify(txErr) };
     }
 
-    // 2. Insert into sale_transaction_items (Requires valid UUID for 'id' and non-null 'product_id')
-    if (tx.items && tx.items.length > 0) {
-      const itemsPayload = tx.items.map((item) => {
-        const prodId = item.product?.id || item.productId || 'p_custom';
-        const unitPrice = Number(
-          item.customPrice !== undefined
-            ? item.customPrice
-            : tx.isWholesale
-            ? item.unit?.wholesalePrice
-            : item.unit?.retailPrice
-        ) || 0;
-        const qty = Number(item.quantity) || 1;
-        const lineTotal = Number(item.lineTotal || (unitPrice * qty));
-        const multiplier = Number(item.unit?.multiplier) || 1;
-        const baseCost = Number(item.product?.costPerBaseUnit) || 0;
-        const lineCost = baseCost * multiplier * qty;
-        const lineProfit = lineTotal - lineCost;
-
-        return {
-          id: generateUUID(),
-          transaction_id: tx.id,
-          product_id: prodId,
-          product_name: item.productName || item.product?.name || 'ສິນຄ້າ',
-          unit_name: item.unit?.unitName || item.unitName || 'ອັນ',
-          multiplier,
-          quantity: qty,
-          unit_price: unitPrice,
-          line_total: lineTotal,
-          line_cost: lineCost,
-          line_profit: lineProfit,
-        };
-      });
-
-      const { error: itemErr } = await supabase.from('sale_transaction_items').insert(itemsPayload);
+    if (checkoutItems.length > 0) {
+      const { error: itemErr } = await supabase.from('sale_transaction_items').insert(checkoutItems.map(it => ({
+        ...it,
+        transaction_id: tx.id,
+      })));
       if (itemErr) {
         console.error('Transaction items insert error:', itemErr);
-        // Note: we still continue to stock deduction, but log clearly
       }
     }
 
-    // 3. Deduct stock in Supabase products table
     if (stockDeductions && stockDeductions.length > 0) {
       for (const d of stockDeductions) {
         if (d.productId) {
@@ -765,16 +828,66 @@ export const syncSaleTransactionToSupabase = createSaleTransactionInSupabase;
 
 /**
  * 7. Void / Cancel a Sale Transaction in Supabase and restore product stock
- * (Does NOT delete the record; marks status as cancelled and restores stock for tracked products)
+ * (Uses atomic process_pos_void RPC if available; gracefully falls back to client execution)
  */
-export async function cancelTransactionInSupabase(txId, itemsToRestore = [], originalPaymentMethod = 'cash') {
+export async function cancelTransactionInSupabase(txId, itemsToRestore = [], originalPaymentMethod = 'cash', options = {}) {
   try {
-    // 1. Mark status as cancelled in Supabase sale_transactions table
+    const reason = options.reason || 'ຍົກເລີກບິນຂາຍ (Void Order)';
+    const voidedBy = options.voidedBy || 'ໄມ້ຄຳ (Meii)';
+
+    // 1. GỌI POSTGRES RPC NGUYÊN TỬ: process_pos_void
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('process_pos_void', {
+      payload: {
+        transaction_id: txId,
+        reason,
+        voided_by: voidedBy,
+        items: itemsToRestore && itemsToRestore.length > 0 ? itemsToRestore : undefined,
+      },
+    });
+
+    if (!rpcErr && rpcData?.success) {
+      // Update local metadata
+      try {
+        const cacheKey = `meiishop_tx_meta_${txId}`;
+        const existing = localStorage.getItem(cacheKey);
+        let parsed = {};
+        if (existing) {
+          try { parsed = JSON.parse(existing); } catch (_) {}
+        }
+        localStorage.setItem(cacheKey, JSON.stringify({
+          ...(typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : { items: parsed }),
+          status: 'VOIDED',
+          isCancelled: true,
+          cancelledAt: new Date().toISOString(),
+          voidedAt: new Date().toISOString(),
+          voidedBy,
+          voidReason: reason,
+          originalPaymentMethod,
+        }));
+      } catch (_) {}
+      return { success: true, via: 'atomic_rpc' };
+    }
+
+    if (rpcErr) {
+      const errMsg = rpcErr.message || '';
+      const isRpcMissing = rpcErr.code === '42883' || rpcErr.code === 'PGRST202' || errMsg.includes('Could not find the function');
+      if (!isRpcMissing) {
+        console.error('process_pos_void RPC business error:', rpcErr);
+        return { success: false, error: errMsg };
+      }
+      console.warn('process_pos_void RPC not available yet in Supabase schema, using legacy fallback:', rpcErr.message);
+    }
+
+    // 2. Fallback thủ công nếu RPC chưa được kích hoạt
     const cancelledPaymentMethod = `cancelled:${originalPaymentMethod || 'cash'}`;
     const { error: txErr } = await supabase
       .from('sale_transactions')
       .update({
         payment_method: cancelledPaymentMethod,
+        status: 'VOIDED',
+        voided_at: new Date().toISOString(),
+        voided_by: voidedBy,
+        void_reason: reason,
       })
       .eq('id', txId);
 
@@ -782,7 +895,7 @@ export async function cancelTransactionInSupabase(txId, itemsToRestore = [], ori
       console.warn('cancelTransactionInSupabase update warning:', txErr);
     }
 
-    // 2. Restore product stock in Supabase products table
+    // Restore product stock in Supabase products table
     if (itemsToRestore && itemsToRestore.length > 0) {
       for (const item of itemsToRestore) {
         if (item.productId && item.unitsToRestore) {
@@ -807,7 +920,7 @@ export async function cancelTransactionInSupabase(txId, itemsToRestore = [], ori
       }
     }
 
-    // 3. Update localStorage metadata
+    // Update localStorage metadata
     try {
       const cacheKey = `meiishop_tx_meta_${txId}`;
       const existing = localStorage.getItem(cacheKey);
@@ -819,9 +932,12 @@ export async function cancelTransactionInSupabase(txId, itemsToRestore = [], ori
       }
       const updatedMeta = {
         ...(typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : { items: parsed }),
-        status: 'cancelled',
+        status: 'VOIDED',
         isCancelled: true,
         cancelledAt: new Date().toISOString(),
+        voidedAt: new Date().toISOString(),
+        voidedBy,
+        voidReason: reason,
         originalPaymentMethod,
       };
       localStorage.setItem(cacheKey, JSON.stringify(updatedMeta));

@@ -1438,12 +1438,14 @@ export default function App() {
         ? (actualPaid <= 0 ? 'unpaid' : (remainingDebt > 0 ? 'partial' : 'paid'))
         : 'paid';
 
-      // Point-in-Time Exchange Rate Snapshot calculations
+      // Point-in-Time Exchange Rate Snapshot calculations (IAS 21 Presentation Standard)
       const currentRate = Number(exchangeRate) || 0;
       const totalLak = Number(cartSubtotal) || 0;
-      const totalThb = currentRate > 0 ? Number((totalLak / currentRate).toFixed(2)) : 0;
+      const totalCostLak = Number(totalCost) || 0;
       const grossProfitLak = Number(grossProfit) || 0;
-      const grossProfitThb = currentRate > 0 ? Number((grossProfitLak / currentRate).toFixed(2)) : 0;
+      const totalThb = currentRate > 0 ? Number((totalLak / currentRate).toFixed(2)) : 0;
+      const totalCostThb = currentRate > 0 ? Number((totalCostLak / currentRate).toFixed(2)) : 0;
+      const grossProfitThb = Number((totalThb - totalCostThb).toFixed(2));
 
       const receipt = {
         id: txId,
@@ -1464,8 +1466,10 @@ export default function App() {
         debtAmount: remainingDebt,
         debtStatus,
         debtNote: debtNote.trim(),
-        totalCost,
-        grossProfit,
+        totalCost: totalCostLak,
+        totalCostLak,
+        totalCostThb,
+        grossProfit: grossProfitLak,
         paymentMethod: isDebt ? 'debt' : (paymentMethod === 'transfer' || paymentMethod === 'onepay' ? 'transfer' : 'cash'),
         paymentStatus: isDebt ? (remainingDebt > 0 ? (actualPaid > 0 ? 'PARTIAL' : 'DEBT') : 'PAID') : 'PAID',
         remainingDebt,
@@ -1474,6 +1478,8 @@ export default function App() {
         exchangeRate: currentRate,
         total_lak: totalLak,
         totalLak,
+        total_cost_lak: totalCostLak,
+        total_cost_thb: totalCostThb,
         total_thb: totalThb,
         totalThb,
         gross_profit_lak: grossProfitLak,
@@ -1540,7 +1546,8 @@ export default function App() {
         // REAL SUPABASE DATABASE API CALL:
         const res = await createSaleTransactionInSupabase(receipt, stockDeductions);
         if (!res.success) {
-          openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກລົງຖານຂໍ້ມູນ: ' + res.error, 'ຂໍ້ຜິດພາດ', 'error');
+          openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກລົງຖານຂໍ້ມູນ:\n' + res.error, 'ຂໍ້ຜິດພາດ', 'error');
+          return;
         }
 
         setProducts(updatedProducts);
@@ -1548,6 +1555,9 @@ export default function App() {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ['products'] }),
           queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+          queryClient.invalidateQueries({ queryKey: ['sale_transactions'] }),
+          queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
         ]);
       }
 
@@ -1711,7 +1721,8 @@ export default function App() {
           const res = await cancelTransactionInSupabase(
             tx.id,
             itemsToRestore,
-            tx.originalPaymentMethod || tx.paymentMethod
+            tx.originalPaymentMethod || tx.paymentMethod,
+            { reason: 'ຍົກເລີກບິນຂາຍ (Void Order)', voidedBy: 'ໄມ້ຄຳ (Meii)' }
           );
           if (!res.success) {
             openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການຍົກເລີກບິນ: ' + (res.error || 'Unknown error'), 'ຂໍ້ຜິດພາດ', 'error');
@@ -1729,6 +1740,9 @@ export default function App() {
                     status: 'cancelled',
                     isCancelled: true,
                     cancelledAt: nowIso,
+                    voidedAt: nowIso,
+                    voidedBy: 'ໄມ້ຄຳ (Meii)',
+                    voidReason: 'ຍົກເລີກບິນຂາຍ (Void Order)',
                   }
                 : t
             )
@@ -1742,6 +1756,9 @@ export default function App() {
                   status: 'cancelled',
                   isCancelled: true,
                   cancelledAt: nowIso,
+                  voidedAt: nowIso,
+                  voidedBy: 'ໄມ້ຄຳ (Meii)',
+                  voidReason: 'ຍົກເລີກບິນຂາຍ (Void Order)',
                 }
               : prev
           );
@@ -1762,6 +1779,9 @@ export default function App() {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['products'] }),
             queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+            queryClient.invalidateQueries({ queryKey: ['sale_transactions'] }),
+            queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
           ]);
 
           openAlert(`ຍົກເລີກບິນ "${tx.receiptNumber}" ສຳເລັດແລ້ວ!\n\n• ສິນຄ້າທັງໝົດໄດ້ຖືກສົ່ງຄືນສະຕັອກຮຽບຮ້ອຍ\n• ຍອດຂາຍ ແລະ ກຳໄລຖືກຫັກອອກຈາກ Dashboard ແລ້ວ`, 'ສຳເລັດ', 'success');
@@ -1821,6 +1841,9 @@ export default function App() {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['products'] }),
             queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+            queryClient.invalidateQueries({ queryKey: ['sale_transactions'] }),
+            queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
           ]);
 
           openAlert(`ລຶບບິນ "${tx.receiptNumber}" ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
@@ -1999,13 +2022,27 @@ export default function App() {
       return true;
     });
 
-    // Point-in-time Snapshot Aggregations (Accounting Compliant)
+    // Point-in-time Snapshot Aggregations (IAS 21 Presentation Standard)
     const totalRevenueLak = filteredTxs.reduce((sum, order) => sum + Number(order.total_lak ?? order.grandTotal ?? 0), 0);
-    const totalRevenueThb = filteredTxs.reduce((sum, order) => sum + Number(order.total_thb ?? (Number(order.total_lak ?? order.grandTotal ?? 0) / Number(order.exchange_rate ?? 690))), 0);
-    const totalCostLak = filteredTxs.reduce((sum, order) => sum + Number(order.total_cost ?? order.totalCost ?? 0), 0);
-    const totalCostThb = filteredTxs.reduce((sum, order) => sum + (Number(order.total_cost ?? order.totalCost ?? 0) / Number(order.exchange_rate ?? 690)), 0);
+    const totalCostLak = filteredTxs.reduce((sum, order) => sum + Number(order.total_cost_lak ?? order.total_cost ?? order.totalCost ?? 0), 0);
     const totalProfitLak = filteredTxs.reduce((sum, order) => sum + Number(order.gross_profit_lak ?? order.grossProfit ?? 0), 0);
-    const totalProfitThb = filteredTxs.reduce((sum, order) => sum + Number(order.gross_profit_thb ?? (Number(order.gross_profit_lak ?? order.grossProfit ?? 0) / Number(order.exchange_rate ?? 690))), 0);
+
+    const totalRevenueThb = filteredTxs.reduce((sum, order) => {
+      const explicitThb = Number(order.total_thb ?? order.totalThb ?? 0);
+      if (explicitThb > 0) return sum + explicitThb;
+      const rate = Number(order.exchange_rate || order.exchangeRate) || 0;
+      return sum + (rate > 0 ? Number(((order.total_lak ?? order.grandTotal ?? 0) / rate).toFixed(2)) : 0);
+    }, 0);
+
+    const totalCostThb = filteredTxs.reduce((sum, order) => {
+      const explicitCostThb = Number(order.total_cost_thb ?? order.totalCostThb ?? 0);
+      if (explicitCostThb > 0) return sum + explicitCostThb;
+      const rate = Number(order.exchange_rate || order.exchangeRate) || 0;
+      const costLak = Number(order.total_cost_lak ?? order.total_cost ?? order.totalCost ?? 0);
+      return sum + (rate > 0 ? Number((costLak / rate).toFixed(2)) : 0);
+    }, 0);
+
+    const totalProfitThb = Number((totalRevenueThb - totalCostThb).toFixed(2));
 
     const totalRevenue = totalRevenueLak;
     const totalCost = totalCostLak;

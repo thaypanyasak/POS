@@ -316,6 +316,7 @@ class Product {
       'image_url': imageUrl,
       'base_unit': baseUnit,
       'cost_per_base_unit': costPerBaseUnit,
+      'cost_thb': costBaht,
       'cost_baht': costBaht,
       'cost_lak': costKip,
       'current_stock_base_units': currentStockBaseUnits,

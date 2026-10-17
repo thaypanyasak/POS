@@ -412,7 +412,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       if (qtyToDeduct.containsKey(p.id) && p.trackStock) {
         final deduct = qtyToDeduct[p.id]!;
         final newStock = p.currentStockBaseUnits - deduct;
-        final updatedP = p.copyWith(currentStockBaseUnits: newStock >= 0 ? newStock : 0);
+        final updatedP = p.copyWith(currentStockBaseUnits: newStock);
         SupabaseSyncService.syncProduct(updatedP);
         return updatedP;
       }

@@ -354,10 +354,12 @@ export default function PurchaseEntryModal({
           'ສຳເລັດ',
           'success'
         );
-        // Cache Invalidation per requirement 2:
+        // Cache Invalidation per enterprise requirement:
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ['products'] }),
           queryClient.invalidateQueries({ queryKey: ['purchase_orders'] }),
+          queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
         ]);
         await onSuccess?.();
       } else {

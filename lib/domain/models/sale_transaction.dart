@@ -103,18 +103,23 @@ class SaleTransaction {
   final bool isCancelled;
   final DateTime? cancelledAt;
   final String? voidReason;
+  final String? voidedBy;
 
   // Point-in-Time Exchange Rate Snapshot Fields
   final double exchangeRate;
   final double? totalLakValue;
   final double? totalThbValue;
+  final double? totalCostLakValue;
+  final double? totalCostThbValue;
   final double? grossProfitLakValue;
   final double? grossProfitThbValue;
 
   double get totalLak => totalLakValue ?? grandTotal.toDouble();
   double get totalThb => totalThbValue ?? (exchangeRate > 0 ? totalLak / exchangeRate : 0.0);
+  double get totalCostLak => totalCostLakValue ?? totalCostOfGoods.toDouble();
+  double get totalCostThb => totalCostThbValue ?? (exchangeRate > 0 ? totalCostLak / exchangeRate : 0.0);
   double get grossProfitLak => grossProfitLakValue ?? grossProfit.toDouble();
-  double get grossProfitThb => grossProfitThbValue ?? (exchangeRate > 0 ? grossProfitLak / exchangeRate : 0.0);
+  double get grossProfitThb => grossProfitThbValue ?? (totalThb - totalCostThb);
 
   const SaleTransaction({
     required this.id,
@@ -142,9 +147,12 @@ class SaleTransaction {
     this.isCancelled = false,
     this.cancelledAt,
     this.voidReason,
+    this.voidedBy,
     this.exchangeRate = 690.0,
     this.totalLakValue,
     this.totalThbValue,
+    this.totalCostLakValue,
+    this.totalCostThbValue,
     this.grossProfitLakValue,
     this.grossProfitThbValue,
   });
@@ -216,9 +224,12 @@ class SaleTransaction {
     bool? isCancelled,
     DateTime? cancelledAt,
     String? voidReason,
+    String? voidedBy,
     double? exchangeRate,
     double? totalLakValue,
     double? totalThbValue,
+    double? totalCostLakValue,
+    double? totalCostThbValue,
     double? grossProfitLakValue,
     double? grossProfitThbValue,
   }) {
@@ -248,9 +259,12 @@ class SaleTransaction {
       isCancelled: isCancelled ?? this.isCancelled,
       cancelledAt: cancelledAt ?? this.cancelledAt,
       voidReason: voidReason ?? this.voidReason,
+      voidedBy: voidedBy ?? this.voidedBy,
       exchangeRate: exchangeRate ?? this.exchangeRate,
       totalLakValue: totalLakValue ?? this.totalLakValue,
       totalThbValue: totalThbValue ?? this.totalThbValue,
+      totalCostLakValue: totalCostLakValue ?? this.totalCostLakValue,
+      totalCostThbValue: totalCostThbValue ?? this.totalCostThbValue,
       grossProfitLakValue: grossProfitLakValue ?? this.grossProfitLakValue,
       grossProfitThbValue: grossProfitThbValue ?? this.grossProfitThbValue,
     );
@@ -270,6 +284,7 @@ class SaleTransaction {
       'grand_total': grandTotal,
       'amount_tendered': amountTendered,
       'change_amount': changeAmount,
+      'total_cost': totalCostOfGoods,
       'total_cost_of_goods': totalCostOfGoods,
       'gross_profit': grossProfit,
       'is_synced': isSynced,
@@ -282,12 +297,16 @@ class SaleTransaction {
       'status': status,
       'is_cancelled': isCancelled,
       'cancelled_at': cancelledAt?.toIso8601String(),
+      'voided_at': cancelledAt?.toIso8601String(),
       'void_reason': voidReason,
+      'voided_by': voidedBy,
       'exchange_rate': exchangeRate,
       'total_lak': totalLak,
-      'total_thb': totalThb,
+      'total_thb': double.parse(totalThb.toStringAsFixed(2)),
+      'total_cost_lak': totalCostLak,
+      'total_cost_thb': double.parse(totalCostThb.toStringAsFixed(2)),
       'gross_profit_lak': grossProfitLak,
-      'gross_profit_thb': grossProfitThb,
+      'gross_profit_thb': double.parse(grossProfitThb.toStringAsFixed(2)),
     };
   }
 
@@ -337,15 +356,23 @@ class SaleTransaction {
     final isDebt = json['is_debt'] as bool? ?? (method == PaymentMethod.debt);
     final rawStatus = json['status'] as String? ?? (isMethodCancelled ? 'cancelled' : 'completed');
     final isCancelled = json['is_cancelled'] as bool? ??
-        (rawStatus == 'cancelled' || rawStatus == 'voided' || isMethodCancelled);
+        (rawStatus == 'cancelled' || rawStatus == 'voided' || rawStatus == 'VOIDED' || isMethodCancelled);
 
     final rate = (json['exchange_rate'] as num?)?.toDouble() ?? 690.0;
     final grandTot = (json['grand_total'] as num?)?.toInt() ?? 0;
     final tLak = (json['total_lak'] as num?)?.toDouble() ?? grandTot.toDouble();
     final tThb = (json['total_thb'] as num?)?.toDouble() ?? (rate > 0 ? (tLak / rate) : 0.0);
-    final gProfit = (json['gross_profit'] as num?)?.toInt() ?? 0;
+    
+    final costGoods = (json['total_cost_of_goods'] as num?)?.toInt() ??
+        (json['total_cost'] as num?)?.toInt() ??
+        (json['total_cost_lak'] as num?)?.toInt() ??
+        0;
+    final cLak = (json['total_cost_lak'] as num?)?.toDouble() ?? costGoods.toDouble();
+    final cThb = (json['total_cost_thb'] as num?)?.toDouble() ?? (rate > 0 ? (cLak / rate) : 0.0);
+
+    final gProfit = (json['gross_profit'] as num?)?.toInt() ?? (grandTot - costGoods);
     final pLak = (json['gross_profit_lak'] as num?)?.toDouble() ?? gProfit.toDouble();
-    final pThb = (json['gross_profit_thb'] as num?)?.toDouble() ?? (rate > 0 ? (pLak / rate) : 0.0);
+    final pThb = (json['gross_profit_thb'] as num?)?.toDouble() ?? (tThb - cThb);
 
     return SaleTransaction(
       id: json['id'] as String,
@@ -362,9 +389,7 @@ class SaleTransaction {
       grandTotal: grandTot,
       amountTendered: (json['amount_tendered'] as num?)?.toInt() ?? 0,
       changeAmount: (json['change_amount'] as num?)?.toInt() ?? 0,
-      totalCostOfGoods: (json['total_cost_of_goods'] as num?)?.toInt() ??
-          (json['total_cost'] as num?)?.toInt() ??
-          0,
+      totalCostOfGoods: costGoods,
       grossProfit: gProfit,
       isSynced: json['is_synced'] as bool? ?? false,
       cashierName: json['cashier_name'] as String? ?? 'ໄມ້ຄຳ (Meii)',
@@ -379,9 +404,12 @@ class SaleTransaction {
           ? DateTime.tryParse(json['cancelled_at'] as String)
           : (json['voided_at'] != null ? DateTime.tryParse(json['voided_at'] as String) : null),
       voidReason: json['void_reason'] as String?,
+      voidedBy: json['voided_by'] as String?,
       exchangeRate: rate,
       totalLakValue: tLak,
       totalThbValue: tThb,
+      totalCostLakValue: cLak,
+      totalCostThbValue: cThb,
       grossProfitLakValue: pLak,
       grossProfitThbValue: pThb,
     );

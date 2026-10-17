@@ -101,11 +101,12 @@ class ProductUnit {
       'multiplier': multiplier,
       'retail_price': retailPrice,
       'wholesale_price': wholesalePrice,
-      'price_2': price2 ?? retailPrice,
-      'price_3': price3 ?? retailPrice,
+      'price_2': price2,
+      'price_3': price3,
       'barcode': barcode,
       'is_base_unit': isBaseUnit,
       'tier': tier,
+      'tier_level': tier,
       'is_active': isActive,
     };
   }
@@ -119,11 +120,11 @@ class ProductUnit {
       multiplier: (json['multiplier'] as num?)?.toInt() ?? 1,
       retailPrice: rPrice,
       wholesalePrice: (json['wholesale_price'] as num?)?.toInt() ?? rPrice,
-      price2: (json['price_2'] as num?)?.toInt() ?? (json['price2'] as num?)?.toInt() ?? rPrice,
-      price3: (json['price_3'] as num?)?.toInt() ?? (json['price3'] as num?)?.toInt() ?? rPrice,
+      price2: (json['price_2'] as num?)?.toInt() ?? (json['price2'] as num?)?.toInt(),
+      price3: (json['price_3'] as num?)?.toInt() ?? (json['price3'] as num?)?.toInt(),
       barcode: json['barcode']?.toString(),
       isBaseUnit: json['is_base_unit'] as bool? ?? false,
-      tier: (json['tier'] as num?)?.toInt(),
+      tier: (json['tier_level'] as num?)?.toInt() ?? (json['tier'] as num?)?.toInt(),
       isActive: json['is_active'] as bool? ?? true,
     );
   }
