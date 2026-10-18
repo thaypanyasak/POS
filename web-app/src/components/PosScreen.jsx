@@ -262,12 +262,12 @@ export default function PosScreen({
 
   // Reusable High-Density Compact Cart for Desktop (35%) & Mobile Drawer
   const renderCartContent = (isDrawer = false) => (
-    <div className="flex-1 flex flex-col h-full min-h-0 bg-white">
+    <div className="flex flex-col h-[calc(100dvh-4rem)] max-h-[100dvh] md:h-full md:max-h-full min-h-0 overflow-hidden bg-white">
       {/* 1. Sticky Amber Banner when editing an old transaction */}
       {renderEditingBanner()}
 
       {/* 2. Compact Cart Header: Title, Customer Name & Clear */}
-      <div className={`p-2.5 px-3 border-b border-slate-200/80 bg-slate-50/80 flex flex-col gap-1.5 shrink-0 ${isDrawer ? 'pt-1.5' : ''}`}>
+      <div className={`p-2 sm:p-3 border-b border-slate-100 flex flex-col gap-1.5 shrink-0 bg-slate-50/80 ${isDrawer ? 'pt-1.5' : ''}`}>
         {!isDrawer && (
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
@@ -361,8 +361,8 @@ export default function PosScreen({
         </div>
       </div>
 
-      {/* 3. High-Density Cart Item List (Thumbnail on left + 2 clean rows on right) */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5 overscroll-contain">
+      {/* 3. High-Density Cart Item List (BẮT BUỘC flex-1 VÀ overflow-y-auto để cuộn độc lập) */}
+      <div className="flex-1 overflow-y-auto overscroll-contain p-2 space-y-2 min-h-0">
         {cart.map((item) => {
           const itemKey = `${item.product.id}_${item.unit.id}`;
           const currentTier = item.selectedPriceTier || 1;
@@ -548,7 +548,7 @@ export default function PosScreen({
                               className="fixed inset-0 z-40"
                               onClick={() => setOpenPriceMenuKey(null)}
                             />
-                            <div className="absolute left-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-1 min-w-[260px] w-max max-w-[320px] flex flex-col gap-0.5 animate-in fade-in-50 zoom-in-95">
+                            <div className="absolute right-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-1 min-w-[240px] w-max max-w-[calc(100vw-32px)] flex flex-col gap-0.5 animate-in fade-in-50 zoom-in-95">
                               <div className="px-2.5 py-1.5 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center justify-between">
                                 <span>ເລືອກລະດັບລາຄາ:</span>
                                 <span className="text-teal-700 font-extrabold">{item.unit.unitName}</span>
@@ -717,25 +717,32 @@ export default function PosScreen({
         )}
       </div>
 
-      {/* 4. Sleek Cart Footer: Large Total & Dual Action Buttons */}
-      <div className="p-2.5 px-3 bg-slate-50 border-t border-slate-200 flex flex-col gap-2 shrink-0">
-        <div className="flex items-baseline justify-between">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">ຍອດເງິນລວມ (Total):</span>
-          <span className="text-2xl font-black font-mono text-slate-900">
-            {formatKip(cartSubtotal)}
+      {/* 4. Footer Tổng tiền & Nút hành động: BẮT BUỘC shrink-0 dính sát đáy, không bao giờ bị che */}
+      <div className="shrink-0 p-2 sm:p-3 border-t border-slate-200 bg-slate-50/80 backdrop-blur-sm shadow-sm">
+        {/* Hàng tổng tiền: Thu nhỏ font chữ, hiển thị trên 1 hàng ngang duy nhất */}
+        <div className="flex items-baseline justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            ຍອດລວມ (TOTAL):
           </span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-lg sm:text-xl font-bold text-slate-900 font-mono tracking-tight tabular-nums">
+              {formatDots(cartSubtotal)}
+            </span>
+            <span className="text-sm font-bold text-slate-700">₭</span>
+          </div>
         </div>
 
+        {/* Hàng các nút hành động (Báo giá, Thanh toán): Chiều cao nút 36px - 40px gọn gàng */}
         <div className="grid grid-cols-2 gap-2">
-          {/* Nút phụ: ໃບບອກລາຄາ (Báo giá) */}
+          {/* Nút báo giá / Treo đơn */}
           <button
             type="button"
             onClick={() => setQuotationModalOpen(true)}
             disabled={cart.length === 0}
-            className={`h-11 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border active:scale-98 ${
+            className={`h-9 sm:h-10 px-2 rounded-lg border text-xs sm:text-sm font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer active:scale-98 ${
               cart.length > 0
-                ? 'bg-white hover:bg-amber-50 text-amber-700 border-amber-300 shadow-2xs'
-                : 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed'
+                ? 'border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs'
+                : 'border-slate-200 bg-slate-100 text-slate-300 cursor-not-allowed'
             }`}
             title="ພິມໃບບອກລາຄາ / ໃບສະເໜີລາຄາຊົ່ວຄາວ (ບໍ່ຕັດສະຕັອກ)"
           >
@@ -743,7 +750,7 @@ export default function PosScreen({
             <span>ໃບບອກລາຄາ</span>
           </button>
 
-          {/* Nút chính: ຊຳລະເງິນ (Thanh toán) */}
+          {/* Nút Thanh toán Checkout */}
           <button
             type="button"
             onClick={() => {
@@ -751,7 +758,7 @@ export default function PosScreen({
               handleOpenCheckout();
             }}
             disabled={cart.length === 0}
-            className={`h-11 px-3 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-98 cursor-pointer ${
+            className={`h-9 sm:h-10 px-3 rounded-lg text-xs sm:text-sm font-bold shadow-sm flex items-center justify-center gap-1.5 transition-colors active:scale-98 cursor-pointer ${
               cart.length > 0
                 ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-teal-600/25'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
