@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../../../../domain/models/sale_transaction.dart';
 
@@ -216,9 +217,15 @@ class _DualBarComparisonChartState extends State<DualBarComparisonChart> {
                       ),
                     ],
                   )
-                : const Text(
-                    '💡 ແຕະທີ່ແທ່ງກຣາຟວັນທີໃດໜຶ່ງ ເພື່ອເບິ່ງຍອດຂາຍທຽບລະອຽດ ແລະ ຜົນຕ່າງ',
-                    style: TextStyle(fontSize: 11.5, fontStyle: FontStyle.italic, color: Color(0xFF94A3B8)),
+                : const Row(
+                    children: [
+                      PhosphorIcon(PhosphorIconsBold.lightbulb, size: 14, color: Color(0xFFD97706)),
+                      SizedBox(width: 6),
+                      Text(
+                        'ແຕະທີ່ແທ່ງກຣາຟວັນທີໃດໜຶ່ງ ເພື່ອເບິ່ງຍອດຂາຍທຽບລະອຽດ ແລະ ຜົນຕ່າງ',
+                        style: TextStyle(fontSize: 11.5, fontStyle: FontStyle.italic, color: Color(0xFF94A3B8)),
+                      ),
+                    ],
                   ),
           ),
           const SizedBox(height: 16),

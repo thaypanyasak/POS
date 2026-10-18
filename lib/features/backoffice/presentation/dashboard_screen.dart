@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/localization/lao_currency_formatter.dart';
 import '../../../core/utils/image_compress_service.dart';
 import '../../../domain/models/product.dart';
@@ -302,7 +303,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           subValueThb: '≈ ${NumberFormat('#,##0').format(totalRevenueThb.round())} ฿',
                           subLeft: 'ຈຳນວນ:',
                           subRight: '${txs.length} ບິນສຳເລັດ',
-                          icon: Icons.monetization_on_outlined,
+                          icon: PhosphorIconsBold.money,
                           iconColor: const Color(0xFF0F766E),
                           iconBg: const Color(0xFFF0FDFA),
                           valueColor: const Color(0xFF0F766E),
@@ -316,7 +317,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           subValueThb: '≈ ${NumberFormat('#,##0').format(totalCostThb.round())} ฿',
                           subLeft: 'ຕົ້ນທຶນສິນຄ້າຂາຍອອກ',
                           subRight: 'ທຶນຈິງ',
-                          icon: Icons.calendar_today_outlined,
+                          icon: PhosphorIconsBold.package,
                           iconColor: const Color(0xFFD97706),
                           iconBg: const Color(0xFFFFFBEB),
                           valueColor: const Color(0xFF1E293B),
@@ -331,7 +332,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           subLeft: 'ອັດຕາກຳໄລ:',
                           subRight: '${margin.toStringAsFixed(1)}%',
                           isMarginBadge: true,
-                          icon: Icons.credit_card_outlined,
+                          icon: PhosphorIconsBold.trendUp,
                           iconColor: const Color(0xFF059669),
                           iconBg: const Color(0xFFECFDF5),
                           valueColor: const Color(0xFF059669),
@@ -345,7 +346,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           subValueThb: '≈ ${NumberFormat('#,##0').format(avgTicketThb.round())} ฿',
                           subLeft: 'ສະເລ່ຍຕໍ່ 1 ລູກຄ້າ',
                           subRight: 'ບິນ/ລູກຄ້າ',
-                          icon: Icons.bar_chart_rounded,
+                          icon: PhosphorIconsBold.chartBar,
                           iconColor: const Color(0xFF7C3AED),
                           iconBg: const Color(0xFFF5F3FF),
                           valueColor: const Color(0xFF0F172A),
@@ -456,7 +457,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   color: const Color(0xFF0F766E), // teal-700
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.bar_chart_rounded, color: Colors.white, size: 20),
+                child: const PhosphorIcon(PhosphorIconsBold.chartBar, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 9),
               Column(
@@ -596,7 +597,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   color: iconBg,
                   borderRadius: BorderRadius.circular(7),
                 ),
-                child: Icon(icon, size: 16, color: iconColor),
+                child: PhosphorIcon(icon, size: 16, color: iconColor),
               ),
             ],
           ),
@@ -678,7 +679,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             children: [
               const Row(
                 children: [
-                  Icon(Icons.receipt_long_outlined, size: 16, color: Color(0xFF0F766E)),
+                  PhosphorIcon(PhosphorIconsBold.receipt, size: 16, color: Color(0xFF0F766E)),
                   SizedBox(width: 6),
                   Text(
                     'ຊ່ອງທາງການຊຳລະເງິນ (Payment Breakdown)',
@@ -721,7 +722,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     title: '1. ເງິນສົດ (Cash)',
                     amount: cash,
                     subtitle: 'ເງິນສົດຕົວຈິງທີ່ໄດ້ຮັບ',
-                    icon: Icons.payments_outlined,
+                    icon: PhosphorIconsBold.money,
                     iconBg: const Color(0xFF10B981),
                     cardBg: const Color(0xFFF0FDF4),
                     cardBorder: const Color(0xFFA7F3D0),
@@ -734,7 +735,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     title: '2. ໂອນເງິນ (Transfer / OnePay)',
                     amount: transfer,
                     subtitle: 'OnePay QR + ໂອນບັນຊີ',
-                    icon: Icons.qr_code_2_rounded,
+                    icon: PhosphorIconsBold.qrCode,
                     iconBg: const Color(0xFF2563EB),
                     cardBg: const Color(0xFFEFF6FF),
                     cardBorder: const Color(0xFFBFDBFE),
@@ -747,7 +748,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     title: '3. ຍອດຂາຍຕິດໜີ້ (Credit)',
                     amount: debt,
                     subtitle: 'ລວມ $debtCount ບິນຕິດໜີ້',
-                    icon: Icons.hourglass_bottom_rounded,
+                    icon: PhosphorIconsBold.hourglass,
                     iconBg: const Color(0xFFF59E0B),
                     cardBg: const Color(0xFFFFFBEB),
                     cardBorder: const Color(0xFFFDE68A),
@@ -791,7 +792,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               color: iconBg,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: Colors.white, size: 20),
+            child: PhosphorIcon(icon, color: Colors.white, size: 20),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1104,7 +1105,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             children: const [
               Row(
                 children: [
-                  Icon(Icons.local_fire_department_rounded, size: 16, color: Color(0xFFF59E0B)),
+                  PhosphorIcon(PhosphorIconsBold.fire, size: 16, color: Color(0xFFF59E0B)),
                   SizedBox(width: 4),
                   Text(
                     '5 ສິນຄ້າຂາຍດີທີ່ສຸດ (Top 5 Sellers)',
@@ -1237,19 +1238,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ImageCompressService.bytesFromDataUri(imgUrl) ?? Uint8List(0),
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => const Center(
-                child: Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFF94A3B8)),
+                child: PhosphorIcon(PhosphorIconsBold.package, size: 18, color: Color(0xFF94A3B8)),
               ),
             )
           : Image.network(
               imgUrl,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => const Center(
-                child: Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFF94A3B8)),
+                child: PhosphorIcon(PhosphorIconsBold.package, size: 18, color: Color(0xFF94A3B8)),
               ),
             );
     }
     return const Center(
-      child: Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFF94A3B8)),
+      child: PhosphorIcon(PhosphorIconsBold.package, size: 18, color: Color(0xFF94A3B8)),
     );
   }
 
@@ -1270,7 +1271,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             children: [
               const Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFE11D48)),
+                  PhosphorIcon(PhosphorIconsBold.warningCircle, size: 16, color: Color(0xFFE11D48)),
                   SizedBox(width: 4),
                   Text(
                     'ສິນຄ້າໃກ້ໝົດສາງ (Low Stock Alert)',
@@ -1307,7 +1308,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFF16A34A)),
+                  PhosphorIcon(PhosphorIconsBold.checkCircle, size: 16, color: Color(0xFF16A34A)),
                   SizedBox(width: 6),
                   Text('ສິນຄ້າທຸກລາຍການຢູ່ໃນເກນປອດໄພ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF166534))),
                 ],
@@ -1388,7 +1389,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             children: [
               const Row(
                 children: [
-                  Icon(Icons.hourglass_bottom_rounded, size: 16, color: Color(0xFFD97706)),
+                  PhosphorIcon(PhosphorIconsBold.hourglass, size: 16, color: Color(0xFFD97706)),
                   SizedBox(width: 4),
                   Text(
                     'ລູກຄ້າຄ້າງຊຳລະ (Recent Credit)',
@@ -1511,7 +1512,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.date_range_rounded,
+                  const PhosphorIcon(PhosphorIconsBold.calendar,
                       size: 16, color: Color(0xFF0F766E)),
                   const SizedBox(width: 8),
                   Text(
@@ -1523,7 +1524,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  const Icon(Icons.edit_calendar_rounded,
+                  const PhosphorIcon(PhosphorIconsBold.pencilSimple,
                       size: 14, color: Color(0xFF0F766E)),
                 ],
               ),

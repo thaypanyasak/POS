@@ -1,8 +1,11 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../../../../core/utils/image_compress_service.dart';
+import '../../../../core/widgets/app_button.dart';
+import '../../../../core/widgets/app_price_dropdown.dart';
 import '../../../../domain/models/cart_item.dart';
 import '../../../../domain/models/product_unit.dart';
 import 'price_override_dialog.dart';
@@ -103,16 +106,44 @@ class CartLineItemTile extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Expanded(
-                              child: Text(
-                                item.product.name,
-                                style: TextStyle(
-                                  fontSize: isNarrow ? 11.5 : 12.0,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
-                                  letterSpacing: -0.2,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      item.product.name,
+                                      style: TextStyle(
+                                        fontSize: isNarrow ? 11.5 : 12.0,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.textPrimary,
+                                        letterSpacing: -0.2,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (item.product.trackStock &&
+                                      (item.totalBaseUnitsDeducted > item.product.currentStockBaseUnits ||
+                                          item.product.currentStockBaseUnits <= 0)) ...[
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.rose50,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: AppColors.rose200, width: 0.8),
+                                      ),
+                                      child: const Text(
+                                        '(ຂາຍຕິດລົບ)',
+                                        style: TextStyle(
+                                          fontSize: 9.0,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.rose700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                             const SizedBox(width: 4),
@@ -121,10 +152,10 @@ class CartLineItemTile extends StatelessWidget {
                               borderRadius: BorderRadius.circular(4),
                               child: const Padding(
                                 padding: EdgeInsets.all(2.0),
-                                child: Icon(
-                                  Icons.delete_outline_rounded,
-                                  size: 16,
-                                  color: AppColors.textTertiary,
+                                child: PhosphorIcon(
+                                  PhosphorIconsBold.trash,
+                                  size: 15,
+                                  color: AppColors.textMuted,
                                 ),
                               ),
                             ),
@@ -191,13 +222,13 @@ class CartLineItemTile extends StatelessWidget {
                                         style: TextStyle(
                                           fontSize: isNarrow ? 8.5 : 9.0,
                                           fontWeight: FontWeight.w700,
-                                          color: const Color(0xFF0F766E), // teal-700
+                                          color: Color(0xFF0F766E), // teal-700
                                         ),
                                       ),
                                       const SizedBox(width: 1),
-                                      const Icon(
-                                        Icons.arrow_drop_down_rounded,
-                                        size: 13,
+                                      const PhosphorIcon(
+                                        PhosphorIconsBold.caretDown,
+                                        size: 11,
                                         color: Color(0xFF0F766E),
                                       ),
                                     ],
@@ -223,182 +254,14 @@ class CartLineItemTile extends StatelessWidget {
 
                             const SizedBox(width: 3),
 
-                            // Nút chọn bảng giá dạng Dropdown Pill [ ລ1 ▾ ]
-                            PopupMenuButton<int>(
-                              initialValue: item.selectedPriceTier,
-                              tooltip: 'ປ່ຽນລະດັບລາຄາ (Price Tier)',
-                              onSelected: onSelectPriceTier,
-                              color: Colors.white,
-                              elevation: 3,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: const BorderSide(color: Color(0xFFE2E8F0)),
-                              ),
-                              itemBuilder: (context) {
-                                final p1 = item.selectedUnit.priceForTier(1);
-                                final p2 = item.selectedUnit.price2 ?? 0;
-                                final p3 = item.selectedUnit.price3 ?? 0;
-
-                                final menuItems = <PopupMenuEntry<int>>[];
-
-                                menuItems.add(
-                                  PopupMenuItem<int>(
-                                    value: 1,
-                                    height: 34,
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          'ລາຄາ 1 (ມາດຕະຖານ)',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: item.selectedPriceTier == 1 ? FontWeight.w800 : FontWeight.w500,
-                                            color: item.selectedPriceTier == 1 ? const Color(0xFF047857) : const Color(0xFF1E293B),
-                                          ),
-                                        ),
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              '${LaoCurrencyFormatter.formatDots(p1)} ₭',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                fontFamily: 'monospace',
-                                                color: item.selectedPriceTier == 1 ? const Color(0xFF047857) : const Color(0xFF0F172A),
-                                              ),
-                                            ),
-                                            if (item.selectedPriceTier == 1) ...[
-                                              const SizedBox(width: 4),
-                                              const Icon(Icons.check_rounded, size: 14, color: Color(0xFF047857)),
-                                            ],
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-
-                                if (p2 > 0) {
-                                  menuItems.add(
-                                    PopupMenuItem<int>(
-                                      value: 2,
-                                      height: 34,
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            'ລາຄາ 2 (ລູກຄ້າປະຈຳ)',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: item.selectedPriceTier == 2 ? FontWeight.w800 : FontWeight.w500,
-                                              color: item.selectedPriceTier == 2 ? const Color(0xFF0284C7) : const Color(0xFF1E293B),
-                                            ),
-                                          ),
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                '${LaoCurrencyFormatter.formatDots(p2)} ₭',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontFamily: 'monospace',
-                                                  color: item.selectedPriceTier == 2 ? const Color(0xFF0284C7) : const Color(0xFF0F172A),
-                                                ),
-                                              ),
-                                              if (item.selectedPriceTier == 2) ...[
-                                                const SizedBox(width: 4),
-                                                const Icon(Icons.check_rounded, size: 14, color: Color(0xFF0284C7)),
-                                              ],
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                }
-
-                                if (p3 > 0) {
-                                  menuItems.add(
-                                    PopupMenuItem<int>(
-                                      value: 3,
-                                      height: 34,
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            'ລາຄາ 3 (ຂາຍສົ່ງ/VIP)',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: item.selectedPriceTier == 3 ? FontWeight.w800 : FontWeight.w500,
-                                              color: item.selectedPriceTier == 3 ? const Color(0xFF7E22CE) : const Color(0xFF1E293B),
-                                            ),
-                                          ),
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                '${LaoCurrencyFormatter.formatDots(p3)} ₭',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontFamily: 'monospace',
-                                                  color: item.selectedPriceTier == 3 ? const Color(0xFF7E22CE) : const Color(0xFF0F172A),
-                                                ),
-                                              ),
-                                              if (item.selectedPriceTier == 3) ...[
-                                                const SizedBox(width: 4),
-                                                const Icon(Icons.check_rounded, size: 14, color: Color(0xFF7E22CE)),
-                                              ],
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                }
-
-                                return menuItems;
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: item.selectedPriceTier == 3
-                                      ? const Color(0xFFFAF5FF)
-                                      : (item.selectedPriceTier == 2 ? const Color(0xFFF0F9FF) : const Color(0xFFF0FDF4)),
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: item.selectedPriceTier == 3
-                                        ? const Color(0xFFD8B4FE)
-                                        : (item.selectedPriceTier == 2 ? const Color(0xFFBAE6FD) : const Color(0xFFA7F3D0)),
-                                    width: 0.8,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'ລ${item.selectedPriceTier}',
-                                      style: TextStyle(
-                                        fontSize: isNarrow ? 8.5 : 9.0,
-                                        fontWeight: FontWeight.w800,
-                                        color: item.selectedPriceTier == 3
-                                            ? const Color(0xFF7E22CE)
-                                            : (item.selectedPriceTier == 2 ? const Color(0xFF0369A1) : const Color(0xFF047857)),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 1),
-                                    Icon(
-                                      Icons.arrow_drop_down_rounded,
-                                      size: 13,
-                                      color: item.selectedPriceTier == 3
-                                          ? const Color(0xFF7E22CE)
-                                          : (item.selectedPriceTier == 2 ? const Color(0xFF0369A1) : const Color(0xFF047857)),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                            // Nút chọn bảng giá dạng Dropdown Pill chuẩn Tailwind (right-aligned, no overflow)
+                            AppPriceDropdown(
+                              currentTier: item.selectedPriceTier,
+                              price1: item.selectedUnit.priceForTier(1),
+                              price2: item.selectedUnit.price2,
+                              price3: item.selectedUnit.price3,
+                              onSelectTier: onSelectPriceTier,
+                              isCompact: isNarrow,
                             ),
 
                             const SizedBox(width: 3),
@@ -436,10 +299,10 @@ class CartLineItemTile extends StatelessWidget {
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                      const SizedBox(width: 1),
-                                      Icon(
-                                        Icons.edit_rounded,
-                                        size: 8.5,
+                                      const SizedBox(width: 2),
+                                      PhosphorIcon(
+                                        PhosphorIconsBold.pencilSimple,
+                                        size: 9.0,
                                         color: item.isPriceOverridden
                                             ? const Color(0xFFB45309)
                                             : const Color(0xFF94A3B8),
@@ -469,7 +332,7 @@ class CartLineItemTile extends StatelessWidget {
                                     child: const SizedBox(
                                       width: 19,
                                       height: 22,
-                                      child: Icon(Icons.remove, size: 10, color: AppColors.textSecondary),
+                                      child: Center(child: PhosphorIcon(PhosphorIconsBold.minus, size: 9.5, color: AppColors.textSecondary)),
                                     ),
                                   ),
                                   InkWell(
@@ -498,7 +361,7 @@ class CartLineItemTile extends StatelessWidget {
                                     child: const SizedBox(
                                       width: 19,
                                       height: 22,
-                                      child: Icon(Icons.add, size: 10, color: Color(0xFF0F766E)),
+                                      child: Center(child: PhosphorIcon(PhosphorIconsBold.plus, size: 9.5, color: Color(0xFF0F766E))),
                                     ),
                                   ),
                                 ],
@@ -686,19 +549,19 @@ class CartLineItemTile extends StatelessWidget {
               ImageCompressService.bytesFromDataUri(item.product.imageUrl!) ?? Uint8List(0),
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => const Center(
-                child: Icon(Icons.inventory_2_outlined, size: 18, color: AppColors.textTertiary),
+                child: PhosphorIcon(PhosphorIconsBold.package, size: 18, color: AppColors.textMuted),
               ),
             )
           : Image.network(
               item.product.imageUrl!,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => const Center(
-                child: Icon(Icons.inventory_2_outlined, size: 18, color: AppColors.textTertiary),
+                child: PhosphorIcon(PhosphorIconsBold.package, size: 18, color: AppColors.textMuted),
               ),
             );
     }
     return const Center(
-      child: Icon(Icons.inventory_2_outlined, size: 18, color: AppColors.textTertiary),
+      child: PhosphorIcon(PhosphorIconsBold.package, size: 18, color: AppColors.textMuted),
     );
   }
 
@@ -733,7 +596,7 @@ class CartLineItemTile extends StatelessWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Row(
                 children: [
-                  const Icon(Icons.pin_rounded, color: AppColors.primary, size: 22),
+                  PhosphorIcon(PhosphorIconsBold.hash, color: AppColors.primary, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -768,8 +631,7 @@ class CartLineItemTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    // 3x4 Numpad Grid
+                    const SizedBox(height: 12),                    // 3x4 Numpad Grid - Modern Flat Slate / Tailwind
                     GridView.count(
                       crossAxisCount: 3,
                       shrinkWrap: true,
@@ -778,76 +640,101 @@ class CartLineItemTile extends StatelessWidget {
                       childAspectRatio: 1.5,
                       children: [
                         for (var i = 1; i <= 9; i++)
-                          ElevatedButton(
-                            onPressed: () => appendDigit(i.toString()),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.surface,
-                              foregroundColor: AppColors.textPrimary,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: const BorderSide(color: AppColors.border, width: 0.8),
+                          Material(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            child: InkWell(
+                              onTap: () => appendDigit(i.toString()),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.border, width: 1.0),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text('$i', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textMain)),
                               ),
                             ),
-                            child: Text('$i', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                           ),
-                        ElevatedButton(
-                          onPressed: () => setDialogState(() => controller.clear()),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.errorLight,
-                            foregroundColor: AppColors.error,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          child: const Text('C', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => appendDigit('0'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.surface,
-                            foregroundColor: AppColors.textPrimary,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              side: const BorderSide(color: AppColors.border, width: 0.8),
+                        Material(
+                          color: AppColors.dangerLight,
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            onTap: () => setDialogState(() => controller.clear()),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.danger.withValues(alpha: 0.2), width: 1.0),
+                              ),
+                              alignment: Alignment.center,
+                              child: const Text('C', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.danger)),
                             ),
                           ),
-                          child: const Text('0', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         ),
-                        ElevatedButton(
-                          onPressed: backspace,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.surfaceSubtle,
-                            foregroundColor: AppColors.textSecondary,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        Material(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            onTap: () => appendDigit('0'),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.border, width: 1.0),
+                              ),
+                              alignment: Alignment.center,
+                              child: const Text('0', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textMain)),
+                            ),
                           ),
-                          child: const Icon(Icons.backspace_outlined, size: 18),
+                        ),
+                        Material(
+                          color: AppColors.secondary,
+                          borderRadius: BorderRadius.circular(8),
+                          child: InkWell(
+                            onTap: backspace,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.border, width: 1.0),
+                              ),
+                              alignment: Alignment.center,
+                              child: const PhosphorIcon(PhosphorIconsBold.backspace, size: 18, color: AppColors.secondaryText),
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ],
                 ),
               ),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('ຍົກເລີກ'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final qty = int.tryParse(controller.text) ?? 1;
-                    if (onSetQuantity != null) {
-                      onSetQuantity!(qty);
-                    }
-                    Navigator.of(ctx).pop();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: const Text('ຕົກລົງ'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    AppButton(
+                      label: 'ຍົກເລີກ',
+                      variant: AppButtonVariant.ghost,
+                      height: 38,
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                    const SizedBox(width: 8),
+                    AppButton(
+                      label: 'ຕົກລົງ',
+                      variant: AppButtonVariant.primary,
+                      height: 38,
+                      icon: PhosphorIconsBold.check,
+                      onPressed: () {
+                        final qty = int.tryParse(controller.text) ?? 1;
+                        if (onSetQuantity != null) {
+                          onSetQuantity!(qty);
+                        }
+                        Navigator.of(ctx).pop();
+                      },
+                    ),
+                  ],
                 ),
               ],
             );

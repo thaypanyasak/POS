@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 
 /// Payment Breakdown Comparison (Cash, Transfer, Credit/Debt)
@@ -60,7 +61,7 @@ class PaymentBreakdownComparisonWidget extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFFCCFBF1)),
                     ),
-                    child: const Icon(Icons.payment_rounded,
+                    child: const PhosphorIcon(PhosphorIconsBold.creditCard,
                         color: Color(0xFF0F766E), size: 18),
                   ),
                   const SizedBox(width: 10),
@@ -112,7 +113,7 @@ class PaymentBreakdownComparisonWidget extends StatelessWidget {
                     amountA: cashA,
                     amountB: cashB,
                     growth: cashGrowth,
-                    icon: Icons.payments_outlined,
+                    icon: PhosphorIconsBold.money,
                     iconColor: const Color(0xFF10B981),
                     iconBg: const Color(0xFFECFDF5),
                     titleColor: const Color(0xFF065F46),
@@ -125,7 +126,7 @@ class PaymentBreakdownComparisonWidget extends StatelessWidget {
                     amountA: transferA,
                     amountB: transferB,
                     growth: transferGrowth,
-                    icon: Icons.qr_code_2_rounded,
+                    icon: PhosphorIconsBold.qrCode,
                     iconColor: const Color(0xFF2563EB),
                     iconBg: const Color(0xFFEFF6FF),
                     titleColor: const Color(0xFF1E40AF),
@@ -138,7 +139,7 @@ class PaymentBreakdownComparisonWidget extends StatelessWidget {
                     amountA: debtA,
                     amountB: debtB,
                     growth: debtGrowth,
-                    icon: Icons.hourglass_bottom_rounded,
+                    icon: PhosphorIconsBold.hourglass,
                     iconColor: const Color(0xFFD97706),
                     iconBg: const Color(0xFFFFFBEB),
                     titleColor: const Color(0xFF92400E),
@@ -190,7 +191,7 @@ class PaymentBreakdownComparisonWidget extends StatelessWidget {
                       color: iconBg,
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Icon(icon, size: 16, color: iconColor),
+                    child: PhosphorIcon(icon, size: 16, color: iconColor),
                   ),
                   const SizedBox(width: 8),
                   Text(

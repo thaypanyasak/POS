@@ -1,9 +1,11 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:screenshot/screenshot.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../../../../core/utils/platform_print.dart';
 import '../../../../domain/models/sale_transaction.dart';
@@ -65,8 +67,8 @@ Future<void> showMeiiReceiptDialog(
                         children: [
                           const Row(
                             children: [
-                              Icon(
-                                Icons.receipt_long,
+                              PhosphorIcon(
+                                PhosphorIconsBold.receipt,
                                 color: AppColors.primary,
                                 size: 20,
                               ),
@@ -134,7 +136,11 @@ Future<void> showMeiiReceiptDialog(
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              ElevatedButton.icon(
+                              AppButton(
+                                label: 'ພິມ (${paperWidth}mm)',
+                                variant: AppButtonVariant.primary,
+                                height: 36,
+                                icon: PhosphorIconsBold.printer,
                                 onPressed: () async {
                                   try {
                                     final bytes = await dialogScreenshot.capture(
@@ -157,20 +163,10 @@ Future<void> showMeiiReceiptDialog(
                                     onPrint();
                                   }
                                 },
-                                icon: const Icon(Icons.print, size: 16),
-                                label: Text('ພິມ (${paperWidth}mm)'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                ),
                               ),
                               const SizedBox(width: 6),
                               IconButton(
-                                icon: const Icon(Icons.close),
+                                icon: const PhosphorIcon(PhosphorIconsBold.x, size: 18),
                                 onPressed: () => Navigator.of(ctx).pop(),
                               ),
                             ],
@@ -390,7 +386,7 @@ class MeiiReceiptSlip extends StatelessWidget {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.block_rounded, color: Colors.white, size: 16),
+                              const PhosphorIcon(PhosphorIconsBold.prohibit, color: Colors.white, size: 16),
                               const SizedBox(width: 6),
                               Text(
                                 'ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ (VOID)',
@@ -989,8 +985,8 @@ class MeiiReceiptSlip extends StatelessWidget {
                           height: 130,
                           color: Colors.white,
                           child: const Center(
-                            child: Icon(
-                              Icons.qr_code_2,
+                            child: PhosphorIcon(
+                              PhosphorIconsBold.qrCode,
                               size: 80,
                               color: AppColors.primary,
                             ),

@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../domain/models/category_model.dart';
 import '../../../pos/presentation/controllers/catalog_controller.dart';
 
@@ -120,7 +122,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
   void _requestDelete(CategoryModel cat, int productCount) {
     if (productCount > 0) {
       _showFeedback(
-        '⚠️ ໝວດໝູ່ນີ້ກຳລັງມີສິນຄ້າຢູ່ $productCount ລາຍການ, ບໍ່ສາມາດລຶບໄດ້! ກະລຸນາຍ້າຍສິນຄ້າໄປໝວດອື່ນກ່ອນ.',
+        '️ ໝວດໝູ່ນີ້ກຳລັງມີສິນຄ້າຢູ່ $productCount ລາຍການ, ບໍ່ສາມາດລຶບໄດ້! ກະລຸນາຍ້າຍສິນຄ້າໄປໝວດອື່ນກ່ອນ.',
         isError: true,
       );
       return;
@@ -133,7 +135,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: const [
-            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+            PhosphorIcon(PhosphorIconsBold.warningCircle, color: Color(0xFFDC2626), size: 24),
             SizedBox(width: 8),
             Text(
               'ຢືນຢັນການລຶບໝວດໝູ່',
@@ -146,16 +148,18 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
           style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
         actions: [
-          TextButton(
+          AppButton(
+            variant: AppButtonVariant.outline,
+            size: AppButtonSize.sm,
+            label: 'ຍົກເລີກ',
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('ຍົກເລີກ', style: TextStyle(color: AppColors.textSecondary)),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
+          const SizedBox(width: 8),
+          AppButton(
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
+            label: 'ລຶບໝວດໝູ່',
+            icon: PhosphorIconsBold.trash,
             onPressed: () async {
               Navigator.of(ctx).pop();
               setState(() => _isSubmitting = true);
@@ -172,7 +176,6 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                 if (mounted) setState(() => _isSubmitting = false);
               }
             },
-            child: const Text('ຢືນຢັນລຶບ', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -228,7 +231,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                       color: Colors.white.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.folder_special_rounded, color: Colors.white, size: 20),
+                    child: const PhosphorIcon(PhosphorIconsBold.folder, color: Colors.white, size: 20),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -258,7 +261,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+                    icon: const PhosphorIcon(PhosphorIconsBold.x, color: Colors.white, size: 20),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.white.withValues(alpha: 0.12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -277,8 +280,8 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                 color: _isFeedbackError ? const Color(0xFFFEF2F2) : const Color(0xFFECFDF5),
                 child: Row(
                   children: [
-                    Icon(
-                      _isFeedbackError ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded,
+                    PhosphorIcon(
+                      _isFeedbackError ? PhosphorIconsBold.warningCircle : PhosphorIconsBold.checkCircle,
                       color: _isFeedbackError ? const Color(0xFFDC2626) : const Color(0xFF059669),
                       size: 18,
                     ),
@@ -321,7 +324,11 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                         decoration: const InputDecoration(
                           hintText: 'ປ້ອນຊື່ໝວດໝູ່ໃໝ່ (e.g. ເຄື່ອງໃຊ້ໄຟຟ້າ, ເຂົ້າສານ...)',
                           hintStyle: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-                          prefixIcon: Icon(Icons.label_outline_rounded, size: 18, color: Color(0xFF64748B)),
+                          prefixIcon: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 10),
+                            child: PhosphorIcon(PhosphorIconsBold.tag, size: 18, color: Color(0xFF64748B)),
+                          ),
+                          prefixIconConstraints: BoxConstraints(minWidth: 36, minHeight: 36),
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                           isDense: true,
@@ -331,30 +338,13 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                     ),
                   ),
                   const SizedBox(width: 10),
-                  ElevatedButton(
+                  AppButton(
                     onPressed: _isSubmitting ? null : _handleCreate,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D9488),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      minimumSize: const Size(84, 42),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                    ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.add_rounded, size: 16),
-                              SizedBox(width: 4),
-                              Text('ເພີ່ມ', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                            ],
-                          ),
+                    variant: AppButtonVariant.primary,
+                    size: AppButtonSize.md,
+                    label: 'ເພີ່ມ',
+                    icon: PhosphorIconsBold.plus,
+                    isLoading: _isSubmitting,
                   ),
                 ],
               ),
@@ -398,7 +388,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: const [
-                            Icon(Icons.label_off_rounded, size: 40, color: Color(0xFFCBD5E1)),
+                            PhosphorIcon(PhosphorIconsBold.tag, size: 40, color: Color(0xFFCBD5E1)),
                             SizedBox(height: 10),
                             Text(
                               'ຍັງບໍ່ມີໝວດໝູ່ໃນລະບົບ',
@@ -529,7 +519,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                               // Actions
                               if (isEditing) ...[
                                 IconButton(
-                                  icon: const Icon(Icons.check_rounded, color: Color(0xFF0D9488), size: 18),
+                                  icon: const PhosphorIcon(PhosphorIconsBold.check, color: Color(0xFF0D9488), size: 18),
                                   onPressed: () => _handleSaveEdit(cat),
                                   style: IconButton.styleFrom(
                                     backgroundColor: const Color(0xFFCCFBF1),
@@ -541,7 +531,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                                 ),
                                 const SizedBox(width: 4),
                                 IconButton(
-                                  icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 18),
+                                  icon: const PhosphorIcon(PhosphorIconsBold.x, color: Color(0xFF64748B), size: 18),
                                   onPressed: _cancelEdit,
                                   style: IconButton.styleFrom(
                                     backgroundColor: const Color(0xFFF1F5F9),
@@ -553,7 +543,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                                 ),
                               ] else ...[
                                 IconButton(
-                                  icon: const Icon(Icons.edit_outlined, color: Color(0xFF475569), size: 16),
+                                  icon: const PhosphorIcon(PhosphorIconsBold.pencilSimple, color: Color(0xFF475569), size: 16),
                                   onPressed: () => _startEdit(cat),
                                   style: IconButton.styleFrom(
                                     backgroundColor: Colors.white,
@@ -568,7 +558,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                                 ),
                                 const SizedBox(width: 4),
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626), size: 16),
+                                  icon: const PhosphorIcon(PhosphorIconsBold.trash, color: Color(0xFFDC2626), size: 16),
                                   onPressed: () => _requestDelete(cat, productCount),
                                   style: IconButton.styleFrom(
                                     backgroundColor: const Color(0xFFFEF2F2),
@@ -598,7 +588,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFF64748B)),
+                  const PhosphorIcon(PhosphorIconsBold.info, size: 15, color: Color(0xFF64748B)),
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
@@ -606,15 +596,11 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                       style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
                     ),
                   ),
-                  OutlinedButton(
+                  AppButton(
+                    variant: AppButtonVariant.outline,
+                    size: AppButtonSize.sm,
+                    label: 'ປິດໜ້າຕ່າງ',
                     onPressed: () => Navigator.of(context).pop(),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF475569),
-                      side: const BorderSide(color: Color(0xFFCBD5E1)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    ),
-                    child: const Text('ປິດໜ້າຕ່າງ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ],
               ),

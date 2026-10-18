@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../providers/month_comparison_provider.dart';
 
@@ -91,7 +92,7 @@ class _HourlyDualBarChartState extends State<HourlyDualBarChart> {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFFCCFBF1)),
                     ),
-                    child: const Icon(Icons.access_time_filled_rounded,
+                    child: const PhosphorIcon(PhosphorIconsBold.clock,
                         color: Color(0xFF0F766E), size: 18),
                   ),
                   const SizedBox(width: 10),
@@ -206,9 +207,15 @@ class _HourlyDualBarChartState extends State<HourlyDualBarChart> {
                       ),
                     ],
                   )
-                : const Text(
-                    '💡 ແຕະທີ່ເສົາກຣາຟຊົ່ວໂມງໃດໜຶ່ງ ເພື່ອເບິ່ງຍອດຂາຍທຽບ ແລະ ຜົນຕ່າງ',
-                    style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF94A3B8)),
+                : const Row(
+                    children: [
+                      PhosphorIcon(PhosphorIconsBold.lightbulb, size: 14, color: Color(0xFFD97706)),
+                      SizedBox(width: 6),
+                      Text(
+                        'ແຕະທີ່ເສົາກຣາຟຊົ່ວໂມງໃດໜຶ່ງ ເພື່ອເບິ່ງຍອດຂາຍທຽບ ແລະ ຜົນຕ່າງ',
+                        style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF94A3B8)),
+                      ),
+                    ],
                   ),
           ),
 

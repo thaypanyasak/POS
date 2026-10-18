@@ -1,6 +1,8 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../core/localization/lo.dart';
 import '../../../../domain/models/product.dart';
 import '../controllers/cart_controller.dart';
@@ -118,17 +120,22 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
               ],
             ),
             actions: [
-              TextButton(
+              AppButton(
+                label: LaoStrings.cancel,
+                variant: AppButtonVariant.ghost,
+                height: 38,
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text(LaoStrings.cancel),
               ),
-              ElevatedButton(
+              AppButton(
+                label: LaoStrings.save,
+                variant: AppButtonVariant.primary,
+                height: 38,
+                icon: PhosphorIconsBold.floppyDisk,
                 onPressed: () {
                   ref.read(printerProvider.notifier).updatePrinterIp(ipController.text);
                   ref.read(printerProvider.notifier).toggleSimulation(isSim);
                   Navigator.of(ctx).pop();
                 },
-                child: const Text(LaoStrings.save),
               ),
             ],
           );
@@ -145,7 +152,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
         return AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.category_outlined, color: AppColors.primary),
+              PhosphorIcon(PhosphorIconsBold.tag, color: AppColors.primary),
               SizedBox(width: 8),
               Text('ເພີ່ມໝວດໝູ່ສິນຄ້າໃໝ່'),
             ],
@@ -203,11 +210,17 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
             ],
           ),
           actions: [
-            TextButton(
+            AppButton(
+              label: LaoStrings.cancel,
+              variant: AppButtonVariant.ghost,
+              height: 38,
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text(LaoStrings.cancel),
             ),
-            ElevatedButton(
+            AppButton(
+              label: 'ເພີ່ມໝວດໝູ່',
+              variant: AppButtonVariant.primary,
+              height: 38,
+              icon: PhosphorIconsBold.plus,
               onPressed: () {
                 final catName = textController.text.trim();
                 if (catName.isNotEmpty) {
@@ -222,7 +235,6 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                   );
                 }
               },
-              child: const Text('ເພີ່ມໝວດໝູ່'),
             ),
           ],
         );
@@ -279,8 +291,8 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 const SizedBox(width: 14),
-                                const Icon(
-                                  Icons.search_rounded,
+                                const PhosphorIcon(
+                                  PhosphorIconsBold.magnifyingGlass,
                                   color: Color(0xFF64748B),
                                   size: 19,
                                 ),
@@ -317,7 +329,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                                 ),
                                 if (_searchController.text.isNotEmpty)
                                   IconButton(
-                                    icon: const Icon(Icons.clear, size: 15, color: Color(0xFF94A3B8)),
+                                    icon: const PhosphorIcon(PhosphorIconsBold.x, size: 14, color: Color(0xFF94A3B8)),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
                                     onPressed: () {
@@ -345,7 +357,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Color(0xFF0F766E)),
+                                          const PhosphorIcon(PhosphorIconsBold.barcode, size: 14, color: Color(0xFF0F766E)),
                                           if (!isNarrow) ...[
                                             const SizedBox(width: 4),
                                             const Text(
@@ -383,7 +395,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                               );
                             }
                           },
-                          icon: const Icon(Icons.sync_rounded, color: Color(0xFF475569), size: 18),
+                          icon: const PhosphorIcon(PhosphorIconsBold.arrowsClockwise, color: Color(0xFF475569), size: 18),
                           tooltip: 'ດຶງຂໍ້ມູນສິນຄ້າຈາກ Supabase Cloud',
                           padding: EdgeInsets.all(isNarrow ? 6 : 8),
                           constraints: BoxConstraints(minWidth: isNarrow ? 34 : 38, minHeight: isNarrow ? 34 : 38),
@@ -400,7 +412,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                         // Printer Settings Button
                         IconButton(
                           onPressed: _showPrinterSettingsDialog,
-                          icon: const Icon(Icons.print_outlined, color: Color(0xFF475569), size: 18),
+                          icon: const PhosphorIcon(PhosphorIconsBold.printer, color: Color(0xFF475569), size: 18),
                           tooltip: 'ຕັ້ງຄ່າເຄື່ອງພິມ',
                           padding: EdgeInsets.all(isNarrow ? 6 : 8),
                           constraints: BoxConstraints(minWidth: isNarrow ? 34 : 38, minHeight: isNarrow ? 34 : 38),
@@ -452,7 +464,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     crossAxisAlignment: CrossAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.add, size: 13, color: Color(0xFF0F766E)),
+                                      PhosphorIcon(PhosphorIconsBold.plus, size: 13, color: Color(0xFF0F766E)),
                                       SizedBox(width: 3),
                                       Text(
                                         'ເພີ່ມໝວດໝູ່',
@@ -533,7 +545,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.inventory_2_outlined, size: 48, color: AppColors.textMuted),
+                        const PhosphorIcon(PhosphorIconsBold.package, size: 48, color: AppColors.textMuted),
                         const SizedBox(height: 12),
                         Text(
                           LaoStrings.productNotFound,
@@ -542,7 +554,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                         const SizedBox(height: 8),
                         TextButton.icon(
                           onPressed: () => ref.read(catalogProvider.notifier).fetchFromSupabase(),
-                          icon: const Icon(Icons.sync),
+                          icon: const PhosphorIcon(PhosphorIconsBold.arrowsClockwise, size: 16),
                           label: const Text('ກວດສອບຂໍ້ມູນຈາກ Supabase Cloud'),
                         ),
                       ],
@@ -597,7 +609,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('⚠️ ສິນຄ້າໃນສາງບໍ່ພໍ! ຍັງເຫຼືອພຽງ ${product.stockBadgeText}'),
+                                    content: Text('ສິນຄ້າໃນສາງບໍ່ພໍ! ຍັງເຫຼືອພຽງ ${product.stockBadgeText}'),
                                     backgroundColor: AppColors.error,
                                     duration: const Duration(seconds: 2),
                                   ),
@@ -614,7 +626,7 @@ class _CatalogDockState extends ConsumerState<CatalogDock> {
                                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('⚠️ ສິນຄ້າໃນສາງບໍ່ພໍ! ຍັງເຫຼືອພຽງ ${product.stockBadgeText}'),
+                                    content: Text('ສິນຄ້າໃນສາງບໍ່ພໍ! ຍັງເຫຼືອພຽງ ${product.stockBadgeText}'),
                                     backgroundColor: AppColors.error,
                                     duration: const Duration(seconds: 2),
                                   ),

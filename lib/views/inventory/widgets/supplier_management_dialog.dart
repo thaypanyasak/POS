@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../models/supplier_model.dart';
 import '../../../../providers/purchase_provider.dart';
 
@@ -103,14 +105,18 @@ class _SupplierManagementDialogState extends ConsumerState<SupplierManagementDia
         title: const Text('ຢືນຢັນການລຶບຜູ້ສະໜອງ'),
         content: Text('ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລຶບຜູ້ສະໜອງ "${s.name}"?'),
         actions: [
-          TextButton(
+          AppButton(
+            variant: AppButtonVariant.outline,
+            size: AppButtonSize.sm,
+            label: 'ຍົກເລີກ',
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ຍົກເລີກ'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          const SizedBox(width: 8),
+          AppButton(
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
+            label: 'ລຶບ',
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ລຶບ', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -124,7 +130,7 @@ class _SupplierManagementDialogState extends ConsumerState<SupplierManagementDia
           builder: (ctx) => AlertDialog(
             title: const Row(
               children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.amber),
+                PhosphorIcon(PhosphorIconsBold.warningCircle, color: Color(0xFFD97706), size: 20),
                 SizedBox(width: 8),
                 Text('ແຈ້ງເຕືອນຄວາມປອດໄພ'),
               ],
@@ -171,7 +177,7 @@ class _SupplierManagementDialogState extends ConsumerState<SupplierManagementDia
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.local_shipping_rounded, color: Color(0xFF0F766E), size: 26),
+                      PhosphorIcon(PhosphorIconsBold.truck, color: Color(0xFF0F766E), size: 26),
                       SizedBox(width: 10),
                       Text(
                         'ຈັດການແຫຼ່ງສະໜອງສິນຄ້າ (Suppliers)',
@@ -185,7 +191,7 @@ class _SupplierManagementDialogState extends ConsumerState<SupplierManagementDia
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
+                    icon: const PhosphorIcon(PhosphorIconsBold.x, size: 20),
                   ),
                 ],
               ),
@@ -213,18 +219,15 @@ class _SupplierManagementDialogState extends ConsumerState<SupplierManagementDia
                                 ),
                               ),
                               if (!_isCreating)
-                                ElevatedButton.icon(
+                                AppButton(
+                                  variant: AppButtonVariant.primary,
+                                  size: AppButtonSize.sm,
+                                  icon: PhosphorIconsBold.plus,
+                                  label: 'ເພີ່ມໃໝ່',
                                   onPressed: () {
                                     _resetForm();
                                     setState(() => _isCreating = true);
                                   },
-                                  icon: const Icon(Icons.add, size: 16, color: Colors.white),
-                                  label: const Text('ເພີ່ມໃໝ່', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF0F766E),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                  ),
                                 ),
                             ],
                           ),
@@ -269,28 +272,40 @@ class _SupplierManagementDialogState extends ConsumerState<SupplierManagementDia
                                                   ),
                                                   if (s.phone != null && s.phone!.isNotEmpty) ...[
                                                     const SizedBox(height: 2),
-                                                    Text(
-                                                      '📞 ${s.phone}',
-                                                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                                    Row(
+                                                      children: [
+                                                        const PhosphorIcon(PhosphorIconsBold.phone, size: 12, color: Color(0xFF64748B)),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          s.phone!,
+                                                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                                        ),
+                                                      ],
                                                     ),
                                                   ],
                                                   if (s.address != null && s.address!.isNotEmpty) ...[
                                                     const SizedBox(height: 2),
-                                                    Text(
-                                                      '📍 ${s.address}',
-                                                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                                    Row(
+                                                      children: [
+                                                        const PhosphorIcon(PhosphorIconsBold.mapPin, size: 12, color: Color(0xFF64748B)),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          s.address!,
+                                                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                                        ),
+                                                      ],
                                                     ),
                                                   ],
                                                 ],
                                               ),
                                             ),
                                             IconButton(
-                                              icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF0F766E)),
+                                              icon: const PhosphorIcon(PhosphorIconsBold.pencilSimple, size: 18, color: Color(0xFF0F766E)),
                                               onPressed: () => _startEdit(s),
                                               tooltip: 'ແກ້ໄຂ',
                                             ),
                                             IconButton(
-                                              icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                                              icon: const PhosphorIcon(PhosphorIconsBold.trash, size: 18, color: Colors.red),
                                               onPressed: () => _confirmDelete(s),
                                               tooltip: 'ລຶບ',
                                             ),
@@ -384,22 +399,19 @@ class _SupplierManagementDialogState extends ConsumerState<SupplierManagementDia
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
                                   if (_editingSupplier != null || _isCreating)
-                                    TextButton(
+                                    AppButton(
+                                      variant: AppButtonVariant.ghost,
+                                      size: AppButtonSize.md,
+                                      label: 'ລ້າງຟອມ',
                                       onPressed: _resetForm,
-                                      child: const Text('ລ້າງຟອມ'),
                                     ),
                                   const SizedBox(width: 8),
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF0F766E),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                                    ),
+                                  AppButton(
+                                    variant: AppButtonVariant.primary,
+                                    size: AppButtonSize.md,
+                                    icon: PhosphorIconsBold.floppyDisk,
+                                    label: _editingSupplier == null ? 'ບັນທຶກຜູ້ສະໜອງ' : 'ອັບເດດຂໍ້ມູນ',
                                     onPressed: _submit,
-                                    child: Text(
-                                      _editingSupplier == null ? 'ບັນທຶກຜູ້ສະໜອງ' : 'ອັບເດດຂໍ້ມູນ',
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                    ),
                                   ),
                                 ],
                               ),

@@ -1,5 +1,7 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../../../../core/localization/lo.dart';
 import '../../../../domain/models/cart_item.dart';
@@ -110,10 +112,10 @@ class _PriceOverrideDialogState extends State<PriceOverrideDialog> {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: AppColors.borderSubtle, width: 0.9),
                     ),
-                    child: const Icon(
-                      Icons.edit_note_rounded,
+                    child: const PhosphorIcon(
+                      PhosphorIconsBold.pencilSimple,
                       size: 20,
-                      color: AppColors.surfaceDark,
+                      color: AppColors.primary,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -142,7 +144,7 @@ class _PriceOverrideDialogState extends State<PriceOverrideDialog> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded, size: 20, color: AppColors.textMuted),
+                    icon: const PhosphorIcon(PhosphorIconsBold.x, size: 20, color: AppColors.textMuted),
                     splashRadius: 20,
                   ),
                 ],
@@ -157,7 +159,7 @@ class _PriceOverrideDialogState extends State<PriceOverrideDialog> {
                   color: AppColors.backgroundAlt,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.borderSubtle, width: 0.9),
-                  boxShadow: AppColors.cardShadow,
+                  boxShadow: AppStyles.softShadow,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -272,7 +274,7 @@ class _PriceOverrideDialogState extends State<PriceOverrideDialog> {
                           color: isSelected ? AppColors.surfaceDark : AppColors.borderSubtle,
                           width: 0.9,
                         ),
-                        boxShadow: isSelected ? AppColors.cardShadow : null,
+                        boxShadow: isSelected ? AppStyles.softShadow : null,
                       ),
                       child: Text(
                         reason,
@@ -298,41 +300,27 @@ class _PriceOverrideDialogState extends State<PriceOverrideDialog> {
               Row(
                 children: [
                   if (widget.item.isPriceOverridden) ...[
-                    OutlinedButton(
+                    AppButton(
+                      label: 'ລາຄາເດີມ',
+                      variant: AppButtonVariant.secondary,
+                      height: 44,
                       onPressed: () {
                         widget.onResetOverride();
                         Navigator.of(context).pop();
                       },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textSecondary,
-                        side: const BorderSide(color: AppColors.borderSubtle, width: 0.9),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: const Text('ລາຄາເດີມ', style: TextStyle(fontWeight: FontWeight.w600)),
                     ),
                     const SizedBox(width: 10),
                   ],
                   Expanded(
-                    child: ElevatedButton(
+                    child: AppButton(
+                      label: 'ນຳໃຊ້ລາຄາ: ${LaoCurrencyFormatter.format(newPrice)}',
+                      variant: AppButtonVariant.primary,
+                      height: 44,
+                      icon: PhosphorIconsBold.check,
                       onPressed: () {
                         widget.onApplyOverride(newPrice, _selectedReason);
                         Navigator.of(context).pop();
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.surfaceDark,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: Text(
-                        'ນຳໃຊ້ລາຄາ: ${LaoCurrencyFormatter.format(newPrice)}',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
                     ),
                   ),
                 ],
@@ -361,43 +349,44 @@ class _PriceOverrideDialogState extends State<PriceOverrideDialog> {
   Widget _buildKeyRow(List<String> keys) {
     return Row(
       children: keys.map((key) {
+        final isAction = key == 'DEL' || key == 'C';
         return Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0),
             child: SizedBox(
               height: 48,
-              child: ElevatedButton(
-                onPressed: () {
-                  if (key == 'DEL') {
-                    _onBackspace();
-                  } else if (key == 'C') {
-                    _onClear();
-                  } else {
-                    _onKeyPress(key);
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: key == 'DEL' || key == 'C'
-                      ? AppColors.surfaceSubtle
-                      : AppColors.surface,
-                  foregroundColor: key == 'DEL' || key == 'C'
-                      ? AppColors.error
-                      : AppColors.textPrimary,
-                  elevation: 0,
-                  side: const BorderSide(color: AppColors.border),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+              child: Material(
+                color: isAction ? const Color(0xFFF1F5F9) : Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                child: InkWell(
+                  onTap: () {
+                    if (key == 'DEL') {
+                      _onBackspace();
+                    } else if (key == 'C') {
+                      _onClear();
+                    } else {
+                      _onKeyPress(key);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.border, width: 1.0),
+                    ),
+                    alignment: Alignment.center,
+                    child: key == 'DEL'
+                        ? const PhosphorIcon(PhosphorIconsBold.backspace, size: 20, color: AppColors.secondaryText)
+                        : Text(
+                            key,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: key == 'C' ? AppColors.danger : AppColors.textMain,
+                            ),
+                          ),
                   ),
                 ),
-                child: key == 'DEL'
-                    ? const Icon(Icons.backspace_outlined, size: 20)
-                    : Text(
-                        key,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
               ),
             ),
           ),

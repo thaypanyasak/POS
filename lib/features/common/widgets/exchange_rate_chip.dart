@@ -1,6 +1,8 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../../../../providers/exchange_rate_provider.dart';
 
@@ -62,8 +64,8 @@ class ExchangeRateChip extends ConsumerWidget {
                     ),
                   )
                 else
-                  const Icon(
-                    Icons.currency_exchange_rounded,
+                  const PhosphorIcon(
+                    PhosphorIconsBold.arrowsLeftRight,
                     size: 14,
                     color: Color(0xFF059669),
                   ),
@@ -129,8 +131,8 @@ class ExchangeRateChip extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: const Color(0xFFA7F3D0)),
                     ),
-                    child: const Icon(
-                      Icons.currency_exchange_rounded,
+                    child: const PhosphorIcon(
+                      PhosphorIconsBold.arrowsLeftRight,
                       color: Color(0xFF059669),
                       size: 20,
                     ),
@@ -224,7 +226,7 @@ class ExchangeRateChip extends ConsumerWidget {
                         color: Color(0xFF0F172A),
                       ),
                       decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.edit_note_rounded, color: Color(0xFF0F766E)),
+                        prefixIcon: const Padding(padding: EdgeInsets.only(left: 8, right: 4), child: PhosphorIcon(PhosphorIconsBold.pencilSimple, color: Color(0xFF0F766E), size: 18)),
                         suffixText: 'ກີບ (LAK)',
                         suffixStyle: const TextStyle(
                           fontSize: 12,
@@ -326,7 +328,7 @@ class ExchangeRateChip extends ConsumerWidget {
                       child: const Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF2563EB)),
+                          PhosphorIcon(PhosphorIconsBold.info, size: 16, color: Color(0xFF2563EB)),
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -345,14 +347,18 @@ class ExchangeRateChip extends ConsumerWidget {
                 ),
               ),
               actions: [
-                TextButton(
+                AppButton(
+                  label: 'ຍົກເລີກ',
+                  variant: AppButtonVariant.ghost,
+                  height: 38,
                   onPressed: isSaving ? null : () => Navigator.of(ctx).pop(),
-                  child: const Text(
-                    'ຍົກເລີກ',
-                    style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w700),
-                  ),
                 ),
-                ElevatedButton(
+                AppButton(
+                  label: 'ບັນທຶກ (Save)',
+                  variant: AppButtonVariant.primary,
+                  height: 38,
+                  icon: PhosphorIconsBold.floppyDisk,
+                  isLoading: isSaving,
                   onPressed: isSaving
                       ? null
                       : () async {
@@ -397,25 +403,6 @@ class ExchangeRateChip extends ConsumerWidget {
                             }
                           }
                         },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F766E),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: isSaving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'ບັນທຶກ (Save)',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
                 ),
               ],
             );

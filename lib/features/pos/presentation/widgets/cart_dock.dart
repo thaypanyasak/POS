@@ -1,7 +1,9 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../../../../core/localization/lo.dart';
 import '../../../../domain/models/sale_transaction.dart';
@@ -63,9 +65,16 @@ class _CartDockState extends ConsumerState<CartDock> {
           color: const Color(0xFF059669),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: const Text(
-          '💵 ເງິນສົດ (Cash)',
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            PhosphorIcon(PhosphorIconsBold.money, size: 12, color: Colors.white),
+            SizedBox(width: 4),
+            Text(
+              'ເງິນສົດ (Cash)',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+            ),
+          ],
         ),
       );
     } else if (isTransfer) {
@@ -75,9 +84,16 @@ class _CartDockState extends ConsumerState<CartDock> {
           color: const Color(0xFF2563EB),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: const Text(
-          '📲 ໂອນເງິນ (Transfer)',
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            PhosphorIcon(PhosphorIconsBold.qrCode, size: 12, color: Colors.white),
+            SizedBox(width: 4),
+            Text(
+              'ໂອນເງິນ (Transfer)',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+            ),
+          ],
         ),
       );
     } else {
@@ -87,9 +103,16 @@ class _CartDockState extends ConsumerState<CartDock> {
           color: const Color(0xFFE11D48),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Text(
-          '⏳ ຕິດໜີ້ (ຄ້າງ: ${LaoCurrencyFormatter.formatDots(remainingDebt)} ₭)',
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const PhosphorIcon(PhosphorIconsBold.handCoins, size: 12, color: Colors.white),
+            const SizedBox(width: 4),
+            Text(
+              'ຕິດໜີ້ (ຄ້າງ: ${LaoCurrencyFormatter.formatDots(remainingDebt)} ₭)',
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+            ),
+          ],
         ),
       );
     }
@@ -131,7 +154,7 @@ class _CartDockState extends ConsumerState<CartDock> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+                  const PhosphorIcon(PhosphorIconsBold.warning, color: Colors.white, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: SingleChildScrollView(
@@ -139,7 +162,7 @@ class _CartDockState extends ConsumerState<CartDock> {
                       child: Row(
                         children: [
                           Text(
-                            '⚠️ ກຳລັງແກ້ໄຂບິນ: #${cartState.originalReceiptNumber ?? ""} • ລູກຄ້າ: ${cartState.originalCustomerName ?? cartState.customer.name} • ຮູບແບບຊຳລະເດີມ: ',
+                            'ກຳລັງແກ້ໄຂບິນ: #${cartState.originalReceiptNumber ?? ""} • ລູກຄ້າ: ${cartState.originalCustomerName ?? cartState.customer.name} • ຮູບແບບຊຳລະເດີມ: ',
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
@@ -198,7 +221,7 @@ class _CartDockState extends ConsumerState<CartDock> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.shopping_cart_outlined, size: 16, color: Color(0xFF0F766E)),
+                        const PhosphorIcon(PhosphorIconsBold.shoppingCart, size: 16, color: Color(0xFF0F766E)),
                         const SizedBox(width: 5),
                         const Text(
                           'ກະຕ່າສິນຄ້າ',
@@ -246,10 +269,10 @@ class _CartDockState extends ConsumerState<CartDock> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
+                                PhosphorIcon(
                                   cartState.isEmpty && cartState.heldOrders.isNotEmpty
-                                      ? Icons.unarchive_outlined
-                                      : Icons.pause_circle_outline,
+                                      ? PhosphorIconsBold.arrowUUpLeft
+                                      : PhosphorIconsBold.pauseCircle,
                                   size: 13,
                                   color: AppColors.textSecondary,
                                 ),
@@ -277,7 +300,7 @@ class _CartDockState extends ConsumerState<CartDock> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.delete_outline_rounded, size: 13, color: AppColors.error),
+                                  PhosphorIcon(PhosphorIconsBold.trash, size: 13, color: AppColors.error),
                                   SizedBox(width: 2),
                                   Text(
                                     'ລ້າງ',
@@ -339,14 +362,14 @@ class _CartDockState extends ConsumerState<CartDock> {
                               minWidth: 32,
                               minHeight: 32,
                             ),
-                            prefixIcon: const Icon(
-                              Icons.person_outline_rounded,
+                            prefixIcon: const PhosphorIcon(
+                              PhosphorIconsBold.user,
                               size: 16,
                               color: AppColors.textTertiary,
                             ),
                             suffixIcon: _customerController.text.isNotEmpty
                                 ? IconButton(
-                                    icon: const Icon(Icons.clear, size: 13),
+                                    icon: const PhosphorIcon(PhosphorIconsBold.x, size: 13),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                                     onPressed: () {
@@ -569,8 +592,8 @@ class _CartDockState extends ConsumerState<CartDock> {
                               color: AppColors.surfaceSubtle,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
-                              Icons.shopping_bag_outlined,
+                            child: const PhosphorIcon(
+                              PhosphorIconsBold.shoppingBag,
                               size: 38,
                               color: AppColors.textMuted,
                             ),
@@ -777,128 +800,40 @@ class _CartDockState extends ConsumerState<CartDock> {
                   // Action Buttons: ໃບບອກລາຄາ (Quotation) + Pay (Checkout)
                   Row(
                     children: [
-                      // Quotation / Proforma Receipt Button (Amber / Warm Gold)
+                      // Quotation / Proforma Receipt Button (Modern Tailwind Flat Style)
                       Expanded(
                         flex: 4,
-                        child: SizedBox(
-                          height: isCompactLandscape ? 40 : 48,
-                          child: ElevatedButton(
-                            onPressed: cartState.isEmpty
-                                ? null
-                                : () => _showQuotationDialog(context, cartState),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFD97706), // Amber-600
-                              foregroundColor: Colors.white,
-                              disabledBackgroundColor: const Color(0xFFF1F5F9),
-                              disabledForegroundColor: const Color(0xFF94A3B8),
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(9),
-                                side: BorderSide(
-                                  color: cartState.isEmpty
-                                      ? const Color(0xFFE2E8F0)
-                                      : const Color(0xFFB45309),
-                                  width: 1,
-                                ),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.receipt_long_rounded,
-                                  size: isCompactLandscape ? 17 : 19,
-                                  color: cartState.isEmpty ? const Color(0xFF94A3B8) : Colors.white,
-                                ),
-                                const SizedBox(width: 5),
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    'ໃບບອກລາຄາ',
-                                    style: TextStyle(
-                                      fontSize: isCompactLandscape ? 12.5 : 14,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: -0.2,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        child: AppButton(
+                          label: 'ໃບບອກລາຄາ',
+                          variant: AppButtonVariant.secondary,
+                          height: isCompactLandscape ? 40 : 44,
+                          icon: PhosphorIconsBold.fileText,
+                          onPressed: cartState.isEmpty
+                              ? null
+                              : () => _showQuotationDialog(context, cartState),
                         ),
                       ),
 
                       const SizedBox(width: 8),
 
-                      // Full Checkout Pay Button with subtle gradient (Teal / Emerald)
+                      // Full Checkout Pay Button
                       Expanded(
                         flex: 6,
-                        child: SizedBox(
-                          height: isCompactLandscape ? 40 : 48,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: cartState.isEmpty
-                                  ? null
-                                  : (cartState.isWholesaleMode
-                                      ? AppColors.wholesaleGradient
-                                      : AppColors.primaryGradient),
-                              color: cartState.isEmpty ? const Color(0xFFF1F5F9) : null,
-                              borderRadius: BorderRadius.circular(9),
-                              boxShadow: cartState.isEmpty
-                                  ? null
-                                  : [
-                                      BoxShadow(
-                                        color: cartState.isWholesaleMode
-                                            ? const Color(0x33D97706)
-                                            : const Color(0x33059669),
-                                        offset: const Offset(0, 2),
-                                        blurRadius: 6,
-                                      ),
-                                    ],
-                            ),
-                            child: ElevatedButton(
-                              onPressed: cartState.isEmpty
-                                  ? null
-                                  : () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (ctx) => const CheckoutModal(),
-                                      );
-                                    },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.transparent,
-                                shadowColor: Colors.transparent,
-                                disabledBackgroundColor: Colors.transparent,
-                                disabledForegroundColor: const Color(0xFF94A3B8),
-                                padding: EdgeInsets.zero,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(9),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.payment_rounded, size: isCompactLandscape ? 18 : 20),
-                                  const SizedBox(width: 6),
-                                  FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                      cartState.isEditingOldOrder
-                                          ? 'ບັນທຶກການແກ້ໄຂ'
-                                          : LaoStrings.pay,
-                                      style: TextStyle(
-                                        fontSize: isCompactLandscape ? 13 : 15,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: -0.2,
-                                        color: cartState.isEmpty ? const Color(0xFF94A3B8) : Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                        child: AppButton(
+                          label: cartState.isEditingOldOrder
+                              ? 'ບັນທຶກການແກ້ໄຂ'
+                              : LaoStrings.pay,
+                          variant: AppButtonVariant.primary,
+                          height: isCompactLandscape ? 40 : 44,
+                          icon: PhosphorIconsBold.creditCard,
+                          onPressed: cartState.isEmpty
+                              ? null
+                              : () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) => const CheckoutModal(),
+                                  );
+                                },
                         ),
                       ),
                     ],
@@ -977,7 +912,7 @@ class _CartDockState extends ConsumerState<CartDock> {
                               color: const Color(0xFFD97706),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Icon(Icons.description_outlined, color: Colors.white, size: 20),
+                            child: const PhosphorIcon(PhosphorIconsBold.receipt, color: Colors.white, size: 20),
                           ),
                           const SizedBox(width: 12),
                           const Expanded(
@@ -1005,7 +940,7 @@ class _CartDockState extends ConsumerState<CartDock> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF78350F)),
+                            icon: const PhosphorIcon(PhosphorIconsBold.x, size: 20, color: Color(0xFF78350F)),
                             onPressed: () => Navigator.of(dialogCtx).pop(),
                           ),
                         ],
@@ -1098,7 +1033,7 @@ class _CartDockState extends ConsumerState<CartDock> {
                                     padding: const EdgeInsets.symmetric(vertical: 11),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   ),
-                                  icon: const Icon(Icons.delete_sweep_outlined, size: 17),
+                                  icon: const PhosphorIcon(PhosphorIconsBold.trash, size: 17),
                                   label: const FittedBox(
                                     fit: BoxFit.scaleDown,
                                     child: Text(
@@ -1113,7 +1048,12 @@ class _CartDockState extends ConsumerState<CartDock> {
                               // Print Thermal Quotation Button
                               Expanded(
                                 flex: 6,
-                                child: ElevatedButton.icon(
+                                child: AppButton(
+                                  label: isPrinting ? 'ກຳລັງພິມ...' : 'ພິມໃບບອກລາຄາ (Print)',
+                                  variant: AppButtonVariant.primary,
+                                  height: 44,
+                                  icon: PhosphorIconsBold.printer,
+                                  isLoading: isPrinting,
                                   onPressed: isPrinting
                                       ? null
                                       : () async {
@@ -1139,27 +1079,6 @@ class _CartDockState extends ConsumerState<CartDock> {
                                             );
                                           }
                                         },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFFD97706),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                    elevation: 0,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                  icon: isPrinting
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                          ),
-                                        )
-                                      : const Icon(Icons.print_rounded, size: 18),
-                                  label: Text(
-                                    isPrinting ? 'ກຳລັງພິມ...' : 'ພິມໃບບອກລາຄາ (Print)',
-                                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
-                                  ),
                                 ),
                               ),
                             ],
@@ -1191,9 +1110,10 @@ class _CartDockState extends ConsumerState<CartDock> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626)),
+            PhosphorIcon(PhosphorIconsBold.warning, color: AppColors.danger, size: 20),
             SizedBox(width: 8),
             Text('ຢືນຢັນລ້າງກະຕ່າ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
@@ -1203,20 +1123,21 @@ class _CartDockState extends ConsumerState<CartDock> {
           style: TextStyle(fontSize: 13),
         ),
         actions: [
-          TextButton(
+          AppButton(
+            label: 'ຍົກເລີກ',
+            variant: AppButtonVariant.ghost,
+            height: 38,
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('ຍົກເລີກ'),
           ),
-          ElevatedButton(
+          AppButton(
+            label: 'ລ້າງກະຕ່າເລີຍ',
+            variant: AppButtonVariant.danger,
+            height: 38,
+            icon: PhosphorIconsBold.trash,
             onPressed: () {
               ref.read(cartProvider.notifier).clearCart();
               Navigator.of(ctx).pop();
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('ລ້າງກະຕ່າເລີຍ'),
           ),
         ],
       ),

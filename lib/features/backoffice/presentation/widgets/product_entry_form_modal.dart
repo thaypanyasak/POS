@@ -1,3 +1,6 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_button.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -58,6 +61,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
   final FocusNode _costBahtFocusNode = FocusNode();
   final FocusNode _costKipFocusNode = FocusNode();
   bool _isConvertingCost = false;
+  bool _autoCostSync = true;
 
   // Track Stock
   bool _trackStock = true;
@@ -422,7 +426,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
 
   // 2-Way Reactive Currency Sync with Infinite Loop Prevention
   void _onBahtChanged(String val, double activeRate) {
-    if (_isConvertingCost) return;
+    if (_isConvertingCost || !_autoCostSync) return;
     final clean = val.replaceAll(RegExp(r'\D'), '');
     if (clean.isEmpty) {
       _isConvertingCost = true;
@@ -456,7 +460,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
   }
 
   void _onKipChanged(String val, double activeRate) {
-    if (_isConvertingCost) return;
+    if (_isConvertingCost || !_autoCostSync) return;
     final clean = val.replaceAll(RegExp(r'\D'), '');
     if (clean.isEmpty) {
       _isConvertingCost = true;
@@ -956,7 +960,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                       Navigator.of(context).maybePop();
                     }
                   },
-                  icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF334155), size: 20),
+                  icon: const PhosphorIcon(PhosphorIconsBold.arrowLeft, color: Color(0xFF334155), size: 20),
                   style: IconButton.styleFrom(
                     backgroundColor: const Color(0xFFF1F5F9),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -972,7 +976,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                       Row(
                         children: [
                           Icon(
-                            isEditMode ? Icons.edit_note_rounded : Icons.add_circle_rounded,
+                            isEditMode ? PhosphorIconsBold.pencilSimple : PhosphorIconsBold.plusCircle,
                             color: const Color(0xFF0D9488),
                             size: 20,
                           ),
@@ -1020,11 +1024,11 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                           'ແມ່ແບບ: ',
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8)),
                         ),
-                        _buildPresetChip('🍺 ເບຍ', _applyPresetBeer),
-                        _buildPresetChip('🥫 ເຄື່ອງດື່ມ', _applyPresetDrink3Tiers),
-                        _buildPresetChip('🍬 ເຂົ້າໜົມ', _applyPresetSnack3Tiers),
-                        _buildPresetChip('🧂 ນ້ຳຕານ', _applyPresetSugarSack),
-                        _buildPresetChip('🏷️ ຂາຍຍ່ອຍ', _applyPresetPieceOnly),
+                        _buildPresetChip(PhosphorIconsBold.beerBottle, 'ເບຍ', _applyPresetBeer),
+                        _buildPresetChip(PhosphorIconsBold.brandy, 'ເຄື່ອງດື່ມ', _applyPresetDrink3Tiers),
+                        _buildPresetChip(PhosphorIconsBold.cookie, 'ເຂົ້າໜົມ', _applyPresetSnack3Tiers),
+                        _buildPresetChip(PhosphorIconsBold.package, 'ນ້ຳຕານ', _applyPresetSugarSack),
+                        _buildPresetChip(PhosphorIconsBold.tag, 'ຂາຍຍ່ອຍ', _applyPresetPieceOnly),
                       ],
                     ),
                   ),
@@ -1043,28 +1047,13 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                   child: const Text('ຍົກເລີກ', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton(
+                AppButton(
+                  label: 'ບັນທຶກສິນຄ້າ',
+                  variant: AppButtonVariant.primary,
+                  height: 38,
+                  icon: PhosphorIconsBold.check,
+                  isLoading: _isSaving,
                   onPressed: _isSaving ? null : _handleSave,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D9488),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  ),
-                  child: _isSaving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.check_circle_outline_rounded, size: 16),
-                            SizedBox(width: 6),
-                            Text('ບັນທຶກສິນຄ້າ', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                          ],
-                        ),
                 ),
               ],
             ),
@@ -1086,7 +1075,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                     // SECTION 1: Product Profile & Category
                     _buildSectionCard(
                       title: '1. ຂໍ້ມູນສິນຄ້າ & ຮູບພາບ (Basic Profile & Image)',
-                      icon: Icons.inventory_2_outlined,
+                      icon: PhosphorIconsBold.package,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1145,7 +1134,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                           onPressed: () => _openBarcodeScanner((code) {
                                             setState(() => _barcodeController.text = code);
                                           }),
-                                          icon: const Icon(Icons.barcode_reader, color: Color(0xFF0D9488)),
+                                          icon: const PhosphorIcon(PhosphorIconsBold.barcode, color: Color(0xFF0D9488), size: 18),
                                           style: IconButton.styleFrom(
                                             backgroundColor: const Color(0xFFCCFBF1),
                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1168,7 +1157,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                     // SECTION 2: Cost Breakdown (THB & LAK)
                     _buildSectionCard(
                       title: '2. ຕົ້ນທຶນຊື້ເຂົ້າ (Purchase Cost)',
-                      icon: Icons.payments_outlined,
+                      icon: PhosphorIconsBold.coins,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1220,32 +1209,43 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                                 color: Color(0xFF0F766E))),
                                         InkWell(
                                           onTap: () {
-                                            final bVal = LaoCurrencyFormatter.parseClean(_costBahtController.text);
-                                            final kVal = LaoCurrencyFormatter.parseClean(_costKipController.text);
-                                            if (bVal > 0) {
-                                              _onBahtChanged(_costBahtController.text, exchangeRate);
-                                            } else if (kVal > 0) {
-                                              _onKipChanged(_costKipController.text, exchangeRate);
-                                            }
+                                            setState(() {
+                                              _autoCostSync = !_autoCostSync;
+                                              if (_autoCostSync) {
+                                                final bVal = LaoCurrencyFormatter.parseClean(_costBahtController.text);
+                                                if (bVal > 0) {
+                                                  _onBahtChanged(_costBahtController.text, exchangeRate);
+                                                }
+                                              }
+                                            });
                                           },
                                           borderRadius: BorderRadius.circular(6),
                                           child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                                             decoration: BoxDecoration(
-                                              color: const Color(0xFFF0FDFA),
+                                              color: _autoCostSync ? const Color(0xFFF0FDFA) : const Color(0xFFF8FAFC),
                                               borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: const Color(0xFF99F6E4)),
+                                              border: Border.all(color: _autoCostSync ? const Color(0xFF99F6E4) : const Color(0xFFCBD5E1)),
                                             ),
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                const Icon(Icons.bolt_rounded, size: 12, color: Color(0xFF0D9488)),
-                                                const SizedBox(width: 2),
-                                                Text('1฿=${LaoCurrencyFormatter.formatNumber(exchangeRate.round())}₭',
-                                                    style: const TextStyle(
-                                                        fontSize: 9.5,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: Color(0xFF0F766E))),
+                                                PhosphorIcon(
+                                                  _autoCostSync ? PhosphorIconsBold.link : PhosphorIconsBold.linkBreak,
+                                                  size: 13,
+                                                  color: _autoCostSync ? const Color(0xFF0D9488) : const Color(0xFF64748B),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  _autoCostSync
+                                                      ? 'Auto: 1฿=${LaoCurrencyFormatter.formatNumber(exchangeRate.round())}₭'
+                                                      : 'Manual',
+                                                  style: TextStyle(
+                                                    fontSize: 9.5,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: _autoCostSync ? const Color(0xFF0F766E) : const Color(0xFF64748B),
+                                                  ),
+                                                ),
                                               ],
                                             ),
                                           ),
@@ -1318,11 +1318,11 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFF0D9488)),
+                                    const PhosphorIcon(PhosphorIconsBold.info, size: 15, color: AppColors.primary),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        'ຕົ້ນທຶນຍົກລັງ: ${LaoCurrencyFormatter.formatNumber(kipEntered)} ₭  ➜  ຕົ້ນທຶນຕໍ່ຫົວໜ່ວຍຫຼັກ ($bName, x$ratio): ${LaoCurrencyFormatter.formatNumber(baseCost)} ₭',
+                                        'ຕົ້ນທຶນຍົກລັງ: ${LaoCurrencyFormatter.formatNumber(kipEntered)} ₭  ->  ຕົ້ນທຶນຕໍ່ຫົວໜ່ວຍຫຼັກ ($bName, x$ratio): ${LaoCurrencyFormatter.formatNumber(baseCost)} ₭',
                                         style: const TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
@@ -1343,7 +1343,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                     // SECTION 3: Stock Inventory Tracking
                     _buildSectionCard(
                       title: '3. ຕິດຕາມສະຕັອກສິນຄ້າ (Inventory & Stock Tracking)',
-                      icon: Icons.warehouse_outlined,
+                      icon: PhosphorIconsBold.warehouse,
                       headerTrailing: Switch(
                         value: _trackStock,
                         activeColor: const Color(0xFF0D9488),
@@ -1441,7 +1441,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF0F766E)),
+                                      const PhosphorIcon(PhosphorIconsBold.info, size: 16, color: AppColors.primary),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
@@ -1463,11 +1463,10 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                               ),
                               child: Row(
                                 children: const [
-                                  Icon(Icons.lightbulb_outline_rounded, color: Color(0xFF0284C7), size: 18),
-                                  SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      '💡 ໂໝດບໍ່ນັບສະຕັອກ: ລະບົບຈະບໍ່ຕັດສະຕັອກ ແລະ ສາມາດຂາຍໄດ້ຕະຫຼອດ (ບໍ່ມີສິນຄ້າໝົດສາງ). ຖານຂໍ້ມູນຈະບັນທຶກ 0 base units.',
+                                  PhosphorIcon(PhosphorIconsBold.lightbulb, color: Color(0xFF0284C7), size: 18),
+SizedBox(width: 10),
+Expanded(
+child: Text('ໂໝດບໍ່ນັບສະຕັອກ: ລະບົບຈະບໍ່ຕັດສະຕັອກ ແລະ ສາມາດຂາຍໄດ້ຕະຫຼອດ (ບໍ່ມີສິນຄ້າໝົດສາງ). ຖານຂໍ້ມູນຈະບັນທຶກ 0 base units.',
                                       style: TextStyle(fontSize: 11.5, color: Color(0xFF0369A1), fontWeight: FontWeight.w600),
                                     ),
                                   ),
@@ -1480,7 +1479,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                     // SECTION 4: 3-Tier Packaging Configuration
                     _buildSectionCard(
                       title: '4. ລະດັບຫົວໜ່ວຍການຂາຍ (3 Packaging Tiers)',
-                      icon: Icons.layers_outlined,
+                      icon: PhosphorIconsBold.stack,
                       child: Column(
                         children: [
                           // Tier 1: Carton
@@ -1576,7 +1575,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
     );
   }
 
-  Widget _buildPresetChip(String label, VoidCallback onTap) {
+  Widget _buildPresetChip(PhosphorIconData icon, String label, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 3),
       child: InkWell(
@@ -1589,9 +1588,16 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: const Color(0xFFCBD5E1)),
           ),
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PhosphorIcon(icon, size: 12, color: const Color(0xFF0D9488)),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+              ),
+            ],
           ),
         ),
       ),
@@ -1600,7 +1606,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
 
   Widget _buildSectionCard({
     required String title,
-    required IconData icon,
+    required PhosphorIconData icon,
     required Widget child,
     Widget? headerTrailing,
   }) {
@@ -1673,7 +1679,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                         if (_compressedImageBytes != null)
                           Image.memory(_compressedImageBytes!, fit: BoxFit.cover)
                         else
-                          Image.network(_imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported)),
+                          Image.network(_imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Center(child: PhosphorIcon(PhosphorIconsBold.imageBroken, color: AppColors.textMuted, size: 24))),
                         Positioned(
                           top: 4,
                           right: 4,
@@ -1691,7 +1697,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                 color: Colors.black54,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.close_rounded, size: 14, color: Colors.white),
+                              child: const PhosphorIcon(PhosphorIconsBold.x, size: 14, color: Colors.white),
                             ),
                           ),
                         ),
@@ -1700,7 +1706,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: const [
-                        Icon(Icons.add_a_photo_outlined, size: 32, color: Color(0xFF94A3B8)),
+                        PhosphorIcon(PhosphorIconsBold.cameraPlus, size: 32, color: Color(0xFF94A3B8)),
                         SizedBox(height: 6),
                         Text('ຮູບສິນຄ້າ', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold)),
                       ],
@@ -1713,7 +1719,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
-              icon: const Icon(Icons.camera_alt_outlined, size: 18),
+              icon: const PhosphorIcon(PhosphorIconsBold.camera, size: 18),
               onPressed: () => _pickImage(ImageSource.camera),
               style: IconButton.styleFrom(
                 backgroundColor: const Color(0xFFF1F5F9),
@@ -1723,7 +1729,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
             ),
             const SizedBox(width: 6),
             IconButton(
-              icon: const Icon(Icons.photo_library_outlined, size: 18),
+              icon: const PhosphorIcon(PhosphorIconsBold.image, size: 18),
               onPressed: () => _pickImage(ImageSource.gallery),
               style: IconButton.styleFrom(
                 backgroundColor: const Color(0xFFF1F5F9),
@@ -1733,7 +1739,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
             ),
             const SizedBox(width: 6),
             IconButton(
-              icon: const Icon(Icons.link_rounded, size: 18),
+              icon: const PhosphorIcon(PhosphorIconsBold.link, size: 18),
               onPressed: () => setState(() => _showUrlInput = !_showUrlInput),
               style: IconButton.styleFrom(
                 backgroundColor: _showUrlInput ? const Color(0xFFCCFBF1) : const Color(0xFFF1F5F9),
@@ -1796,35 +1802,50 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
           children: [
             // Dropdown
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFCBD5E1)),
+              child: PopupMenuButton<String>(
+                tooltip: 'ເລືອກໝວດໝູ່',
+                offset: const Offset(0, 46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: AppColors.border),
                 ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedCategoryId ?? (rawCats.isNotEmpty ? rawCats.first.id : null),
-                    isExpanded: true,
-                    icon: const Icon(Icons.arrow_drop_down_rounded),
-                    items: rawCats.map((cat) {
-                      return DropdownMenuItem<String>(
-                        value: cat.id,
+                color: AppColors.surface,
+                onSelected: (val) {
+                  final cat = rawCats.firstWhere((c) => c.id == val);
+                  setState(() {
+                    _selectedCategoryId = cat.id;
+                    _selectedCategoryName = cat.name;
+                  });
+                },
+                itemBuilder: (ctx) => rawCats.map((cat) {
+                  return PopupMenuItem<String>(
+                    value: cat.id,
+                    child: Text(
+                      cat.name,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textMain),
+                    ),
+                  );
+                }).toList(),
+                child: Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
                         child: Text(
-                          cat.name,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          _selectedCategoryName.isNotEmpty
+                              ? _selectedCategoryName
+                              : (rawCats.isNotEmpty ? rawCats.first.name : 'ເລືອກໝວດໝູ່...'),
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textMain),
                         ),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        final cat = rawCats.firstWhere((c) => c.id == val);
-                        setState(() {
-                          _selectedCategoryId = cat.id;
-                          _selectedCategoryName = cat.name;
-                        });
-                      }
-                    },
+                      ),
+                      const PhosphorIcon(PhosphorIconsBold.caretDown, size: 16, color: AppColors.textMuted),
+                    ],
                   ),
                 ),
               ),
@@ -1834,7 +1855,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
             // Quick add category inline
             OutlinedButton.icon(
               onPressed: () => setState(() => _isAddingCustomCategory = !_isAddingCustomCategory),
-              icon: Icon(_isAddingCustomCategory ? Icons.close_rounded : Icons.add_rounded, size: 14),
+              icon: PhosphorIcon(_isAddingCustomCategory ? PhosphorIconsBold.x : PhosphorIconsBold.plus, size: 14),
               label: Text(_isAddingCustomCategory ? 'ຍົກເລີກ' : 'ໝວດໃໝ່', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF0F766E),
@@ -1853,7 +1874,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                   builder: (_) => const CategoryManagementModal(),
                 );
               },
-              icon: const Icon(Icons.settings_outlined, color: Color(0xFF475569), size: 18),
+              icon: const PhosphorIcon(PhosphorIconsBold.gear, color: Color(0xFF475569), size: 18),
               style: IconButton.styleFrom(
                 backgroundColor: const Color(0xFFF1F5F9),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1883,7 +1904,11 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                 ),
               ),
               const SizedBox(width: 8),
-              ElevatedButton(
+              AppButton(
+                label: 'ບັນທຶກ',
+                variant: AppButtonVariant.primary,
+                height: 38,
+                icon: PhosphorIconsBold.floppyDisk,
                 onPressed: () async {
                   final clean = _categoryCustomController.text.trim();
                   if (clean.isNotEmpty) {
@@ -1898,13 +1923,6 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                     }
                   }
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0D9488),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                ),
-                child: const Text('ບັນທຶກ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -2067,7 +2085,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                 ),
                                 const SizedBox(width: 4),
                                 IconButton(
-                                  icon: const Icon(Icons.barcode_reader, size: 16, color: Color(0xFF0D9488)),
+                                  icon: const PhosphorIcon(PhosphorIconsBold.barcode, size: 16, color: Color(0xFF0D9488)),
                                   onPressed: () => _openBarcodeScanner((code) {
                                     setState(() => barcodeController.text = code);
                                   }),

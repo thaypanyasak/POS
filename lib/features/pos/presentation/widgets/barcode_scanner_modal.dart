@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -129,7 +130,7 @@ class _BarcodeScannerModalState extends ConsumerState<BarcodeScannerModal>
                 children: [
                   Row(
                     children: const [
-                      Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF0F766E), size: 22),
+                      PhosphorIcon(PhosphorIconsBold.scan, color: Color(0xFF0F766E), size: 22),
                       SizedBox(width: 8),
                       Text(
                         'ສະແກນບາໂຄດ (Camera Scanner)',
@@ -152,8 +153,8 @@ class _BarcodeScannerModalState extends ConsumerState<BarcodeScannerModal>
                             _isTorchOn = !_isTorchOn;
                           });
                         },
-                        icon: Icon(
-                          _isTorchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                        icon: PhosphorIcon(
+                          _isTorchOn ? PhosphorIconsBold.lightning : PhosphorIconsBold.lightningSlash,
                           size: 19,
                           color: _isTorchOn ? const Color(0xFFEAB308) : const Color(0xFF64748B),
                         ),
@@ -163,7 +164,7 @@ class _BarcodeScannerModalState extends ConsumerState<BarcodeScannerModal>
                       // Camera switch button
                       IconButton(
                         onPressed: () => _scannerController.switchCamera(),
-                        icon: const Icon(Icons.flip_camera_ios_rounded, size: 19, color: Color(0xFF64748B)),
+                        icon: const PhosphorIcon(PhosphorIconsBold.cameraRotate, size: 19, color: Color(0xFF64748B)),
                         tooltip: 'ສະຫຼັບກ້ອງ',
                         visualDensity: VisualDensity.compact,
                       ),
@@ -173,7 +174,7 @@ class _BarcodeScannerModalState extends ConsumerState<BarcodeScannerModal>
                         borderRadius: BorderRadius.circular(20),
                         child: const Padding(
                           padding: EdgeInsets.all(4.0),
-                          child: Icon(Icons.close, size: 18, color: Color(0xFF94A3B8)),
+                          child: PhosphorIcon(PhosphorIconsBold.x, size: 18, color: Color(0xFF94A3B8)),
                         ),
                       ),
                     ],
@@ -207,7 +208,7 @@ class _BarcodeScannerModalState extends ConsumerState<BarcodeScannerModal>
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.videocam_off_outlined, color: Colors.white54, size: 36),
+                                  const PhosphorIcon(PhosphorIconsBold.videoCameraSlash, color: Colors.white54, size: 36),
                                   const SizedBox(height: 8),
                                   Text(
                                     'ບໍ່ສາມາດເປີດກ້ອງໄດ້: ${error.errorCode.name}',
@@ -276,7 +277,7 @@ class _BarcodeScannerModalState extends ConsumerState<BarcodeScannerModal>
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.camera_alt_outlined, size: 13, color: Colors.white70),
+                            PhosphorIcon(PhosphorIconsBold.camera, size: 13, color: Colors.white70),
                             SizedBox(width: 4),
                             Text(
                               'ສ່ອງກ້ອງໃສ່ບາໂຄດສິນຄ້າເພື່ອສະແກນ',
@@ -313,9 +314,9 @@ class _BarcodeScannerModalState extends ConsumerState<BarcodeScannerModal>
                     border: InputBorder.none,
                     hintText: 'ປ້ອນບາໂຄດດ້ວຍຕົນເອງ...',
                     hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-                    prefixIcon: const Icon(Icons.barcode_reader, size: 18, color: Color(0xFF64748B)),
+                    prefixIcon: const PhosphorIcon(PhosphorIconsBold.barcode, size: 18, color: Color(0xFF64748B)),
                     suffixIcon: IconButton(
-                      icon: const Icon(Icons.arrow_forward_rounded, size: 18, color: Color(0xFF0F766E)),
+                      icon: const PhosphorIcon(PhosphorIconsBold.arrowRight, size: 18, color: Color(0xFF0F766E)),
                       onPressed: () => _processBarcode(_inputController.text),
                     ),
                   ),
@@ -334,7 +335,7 @@ class _BarcodeScannerModalState extends ConsumerState<BarcodeScannerModal>
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, size: 14, color: Color(0xFFE11D48)),
+                      const PhosphorIcon(PhosphorIconsBold.warningCircle, size: 14, color: Color(0xFFE11D48)),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(

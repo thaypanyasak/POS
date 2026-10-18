@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../data/remote/supabase_sync_service.dart';
 import '../../../../domain/models/sale_transaction.dart';
 import '../../../../features/pos/presentation/controllers/transaction_controller.dart';
@@ -184,7 +186,7 @@ class _CustomerDebtPaymentDialogState
                     color: const Color(0xFFFEF3C7),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.handshake_rounded,
+                  child: const PhosphorIcon(PhosphorIconsBold.handshake,
                       color: Color(0xFFD97706), size: 22),
                 ),
                 const SizedBox(width: 10),
@@ -212,7 +214,7 @@ class _CustomerDebtPaymentDialogState
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  icon: const Icon(Icons.close_rounded,
+                  icon: const PhosphorIcon(PhosphorIconsBold.x,
                       color: Color(0xFF94A3B8), size: 20),
                   visualDensity: VisualDensity.compact,
                 ),
@@ -470,15 +472,28 @@ class _CustomerDebtPaymentDialogState
                         ),
                       ),
                       alignment: Alignment.center,
-                      child: Text(
-                        '💵 ເງິນສົດ (CASH)',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
-                          color: _paymentMethod == 'CASH'
-                              ? const Color(0xFF0F766E)
-                              : const Color(0xFF64748B),
-                        ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          PhosphorIcon(
+                            PhosphorIconsBold.money,
+                            size: 15,
+                            color: _paymentMethod == 'CASH'
+                                ? const Color(0xFF0F766E)
+                                : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'ເງິນສົດ (CASH)',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: _paymentMethod == 'CASH'
+                                  ? const Color(0xFF0F766E)
+                                  : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -503,15 +518,28 @@ class _CustomerDebtPaymentDialogState
                         ),
                       ),
                       alignment: Alignment.center,
-                      child: Text(
-                        '📱 ໂອນ / QR (TRANSFER)',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
-                          color: _paymentMethod == 'TRANSFER'
-                              ? const Color(0xFF2563EB)
-                              : const Color(0xFF64748B),
-                        ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          PhosphorIcon(
+                            PhosphorIconsBold.qrCode,
+                            size: 15,
+                            color: _paymentMethod == 'TRANSFER'
+                                ? const Color(0xFF2563EB)
+                                : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'ໂອນ / QR (TRANSFER)',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: _paymentMethod == 'TRANSFER'
+                                  ? const Color(0xFF2563EB)
+                                  : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -553,58 +581,23 @@ class _CustomerDebtPaymentDialogState
             Row(
               children: [
                 Expanded(
-                  child: TextButton(
+                  child: AppButton(
+                    variant: AppButtonVariant.outline,
+                    size: AppButtonSize.md,
+                    label: 'ຍົກເລີກ',
                     onPressed: () => Navigator.of(context).pop(false),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: const Text(
-                      'ຍົກເລີກ',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 2,
-                  child: ElevatedButton(
+                  child: AppButton(
+                    variant: AppButtonVariant.primary,
+                    size: AppButtonSize.md,
+                    label: 'ບັນທຶກການຊຳລະ',
+                    icon: PhosphorIconsBold.checkCircle,
+                    isLoading: _isSubmitting,
                     onPressed: _isSubmitting ? null : _handleSubmit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F766E),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.check_circle_rounded, size: 16),
-                              SizedBox(width: 6),
-                              Text(
-                                'ບັນທຶກການຊຳລະ',
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
-                          ),
                   ),
                 ),
               ],

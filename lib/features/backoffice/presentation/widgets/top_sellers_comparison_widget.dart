@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../providers/month_comparison_provider.dart';
 
@@ -43,7 +44,7 @@ class TopSellersComparisonWidget extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFFFDE68A)),
                     ),
-                    child: const Icon(Icons.local_fire_department_rounded,
+                    child: const PhosphorIcon(PhosphorIconsBold.fire,
                         color: Color(0xFFF59E0B), size: 18),
                   ),
                   const SizedBox(width: 10),
@@ -196,8 +197,8 @@ class TopSellersComparisonWidget extends StatelessWidget {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                            PhosphorIcon(
+                              isUp ? PhosphorIconsBold.arrowUp : PhosphorIconsBold.arrowDown,
                               size: 11,
                               color: isUp ? const Color(0xFF059669) : const Color(0xFFE11D48),
                             ),

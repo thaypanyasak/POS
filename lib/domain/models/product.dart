@@ -1,4 +1,5 @@
 import 'product_unit.dart';
+import '../../core/utils/stock_format_helper.dart';
 import '../../data/local/product_local_meta_service.dart';
 
 /// Product domain entity for Lao Grocery POS & Backoffice
@@ -7,23 +8,28 @@ import '../../data/local/product_local_meta_service.dart';
 class Product {
   final String id;
   final String name; // Lao product name (e.g. ເບຍລາວ ຂວດໃຫຍ່ 640ml)
-  final String category; // Category name (e.g. ເຄື່ອງດື່ມ, ເບຍ/ເຫຼົ້າ, ເຂົ້າໜົມ)
+  final String
+  category; // Category name (e.g. ເຄື່ອງດື່ມ, ເບຍ/ເຫຼົ້າ, ເຂົ້າໜົມ)
   final String? categoryId; // Relational UUID linking to categories.id
   final String? barcode;
   final String? imageUrl;
-  final String baseUnit; // Smallest stock keeping unit (e.g. "ແກ້ວ", "ກະປ໋ອງ", "ແພັກ", "ອັນ")
+  final String
+  baseUnit; // Smallest stock keeping unit (e.g. "ແກ້ວ", "ກະປ໋ອງ", "ແພັກ", "ອັນ")
   final int costPerBaseUnit; // Wholesale cost per base unit in Lao Kip (₭)
   final int costBaht; // Purchase cost in THB (฿)
   final int costKip; // Purchase cost in LAK (₭)
   final int currentStockBaseUnits; // Inventory count in base unit
   final bool trackStock; // If false, displays "ບໍ່ນັບສາງ"
-  final bool hasCrateDeposit; // Specialized crate deposit for beer crates/bottles
+  final bool
+  hasCrateDeposit; // Specialized crate deposit for beer crates/bottles
   final int crateDepositFee; // Fee per crate (default 30.000 Kip)
   final bool tier1Active; // Carton/Box tier switch
   final bool tier2Active; // Pack/Bundle tier switch
   final bool tier3Active; // Piece/Retail tier switch
   final int packsPerCarton; // Multiplier between Carton and Pack (default 8)
   final int piecesPerPack; // Multiplier between Pack and Piece (default 6)
+  final bool
+  allowNegativeStock; // If true, cashier can sell even when stock <= 0
   final List<ProductUnit> units; // Multi-tier unit packaging options
 
   const Product({
@@ -39,6 +45,7 @@ class Product {
     this.costKip = 0,
     required this.currentStockBaseUnits,
     this.trackStock = true,
+    this.allowNegativeStock = true,
     this.hasCrateDeposit = false,
     this.crateDepositFee = 30000,
     this.tier1Active = true,
@@ -63,7 +70,14 @@ class Product {
           u != null &&
           (u.tier == 3 ||
               u.id.endsWith('_carton') ||
-              ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].contains(u.unitName)),
+              [
+                'ແກັດ',
+                'ລັງ',
+                'ເປົາ',
+                'ກະສອບ',
+                'ກ່ອງໃຫຍ່',
+                'ຖັງ',
+              ].contains(u.unitName)),
       orElse: () => units.isNotEmpty && units.length > 2 ? units.last : null,
     );
   }
@@ -95,7 +109,15 @@ class Product {
           u.id != pUnit?.id &&
           (u.tier == 1 ||
               u.id.endsWith('_piece') ||
-              ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ', 'ຕຸກ', 'ຊອງ', 'ກ່ອງນ້ອຍ'].contains(u.unitName)),
+              [
+                'ອັນ',
+                'ແກ້ວ',
+                'ຖົງ',
+                'ກະປ໋ອງ',
+                'ຕຸກ',
+                'ຊອງ',
+                'ກ່ອງນ້ອຍ',
+              ].contains(u.unitName)),
       orElse: () => units.isNotEmpty ? units.first : null,
     );
   }
@@ -103,23 +125,27 @@ class Product {
   /// Unit name display getters
   String get cName => cartonUnit?.unitName ?? 'ແກັດ';
   String get pName => packUnit?.unitName ?? 'ແພັກ';
-  String get pcName => pieceUnit?.unitName ?? (baseUnit != pName && baseUnit != cName ? baseUnit : 'ອັນ');
+  String get pcName =>
+      pieceUnit?.unitName ??
+      (baseUnit != pName && baseUnit != cName ? baseUnit : 'ອັນ');
 
   /// Base unit representation
   ProductUnit get defaultBaseUnit {
     return units.firstWhere(
       (u) => u.multiplier == 1 || u.isBaseUnit,
-      orElse: () => units.isNotEmpty
-          ? units.reduce((a, b) => a.multiplier < b.multiplier ? a : b)
-          : ProductUnit(
-              id: '${id}_base',
-              productId: id,
-              unitName: baseUnit,
-              multiplier: 1,
-              retailPrice: 0,
-              wholesalePrice: 0,
-              isBaseUnit: true,
-            ),
+      orElse:
+          () =>
+              units.isNotEmpty
+                  ? units.reduce((a, b) => a.multiplier < b.multiplier ? a : b)
+                  : ProductUnit(
+                    id: '${id}_base',
+                    productId: id,
+                    unitName: baseUnit,
+                    multiplier: 1,
+                    retailPrice: 0,
+                    wholesalePrice: 0,
+                    isBaseUnit: true,
+                  ),
     );
   }
 
@@ -148,55 +174,61 @@ class Product {
   /// Compound Stock breakdown getters
   int get cartonCount {
     if (!trackStock || !tier1Active) return 0;
+    final absBase = currentStockBaseUnits.abs();
     final cUnit = cartonUnit;
     final pUnit = packUnit;
     final pcUnit = pieceUnit;
 
     if (cUnit != null && pUnit != null && pcUnit != null) {
       final piecesPerCarton = packsPerCarton * piecesPerPack;
-      return currentStockBaseUnits ~/ (piecesPerCarton > 0 ? piecesPerCarton : 1);
+      return absBase ~/ (piecesPerCarton > 0 ? piecesPerCarton : 1);
     } else if (cUnit != null && pUnit != null) {
-      return currentStockBaseUnits ~/ (packsPerCarton > 0 ? packsPerCarton : 1);
+      return absBase ~/ (packsPerCarton > 0 ? packsPerCarton : 1);
     } else if (cUnit != null) {
       final mul = cUnit.multiplier > 0 ? cUnit.multiplier : 1;
-      return currentStockBaseUnits ~/ mul;
+      return absBase ~/ mul;
     }
     return 0;
   }
 
   int get packCount {
     if (!trackStock || !tier2Active) return 0;
+    final absBase = currentStockBaseUnits.abs();
     final cUnit = cartonUnit;
     final pUnit = packUnit;
     final pcUnit = pieceUnit;
 
     if (cUnit != null && pUnit != null && pcUnit != null) {
       final piecesPerCarton = packsPerCarton * piecesPerPack;
-      final rem = currentStockBaseUnits % (piecesPerCarton > 0 ? piecesPerCarton : 1);
+      final rem = absBase % (piecesPerCarton > 0 ? piecesPerCarton : 1);
       return rem ~/ (piecesPerPack > 0 ? piecesPerPack : 1);
     } else if (cUnit != null && pUnit != null) {
-      return currentStockBaseUnits % (packsPerCarton > 0 ? packsPerCarton : 1);
+      return absBase % (packsPerCarton > 0 ? packsPerCarton : 1);
     } else if (pUnit != null) {
-      return currentStockBaseUnits;
+      return absBase;
     }
     return 0;
   }
 
   int get pieceCount {
     if (!trackStock || !tier3Active) return 0;
+    final absBase = currentStockBaseUnits.abs();
     final cUnit = cartonUnit;
     final pUnit = packUnit;
     final pcUnit = pieceUnit;
 
     if (cUnit != null && pUnit != null && pcUnit != null) {
-      return currentStockBaseUnits % (piecesPerPack > 0 ? piecesPerPack : 1);
+      return absBase % (piecesPerPack > 0 ? piecesPerPack : 1);
     } else if (cUnit != null && pcUnit != null) {
-      final mul = packsPerCarton > 0 ? packsPerCarton : (cUnit.multiplier > 0 ? cUnit.multiplier : 1);
-      return currentStockBaseUnits % mul;
+      final mul =
+          packsPerCarton > 0
+              ? packsPerCarton
+              : (cUnit.multiplier > 0 ? cUnit.multiplier : 1);
+      return absBase % mul;
     } else if (pUnit != null && pcUnit != null) {
-      return currentStockBaseUnits % (piecesPerPack > 0 ? piecesPerPack : 1);
+      return absBase % (piecesPerPack > 0 ? piecesPerPack : 1);
     } else if (pcUnit != null) {
-      return currentStockBaseUnits;
+      return absBase;
     }
     return 0;
   }
@@ -204,25 +236,45 @@ class Product {
   String get totalPacksCount {
     if (!trackStock || !tier2Active) return '0';
     if (tier3Active && piecesPerPack > 0) {
-      final val = currentStockBaseUnits / piecesPerPack;
+      final val = currentStockBaseUnits.abs() / piecesPerPack;
       return val.toStringAsFixed(1).replaceAll('.0', '');
     }
-    return currentStockBaseUnits.toString();
+    return currentStockBaseUnits.abs().toString();
   }
+
+  /// Formatted compound negative stock (e.g. "-2 ແກັດ", "-2 ແກັດ 1 ອັນ", "-6 ອັນ")
+  String get negativeStockCompound => StockFormatHelper.formatNegativeCompound(
+    currentStockBaseUnits,
+    units,
+    baseUnitName: baseUnit,
+  );
+
+  /// Full ERP stock display string
+  String get stockDisplayText => StockFormatHelper.formatStockDisplay(
+    currentStockBaseUnits,
+    units,
+    baseUnitName: baseUnit,
+    trackStock: trackStock,
+  );
 
   /// Compound Stock Display Formatter
   ///
   /// Exactly implements SPEC_PRODUCT_LIST.md & SPEC_PRODUCT_FORM_MODAL.md:
   /// - When trackStock == false: returns 'ບໍ່ນັບສາງ'
   /// - When totalBaseUnits == 0: returns 'ໝົດສະຕັອກ (0)'
+  /// - When totalBaseUnits < 0: returns 'ໝົດສະຕັອກ ($negativeStockCompound)'
   /// - Unpacks dynamically: `X ແກັດ Y ແພັກ Z ອັນ` + `(ລວມທັງໝົດ: N [baseUnit])`
   String get compoundStockFormatted {
     if (!trackStock) {
       return 'ບໍ່ນັບສາງ';
     }
 
-    if (currentStockBaseUnits <= 0) {
+    if (currentStockBaseUnits == 0) {
       return 'ໝົດສະຕັອກ (0)';
+    }
+
+    if (currentStockBaseUnits < 0) {
+      return 'ໝົດສະຕັອກ ($negativeStockCompound)';
     }
 
     final List<String> parts = [];
@@ -245,16 +297,17 @@ class Product {
     return summary;
   }
 
-  /// Short summary for compact cards (e.g. `12 ແກັດ 4 ແພັກ`)
+  /// Short summary for compact cards (e.g. `12 ແກັດ 4 ແພັກ`, `ຕິດລົບ (-2 ແກັດ)`)
   String get stockBadgeText {
     if (!trackStock) return 'ບໍ່ນັບສາງ';
-    if (currentStockBaseUnits <= 0) return 'ໝົດສາງ (0)';
+    if (currentStockBaseUnits == 0) return 'ໝົດສະຕັອກ (0)';
+    if (currentStockBaseUnits < 0) return 'ຕິດລົບ ($negativeStockCompound)';
     return compoundStockFormatted;
   }
 
   /// Check if a specific unit quantity can be fulfilled
   bool canFulfill(ProductUnit unit, int quantity) {
-    if (!trackStock) return true;
+    if (!trackStock || allowNegativeStock) return true;
     final requiredBase = unit.multiplier * quantity;
     return currentStockBaseUnits >= requiredBase;
   }
@@ -272,6 +325,7 @@ class Product {
     int? costKip,
     int? currentStockBaseUnits,
     bool? trackStock,
+    bool? allowNegativeStock,
     bool? hasCrateDeposit,
     int? crateDepositFee,
     bool? tier1Active,
@@ -295,6 +349,7 @@ class Product {
       currentStockBaseUnits:
           currentStockBaseUnits ?? this.currentStockBaseUnits,
       trackStock: trackStock ?? this.trackStock,
+      allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
       hasCrateDeposit: hasCrateDeposit ?? this.hasCrateDeposit,
       crateDepositFee: crateDepositFee ?? this.crateDepositFee,
       tier1Active: tier1Active ?? this.tier1Active,
@@ -321,6 +376,7 @@ class Product {
       'cost_lak': costKip,
       'current_stock_base_units': currentStockBaseUnits,
       'track_stock': trackStock,
+      'allow_negative_stock': allowNegativeStock,
       'has_crate_deposit': hasCrateDeposit,
       'crate_deposit_fee': crateDepositFee,
       'tier1_active': tier1Active,
@@ -334,7 +390,8 @@ class Product {
 
   factory Product.fromJson(Map<String, dynamic> json) {
     final rawUnits = json['units'] ?? json['product_units'];
-    final unitsList = (rawUnits as List<dynamic>?)
+    final unitsList =
+        (rawUnits as List<dynamic>?)
             ?.map((u) => ProductUnit.fromJson(u as Map<String, dynamic>))
             .toList() ??
         [];
@@ -349,26 +406,50 @@ class Product {
         json['categories']?['id']?.toString();
 
     // Check tier active flags directly or infer from units
-    final bool hasCarton = json['tier1_active'] != null
-        ? json['tier1_active'] as bool
-        : unitsList.any((u) =>
-            u.tier == 3 ||
-            u.id.endsWith('_carton') ||
-            ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].contains(u.unitName));
+    final bool hasCarton =
+        json['tier1_active'] != null
+            ? json['tier1_active'] as bool
+            : unitsList.any(
+              (u) =>
+                  u.tier == 3 ||
+                  u.id.endsWith('_carton') ||
+                  [
+                    'ແກັດ',
+                    'ລັງ',
+                    'ເປົາ',
+                    'ກະສອບ',
+                    'ກ່ອງໃຫຍ່',
+                    'ຖັງ',
+                  ].contains(u.unitName),
+            );
 
-    final bool hasPack = json['tier2_active'] != null
-        ? json['tier2_active'] as bool
-        : unitsList.any((u) =>
-            u.tier == 2 ||
-            u.id.endsWith('_pack') ||
-            ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂຫຼ', 'ຖົງກາງ'].contains(u.unitName));
+    final bool hasPack =
+        json['tier2_active'] != null
+            ? json['tier2_active'] as bool
+            : unitsList.any(
+              (u) =>
+                  u.tier == 2 ||
+                  u.id.endsWith('_pack') ||
+                  ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂຫຼ', 'ຖົງກາງ'].contains(u.unitName),
+            );
 
-    final bool hasPiece = json['tier3_active'] != null
-        ? json['tier3_active'] as bool
-        : unitsList.any((u) =>
-            u.tier == 1 ||
-            u.id.endsWith('_piece') ||
-            ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ', 'ຕຸກ', 'ຊອງ', 'ກ່ອງນ້ອຍ'].contains(u.unitName));
+    final bool hasPiece =
+        json['tier3_active'] != null
+            ? json['tier3_active'] as bool
+            : unitsList.any(
+              (u) =>
+                  u.tier == 1 ||
+                  u.id.endsWith('_piece') ||
+                  [
+                    'ອັນ',
+                    'ແກ້ວ',
+                    'ຖົງ',
+                    'ກະປ໋ອງ',
+                    'ຕຸກ',
+                    'ຊອງ',
+                    'ກ່ອງນ້ອຍ',
+                  ].contains(u.unitName),
+            );
 
     int packsPerC = (json['packs_per_carton'] as num?)?.toInt() ?? 8;
     int piecesPerP = (json['pieces_per_pack'] as num?)?.toInt() ?? 6;
@@ -378,9 +459,12 @@ class Product {
     ProductUnit? pU;
     ProductUnit? pcU;
     for (final u in unitsList) {
-      if (u.tier == 3 || ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ'].contains(u.unitName)) cU = u;
-      if (u.tier == 2 || ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂຫຼ'].contains(u.unitName)) pU = u;
-      if (u.tier == 1 || ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ'].contains(u.unitName)) pcU = u;
+      if (u.tier == 3 || ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ'].contains(u.unitName))
+        cU = u;
+      if (u.tier == 2 || ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂຫຼ'].contains(u.unitName))
+        pU = u;
+      if (u.tier == 1 || ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ'].contains(u.unitName))
+        pcU = u;
     }
 
     if (cU != null && pU != null && cU.multiplier > pU.multiplier) {
@@ -403,7 +487,8 @@ class Product {
     final localMeta = ProductLocalMetaService.getMeta(pId);
 
     // Check if cost_lak or costKip was explicitly provided
-    final int? explicitCostLak = (json['cost_lak'] as num?)?.toInt() ??
+    final int? explicitCostLak =
+        (json['cost_lak'] as num?)?.toInt() ??
         (json['costLak'] as num?)?.toInt() ??
         (json['cost_kip'] as num?)?.toInt() ??
         (json['costKip'] as num?)?.toInt() ??
@@ -420,7 +505,10 @@ class Product {
       // If rawCostBase in DB was mistakenly saved as carton cost (e.g. 280,000)
       // for a multi-tier product whose carton multiplier > 1 (e.g. 8):
       final int cartonRetail = cU?.retailPrice ?? 0;
-      if (effCartonMul > 1 && (cartonRetail > 0 ? rawCostBase > (cartonRetail * 0.4) : rawCostBase > 50000)) {
+      if (effCartonMul > 1 &&
+          (cartonRetail > 0
+              ? rawCostBase > (cartonRetail * 0.4)
+              : rawCostBase > 50000)) {
         // rawCostBase in DB is already the carton cost (280,000)!
         cKip = rawCostBase;
         costBase = (rawCostBase / effCartonMul).round(); // 35,000
@@ -433,7 +521,8 @@ class Product {
     if (cKip == 0 && costBase > 0) cKip = costBase;
 
     // Baht cost: priority cost_thb -> cost_baht -> localMeta -> strictly 0 if domestic
-    int cBaht = (json['cost_thb'] as num?)?.toInt() ??
+    int cBaht =
+        (json['cost_thb'] as num?)?.toInt() ??
         (json['cost_baht'] as num?)?.toInt() ??
         (json['costBaht'] as num?)?.toInt() ??
         (json['costThb'] as num?)?.toInt() ??
@@ -451,12 +540,19 @@ class Product {
       costPerBaseUnit: costBase,
       costBaht: cBaht,
       costKip: cKip,
-      currentStockBaseUnits: (json['current_stock_base_units'] as num?)?.toInt() ?? 0,
+      currentStockBaseUnits:
+          (json['current_stock_base_units'] as num?)?.toInt() ?? 0,
       trackStock: json['track_stock'] as bool? ?? true,
-      hasCrateDeposit: json['has_crate_deposit'] as bool? ??
+      allowNegativeStock:
+          json['allow_negative_stock'] as bool? ??
+          json['allowNegativeStock'] as bool? ??
+          true,
+      hasCrateDeposit:
+          json['has_crate_deposit'] as bool? ??
           json['hasCrateDeposit'] as bool? ??
           false,
-      crateDepositFee: (json['crate_deposit_fee'] as num?)?.toInt() ??
+      crateDepositFee:
+          (json['crate_deposit_fee'] as num?)?.toInt() ??
           (json['crateDepositFee'] as num?)?.toInt() ??
           30000,
       tier1Active: hasCarton,

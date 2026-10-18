@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/app_button.dart';
 import '../../../core/localization/lao_currency_formatter.dart';
 import '../../../data/remote/supabase_sync_service.dart';
 import '../../../domain/models/product.dart';
@@ -126,7 +128,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: const [
-            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+            PhosphorIcon(PhosphorIconsBold.warningCircle, color: Color(0xFFDC2626), size: 24),
             SizedBox(width: 8),
             Text(
               'ຢືນຢັນການລຶບສິນຄ້າ',
@@ -139,16 +141,18 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
           style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
         actions: [
-          TextButton(
+          AppButton(
+            variant: AppButtonVariant.outline,
+            size: AppButtonSize.sm,
+            label: 'ຍົກເລີກ',
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('ຍົກເລີກ', style: TextStyle(color: AppColors.textSecondary)),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
+          const SizedBox(width: 8),
+          AppButton(
+            variant: AppButtonVariant.danger,
+            size: AppButtonSize.sm,
+            label: 'ລຶບສິນຄ້າ',
+            icon: PhosphorIconsBold.trash,
             onPressed: () async {
               Navigator.of(ctx).pop();
               final success = await SupabaseSyncService.deleteProduct(product.id);
@@ -173,7 +177,6 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                 }
               }
             },
-            child: const Text('ຢືນຢັນລຶບ', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -246,7 +249,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                               color: const Color(0xFFCCFBF1),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Icon(Icons.warehouse_rounded, color: Color(0xFF0D9488), size: 18),
+                            child: const PhosphorIcon(PhosphorIconsBold.archive, color: Color(0xFF0D9488), size: 18),
                           ),
                           const SizedBox(width: 10),
                           const Expanded(
@@ -271,7 +274,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                                     height: 14,
                                     child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0D9488)),
                                   )
-                                : const Icon(Icons.refresh_rounded, size: 16, color: Color(0xFF475569)),
+                                : const PhosphorIcon(PhosphorIconsBold.arrowsClockwise, size: 16, color: Color(0xFF475569)),
                             style: IconButton.styleFrom(
                               backgroundColor: const Color(0xFFF1F5F9),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -286,7 +289,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: _openCategoryManagerModal,
-                              icon: const Icon(Icons.folder_special_outlined, size: 15, color: Color(0xFF0F766E)),
+                              icon: const PhosphorIcon(PhosphorIconsBold.folder, size: 15, color: Color(0xFF0F766E)),
                               label: const Text('ໝວດໝູ່', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFF334155),
@@ -300,20 +303,12 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             flex: 2,
-                            child: ElevatedButton.icon(
+                            child: AppButton(
+                              variant: AppButtonVariant.primary,
+                              size: AppButtonSize.sm,
+                              label: 'ເພີ່ມສິນຄ້າໃໝ່',
+                              icon: PhosphorIconsBold.plus,
                               onPressed: _openAddProductModal,
-                              icon: const Icon(Icons.add_rounded, size: 16),
-                              label: const Text(
-                                '+ ເພີ່ມສິນຄ້າໃໝ່',
-                                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0D9488),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                              ),
                             ),
                           ),
                         ],
@@ -338,7 +333,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                         color: const Color(0xFFCCFBF1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.warehouse_rounded, color: Color(0xFF0D9488), size: 22),
+                      child: const PhosphorIcon(PhosphorIconsBold.archive, color: Color(0xFF0D9488), size: 22),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -370,7 +365,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                     // Action Buttons: Category Manager, Reload, + Add Product
                     OutlinedButton.icon(
                       onPressed: _openCategoryManagerModal,
-                      icon: const Icon(Icons.folder_special_outlined, size: 16, color: Color(0xFF0F766E)),
+                      icon: const PhosphorIcon(PhosphorIconsBold.folder, size: 16, color: Color(0xFF0F766E)),
                       label: const Text('ໝວດໝູ່', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFF334155),
@@ -394,7 +389,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                               height: 16,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0D9488)),
                             )
-                          : const Icon(Icons.refresh_rounded, size: 18, color: Color(0xFF475569)),
+                          : const PhosphorIcon(PhosphorIconsBold.arrowsClockwise, size: 18, color: Color(0xFF475569)),
                       style: IconButton.styleFrom(
                         backgroundColor: const Color(0xFFF1F5F9),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -405,20 +400,12 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                     const SizedBox(width: 8),
 
                     // FIXED "+ ເພີ່ມສິນຄ້າໃໝ່" BUTTON
-                    ElevatedButton.icon(
+                    AppButton(
+                      variant: AppButtonVariant.primary,
+                      size: AppButtonSize.md,
+                      icon: PhosphorIconsBold.plus,
+                      label: 'ເພີ່ມສິນຄ້າໃໝ່',
                       onPressed: _openAddProductModal,
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text(
-                        '+ ເພີ່ມສິນຄ້າໃໝ່',
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0D9488),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      ),
                     ),
                   ],
                 ),
@@ -450,7 +437,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                         child: Row(
                           children: [
                             const SizedBox(width: 12),
-                            const Icon(Icons.search_rounded, size: 20, color: Color(0xFF64748B)),
+                            const PhosphorIcon(PhosphorIconsBold.magnifyingGlass, size: 20, color: Color(0xFF64748B)),
                             const SizedBox(width: 8),
                             Expanded(
                               child: TextField(
@@ -477,7 +464,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                             ),
                             if (_searchController.text.isNotEmpty)
                               IconButton(
-                                icon: const Icon(Icons.clear_rounded, size: 16, color: Color(0xFF94A3B8)),
+                                icon: const PhosphorIcon(PhosphorIconsBold.x, size: 16, color: Color(0xFF94A3B8)),
                                 onPressed: () {
                                   _searchController.clear();
                                   setState(() {});
@@ -486,18 +473,12 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                             // Barcode Camera Button
                             Container(
                               margin: const EdgeInsets.only(right: 6),
-                              child: ElevatedButton.icon(
+                              child: AppButton(
+                                variant: AppButtonVariant.outline,
+                                size: AppButtonSize.sm,
+                                icon: PhosphorIconsBold.barcode,
+                                label: 'ສະແກນ',
                                 onPressed: _openBarcodeScanner,
-                                icon: const Icon(Icons.barcode_reader, size: 16),
-                                label: const Text('ສະແກນ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFF0FDFA),
-                                  foregroundColor: const Color(0xFF0F766E),
-                                  elevation: 0,
-                                  side: const BorderSide(color: Color(0xFF99F6E4)),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                ),
                               ),
                             ),
                           ],
@@ -548,7 +529,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                       Padding(
                         padding: const EdgeInsets.only(left: 4),
                         child: ActionChip(
-                          avatar: const Icon(Icons.settings_outlined, size: 14, color: Color(0xFF475569)),
+                          avatar: const PhosphorIcon(PhosphorIconsBold.gear, size: 14, color: Color(0xFF475569)),
                           label: const Text(
                             'ຈັດການໝວດໝູ່',
                             style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
@@ -599,7 +580,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: const [
-                        Icon(Icons.inventory_2_outlined, size: 48, color: Color(0xFFCBD5E1)),
+                        PhosphorIcon(PhosphorIconsBold.package, size: 48, color: Color(0xFFCBD5E1)),
                         SizedBox(height: 12),
                         Text(
                           'ບໍ່ພົບລາຍການສິນຄ້າ',
@@ -684,7 +665,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                                 width: 44,
                                 height: 44,
                                 color: const Color(0xFFF1F5F9),
-                                child: const Icon(Icons.image_outlined, color: Color(0xFF94A3B8), size: 20),
+                                child: const PhosphorIcon(PhosphorIconsBold.image, color: Color(0xFF94A3B8), size: 20),
                               ),
                             ),
                           ),
@@ -824,7 +805,31 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                if (p.currentStockBaseUnits <= 0)
+                                if (p.currentStockBaseUnits < 0)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFF1F2),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: const Color(0xFFFECDD3)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const PhosphorIcon(PhosphorIconsBold.warningCircle, size: 12, color: Color(0xFFBE123C)),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'ໝົດສະຕັອກ (${p.negativeStockCompound})',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w800,
+                                            color: Color(0xFFBE123C),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else if (p.currentStockBaseUnits == 0)
                                   const Text(
                                     'ໝົດສະຕັອກ (0)',
                                     style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900, color: Color(0xFFDC2626)),
@@ -877,7 +882,11 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                                 const SizedBox(height: 2),
                                 Text(
                                   'ລວມທັງໝົດ: ${p.currentStockBaseUnits} ${p.baseUnit}',
-                                  style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: p.currentStockBaseUnits < 0 ? const Color(0xFFE11D48) : const Color(0xFF94A3B8),
+                                    fontWeight: p.currentStockBaseUnits < 0 ? FontWeight.w700 : FontWeight.w600,
+                                  ),
                                 ),
                               ],
                             ),
@@ -911,7 +920,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF475569)),
+                            icon: const PhosphorIcon(PhosphorIconsBold.pencilSimple, size: 16, color: Color(0xFF475569)),
                             onPressed: () => _openEditProductModal(p),
                             style: IconButton.styleFrom(
                               backgroundColor: const Color(0xFFF1F5F9),
@@ -923,7 +932,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                           ),
                           const SizedBox(width: 6),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Color(0xFFDC2626)),
+                            icon: const PhosphorIcon(PhosphorIconsBold.trash, size: 16, color: Color(0xFFDC2626)),
                             onPressed: () => _confirmDeleteProduct(p),
                             style: IconButton.styleFrom(
                               backgroundColor: const Color(0xFFFEF2F2),
@@ -993,7 +1002,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                         width: 48,
                         height: 48,
                         color: const Color(0xFFF1F5F9),
-                        child: const Icon(Icons.image_outlined, color: Color(0xFF94A3B8), size: 22),
+                        child: const PhosphorIcon(PhosphorIconsBold.image, color: Color(0xFF94A3B8), size: 22),
                       ),
                     ),
                   ),
@@ -1040,7 +1049,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF475569)),
+                        icon: const PhosphorIcon(PhosphorIconsBold.pencilSimple, size: 18, color: Color(0xFF475569)),
                         onPressed: () => _openEditProductModal(p),
                         style: IconButton.styleFrom(
                           backgroundColor: const Color(0xFFF1F5F9),
@@ -1051,7 +1060,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                       ),
                       const SizedBox(width: 4),
                       IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFDC2626)),
+                        icon: const PhosphorIcon(PhosphorIconsBold.trash, size: 18, color: Color(0xFFDC2626)),
                         onPressed: () => _confirmDeleteProduct(p),
                         style: IconButton.styleFrom(
                           backgroundColor: const Color(0xFFFEF2F2),
@@ -1137,7 +1146,24 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                       ),
                       child: const Text('ບໍ່ນັບສາງ', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
                     )
-                  else if (p.currentStockBaseUnits <= 0)
+                  else if (p.currentStockBaseUnits < 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF1F2),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFFECDD3)),
+                      ),
+                      child: Text(
+                        'ໝົດສະຕັອກ (${p.negativeStockCompound})',
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFFBE123C),
+                        ),
+                      ),
+                    )
+                  else if (p.currentStockBaseUnits == 0)
                     const Text('ໝົດສະຕັອກ (0)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFFDC2626)))
                   else
                     Row(

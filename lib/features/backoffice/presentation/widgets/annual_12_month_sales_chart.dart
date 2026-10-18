@@ -1,5 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../../../../data/remote/supabase_sync_service.dart';
 
@@ -97,31 +99,43 @@ class _Annual12MonthSalesChartState extends State<Annual12MonthSalesChart> {
               ),
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                  PopupMenuButton<int>(
+                    tooltip: 'ເລືອກປີ',
+                    offset: const Offset(0, 36),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: const BorderSide(color: AppColors.border),
                     ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<int>(
-                        value: _selectedYear,
-                        isDense: true,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                        ),
-                        items: [2026, 2025, 2024].map((y) {
-                          return DropdownMenuItem(value: y, child: Text(y.toString()));
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null && val != _selectedYear) {
-                            setState(() => _selectedYear = val);
-                            _loadData();
-                          }
-                        },
+                    color: AppColors.surface,
+                    onSelected: (val) {
+                      if (val != _selectedYear) {
+                        setState(() => _selectedYear = val);
+                        _loadData();
+                      }
+                    },
+                    itemBuilder: (ctx) => [2026, 2025, 2024].map((y) {
+                      return PopupMenuItem<int>(
+                        value: y,
+                        child: Text(y.toString(), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textMain)),
+                      );
+                    }).toList(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _selectedYear.toString(),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMain),
+                          ),
+                          const SizedBox(width: 4),
+                          const PhosphorIcon(PhosphorIconsBold.caretDown, size: 12, color: AppColors.textMuted),
+                        ],
                       ),
                     ),
                   ),
@@ -231,9 +245,15 @@ class _Annual12MonthSalesChartState extends State<Annual12MonthSalesChart> {
                       ),
                     ],
                   )
-                : const Text(
-                    '💡 ແຕະທີ່ຈຸດເສັ້ນກຣາຟເດືອນໃດໜຶ່ງ ເພື່ອເບິ່ງຍອດຂາຍ, ຕົ້ນທຶນ ແລະ ກຳໄລລວມ',
-                    style: TextStyle(fontSize: 11.5, fontStyle: FontStyle.italic, color: Color(0xFF94A3B8)),
+                : const Row(
+                    children: [
+                      PhosphorIcon(PhosphorIconsBold.lightbulb, size: 14, color: AppColors.textMuted),
+                      SizedBox(width: 6),
+                      Text(
+                        'ແຕະທີ່ຈຸດເສັ້ນກຣາຟເດືອນໃດໜຶ່ງ ເພື່ອເບິ່ງຍອດຂາຍ, ຕົ້ນທຶນ ແລະ ກຳໄລລວມ',
+                        style: TextStyle(fontSize: 11.5, fontStyle: FontStyle.italic, color: AppColors.textMuted),
+                      ),
+                    ],
                   ),
           ),
           const SizedBox(height: 16),

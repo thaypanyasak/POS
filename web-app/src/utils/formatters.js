@@ -87,23 +87,186 @@ export const parseCurrencyInput = (val) => {
 };
 
 /**
+ * Resolves active units sorted by multiplier descending
+ */
+export const getSortedUnits = (product) => {
+  if (!product) return [];
+  if (Array.isArray(product.units) && product.units.length > 0) {
+    const isPieceActive = product.tier3_active !== undefined
+      ? Boolean(product.tier3_active)
+      : (product.tierSettings?.enablePiece !== undefined ? Boolean(product.tierSettings.enablePiece) : true);
+    const isPackActive = product.tier2_active !== undefined
+      ? Boolean(product.tier2_active)
+      : (product.tierSettings?.enablePack !== undefined ? Boolean(product.tierSettings.enablePack) : true);
+    const isCartonActive = product.tier1_active !== undefined
+      ? Boolean(product.tier1_active)
+      : (product.tierSettings?.enableCarton !== undefined ? Boolean(product.tierSettings.enableCarton) : true);
+
+    const filtered = product.units.filter((u) => {
+      if (!u) return false;
+      if (u.tier === 3 || u.id?.endsWith('_carton')) return isCartonActive;
+      if (u.tier === 2 || u.id?.endsWith('_pack')) return isPackActive;
+      if (u.tier === 1 || u.id?.endsWith('_piece')) return isPieceActive;
+      return true;
+    });
+
+    return filtered.slice().sort((a, b) => (Number(b.multiplier) || 1) - (Number(a.multiplier) || 1));
+  }
+  return [];
+};
+
+/**
+ * Returns raw negative compound string (e.g. "-2 ແກັດ" or "-2 ແກັດ 1 ອັນ" or "-6 ອັນ")
+ */
+export const formatNegativeStockCompound = (stockOrProduct, productUnits = null, baseUnitName = 'ອັນ') => {
+  let stock = 0;
+  let units = productUnits;
+  let baseUnit = baseUnitName;
+
+  if (typeof stockOrProduct === 'object' && stockOrProduct !== null) {
+    stock = Number(stockOrProduct.currentStockBaseUnits ?? stockOrProduct.current_stock_base_units ?? 0);
+    units = units || getSortedUnits(stockOrProduct);
+    baseUnit = stockOrProduct.baseUnit || stockOrProduct.base_unit || baseUnit;
+  } else {
+    stock = Number(stockOrProduct || 0);
+  }
+
+  if (stock >= 0) return '';
+
+  let sorted = [];
+  if (Array.isArray(units) && units.length > 0) {
+    sorted = units
+      .filter((u) => u && u.unitName)
+      .slice()
+      .sort((a, b) => (Number(b.multiplier) || 1) - (Number(a.multiplier) || 1));
+  }
+
+  let remaining = Math.abs(stock);
+  const parts = [];
+
+  if (sorted.length > 0) {
+    for (let i = 0; i < sorted.length; i++) {
+      const u = sorted[i];
+      const m = Math.max(1, Number(u.multiplier) || 1);
+      if (i < sorted.length - 1) {
+        if (m > 1) {
+          const count = Math.floor(remaining / m);
+          if (count > 0) {
+            parts.push(`${count} ${u.unitName}`);
+            remaining %= m;
+          }
+        }
+      } else {
+        if (remaining > 0 || parts.length === 0) {
+          parts.push(`${remaining} ${u.unitName}`);
+        }
+      }
+    }
+  } else {
+    parts.push(`${remaining} ${baseUnit}`);
+  }
+
+  return `-${parts.join(' ')}`;
+};
+
+/**
+ * ERP Smart Stock Formatting Helper
+ * - stock > 0: Compound breakdown (e.g. "71 ແກັດ 1 ແພັກ")
+ * - stock === 0: "ໝົດສະຕັອກ (0)"
+ * - stock < 0: Negative compound breakdown inside parentheses with prefix:
+ *   e.g. "ໝົດສະຕັອກ (-2 ແກັດ)" or "ຕິດລົບ (-2 ແກັດ)"
+ */
+export const formatStockDisplay = (
+  stockOrProduct,
+  productUnits = null,
+  baseUnitName = 'ອັນ',
+  { prefix = 'ໝົດສະຕັອກ' } = {}
+) => {
+  let stock = 0;
+  let units = productUnits;
+  let baseUnit = baseUnitName;
+
+  if (typeof stockOrProduct === 'object' && stockOrProduct !== null) {
+    const p = stockOrProduct;
+    if (p.trackStock === false || p.track_stock === false) {
+      return 'ບໍ່ນັບສາງ';
+    }
+    stock = Number(p.currentStockBaseUnits ?? p.current_stock_base_units ?? 0);
+    units = units || getSortedUnits(p);
+    baseUnit = p.baseUnit || p.base_unit || baseUnit;
+  } else {
+    stock = Number(stockOrProduct || 0);
+  }
+
+  if (stock === 0) {
+    return `${prefix} (0)`;
+  }
+
+  if (stock < 0) {
+    const negCompound = formatNegativeStockCompound(stock, units, baseUnit);
+    return `${prefix} (${negCompound})`;
+  }
+
+  // Positive stock breakdown
+  let sorted = [];
+  if (Array.isArray(units) && units.length > 0) {
+    sorted = units
+      .filter((u) => u && u.unitName)
+      .slice()
+      .sort((a, b) => (Number(b.multiplier) || 1) - (Number(a.multiplier) || 1));
+  }
+
+  let remaining = stock;
+  const parts = [];
+
+  if (sorted.length > 0) {
+    for (let i = 0; i < sorted.length; i++) {
+      const u = sorted[i];
+      const m = Math.max(1, Number(u.multiplier) || 1);
+      if (i < sorted.length - 1) {
+        if (m > 1) {
+          const count = Math.floor(remaining / m);
+          if (count > 0) {
+            parts.push(`${count} ${u.unitName}`);
+            remaining %= m;
+          }
+        }
+      } else {
+        if (remaining > 0 || parts.length === 0) {
+          parts.push(`${remaining} ${u.unitName}`);
+        }
+      }
+    }
+  } else {
+    parts.push(`${remaining} ${baseUnit}`);
+  }
+
+  return parts.join(' ');
+};
+
+/**
  * Formats compound stock breakdown (e.g. "28 ແກັດ 7 ແພັກ (ລວມທັງໝົດ: 231 ແພັກ)" or "ບໍ່ນັບສາງ")
  */
 export const formatCompoundStock = (product) => {
   if (!product) return 'ບໍ່ນັບສາງ';
-  if (product.trackStock === false) {
+  if (product.trackStock === false || product.track_stock === false) {
     return 'ບໍ່ນັບສາງ';
   }
 
-  if (product.currentStockBaseUnits === null || product.currentStockBaseUnits === undefined || isNaN(product.currentStockBaseUnits)) {
+  const rawStock = product.currentStockBaseUnits ?? product.current_stock_base_units;
+  if (rawStock === null || rawStock === undefined || isNaN(rawStock)) {
     return 'ບໍ່ນັບສາງ';
   }
 
-  const total = Number(product.currentStockBaseUnits);
-  if (total === 0) return 'ໝົດສາງ (0)';
-
+  const total = Number(rawStock);
   const isNeg = total < 0;
-  const absTotal = Math.abs(total);
+  if (total === 0) return 'ໝົດສາງ (0)';
+  if (isNeg) {
+    const negCompound = formatNegativeStockCompound(product);
+    return `ຕິດລົບ (${negCompound})`;
+  }
+
+  const absTotal = total;
 
   const isPieceActive = product.tier3_active !== undefined
     ? Boolean(product.tier3_active)

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
@@ -60,8 +61,8 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
                           color: AppColors.primaryLight,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(
-                          Icons.query_stats,
+                        child: const PhosphorIcon(
+                          PhosphorIconsBold.chartLineUp,
                           color: AppColors.primary,
                           size: 24,
                         ),
@@ -88,7 +89,7 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, color: AppColors.textMuted),
+                    icon: const PhosphorIcon(PhosphorIconsBold.x, color: AppColors.textMuted, size: 20),
                   ),
                 ],
               ),
@@ -157,7 +158,7 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
                   title: LaoStrings.totalRevenue,
                   value: LaoCurrencyFormatter.format(summary.totalRevenue),
                   subValueThb: '≈ ${LaoCurrencyFormatter.formatDots(summary.totalRevenueThb.round())} ฿',
-                  icon: Icons.payments,
+                  icon: PhosphorIconsBold.money,
                   color: AppColors.info,
                 ),
               ),
@@ -167,7 +168,7 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
                   title: LaoStrings.totalCost,
                   value: LaoCurrencyFormatter.format(summary.totalCostOfGoods),
                   subValueThb: '≈ ${LaoCurrencyFormatter.formatDots(summary.totalCostThb.round())} ฿',
-                  icon: Icons.inventory_2,
+                  icon: PhosphorIconsBold.package,
                   color: AppColors.textSecondary,
                 ),
               ),
@@ -177,7 +178,7 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
                   title: LaoStrings.grossProfit,
                   value: '+${LaoCurrencyFormatter.format(summary.totalGrossProfit)}',
                   subValueThb: '≈ +${LaoCurrencyFormatter.formatDots(summary.totalProfitThb.round())} ฿',
-                  icon: Icons.trending_up,
+                  icon: PhosphorIconsBold.trendUp,
                   color: AppColors.primary,
                   isBold: true,
                 ),
@@ -187,7 +188,7 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
                 child: _buildMetricCard(
                   title: LaoStrings.profitMargin,
                   value: '${summary.profitMarginPercent.toStringAsFixed(1)}%',
-                  icon: Icons.percent,
+                  icon: PhosphorIconsBold.percent,
                   color: AppColors.wholesale,
                 ),
               ),
@@ -331,7 +332,7 @@ class _ProfitSummarySheetState extends ConsumerState<ProfitSummarySheet>
                   color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Icon(icon, size: 14, color: color),
+                child: PhosphorIcon(icon, size: 14, color: color),
               ),
             ],
           ),

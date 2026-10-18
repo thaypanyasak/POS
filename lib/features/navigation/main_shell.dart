@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/localization/lo.dart';
@@ -95,28 +96,28 @@ class _MainShellState extends ConsumerState<MainShell> {
                       elevation: 0,
                       items: const [
                         BottomNavigationBarItem(
-                          icon: Icon(Icons.storefront_rounded),
-                          activeIcon: Icon(Icons.storefront_rounded),
+                          icon: PhosphorIcon(PhosphorIconsBold.storefront),
+                          activeIcon: PhosphorIcon(PhosphorIconsBold.storefront),
                           label: 'ຂາຍໜ້າຮ້ານ',
                         ),
                         BottomNavigationBarItem(
-                          icon: Icon(Icons.bar_chart_rounded),
-                          activeIcon: Icon(Icons.bar_chart_rounded),
+                          icon: PhosphorIcon(PhosphorIconsBold.chartBar),
+                          activeIcon: PhosphorIcon(PhosphorIconsBold.chartBar),
                           label: 'ແຜງຄວບຄຸມ',
                         ),
                         BottomNavigationBarItem(
-                          icon: Icon(Icons.warehouse_rounded),
-                          activeIcon: Icon(Icons.warehouse_rounded),
+                          icon: PhosphorIcon(PhosphorIconsBold.warehouse),
+                          activeIcon: PhosphorIcon(PhosphorIconsBold.warehouse),
                           label: 'ລາຍການສິນຄ້າ',
                         ),
                         BottomNavigationBarItem(
-                          icon: Icon(Icons.history_rounded),
-                          activeIcon: Icon(Icons.history_rounded),
+                          icon: PhosphorIcon(PhosphorIconsBold.clockCounterClockwise),
+                          activeIcon: PhosphorIcon(PhosphorIconsBold.clockCounterClockwise),
                           label: 'ປະຫວັດບິນ',
                         ),
                         BottomNavigationBarItem(
-                          icon: Icon(Icons.inventory_2_rounded),
-                          activeIcon: Icon(Icons.inventory_2_rounded),
+                          icon: PhosphorIcon(PhosphorIconsBold.truck),
+                          activeIcon: PhosphorIcon(PhosphorIconsBold.truck),
                           label: 'ຮັບເຂົ້າສາງ',
                         ),
                       ],
@@ -179,8 +180,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          icon: const Icon(
-                            Icons.menu,
+                          icon: const PhosphorIcon(
+                            PhosphorIconsBold.list,
                             color: AppColors.textSecondary,
                             size: 18,
                           ),
@@ -262,8 +263,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                             ),
-                            icon: const Icon(
-                              Icons.menu_open,
+                            icon: const PhosphorIcon(
+                              PhosphorIconsBold.sidebarSimple,
                               color: AppColors.textSecondary,
                               size: 20,
                             ),
@@ -283,35 +284,35 @@ class _MainShellState extends ConsumerState<MainShell> {
                   children: [
                     _buildNavItem(
                       workflow: MainWorkflow.pos,
-                      icon: Icons.storefront_rounded,
+                      icon: PhosphorIconsBold.storefront,
                       label: 'ຂາຍໜ້າຮ້ານ (POS)',
                       isCompact: isCompact,
                       currentWorkflow: currentWorkflow,
                     ),
                     _buildNavItem(
                       workflow: MainWorkflow.dashboard,
-                      icon: Icons.bar_chart_rounded,
+                      icon: PhosphorIconsBold.chartBar,
                       label: 'ແຜງຄວບຄຸມ',
                       isCompact: isCompact,
                       currentWorkflow: currentWorkflow,
                     ),
                     _buildNavItem(
                       workflow: MainWorkflow.catalog,
-                      icon: Icons.warehouse_rounded,
+                      icon: PhosphorIconsBold.warehouse,
                       label: 'ລາຍການສິນຄ້າ',
                       isCompact: isCompact,
                       currentWorkflow: currentWorkflow,
                     ),
                     _buildNavItem(
                       workflow: MainWorkflow.history,
-                      icon: Icons.history_rounded,
+                      icon: PhosphorIconsBold.clockCounterClockwise,
                       label: 'ປະຫວັດບິນ',
                       isCompact: isCompact,
                       currentWorkflow: currentWorkflow,
                     ),
                     _buildNavItem(
                       workflow: MainWorkflow.inventory,
-                      icon: Icons.inventory_2_rounded,
+                      icon: PhosphorIconsBold.truck,
                       label: 'ຮັບສິນຄ້າເຂົ້າສາງ',
                       isCompact: isCompact,
                       currentWorkflow: currentWorkflow,
@@ -352,7 +353,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                               color: AppColors.surfaceSubtle,
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: const Icon(Icons.sensor_door_outlined, size: 16, color: AppColors.textSecondary),
+                            child: const PhosphorIcon(PhosphorIconsBold.vault, size: 16, color: AppColors.textSecondary),
                           ),
                           if (!isCompact) ...[
                             const SizedBox(width: 10),
@@ -483,7 +484,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   ? MainAxisAlignment.center
                   : MainAxisAlignment.start,
               children: [
-                Icon(
+                PhosphorIcon(
                   icon,
                   size: 20,
                   color: isSelected ? Colors.white : const Color(0xFF64748B),

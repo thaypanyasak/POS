@@ -177,7 +177,7 @@ class SupabaseSyncService {
 
     if (!isConnected) {
       // ignore: avoid_print
-      print('⚠️ SupabaseSyncService: Not connected, saved metadata locally.');
+      print('[WARN] SupabaseSyncService: Not connected, saved metadata locally.');
       return false;
     }
     try {
@@ -281,7 +281,7 @@ class SupabaseSyncService {
       return true;
     } catch (e, stack) {
       // ignore: avoid_print
-      print('❌ SupabaseSyncService.syncProduct error: $e\n$stack');
+      print('[ERROR] SupabaseSyncService.syncProduct error: $e\n$stack');
       return false;
     }
   }
@@ -290,7 +290,7 @@ class SupabaseSyncService {
   static Future<bool> deleteProduct(String productId) async {
     if (!isConnected) {
       // ignore: avoid_print
-      print('⚠️ SupabaseSyncService: Not connected, cannot delete product $productId');
+      print('[WARN] SupabaseSyncService: Not connected, cannot delete product $productId');
       return false;
     }
     try {
@@ -299,7 +299,7 @@ class SupabaseSyncService {
       return true;
     } catch (e, stack) {
       // ignore: avoid_print
-      print('❌ SupabaseSyncService.deleteProduct error: $e\n$stack');
+      print('[ERROR] SupabaseSyncService.deleteProduct error: $e\n$stack');
       return false;
     }
   }

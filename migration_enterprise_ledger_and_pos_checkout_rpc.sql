@@ -20,6 +20,11 @@ ADD COLUMN IF NOT EXISTS voided_at TIMESTAMPTZ,
 ADD COLUMN IF NOT EXISTS voided_by TEXT,
 ADD COLUMN IF NOT EXISTS void_reason TEXT;
 
+ALTER TABLE public.products DROP CONSTRAINT IF EXISTS products_current_stock_base_units_check;
+ALTER TABLE public.products DROP CONSTRAINT IF EXISTS check_positive_stock;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS allow_negative_stock BOOLEAN DEFAULT TRUE;
+UPDATE public.products SET allow_negative_stock = TRUE WHERE allow_negative_stock IS NULL;
+
 -- Đồng bộ dữ liệu cũ nếu total_cost_thb đang là 0
 UPDATE public.sale_transactions
 SET 
@@ -122,6 +127,7 @@ DECLARE
     v_base_qty_sold INT8;
     v_current_stock INT8;
     v_track_stock BOOLEAN;
+    v_allow_negative_stock BOOLEAN;
     v_unit_cost INT8;
     v_balance_after INT8;
 BEGIN
@@ -272,13 +278,18 @@ BEGIN
                 SELECT 
                     COALESCE(current_stock_base_units, 0), 
                     COALESCE(track_stock, true),
-                    COALESCE(cost_per_base_unit, 0)
-                INTO v_current_stock, v_track_stock, v_unit_cost
+                    COALESCE(cost_per_base_unit, 0),
+                    COALESCE(allow_negative_stock, true)
+                INTO v_current_stock, v_track_stock, v_unit_cost, v_allow_negative_stock
                 FROM public.products
                 WHERE id = v_prod_id
                 FOR UPDATE;
 
                 IF FOUND AND v_track_stock THEN
+                    -- Chỉ chặn nếu sản phẩm BẬT track_stock VÀ CẤM bán âm (allow_negative_stock = FALSE)
+                    IF NOT v_allow_negative_stock AND v_current_stock < v_base_qty_sold THEN
+                        RAISE EXCEPTION 'ສິນຄ້າ % ບໍ່ພໍຂາຍໃນສາງ (Current stock: %)', v_prod_name, v_current_stock;
+                    END IF;
                     v_balance_after := v_current_stock - v_base_qty_sold;
 
                     -- Cập nhật tồn kho mới

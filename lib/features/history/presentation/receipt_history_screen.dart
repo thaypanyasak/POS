@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'dart:math' as math;
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../../core/widgets/app_button.dart';
 import '../../../core/localization/lao_currency_formatter.dart';
 import '../../../domain/models/sale_transaction.dart';
 import '../../navigation/main_shell.dart';
@@ -216,7 +218,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: const [
-              Icon(Icons.block_rounded, color: Color(0xFFE11D48), size: 22),
+              PhosphorIcon(PhosphorIconsBold.prohibit, color: Color(0xFFE11D48), size: 22),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -250,13 +252,18 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFFFECDD3)),
                 ),
-                child: const Text(
-                  '⚠️ ລະບົບຈະຫັກຍອດຂາຍອອກຈາກລາຍຮັບ ແລະ ດຶງສະຕັອກສິນຄ້າທັງໝົດໃນບິນນີ້ກັບຄືນສາງອັດຕະໂນມັດ.',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: Color(0xFFBE123C),
-                    height: 1.4,
-                  ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    PhosphorIcon(PhosphorIconsBold.warningCircle, color: Color(0xFFBE123C), size: 16),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'ລະບົບຈະຫັກຍອດຂາຍອອກຈາກລາຍຮັບ ແລະ ດຶງສະຕັອກສິນຄ້າທັງໝົດໃນບິນນີ້ກັບຄືນສາງອັດຕະໂນມັດ.',
+                        style: TextStyle(fontSize: 11.5, color: Color(0xFFBE123C), height: 1.4),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),
@@ -290,25 +297,18 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
             ],
           ),
           actions: [
-            TextButton(
+            AppButton(
+              variant: AppButtonVariant.outline,
+              size: AppButtonSize.sm,
+              label: 'ກັບຄືນ',
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text(
-                'ກັບຄືນ',
-                style: TextStyle(
-                  color: Color(0xFF64748B),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE11D48),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                elevation: 0,
-              ),
+            const SizedBox(width: 8),
+            AppButton(
+              variant: AppButtonVariant.danger,
+              size: AppButtonSize.sm,
+              label: 'ຢືນຢັນຍົກເລີກບິນ',
+              icon: PhosphorIconsBold.prohibit,
               onPressed: () async {
                 Navigator.of(ctx).pop();
                 final ok = await ref
@@ -328,10 +328,6 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                   );
                 }
               },
-              child: const Text(
-                'ຢືນຢັນຍົກເລີກບິນ',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
             ),
           ],
         );
@@ -348,7 +344,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: const [
-              Icon(Icons.delete_forever_rounded,
+              PhosphorIcon(PhosphorIconsBold.trash,
                   color: Color(0xFFDC2626), size: 22),
               SizedBox(width: 8),
               Expanded(
@@ -372,25 +368,18 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
             ),
           ),
           actions: [
-            TextButton(
+            AppButton(
+              variant: AppButtonVariant.outline,
+              size: AppButtonSize.sm,
+              label: 'ຍົກເລີກ',
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text(
-                'ຍົກເລີກ',
-                style: TextStyle(
-                  color: Color(0xFF64748B),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFDC2626),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                elevation: 0,
-              ),
+            const SizedBox(width: 8),
+            AppButton(
+              variant: AppButtonVariant.danger,
+              size: AppButtonSize.sm,
+              label: 'ລຶບຖາວອນ',
+              icon: PhosphorIconsBold.trash,
               onPressed: () async {
                 Navigator.of(ctx).pop();
                 final ok = await ref
@@ -406,10 +395,6 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                   );
                 }
               },
-              child: const Text(
-                'ລຶບຖາວອນ',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
             ),
           ],
         );
@@ -554,7 +539,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                   color: const Color(0xFFCCFBF1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.history_rounded,
+                child: const PhosphorIcon(PhosphorIconsBold.clockCounterClockwise,
                     color: Color(0xFF0F766E), size: 20),
               ),
               const SizedBox(width: 8),
@@ -577,29 +562,13 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
               ),
             ],
           ),
-          ElevatedButton.icon(
+          AppButton(
+            variant: AppButtonVariant.outline,
+            size: AppButtonSize.sm,
+            label: 'ໂຫຼດຄືນ',
+            icon: PhosphorIconsBold.arrowsClockwise,
+            isLoading: _isRefreshing,
             onPressed: _isRefreshing ? null : _handleRefresh,
-            icon: _isRefreshing
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFF475569),
-                    ),
-                  )
-                : const Icon(Icons.refresh_rounded, size: 16),
-            label: const Text('ໂຫຼດຄືນ'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF1F5F9),
-              foregroundColor: const Color(0xFF334155),
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-                side: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-            ),
           ),
         ],
       ),
@@ -622,7 +591,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
           // Tab 1: ເງິນສົດ
           _buildTabPill(
             label: 'ເງິນສົດ (Cash)',
-            icon: Icons.payments_rounded,
+            icon: PhosphorIconsBold.money,
             count: cashCount,
             tab: HistoryTab.cash,
             selectedColor: const Color(0xFF0F766E),
@@ -632,7 +601,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
           // Tab 2: ເງິນໂອນ
           _buildTabPill(
             label: 'ເງິນໂອນ (Transfer)',
-            icon: Icons.qr_code_rounded,
+            icon: PhosphorIconsBold.qrCode,
             count: transferCount,
             tab: HistoryTab.transfer,
             selectedColor: const Color(0xFF2563EB),
@@ -642,7 +611,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
           // Tab 3: ຕິດໜີ້
           _buildTabPill(
             label: 'ຕິດໜີ້ (Customer Debt)',
-            icon: Icons.handshake_rounded,
+            icon: PhosphorIconsBold.handshake,
             count: debtCount,
             tab: HistoryTab.debt,
             selectedColor: const Color(0xFFD97706),
@@ -653,7 +622,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
           // Tab 4: ທັງໝົດ
           _buildTabPill(
             label: 'ທັງໝົດ',
-            icon: Icons.receipt_long_rounded,
+            icon: PhosphorIconsBold.receipt,
             count: allCount,
             tab: HistoryTab.all,
             selectedColor: const Color(0xFF334155),
@@ -663,7 +632,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
           // Tab 5: ຍົກເລີກແລ້ວ
           _buildTabPill(
             label: 'ຍົກເລີກແລ້ວ',
-            icon: Icons.block_rounded,
+            icon: PhosphorIconsBold.prohibit,
             count: cancelledCount,
             tab: HistoryTab.cancelled,
             selectedColor: const Color(0xFFBE123C),
@@ -676,7 +645,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
 
   Widget _buildTabPill({
     required String label,
-    required IconData icon,
+    required PhosphorIconData icon,
     required int count,
     required HistoryTab tab,
     required Color selectedColor,
@@ -719,7 +688,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
+            PhosphorIcon(
               icon,
               size: 15,
               color: isSelected
@@ -787,7 +756,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                const Icon(Icons.calendar_today_rounded,
+                const PhosphorIcon(PhosphorIconsBold.calendar,
                     size: 14, color: Color(0xFF94A3B8)),
                 const SizedBox(width: 6),
                 _buildDateChip('ມື້ນີ້', HistoryDatePreset.today),
@@ -828,7 +797,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                           ),
                         ),
                         const SizedBox(width: 4),
-                        const Icon(Icons.edit_calendar_rounded,
+                        const PhosphorIcon(PhosphorIconsBold.calendarBlank,
                             size: 13, color: Color(0xFF0F766E)),
                       ],
                     ),
@@ -850,8 +819,12 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                     style:
                         const TextStyle(fontSize: 12, color: Color(0xFF0F172A)),
                     decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.search_rounded,
-                          size: 16, color: Color(0xFF94A3B8)),
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: PhosphorIcon(PhosphorIconsBold.magnifyingGlass,
+                            size: 16, color: Color(0xFF94A3B8)),
+                      ),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                       hintText: 'ຄົ້ນຫາເລກບິນ, ຊື່ລູກຄ້າ...',
                       hintStyle: const TextStyle(
                           fontSize: 11.5, color: Color(0xFF94A3B8)),
@@ -1133,64 +1106,39 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                 runSpacing: 6,
                 children: [
                   // View / Print Receipt Button
-                  ElevatedButton.icon(
+                  AppButton(
+                    variant: AppButtonVariant.outline,
+                    size: AppButtonSize.sm,
+                    icon: PhosphorIconsBold.printer,
+                    label: 'ພິມບິນ',
                     onPressed: () => showMeiiReceiptDialog(context, tx),
-                    icon: const Icon(Icons.print_outlined, size: 14),
-                    label: const Text('ພິມບິນ',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF1F5F9),
-                      foregroundColor: const Color(0xFF1E293B),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
                   ),
 
                   // Edit Order in POS Button
                   if (!isCancelled)
-                    ElevatedButton.icon(
+                    AppButton(
+                      variant: AppButtonVariant.secondary,
+                      size: AppButtonSize.sm,
+                      icon: PhosphorIconsBold.pencilSimple,
+                      label: 'ແກ້ໄຂບິນ',
                       onPressed: () => _handleEditOrderInPos(tx),
-                      icon: const Icon(Icons.edit_note_rounded, size: 15),
-                      label: const Text('ແກ້ໄຂບິນ',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFEF3C7),
-                        foregroundColor: const Color(0xFFB45309),
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
-                        side: const BorderSide(color: Color(0xFFFDE68A)),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
                     ),
 
                   // Collect Debt Button
                   if (!isCancelled && hasDebt)
-                    ElevatedButton.icon(
+                    AppButton(
+                      variant: AppButtonVariant.primary,
+                      size: AppButtonSize.sm,
+                      icon: PhosphorIconsBold.handshake,
+                      label: 'ຊຳລະໜີ້',
                       onPressed: () => _handleCollectDebt(tx),
-                      icon: const Icon(Icons.handshake_rounded, size: 14),
-                      label: const Text('ຊຳລະໜີ້',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F766E),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
                     ),
 
                   // Void Button
                   if (!isCancelled)
                     IconButton(
                       onPressed: () => _handleCancelTransaction(tx),
-                      icon: const Icon(Icons.block_rounded,
+                      icon: const PhosphorIcon(PhosphorIconsBold.prohibit,
                           size: 16, color: Color(0xFFBE123C)),
                       style: IconButton.styleFrom(
                         backgroundColor: const Color(0xFFFFF1F2),
@@ -1203,7 +1151,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                   // Delete Button
                   IconButton(
                     onPressed: () => _handleDeleteTransaction(tx),
-                    icon: const Icon(Icons.delete_outline_rounded,
+                    icon: const PhosphorIcon(PhosphorIconsBold.trash,
                         size: 16, color: Color(0xFFDC2626)),
                     style: IconButton.styleFrom(
                       backgroundColor: const Color(0xFFFEF2F2),
@@ -1428,7 +1376,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                             IconButton(
                               onPressed: () =>
                                   showMeiiReceiptDialog(context, tx),
-                              icon: const Icon(Icons.print_outlined,
+                              icon: const PhosphorIcon(PhosphorIconsBold.printer,
                                   size: 17, color: Color(0xFF334155)),
                               tooltip: 'ເບິ່ງ / ພິມບິນ',
                             ),
@@ -1437,31 +1385,20 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                             if (!isCancelled)
                               IconButton(
                                 onPressed: () => _handleEditOrderInPos(tx),
-                                icon: const Icon(Icons.edit_note_rounded,
+                                icon: const PhosphorIcon(PhosphorIconsBold.pencilSimple,
                                     size: 18, color: Color(0xFFB45309)),
                                 tooltip: 'ແກ້ໄຂບິນຜ່ານ POS',
                               ),
 
                             // Collect Debt
                             if (!isCancelled && hasDebt)
-                              ElevatedButton.icon(
+                              AppButton(
+                                variant: AppButtonVariant.primary,
+                                size: AppButtonSize.sm,
+                                height: 28,
+                                icon: PhosphorIconsBold.handshake,
+                                label: 'ຊຳລະໜີ້',
                                 onPressed: () => _handleCollectDebt(tx),
-                                icon: const Icon(Icons.handshake_rounded,
-                                    size: 13),
-                                label: const Text('ຊຳລະໜີ້',
-                                    style: TextStyle(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.bold)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF0F766E),
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                          BorderRadius.circular(6)),
-                                ),
                               ),
 
                             // Void
@@ -1469,7 +1406,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                               IconButton(
                                 onPressed: () =>
                                     _handleCancelTransaction(tx),
-                                icon: const Icon(Icons.block_rounded,
+                                icon: const PhosphorIcon(PhosphorIconsBold.prohibit,
                                     size: 16, color: Color(0xFFBE123C)),
                                 tooltip: 'ຍົກເລີກບິນ',
                               ),
@@ -1477,7 +1414,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
                             // Delete
                             IconButton(
                               onPressed: () => _handleDeleteTransaction(tx),
-                              icon: const Icon(Icons.delete_outline_rounded,
+                              icon: const PhosphorIcon(PhosphorIconsBold.trash,
                                   size: 16, color: Color(0xFFDC2626)),
                               tooltip: 'ລຶບຖາວອນ',
                             ),
@@ -1525,7 +1462,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.block_rounded, size: 11, color: Color(0xFFE11D48)),
+            PhosphorIcon(PhosphorIconsBold.prohibit, size: 11, color: Color(0xFFE11D48)),
             SizedBox(width: 3),
             Text(
               'ຍົກເລີກແລ້ວ',
@@ -1561,7 +1498,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.handshake_rounded,
+            const PhosphorIcon(PhosphorIconsBold.handshake,
                 size: 11, color: Color(0xFFB45309)),
             const SizedBox(width: 3),
             Text(
@@ -1587,13 +1524,20 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: const Color(0xFFA7F3D0)),
         ),
-        child: const Text(
-          '💵 ເງິນສົດ',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF065F46),
-          ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PhosphorIcon(PhosphorIconsBold.money, size: 11, color: Color(0xFF065F46)),
+            SizedBox(width: 3),
+            Text(
+              'ເງິນສົດ',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF065F46),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -1605,13 +1549,20 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFBFDBFE)),
       ),
-      child: const Text(
-        '📱 QR ໂອນ',
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF1E40AF),
-        ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PhosphorIcon(PhosphorIconsBold.qrCode, size: 11, color: Color(0xFF1E40AF)),
+          SizedBox(width: 3),
+          Text(
+            'QR ໂອນ',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E40AF),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1627,7 +1578,7 @@ class _ReceiptHistoryScreenState extends ConsumerState<ReceiptHistoryScreen> {
       ),
       child: const Column(
         children: [
-          Icon(Icons.receipt_long_outlined, size: 48, color: Color(0xFF94A3B8)),
+          PhosphorIcon(PhosphorIconsBold.receipt, size: 48, color: Color(0xFF94A3B8)),
           SizedBox(height: 10),
           Text(
             'ບໍ່ພົບລາຍການບິນຕາມເງື່ອນໄຂທີ່ເລືອກ',

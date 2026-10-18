@@ -19,7 +19,7 @@ import {
   HandCoins,
   Check,
 } from '@phosphor-icons/react';
-import { formatKip, formatCompoundStock, formatDots, getEffectiveUnitPrice, PRICE_TIERS } from '../utils/formatters';
+import { formatKip, formatCompoundStock, formatStockDisplay, formatDots, getEffectiveUnitPrice, PRICE_TIERS } from '../utils/formatters';
 import PriceOverrideModal from './PriceOverrideModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import QuotationPreviewModal from './inventory/QuotationPreviewModal';
@@ -429,9 +429,29 @@ export default function PosScreen({
                 <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
                   {/* Row 1: Product Name, Line Total, Trash Button */}
                   <div className="flex items-center justify-between gap-1.5">
-                    <span className="font-bold text-xs text-slate-900 truncate" title={item.product.name}>
-                      {item.product.name}
-                    </span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-bold text-xs text-slate-900 truncate" title={item.product.name}>
+                        {item.product.name}
+                      </span>
+                      {(() => {
+                        const trackStock = item.product?.trackStock !== false;
+                        if (!trackStock) return null;
+                        const currStock = Number(item.product?.currentStockBaseUnits ?? item.product?.current_stock_base_units ?? 0);
+                        const multiplier = Number(item.unit?.multiplier) || 1;
+                        const lineBaseQty = multiplier * (Number(item.quantity) || 1);
+                        if (currStock < lineBaseQty || currStock <= 0) {
+                          return (
+                            <span
+                              className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shrink-0"
+                              title="ຂາຍເກີນຈຳນວນສະຕັອກທີ່ມີ (ຂາຍຕິດລົບ)"
+                            >
+                              (ຂາຍຕິດລົບ)
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span className="font-black text-xs sm:text-sm font-mono text-slate-900">
@@ -844,6 +864,12 @@ export default function PosScreen({
         <div className="flex-1 min-h-0 p-2.5 overflow-y-auto overscroll-contain pb-24 sm:pb-12">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-2.5 w-full">
             {filteredProducts.map((p) => {
+              const rawStock = p.currentStockBaseUnits ?? p.current_stock_base_units;
+              const hasTrackStock = p.trackStock !== false;
+              const stockVal = hasTrackStock && rawStock !== null && rawStock !== undefined && !isNaN(rawStock) ? Number(rawStock) : null;
+              const isZeroStock = hasTrackStock && stockVal === 0;
+              const isNegativeStock = hasTrackStock && stockVal !== null && stockVal < 0;
+
               return (
                 <div
                   key={p.id}
@@ -854,8 +880,8 @@ export default function PosScreen({
                     onClick={() => openUnitSelector(p)}
                     className="p-2 cursor-pointer flex-1 flex flex-col"
                   >
-                    {/* Ảnh bo góc 12px với chiều cao chuẩn compact */}
-                    <div className="relative h-24 sm:h-28 w-full rounded-[10px] overflow-hidden bg-slate-100 mb-1.5 shrink-0">
+                    {/* Ảnh bo góc 12px với chiều cao thoáng hơn */}
+                    <div className="relative h-28 sm:h-36 w-full rounded-[10px] overflow-hidden bg-slate-100 mb-1.5 shrink-0">
                       <img
                         src={p.imageUrl}
                         alt={p.name}
@@ -873,30 +899,42 @@ export default function PosScreen({
                       )}
                     </div>
 
-                    {/* Tên sản phẩm 2 dòng rõ ràng */}
+                    {/* Tên sản phẩm gọn gàng */}
                     <h3
-                      className="font-bold text-xs text-slate-900 leading-snug line-clamp-2 min-h-[2rem]"
+                      className="font-bold text-xs text-slate-900 leading-snug line-clamp-1"
                       title={p.name}
                     >
                       {p.name}
                     </h3>
 
-                    {/* Hiển thị tồn kho hiện tại */}
-                    <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100 text-[10px] text-slate-500">
-                      <span className="truncate font-medium" title={formatCompoundStock(p)}>
-                        ສະຕັອກ: <strong className="text-slate-800 font-mono font-bold">{formatCompoundStock(p)}</strong>
-                      </span>
+                    {/* Hiển thị tồn kho hiện tại (Duy nhất 1 vị trí chuẩn ERP - Kích thước chữ nhỏ gọn gàng) */}
+                    <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100 text-[10px]">
+                      {!hasTrackStock ? (
+                        <span className="text-slate-400 font-medium text-[9.5px]">ບໍ່ນັບສາງ</span>
+                      ) : isZeroStock ? (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="ສິນຄ້າໝົດສາງ (ຂາຍຕໍ່ໄດ້)">
+                          ໝົດສາງ (0)
+                        </span>
+                      ) : isNegativeStock ? (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200 font-mono tracking-tight" title="ສິນຄ້າຕິດລົບ (ຂາຍຕໍ່ໄດ້)">
+                          {formatStockDisplay(p, null, p.baseUnit || 'ອັນ', { prefix: 'ຕິດລົບ' })}
+                        </span>
+                      ) : (
+                        <span className="text-[9.5px] text-slate-500 font-medium truncate" title={`ສະຕັອກ: ${formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}`}>
+                          ສະຕັອກ: <strong className="text-slate-700 font-bold">{formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}</strong>
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           openUnitSelector(p);
                         }}
-                        className="text-teal-700 hover:text-teal-800 font-bold flex items-center gap-0.5 text-[10px] cursor-pointer shrink-0 ml-1"
-                        title="ເລືອກຫົວໜ່ວຍອື່ນ"
+                        className="text-teal-700 hover:text-teal-800 font-bold flex items-center gap-0.5 text-[9.5px] cursor-pointer shrink-0 ml-1 py-0.5 px-1 rounded hover:bg-teal-50 transition-colors"
+                        title="ປັບຫົວໜ່ວຍອື່ນ"
                       >
-                        <SlidersHorizontal size={11} weight="bold" />
-                        <span>ຫົວໜ່ວຍ</span>
+                        <SlidersHorizontal size={10} weight="bold" />
+                        <span>ປັບຫົວໜ່ວຍ</span>
                       </button>
                     </div>
                   </div>

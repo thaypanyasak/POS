@@ -1,8 +1,10 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:screenshot/screenshot.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../../../../core/utils/platform_print.dart';
 import '../../../../domain/models/sale_transaction.dart';
@@ -118,9 +120,16 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: const Color(0xFFA7F3D0)),
         ),
-        child: const Text(
-          '💵 ເງິນສົດ (Cash)',
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF047857)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            PhosphorIcon(PhosphorIconsBold.money, size: 12, color: Color(0xFF047857)),
+            SizedBox(width: 4),
+            Text(
+              'ເງິນສົດ (Cash)',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF047857)),
+            ),
+          ],
         ),
       );
     } else if (isTransfer) {
@@ -131,9 +140,16 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: const Color(0xFFBFDBFE)),
         ),
-        child: const Text(
-          '📲 ໂອນເງິນ (Transfer)',
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF1D4ED8)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            PhosphorIcon(PhosphorIconsBold.qrCode, size: 12, color: Color(0xFF1D4ED8)),
+            SizedBox(width: 4),
+            Text(
+              'ໂອນເງິນ (Transfer)',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF1D4ED8)),
+            ),
+          ],
         ),
       );
     } else {
@@ -144,9 +160,16 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: const Color(0xFFFECDD3)),
         ),
-        child: Text(
-          '⏳ ຕິດໜີ້ (ຄ້າງ: ${LaoCurrencyFormatter.formatDots(remainingDebt)} ₭)',
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFFBE123C)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const PhosphorIcon(PhosphorIconsBold.handCoins, size: 12, color: Color(0xFFBE123C)),
+            const SizedBox(width: 4),
+            Text(
+              'ຕິດໜີ້ (ຄ້າງ: ${LaoCurrencyFormatter.formatDots(remainingDebt)} ₭)',
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFFBE123C)),
+            ),
+          ],
         ),
       );
     }
@@ -222,9 +245,9 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                 children: [
                   Row(
                     children: [
-                      const Icon(
-                        Icons.check_circle_rounded,
-                        color: Color(0xFF0D9488),
+                      const PhosphorIcon(
+                        PhosphorIconsBold.checkCircle,
+                        color: AppColors.primary,
                         size: 22,
                       ),
                       const SizedBox(width: 8),
@@ -273,9 +296,9 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(
-                      Icons.close,
-                      color: Color(0xFF94A3B8),
+                    icon: const PhosphorIcon(
+                      PhosphorIconsBold.x,
+                      color: AppColors.textMuted,
                       size: 20,
                     ),
                     padding: EdgeInsets.zero,
@@ -298,9 +321,9 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.person_outline_rounded,
-                      color: Color(0xFF94A3B8),
+                    const PhosphorIcon(
+                      PhosphorIconsBold.user,
+                      color: AppColors.textMuted,
                       size: 16,
                     ),
                     const SizedBox(width: 6),
@@ -353,13 +376,24 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: const Color(0xFFFCD34D)),
                         ),
-                        child: const Text(
-                          '⚠️ ຄວນໃສ່ຊື່ລູກຄ້າ',
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF92400E),
-                          ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            PhosphorIcon(
+                              PhosphorIconsBold.warning,
+                              size: 11,
+                              color: Color(0xFF92400E),
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'ຄວນໃສ່ຊື່ລູກຄ້າ',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF92400E),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                   ],
@@ -597,7 +631,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                           Expanded(
                             child: _buildPaymentTab(
                               method: PaymentMethod.cash,
-                              icon: Icons.monetization_on_outlined,
+                              icon: PhosphorIconsBold.money,
                               label: 'ເງິນສົດ (Cash)',
                               isSelected: _paymentMethod == PaymentMethod.cash,
                               activeBg: const Color(0xFFF0FDFA),
@@ -609,7 +643,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                           Expanded(
                             child: _buildPaymentTab(
                               method: PaymentMethod.qrTransfer,
-                              icon: Icons.qr_code_rounded,
+                              icon: PhosphorIconsBold.qrCode,
                               label: 'ໂອນເງິນ (Transfer)',
                               isSelected:
                                   _paymentMethod == PaymentMethod.qrTransfer,
@@ -622,7 +656,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                           Expanded(
                             child: _buildPaymentTab(
                               method: PaymentMethod.debt,
-                              icon: Icons.access_time_rounded,
+                              icon: PhosphorIconsBold.handCoins,
                               label: 'ຄ້າງຊຳລະ (Debt)',
                               isSelected: _paymentMethod == PaymentMethod.debt,
                               activeBg: const Color(0xFFFFF1F2),
@@ -696,10 +730,10 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                         ),
                       );
                     },
-                    icon: const Icon(
-                      Icons.sensor_door_outlined,
+                    icon: const PhosphorIcon(
+                      PhosphorIconsBold.archive,
                       size: 14,
-                      color: Color(0xFF64748B),
+                      color: AppColors.textSecondary,
                     ),
                     label: const Text(
                       'ເປີດລິ້ນຊັກ',
@@ -743,44 +777,19 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                   const SizedBox(width: 10),
                   Expanded(
                     flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed:
-                          isCashSufficient
-                              ? () => _onConfirmCheckout(context, grandTotal)
-                              : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF059669),
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: const Color(0xFFE2E8F0),
-                        disabledForegroundColor: const Color(0xFF94A3B8),
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      icon:
-                          printerState.isPrinting
-                              ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                              : const Icon(Icons.check_rounded, size: 18),
-                      label: Text(
-                        printerState.isPrinting
-                            ? 'ກຳລັງປະມວນຜົນ...'
-                            : (cartState.isEditingOldOrder
-                                ? '💾 ບັນທຶກການແກ້ໄຂ'
-                                : 'ຢືນຢັນ & ພິມໃບບິນ'),
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
+                    child: AppButton(
+                      label: printerState.isPrinting
+                          ? 'ກຳລັງປະມວນຜົນ...'
+                          : (cartState.isEditingOldOrder
+                              ? 'ບັນທຶກການແກ້ໄຂ'
+                              : 'ຢືນຢັນ & ພິມໃບບິນ'),
+                      variant: AppButtonVariant.primary,
+                      height: 50,
+                      icon: cartState.isEditingOldOrder ? PhosphorIconsBold.floppyDisk : PhosphorIconsBold.check,
+                      isLoading: printerState.isPrinting,
+                      onPressed: isCashSufficient
+                          ? () => _onConfirmCheckout(context, grandTotal)
+                          : null,
                     ),
                   ),
                 ],
@@ -794,7 +803,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
 
   Widget _buildPaymentTab({
     required PaymentMethod method,
-    required IconData icon,
+    required PhosphorIconData icon,
     required String label,
     required bool isSelected,
     required Color activeBg,
@@ -837,7 +846,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
         ),
         child: Column(
           children: [
-            Icon(
+            PhosphorIcon(
               icon,
               size: 18,
               color: isSelected ? activeText : const Color(0xFF64748B),
@@ -1045,8 +1054,8 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                     fit: BoxFit.contain,
                     errorBuilder:
                         (_, __, ___) => const Center(
-                          child: Icon(
-                            Icons.qr_code_2_rounded,
+                          child: PhosphorIcon(
+                            PhosphorIconsBold.qrCode,
                             size: 80,
                             color: Color(0xFF0284C7),
                           ),
@@ -1099,8 +1108,8 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
             children: [
               const Row(
                 children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
+                  PhosphorIcon(
+                    PhosphorIconsBold.warningCircle,
                     size: 16,
                     color: Color(0xFFF43F5E),
                   ),
@@ -1530,8 +1539,8 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                             ),
                                           ),
                                         ),
-                                        child: Icon(
-                                          Icons.check_circle_rounded,
+                                        child: PhosphorIcon(
+                                          PhosphorIconsBold.checkCircle,
                                           size: isCompactLandscape ? 22 : 28,
                                           color: AppColors.primary,
                                         ),
@@ -1589,8 +1598,8 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                         children: [
                                           const Row(
                                             children: [
-                                              Icon(
-                                                Icons.warning_amber_rounded,
+                                              PhosphorIcon(
+                                                PhosphorIconsBold.warningCircle,
                                                 color: Color(0xFFB45309),
                                                 size: 16,
                                               ),
@@ -1640,8 +1649,8 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                         children: [
                                           const Row(
                                             children: [
-                                              Icon(
-                                                Icons.paid_outlined,
+                                              PhosphorIcon(
+                                                PhosphorIconsBold.money,
                                                 color: AppColors.primaryDark,
                                                 size: 16,
                                               ),
@@ -1839,8 +1848,8 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Icon(
-                                          Icons.info_outline,
+                                        PhosphorIcon(
+                                          PhosphorIconsBold.info,
                                           size: isCompactLandscape ? 14 : 16,
                                           color: AppColors.primaryDark,
                                         ),
@@ -1872,110 +1881,46 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                               children: [
                                 Expanded(
                                   flex: 4,
-                                  child: OutlinedButton.icon(
+                                  child: AppButton(
+                                    variant: AppButtonVariant.outline,
+                                    size: AppButtonSize.sm,
+                                    icon: PhosphorIconsBold.shoppingCart,
+                                    label: 'ເລີ່ມບິນໃໝ່',
                                     onPressed:
                                         () => Navigator.of(context).pop(),
-                                    icon: const Icon(
-                                      Icons.add_shopping_cart_rounded,
-                                      size: 15,
-                                    ),
-                                    label: const FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        'ເລີ່ມບິນໃໝ່',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 9,
-                                        horizontal: 6,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   flex: 6,
-                                  child: ElevatedButton.icon(
+                                  child: AppButton(
+                                    variant: AppButtonVariant.primary,
+                                    size: AppButtonSize.sm,
+                                    icon: PhosphorIconsBold.printer,
+                                    label: 'ພິມໃບບິນ (Print)',
                                     onPressed:
                                         () => _handlePrintReceipt(context, tx),
-                                    icon: const Icon(
-                                      Icons.print_rounded,
-                                      size: 16,
-                                    ),
-                                    label: const FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        'ພິມໃບບິນ (Print)',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12.5,
-                                        ),
-                                      ),
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.primary,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 9,
-                                        horizontal: 6,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
                                   ),
                                 ),
                               ],
                             )
                           else ...[
-                            ElevatedButton.icon(
+                            AppButton(
+                              isFullWidth: true,
+                              variant: AppButtonVariant.primary,
+                              size: AppButtonSize.lg,
+                              icon: PhosphorIconsBold.printer,
+                              label: 'ພິມໃບບິນ (Print Receipt)',
                               onPressed: () => _handlePrintReceipt(context, tx),
-                              icon: const Icon(Icons.print_rounded, size: 20),
-                              label: const Text(
-                                'ພິມໃບບິນ (Print Receipt)',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
                             ),
                             const SizedBox(height: 8),
-                            OutlinedButton.icon(
+                            AppButton(
+                              isFullWidth: true,
+                              variant: AppButtonVariant.outline,
+                              size: AppButtonSize.md,
+                              icon: PhosphorIconsBold.shoppingCart,
+                              label: 'ເລີ່ມບິນໃໝ່ (New Sale)',
                               onPressed: () => Navigator.of(context).pop(),
-                              icon: const Icon(
-                                Icons.add_shopping_cart_rounded,
-                                size: 18,
-                              ),
-                              label: const Text(
-                                'ເລີ່ມບິນໃໝ່ (New Sale)',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
                             ),
                           ],
                         ],
@@ -2016,8 +1961,8 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                 children: [
                                   const Row(
                                     children: [
-                                      Icon(
-                                        Icons.receipt_long_rounded,
+                                      PhosphorIcon(
+                                        PhosphorIconsBold.receipt,
                                         size: 18,
                                         color: AppColors.primary,
                                       ),
@@ -2033,8 +1978,8 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                                   ),
                                   IconButton(
                                     tooltip: 'ພິມໃບບິນ',
-                                    icon: const Icon(
-                                      Icons.print_outlined,
+                                    icon: const PhosphorIcon(
+                                      PhosphorIconsBold.printer,
                                       size: 20,
                                       color: AppColors.primary,
                                     ),
@@ -2075,8 +2020,8 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                 children: [
                   Row(
                     children: [
-                      const Icon(
-                        Icons.check_circle_rounded,
+                      const PhosphorIcon(
+                        PhosphorIconsBold.checkCircle,
                         size: 28,
                         color: AppColors.primary,
                       ),
@@ -2091,7 +2036,7 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                       const Spacer(),
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close),
+                        icon: const PhosphorIcon(PhosphorIconsBold.x, size: 18),
                       ),
                     ],
                   ),
@@ -2129,20 +2074,21 @@ class _CheckoutModalState extends ConsumerState<CheckoutModal> {
                     child: MeiiReceiptSlip(transaction: tx),
                   ),
                   const SizedBox(height: 16),
-                  ElevatedButton.icon(
+                  AppButton(
+                    isFullWidth: true,
+                    variant: AppButtonVariant.primary,
+                    size: AppButtonSize.lg,
+                    icon: PhosphorIconsBold.printer,
+                    label: 'ພິມໃບບິນ (Print Receipt)',
                     onPressed: () => _handlePrintReceipt(context, tx),
-                    icon: const Icon(Icons.print_rounded),
-                    label: const Text('ພິມໃບບິນ (Print Receipt)'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
                   ),
                   const SizedBox(height: 8),
-                  OutlinedButton(
+                  AppButton(
+                    isFullWidth: true,
+                    variant: AppButtonVariant.outline,
+                    size: AppButtonSize.md,
+                    label: 'ເລີ່ມບິນໃໝ່',
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('ເລີ່ມບິນໃໝ່'),
                   ),
                 ],
               ),

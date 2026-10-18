@@ -12,7 +12,7 @@ import {
   WarningCircle,
   Folders
 } from '@phosphor-icons/react';
-import { formatKip, formatBaht, getCartonUnitInfo } from '../utils/formatters';
+import { formatKip, formatBaht, getCartonUnitInfo, formatStockDisplay, formatNegativeStockCompound } from '../utils/formatters';
 import BarcodeScannerModal from './BarcodeScannerModal';
 
 /**
@@ -89,7 +89,15 @@ export function getProductStockDetails(p, exchangeRate = 0) {
     piecesPerPack = (p.name?.includes('Lay') || p.name?.includes('ເຂົ້າໜົມ')) ? 4 : 6;
   }
 
-  const totalBase = Math.max(0, Number(p.currentStockBaseUnits) || 0);
+  const rawStock = Number(p.currentStockBaseUnits ?? p.current_stock_base_units ?? 0);
+  const isNegativeStock = !isUntracked && rawStock < 0;
+  const isZeroStock = !isUntracked && rawStock === 0;
+
+  const stockDisplayText = formatStockDisplay(p, null, pcName, { prefix: 'ໝົດສະຕັອກ' });
+  const negativeCompound = formatNegativeStockCompound(p, null, pcName);
+
+  const totalBase = rawStock;
+  const absBase = Math.abs(rawStock);
 
   let cartonCount = 0;
   let packCount = 0;
@@ -100,42 +108,42 @@ export function getProductStockDetails(p, exchangeRate = 0) {
     if (cartonUnit && packUnit && pieceUnit) {
       // 3 Tiers Active: Piece is base unit
       const piecesPerCarton = packsPerCarton * piecesPerPack;
-      cartonCount = Math.floor(totalBase / piecesPerCarton);
-      const rem = totalBase % piecesPerCarton;
+      cartonCount = Math.floor(absBase / piecesPerCarton);
+      const rem = absBase % piecesPerCarton;
       packCount = Math.floor(rem / piecesPerPack);
       pieceCount = rem % piecesPerPack;
-      totalPacksCount = (totalBase / piecesPerPack).toFixed(1).replace('.0', '');
+      totalPacksCount = (absBase / piecesPerPack).toFixed(1).replace('.0', '');
     } else if (cartonUnit && packUnit && !pieceUnit) {
       // 2 Tiers Active (Tier 3 OFF): Pack IS the base unit
-      cartonCount = Math.floor(totalBase / packsPerCarton);
-      packCount = totalBase % packsPerCarton;
+      cartonCount = Math.floor(absBase / packsPerCarton);
+      packCount = absBase % packsPerCarton;
       pieceCount = 0;
-      totalPacksCount = totalBase.toString();
+      totalPacksCount = absBase.toString();
     } else if (cartonUnit && pieceUnit && !packUnit) {
       // 2 Tiers Active (Tier 2 OFF): Piece is base unit
       const piecesPerCarton = packsPerCarton || cartonUnit.multiplier || 25;
-      cartonCount = Math.floor(totalBase / piecesPerCarton);
-      pieceCount = totalBase % piecesPerCarton;
+      cartonCount = Math.floor(absBase / piecesPerCarton);
+      pieceCount = absBase % piecesPerCarton;
       packCount = 0;
       totalPacksCount = '0';
     } else if (packUnit && pieceUnit && !cartonUnit) {
       // 2 Tiers Active (Tier 1 OFF): Piece is base unit
-      packCount = Math.floor(totalBase / piecesPerPack);
-      pieceCount = totalBase % piecesPerPack;
+      packCount = Math.floor(absBase / piecesPerPack);
+      pieceCount = absBase % piecesPerPack;
       cartonCount = 0;
-      totalPacksCount = (totalBase / piecesPerPack).toFixed(1).replace('.0', '');
+      totalPacksCount = (absBase / piecesPerPack).toFixed(1).replace('.0', '');
     } else if (cartonUnit) {
-      cartonCount = totalBase;
+      cartonCount = absBase;
       packCount = 0;
       pieceCount = 0;
       totalPacksCount = '0';
     } else if (packUnit) {
-      packCount = totalBase;
+      packCount = absBase;
       cartonCount = 0;
       pieceCount = 0;
-      totalPacksCount = totalBase.toString();
+      totalPacksCount = absBase.toString();
     } else {
-      pieceCount = totalBase;
+      pieceCount = absBase;
       cartonCount = 0;
       packCount = 0;
       totalPacksCount = '0';
@@ -147,6 +155,11 @@ export function getProductStockDetails(p, exchangeRate = 0) {
     cartonCostKip,
     cartonCostBaht,
     isUntracked,
+    isNegativeStock,
+    isZeroStock,
+    rawStock,
+    stockDisplayText,
+    negativeCompound,
     cartonUnit,
     packUnit,
     pieceUnit,
@@ -448,28 +461,46 @@ export default function ProductsView({
                     <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-400 font-bold text-[11px] border border-slate-200">
                       ບໍ່ນັບສາງ
                     </span>
+                  ) : info.isNegativeStock ? (
+                    <div className="flex flex-col gap-0.5 items-end">
+                      <span className="bg-rose-50 text-rose-700 border border-rose-200 font-bold px-2.5 py-1 rounded-md text-xs inline-flex items-center gap-1">
+                        {info.stockDisplayText}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        ລວມທັງໝົດ: {info.rawStock} {info.pcName}
+                      </span>
+                    </div>
+                  ) : info.isZeroStock ? (
+                    <div className="flex flex-col gap-0.5 items-end">
+                      <span className="text-red-500 font-black text-xs">
+                        ໝົດສະຕັອກ (0)
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        ລວມທັງໝົດ: 0 {info.pcName}
+                      </span>
+                    </div>
                   ) : (
-                    <div className="flex items-center gap-1.5 flex-wrap font-bold">
-                      {info.cartonUnit && (
-                        <span className="bg-amber-100 text-amber-950 px-2 py-0.5 rounded-md border border-amber-300 text-xs font-black">
-                          {info.cartonCount} {info.cName}
-                        </span>
-                      )}
-                      {info.packUnit && (
-                        <span className="bg-sky-100 text-sky-950 px-2 py-0.5 rounded-md border border-sky-300 text-xs font-black">
-                          {info.packCount} {info.pName}
-                        </span>
-                      )}
-                      {info.pieceCount > 0 && (
-                        <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md border border-slate-200 text-xs font-black">
-                          {info.pieceCount} {info.pcName}
-                        </span>
-                      )}
-                      {info.cartonCount === 0 && info.packCount === 0 && info.pieceCount === 0 && (
-                        <span className="text-red-500 font-black text-xs">
-                          ໝົດສະຕັອກ (0)
-                        </span>
-                      )}
+                    <div className="flex flex-col gap-0.5 items-end">
+                      <div className="flex items-center gap-1.5 flex-wrap font-bold">
+                        {info.cartonUnit && info.cartonCount > 0 && (
+                          <span className="bg-amber-100 text-amber-950 px-2 py-0.5 rounded-md border border-amber-300 text-xs font-black">
+                            {info.cartonCount} {info.cName}
+                          </span>
+                        )}
+                        {info.packUnit && info.packCount > 0 && (
+                          <span className="bg-sky-100 text-sky-950 px-2 py-0.5 rounded-md border border-sky-300 text-xs font-black">
+                            {info.packCount} {info.pName}
+                          </span>
+                        )}
+                        {info.pieceCount > 0 && (
+                          <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md border border-slate-200 text-xs font-black">
+                            {info.pieceCount} {info.pcName}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        ລວມທັງໝົດ: {info.rawStock} {info.pcName}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -595,15 +626,35 @@ export default function ProductsView({
                       <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-400 font-bold text-[11px] border border-slate-200">
                         ບໍ່ນັບສາງ
                       </span>
+                    ) : info.isNegativeStock ? (
+                      <div className="flex flex-col gap-1 text-xs">
+                        <div>
+                          <span className="bg-rose-50 text-rose-700 border border-rose-200 font-bold px-2.5 py-1 rounded-md text-xs inline-flex items-center gap-1">
+                            {info.stockDisplayText}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          ລວມທັງໝົດ: {info.rawStock} {info.pcName}
+                        </span>
+                      </div>
+                    ) : info.isZeroStock ? (
+                      <div className="flex flex-col gap-1 text-xs">
+                        <span className="text-red-500 font-bold text-[11px]">
+                          ໝົດສະຕັອກ (0)
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          ລວມທັງໝົດ: 0 {info.pcName}
+                        </span>
+                      </div>
                     ) : (
                       <div className="flex flex-col gap-1 text-xs">
                         <div className="flex items-center gap-1.5 flex-wrap font-bold">
-                          {info.cartonUnit && (
+                          {info.cartonUnit && info.cartonCount > 0 && (
                             <span className="bg-amber-50 text-amber-900 px-1.5 py-0.5 rounded-md border border-amber-200 text-[11px]">
                               {info.cartonCount} {info.cName}
                             </span>
                           )}
-                          {info.packUnit && (
+                          {info.packUnit && info.packCount > 0 && (
                             <span className="bg-sky-50 text-sky-900 px-1.5 py-0.5 rounded-md border border-sky-200 text-[11px]">
                               {info.packCount} {info.pName}
                             </span>
@@ -613,15 +664,15 @@ export default function ProductsView({
                               {info.pieceCount} {info.pcName}
                             </span>
                           )}
-                          {info.cartonCount === 0 && info.packCount === 0 && info.pieceCount === 0 && (
-                            <span className="text-red-500 font-bold text-[11px]">
-                              ໝົດສະຕັອກ (0)
-                            </span>
-                          )}
                         </div>
                         {info.packUnit && info.totalPacksCount && (
                           <span className="text-[10px] text-slate-400 font-medium">
                             ລວມທັງໝົດ: {info.totalPacksCount} {info.pName}
+                          </span>
+                        )}
+                        {!info.packUnit && (
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            ລວມທັງໝົດ: {info.rawStock} {info.pcName}
                           </span>
                         )}
                       </div>

@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -135,21 +136,18 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             final screenWidth = constraints.maxWidth;
             final isLandscapeTablet = screenWidth >= 768;
 
-            // 1. TABLET / DESKTOP (Width >= 768px) -> Split Screen View
+            // 1. TABLET / DESKTOP (Width >= 768px) -> Modern 59% / 41% Two-Column Split Layout
             if (isLandscapeTablet) {
-              final cartWidth = screenWidth >= 1280
-                  ? 380.0
-                  : (screenWidth >= 1024 ? 350.0 : 330.0);
-
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Expanded(
+                children: const [
+                  Expanded(
+                    flex: 59, // 59% Catalog & Categories Dock
                     child: CatalogDock(),
                   ),
-                  SizedBox(
-                    width: cartWidth,
-                    child: const CartDock(),
+                  Expanded(
+                    flex: 41, // 41% Cart & Checkout Dock
+                    child: CartDock(),
                   ),
                 ],
               );
@@ -186,7 +184,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                         Stack(
                           clipBehavior: Clip.none,
                           children: [
-                            const Icon(Icons.shopping_cart_rounded, color: Colors.white, size: 22),
+                            const PhosphorIcon(PhosphorIconsBold.shoppingCart, color: Colors.white, size: 22),
                             if (cartState.itemCount > 0)
                               Positioned(
                                 top: -6,
@@ -261,7 +259,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                                 ),
                               ),
                               SizedBox(width: 4),
-                              Icon(Icons.arrow_forward_rounded, size: 14, color: Color(0xFF0F766E)),
+                              PhosphorIcon(PhosphorIconsBold.arrowRight, size: 14, color: Color(0xFF0F766E)),
                             ],
                           ),
                         ),
@@ -302,20 +300,27 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+          const PhosphorIcon(PhosphorIconsBold.warning, color: Colors.white, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  Text(
-                    '⚠️ ກຳລັງແກ້ໄຂບິນ: #${cartState.originalReceiptNumber ?? ""} • ລູກຄ້າ: ${cartState.originalCustomerName ?? cartState.customer.name} • ຮູບແບບຊຳລະເດີມ: ',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const PhosphorIcon(PhosphorIconsBold.warning, color: Colors.white, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        'ກຳລັງແກ້ໄຂບິນ: #${cartState.originalReceiptNumber ?? ""} • ລູກຄ້າ: ${cartState.originalCustomerName ?? cartState.customer.name} • ຮູບແບບຊຳລະເດີມ: ',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                   if (isCash)
                     Container(
@@ -324,9 +329,16 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                         color: const Color(0xFF059669),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text(
-                        '💵 ເງິນສົດ (Cash)',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          PhosphorIcon(PhosphorIconsBold.money, size: 12, color: Colors.white),
+                          SizedBox(width: 4),
+                          Text(
+                            'ເງິນສົດ (Cash)',
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                          ),
+                        ],
                       ),
                     ),
                   if (isTransfer)
@@ -336,9 +348,16 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                         color: const Color(0xFF2563EB),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text(
-                        '📲 ໂອນເງິນ (Transfer)',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          PhosphorIcon(PhosphorIconsBold.qrCode, size: 12, color: Colors.white),
+                          SizedBox(width: 4),
+                          Text(
+                            'ໂອນເງິນ (Transfer)',
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                          ),
+                        ],
                       ),
                     ),
                   if (isDebt)
@@ -348,9 +367,16 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                         color: const Color(0xFFE11D48),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text(
-                        '⏳ ຕິດໜີ້ (ຄ້າງ: ${LaoCurrencyFormatter.formatDots(remainingDebt)} ₭)',
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const PhosphorIcon(PhosphorIconsBold.handCoins, size: 12, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            'ຕິດໜີ້ (ຄ້າງ: ${LaoCurrencyFormatter.formatDots(remainingDebt)} ₭)',
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white),
+                          ),
+                        ],
                       ),
                     ),
                 ],

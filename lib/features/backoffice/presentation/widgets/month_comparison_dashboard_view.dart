@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
@@ -48,7 +49,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                     ),
                   ),
                   if (isCur)
-                    const Icon(Icons.check_rounded, color: Color(0xFF0F766E), size: 18),
+                    const PhosphorIcon(PhosphorIconsBold.check, color: Color(0xFF0F766E), size: 18),
                 ],
               ),
             ),
@@ -117,7 +118,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                           const Text('ເດືອນ A: ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
                           Text(monthALabel, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
                           const SizedBox(width: 4),
-                          const Icon(Icons.arrow_drop_down, size: 16, color: Color(0xFF64748B)),
+                          const PhosphorIcon(PhosphorIconsBold.caretDown, size: 16, color: Color(0xFF64748B)),
                         ],
                       ),
                     ),
@@ -141,7 +142,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                           const Text('ເດືອນ B: ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F766E))),
                           Text(monthBLabel, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF0F766E))),
                           const SizedBox(width: 4),
-                          const Icon(Icons.arrow_drop_down, size: 16, color: Color(0xFF0F766E)),
+                          const PhosphorIcon(PhosphorIconsBold.caretDown, size: 16, color: Color(0xFF0F766E)),
                         ],
                       ),
                     ),
@@ -188,7 +189,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                               height: 16,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F766E)),
                             )
-                          : const Icon(Icons.refresh_rounded, size: 18, color: Color(0xFF475569)),
+                          : const PhosphorIcon(PhosphorIconsBold.arrowsClockwise, size: 18, color: Color(0xFF475569)),
                     ),
                   ),
                 ],
@@ -459,7 +460,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_today_rounded, size: 12, color: Color(0xFF64748B)),
+                      const PhosphorIcon(PhosphorIconsBold.calendar, size: 12, color: Color(0xFF64748B)),
                       const SizedBox(width: 4),
                       Text(
                         DateFormat('MM/yy').format(monthDate),
@@ -483,7 +484,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                     child: _buildMetricCard(
                       title: 'ຍອດຂາຍລວມ',
                       val: LaoCurrencyFormatter.format(revenue),
-                      icon: Icons.monetization_on_rounded,
+                      icon: PhosphorIconsBold.money,
                       color: const Color(0xFF0F766E),
                       growth: growthRev,
                     ),
@@ -493,7 +494,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                     child: _buildMetricCard(
                       title: 'ຕົ້ນທຶນສິນຄ້າລວມ',
                       val: LaoCurrencyFormatter.format(cost),
-                      icon: Icons.account_balance_wallet_rounded,
+                      icon: PhosphorIconsBold.wallet,
                       color: const Color(0xFFD97706),
                     ),
                   ),
@@ -506,7 +507,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                     child: _buildMetricCard(
                       title: 'ກຳໄລຕົວຈິງ',
                       val: LaoCurrencyFormatter.format(profit),
-                      icon: Icons.credit_card_rounded,
+                      icon: PhosphorIconsBold.creditCard,
                       color: const Color(0xFF059669),
                       growth: growthProfit,
                       subtext: 'ກຳໄລ: ${margin.toStringAsFixed(1)}%',
@@ -517,7 +518,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                     child: _buildMetricCard(
                       title: 'ຈຳນວນບິນທັງໝົດ',
                       val: '$count ບິນ',
-                      icon: Icons.receipt_long_rounded,
+                      icon: PhosphorIconsBold.receipt,
                       color: const Color(0xFF2563EB),
                       growth: growthCount,
                     ),
@@ -542,7 +543,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.payment_rounded, size: 14, color: Color(0xFF0F766E)),
+                    PhosphorIcon(PhosphorIconsBold.creditCard, size: 14, color: Color(0xFF0F766E)),
                     SizedBox(width: 4),
                     Text(
                       'ຊ່ອງທາງການຊຳລະເງິນ',
@@ -588,7 +589,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.access_time_rounded, size: 14, color: Color(0xFF0F766E)),
+                        PhosphorIcon(PhosphorIconsBold.clock, size: 14, color: Color(0xFF0F766E)),
                         SizedBox(width: 4),
                         Text(
                           'ຍອດຂາຍຕາມຊ່ວງເວລາ (07:00 - 22:00)',
@@ -661,7 +662,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.pie_chart_rounded, size: 14, color: Color(0xFF0F766E)),
+                        PhosphorIcon(PhosphorIconsBold.chartPie, size: 14, color: Color(0xFF0F766E)),
                         SizedBox(width: 4),
                         Text(
                           'ໂຄງສ້າງຍອດຂາຍຕາມໝວດໝູ່ (Category)',
@@ -739,7 +740,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.local_fire_department_rounded, size: 14, color: Color(0xFFD97706)),
+                    PhosphorIcon(PhosphorIconsBold.fire, size: 14, color: Color(0xFFD97706)),
                     SizedBox(width: 4),
                     Text(
                       '5 ສິນຄ້າຂາຍດີທີ່ສຸດ (Top 5 Sellers)',
@@ -835,7 +836,7 @@ class MonthComparisonDashboardView extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Icon(icon, size: 14, color: color),
+              PhosphorIcon(icon, size: 14, color: color),
             ],
           ),
           const SizedBox(height: 6),

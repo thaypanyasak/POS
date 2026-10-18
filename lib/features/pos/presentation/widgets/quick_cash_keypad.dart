@@ -104,22 +104,31 @@ class QuickCashKeypad extends StatelessWidget {
             // Exact Tender Button ("ພໍດີ")
             SizedBox(
               height: btnHeight,
-              child: ElevatedButton(
-                onPressed: onExactTender,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isExact ? AppColors.surfaceDark : AppColors.surface,
-                  foregroundColor: isExact ? Colors.white : AppColors.textPrimary,
-                  elevation: isExact ? 1 : 0,
-                  side: BorderSide(
-                    color: isExact ? AppColors.surfaceDark : AppColors.border,
-                    width: 0.9,
+              child: Material(
+                color: isExact ? AppColors.surfaceDark : AppColors.surface,
+                borderRadius: BorderRadius.circular(7),
+                child: InkWell(
+                  onTap: onExactTender,
+                  borderRadius: BorderRadius.circular(7),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: isExact ? AppColors.surfaceDark : AppColors.border,
+                        width: 0.9,
+                      ),
+                    ),
+                    padding: EdgeInsets.symmetric(horizontal: isCompact ? 10 : 16),
+                    alignment: Alignment.center,
+                    child: Text(
+                      LaoStrings.exactCash,
+                      style: TextStyle(
+                        fontSize: btnFontSize,
+                        fontWeight: FontWeight.w700,
+                        color: isExact ? Colors.white : AppColors.textPrimary,
+                      ),
+                    ),
                   ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                  padding: EdgeInsets.symmetric(horizontal: isCompact ? 10 : 16),
-                ),
-                child: Text(
-                  LaoStrings.exactCash,
-                  style: TextStyle(fontSize: btnFontSize, fontWeight: FontWeight.w700),
                 ),
               ),
             ),

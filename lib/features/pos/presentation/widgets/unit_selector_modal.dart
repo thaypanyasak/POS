@@ -1,5 +1,7 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../../../../core/localization/lo.dart';
 import '../../../../domain/models/product.dart';
@@ -89,7 +91,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, color: AppColors.textMuted),
+                    icon: const PhosphorIcon(PhosphorIconsBold.x, size: 18, color: AppColors.textMuted),
                   ),
                 ],
               ),
@@ -137,10 +139,11 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                         ),
                         child: Row(
                           children: [
-                            Icon(
+                            PhosphorIcon(
                               isSelected
-                                  ? Icons.radio_button_checked
-                                  : Icons.radio_button_off,
+                                  ? PhosphorIconsBold.radioButton
+                                  : PhosphorIconsBold.circle,
+                              size: 20,
                               color: isSelected
                                   ? (widget.isWholesaleMode
                                       ? AppColors.wholesale
@@ -242,7 +245,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                           onPressed: _quantity > 1
                               ? () => setState(() => _quantity--)
                               : null,
-                          icon: const Icon(Icons.remove),
+                          icon: const PhosphorIcon(PhosphorIconsBold.minus, size: 16),
                           iconSize: 20,
                         ),
                         Container(
@@ -257,7 +260,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                         ),
                         IconButton(
                           onPressed: () => setState(() => _quantity++),
-                          icon: const Icon(Icons.add),
+                          icon: const PhosphorIcon(PhosphorIconsBold.plus, size: 16),
                           iconSize: 20,
                         ),
                       ],
@@ -322,21 +325,15 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
               const SizedBox(height: 20),
 
               // Confirm Button
-              ElevatedButton(
+              AppButton(
+                label: 'ເພີ່ມເຂົ້າກະຕ່າ ($_quantity ${_selectedUnit.unitName})',
+                variant: AppButtonVariant.primary,
+                height: 48,
+                icon: PhosphorIconsBold.shoppingCart,
                 onPressed: () {
                   widget.onConfirm(_selectedUnit, _quantity);
                   Navigator.of(context).pop();
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.isWholesaleMode
-                      ? AppColors.wholesale
-                      : AppColors.primary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: Text(
-                  'ເພີ່ມເຂົ້າກະຕ່າ ($_quantity ${_selectedUnit.unitName})',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
               ),
             ],
           ),

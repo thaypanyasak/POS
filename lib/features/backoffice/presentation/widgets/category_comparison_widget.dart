@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../providers/month_comparison_provider.dart';
 
@@ -49,7 +50,7 @@ class CategoryComparisonWidget extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFFCCFBF1)),
                     ),
-                    child: const Icon(Icons.pie_chart_rounded,
+                    child: const PhosphorIcon(PhosphorIconsBold.chartPie,
                         color: Color(0xFF0F766E), size: 18),
                   ),
                   const SizedBox(width: 10),
