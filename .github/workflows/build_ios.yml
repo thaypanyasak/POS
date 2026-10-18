@@ -1,4 +1,4 @@
-name: Build iOS IPA (Unsigned)
+name: Build iOS IPA (Flutter & Web-App)
 
 on:
   push:
@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ios:
-    name: Build Unsigned IPA
+  build-flutter-ios:
+    name: Build Flutter IPA
     runs-on: macos-15
 
     steps:
@@ -48,13 +48,64 @@ jobs:
         run: |
           mkdir -p Payload
           cp -r build/ios_derived/Build/Products/Release-iphoneos/Runner.app Payload/
-          zip -r MeiiShop.ipa Payload/
-          echo "IPA created: MeiiShop.ipa"
-          ls -lh MeiiShop.ipa
+          zip -r MeiiShop-Flutter.ipa Payload/
+          echo "IPA created: MeiiShop-Flutter.ipa"
+          ls -lh MeiiShop-Flutter.ipa
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MeiiShop-IPA-unsigned
-          path: MeiiShop.ipa
+          name: MeiiShop-Flutter-IPA-unsigned
+          path: MeiiShop-Flutter.ipa
+          retention-days: 14
+
+  build-webapp-ios:
+    name: Build Web-App IPA
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: web-app/package-lock.json
+
+      - name: Install dependencies & Build Web
+        run: |
+          cd web-app
+          npm install
+          npm run build
+          npx cap sync ios
+
+      - name: Build iOS with Xcode (No Code Signing)
+        run: |
+          cd web-app/ios/App
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build_derived \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -r web-app/ios/App/build_derived/Build/Products/Release-iphoneos/App.app Payload/
+          zip -r MeiiShop-WebApp.ipa Payload/
+          echo "Web-App IPA created: MeiiShop-WebApp.ipa"
+          ls -lh MeiiShop-WebApp.ipa
+
+      - name: Upload Web-App IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MeiiShop-WebApp-IPA-unsigned
+          path: MeiiShop-WebApp.ipa
           retention-days: 14
