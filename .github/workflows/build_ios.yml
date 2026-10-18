@@ -31,7 +31,7 @@ jobs:
 
       - name: Build iOS (no code signing)
         run: |
-          flutter build ios --release --no-codesign --config-only
+          flutter build ios --release --no-codesign
           cd ios
           xcodebuild -workspace Runner.xcworkspace \
             -scheme Runner \
