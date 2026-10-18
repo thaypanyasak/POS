@@ -1,9 +1,9 @@
-import 'package:phosphor_flutter/phosphor_flutter.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/app_button.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_button.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
@@ -1180,7 +1180,11 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                       keyboardType: TextInputType.number,
                                       inputFormatters: [LaoCurrencyInputFormatter()],
                                       style: const TextStyle(
-                                          fontSize: 13, fontFamily: 'monospace', fontWeight: FontWeight.bold),
+                                        fontSize: 13,
+                                        fontFamily: 'monospace',
+                                        fontWeight: FontWeight.bold,
+                                        fontFeatures: [FontFeature.tabularFigures()],
+                                      ),
                                       decoration: InputDecoration(
                                         hintText: '250',
                                         prefixText: '฿ ',
@@ -1194,7 +1198,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 14),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1231,7 +1235,7 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 PhosphorIcon(
-                                                  _autoCostSync ? PhosphorIconsBold.link : PhosphorIconsBold.linkBreak,
+                                                  PhosphorIconsBold.arrowsClockwise,
                                                   size: 13,
                                                   color: _autoCostSync ? const Color(0xFF0D9488) : const Color(0xFF64748B),
                                                 ),
@@ -1262,10 +1266,12 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                       keyboardType: TextInputType.number,
                                       inputFormatters: [LaoCurrencyInputFormatter()],
                                       style: const TextStyle(
-                                          fontSize: 13,
-                                          fontFamily: 'monospace',
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF0F766E)),
+                                        fontSize: 13,
+                                        fontFamily: 'monospace',
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0F766E),
+                                        fontFeatures: [FontFeature.tabularFigures()],
+                                      ),
                                       decoration: InputDecoration(
                                         hintText: '180.000',
                                         suffixText: '₭',
@@ -1368,7 +1374,11 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                             TextFormField(
                                               controller: _stockCartonController,
                                               keyboardType: TextInputType.number,
-                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                fontFeatures: [FontFeature.tabularFigures()],
+                                              ),
                                               decoration: InputDecoration(
                                                 isDense: true,
                                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1393,7 +1403,11 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                             TextFormField(
                                               controller: _stockPackController,
                                               keyboardType: TextInputType.number,
-                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                fontFeatures: [FontFeature.tabularFigures()],
+                                              ),
                                               decoration: InputDecoration(
                                                 isDense: true,
                                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1418,7 +1432,11 @@ class _ProductEntryFormModalState extends ConsumerState<ProductEntryFormModal> {
                                             TextFormField(
                                               controller: _stockPieceController,
                                               keyboardType: TextInputType.number,
-                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                fontFeatures: [FontFeature.tabularFigures()],
+                                              ),
                                               decoration: InputDecoration(
                                                 isDense: true,
                                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1615,11 +1633,11 @@ child: Text('ໂໝດບໍ່ນັບສະຕັອກ: ລະບົບຈ�
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x08000000),
-            offset: Offset(0, 1),
-            blurRadius: 3,
+            color: const Color(0xFF0F172A).withValues(alpha: 0.035),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -1635,7 +1653,7 @@ child: Text('ໂໝດບໍ່ນັບສະຕັອກ: ລະບົບຈ�
             ),
             child: Row(
               children: [
-                Icon(icon, size: 18, color: const Color(0xFF0D9488)),
+                PhosphorIcon(icon, size: 18, color: const Color(0xFF0D9488)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -2170,7 +2188,13 @@ child: Text('ໂໝດບໍ່ນັບສະຕັອກ: ລະບົບຈ�
                                   controller: priceController,
                                   keyboardType: TextInputType.number,
                                   inputFormatters: [LaoCurrencyInputFormatter()],
-                                  style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace', fontWeight: FontWeight.w800, color: Color(0xFF047857)),
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontFamily: 'monospace',
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF047857),
+                                    fontFeatures: [FontFeature.tabularFigures()],
+                                  ),
                                   decoration: InputDecoration(
                                     hintText: '10.000',
                                     suffixText: '₭',
@@ -2215,7 +2239,13 @@ child: Text('ໂໝດບໍ່ນັບສະຕັອກ: ລະບົບຈ�
                                   controller: price2Controller,
                                   keyboardType: TextInputType.number,
                                   inputFormatters: [LaoCurrencyInputFormatter()],
-                                  style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace', fontWeight: FontWeight.w800, color: Color(0xFF0284C7)),
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontFamily: 'monospace',
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF0284C7),
+                                    fontFeatures: [FontFeature.tabularFigures()],
+                                  ),
                                   decoration: InputDecoration(
                                     hintText: '(ບໍ່ກຳນົດ)',
                                     suffixText: '₭',
@@ -2260,7 +2290,13 @@ child: Text('ໂໝດບໍ່ນັບສະຕັອກ: ລະບົບຈ�
                                   controller: price3Controller,
                                   keyboardType: TextInputType.number,
                                   inputFormatters: [LaoCurrencyInputFormatter()],
-                                  style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace', fontWeight: FontWeight.w800, color: Color(0xFF9333EA)),
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontFamily: 'monospace',
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF9333EA),
+                                    fontFeatures: [FontFeature.tabularFigures()],
+                                  ),
                                   decoration: InputDecoration(
                                     hintText: '(ບໍ່ກຳນົດ)',
                                     suffixText: '₭',

@@ -31,7 +31,37 @@
 
   <title>meiishop</title>
   <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
+    @font-face {
+      font-family: 'Noto Sans Lao';
+      font-style: normal;
+      font-weight: 400;
+      src: url('assets/fonts/NotoSansLao-Regular.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Noto Sans Lao';
+      font-style: normal;
+      font-weight: 500;
+      src: url('assets/fonts/NotoSansLao-Medium.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Noto Sans Lao';
+      font-style: normal;
+      font-weight: 600;
+      src: url('assets/fonts/NotoSansLao-SemiBold.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Noto Sans Lao';
+      font-style: normal;
+      font-weight: 700;
+      src: url('assets/fonts/NotoSansLao-Bold.ttf') format('truetype');
+    }
+    html, body {
+      font-family: 'Noto Sans Lao', 'Outfit', sans-serif !important;
+    }
     @media print {
       @page {
         size: 80mm auto;

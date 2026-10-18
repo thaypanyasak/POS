@@ -423,21 +423,21 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Universal Search Bar with Barcode Camera Button inside
+                // Universal Search Bar with Barcode Camera Button inside (40px height)
                 Row(
                   children: [
                     Expanded(
                       child: Container(
-                        height: 44,
+                        height: 40,
                         decoration: BoxDecoration(
                           color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
                         child: Row(
                           children: [
                             const SizedBox(width: 12),
-                            const PhosphorIcon(PhosphorIconsBold.magnifyingGlass, size: 20, color: Color(0xFF64748B)),
+                            const PhosphorIcon(PhosphorIconsRegular.magnifyingGlass, size: 18, color: Color(0xFF64748B)),
                             const SizedBox(width: 8),
                             Expanded(
                               child: TextField(
@@ -448,6 +448,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                                   hintStyle: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
                                   border: InputBorder.none,
                                   isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(vertical: 10),
                                 ),
                                 onChanged: (_) => setState(() {}),
                                 onSubmitted: (code) {
@@ -472,11 +473,11 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                               ),
                             // Barcode Camera Button
                             Container(
-                              margin: const EdgeInsets.only(right: 6),
+                              margin: const EdgeInsets.only(right: 4),
                               child: AppButton(
                                 variant: AppButtonVariant.outline,
                                 size: AppButtonSize.sm,
-                                icon: PhosphorIconsBold.barcode,
+                                icon: PhosphorIconsRegular.barcode,
                                 label: 'ສະແກນ',
                                 onPressed: _openBarcodeScanner,
                               ),
@@ -489,7 +490,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                 ),
                 const SizedBox(height: 10),
 
-                // Category Filter Chips + Category Manager button
+                // Category Filter Chips (Pill Tabs 20px) + Category Manager button
                 SizedBox(
                   height: 36,
                   child: ListView(
@@ -500,44 +501,61 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                         final isSelected = _selectedCategory == catName;
                         return Padding(
                           padding: const EdgeInsets.only(right: 6),
-                          child: ChoiceChip(
-                            label: Text(
-                              catName,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                                color: isSelected ? Colors.white : const Color(0xFF475569),
+                          child: InkWell(
+                            onTap: () {
+                              setState(() => _selectedCategory = catName);
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: isSelected ? const Color(0xFF0D9488) : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isSelected ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  catName,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                    color: isSelected ? Colors.white : const Color(0xFF475569),
+                                  ),
+                                ),
                               ),
                             ),
-                            selected: isSelected,
-                            selectedColor: const Color(0xFF0F766E),
-                            backgroundColor: const Color(0xFFF1F5F9),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            side: BorderSide(
-                              color: isSelected ? const Color(0xFF0F766E) : const Color(0xFFE2E8F0),
-                            ),
-                            onSelected: (val) {
-                              if (val) {
-                                setState(() => _selectedCategory = catName);
-                              }
-                            },
                           ),
                         );
                       }),
 
-                      // Manage Categories Icon Button next to chips
+                      // Manage Categories Button next to chips
                       Padding(
                         padding: const EdgeInsets.only(left: 4),
-                        child: ActionChip(
-                          avatar: const PhosphorIcon(PhosphorIconsBold.gear, size: 14, color: Color(0xFF475569)),
-                          label: const Text(
-                            'ຈັດການໝວດໝູ່',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+                        child: InkWell(
+                          onTap: _openCategoryManagerModal,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFCBD5E1)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                PhosphorIcon(PhosphorIconsBold.gear, size: 14, color: Color(0xFF475569)),
+                                SizedBox(width: 6),
+                                Text(
+                                  'ຈັດການໝວດໝູ່',
+                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+                                ),
+                              ],
+                            ),
                           ),
-                          backgroundColor: Colors.white,
-                          side: const BorderSide(color: Color(0xFFCBD5E1)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          onPressed: _openCategoryManagerModal,
                         ),
                       ),
                     ],
@@ -606,11 +624,11 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x06000000),
-            offset: Offset(0, 1),
-            blurRadius: 3,
+            color: const Color(0xFF0F172A).withValues(alpha: 0.035),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -620,341 +638,439 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
           final tableWidth = constraints.maxWidth < 1200 ? 1200.0 : constraints.maxWidth;
 
           return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: tableWidth,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-                  headingRowHeight: 48,
-                  dataRowMinHeight: 64,
-                  dataRowMaxHeight: 80,
-                  horizontalMargin: 20,
-                  columnSpacing: 24,
-                  columns: const [
-                    DataColumn(label: Text('ຮູບ & ຊື່ສິນຄ້າ', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: Color(0xFF334155)))),
-                    DataColumn(label: Text('ໝວດໝູ່', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: Color(0xFF334155)))),
-                    DataColumn(label: Text('ຕົ້ນທຶນບາດ (฿) & ກີບ (₭)', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: Color(0xFF334155)))),
-                    DataColumn(label: Text('ລະດັບຫົວໜ່ວຍຂາຍ', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: Color(0xFF334155)))),
-                    DataColumn(label: Text('ສາງຄົງເຫຼືອ (Stock)', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: Color(0xFF334155)))),
-                    DataColumn(label: SizedBox(width: 140, child: Text('ອັດຕາສ່ວນ (Ratio)', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: Color(0xFF334155))))),
-                    DataColumn(label: SizedBox(width: 90, child: Center(child: Text('ຈັດການ', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: Color(0xFF334155)))))),
-                  ],
-              rows: products.map((p) {
-                final isHighlighted = p.id == _scannedHighlightId;
-
-                return DataRow(
-                  color: WidgetStateProperty.resolveWith<Color?>((states) {
-                    if (isHighlighted) return const Color(0xFFCCFBF1).withValues(alpha: 0.6);
-                    if (states.contains(WidgetState.hovered)) return const Color(0xFFF8FAFC);
-                    return null;
-                  }),
-                  cells: [
-                    // Col 1: Image & Name & Barcode
-                    DataCell(
-                      Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Image.network(
-                              p.imageUrl ?? 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80',
-                              width: 44,
-                              height: 44,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                width: 44,
-                                height: 44,
-                                color: const Color(0xFFF1F5F9),
-                                child: const PhosphorIcon(PhosphorIconsBold.image, color: Color(0xFF94A3B8), size: 20),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 220),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  p.name,
-                                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5, color: Color(0xFF0F172A)),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 3),
-                                if (p.units.any((u) => u.barcode != null && u.barcode!.isNotEmpty))
-                                  Wrap(
-                                    spacing: 4,
-                                    children: p.units.where((u) => u.barcode != null && u.barcode!.isNotEmpty).map((u) {
-                                      return Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFF1F5F9),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          '${u.unitName}: ${u.barcode}',
-                                          style: const TextStyle(fontSize: 9.5, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Color(0xFF475569)),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  )
-                                else
-                                  Text(
-                                    p.barcode ?? 'ບໍ່ມີບາໂຄດ',
-                                    style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: Color(0xFF94A3B8)),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
+            scrollDirection: Axis.vertical,
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: tableWidth,
+                child: Table(
+                columnWidths: const {
+                  0: FlexColumnWidth(2.6), // ຮູບ & ຊື່ສິນຄ້າ
+                  1: FlexColumnWidth(1.2), // ໝວດໝູ່
+                  2: FlexColumnWidth(1.5), // ຕົ້ນທຶນບາດ (฿) & ກີບ (₭)
+                  3: FlexColumnWidth(1.6), // ລະດັບຫົວໜ່ວຍຂາຍ
+                  4: FlexColumnWidth(1.5), // ສາງຄົງເຫຼືອ (Stock)
+                  5: FlexColumnWidth(1.2), // ອັດຕາສ່ວນ (Ratio)
+                  6: FixedColumnWidth(80), // ຈັດການ (Actions)
+                },
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                children: [
+                  // Header Row
+                  TableRow(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF8FAFC),
+                      border: Border(
+                        bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
                       ),
                     ),
+                    children: const [
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                        child: Text('ຮູບ & ຊື່ສິນຄ້າ', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: Color(0xFF64748B))),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                        child: Text('ໝວດໝູ່', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: Color(0xFF64748B))),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                        child: Text('ຕົ້ນທຶນບາດ (฿) & ກີບ (₭)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: Color(0xFF64748B))),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                        child: Text('ລະດັບຫົວໜ່ວຍຂາຍ', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: Color(0xFF64748B))),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                        child: Text('ສາງຄົງເຫຼືອ (Stock)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: Color(0xFF64748B))),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                        child: Text('ອັດຕາສ່ວນ (Ratio)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: Color(0xFF64748B))),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+                        child: Center(child: Text('ຈັດການ', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: Color(0xFF64748B)))),
+                      ),
+                    ],
+                  ),
 
-                    // Col 2: Category Badge
-                    DataCell(
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Text(
-                          p.category,
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF334155)),
+                  // Data Rows
+                  ...products.map((p) {
+                    final isHighlighted = p.id == _scannedHighlightId;
+                    final rowBg = isHighlighted ? const Color(0xFFCCFBF1).withValues(alpha: 0.6) : Colors.white;
+
+                    return TableRow(
+                      decoration: BoxDecoration(
+                        color: rowBg,
+                        border: const Border(
+                          bottom: BorderSide(color: Color(0xFFF1F5F9), width: 1),
                         ),
                       ),
-                    ),
-
-                    // Col 3: Cost Breakdown (THB & LAK)
-                    DataCell(
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Col 1: Image & Name & Barcode
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          child: Row(
                             children: [
-                              const Text('฿ ', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8))),
-                              Text(
-                                p.costBaht > 0 ? '${LaoCurrencyFormatter.formatNumber(p.costBaht)} ฿' : '-',
-                                style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace', fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
-                              ),
-                              Text(' / ${p.cName}', style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('₭ ', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8))),
-                              Text(
-                                p.costKip > 0 ? '${LaoCurrencyFormatter.formatNumber(p.costKip)} ₭' : '-',
-                                style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace', fontWeight: FontWeight.w800, color: Color(0xFF334155)),
-                              ),
-                              Text(' / ${p.cName}', style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Col 4: Active Sale Units & Prices
-                    DataCell(
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 240),
-                        child: Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: p.units.where((u) => u.isActive).map((u) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF0FDFA),
+                              ClipRRect(
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFFCCFBF1)),
+                                child: Image.network(
+                                  p.imageUrl ?? 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80',
+                                  width: 36,
+                                  height: 36,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 36,
+                                    height: 36,
+                                    color: const Color(0xFFF1F5F9),
+                                    child: const PhosphorIcon(PhosphorIconsBold.image, color: Color(0xFF94A3B8), size: 16),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      p.name,
+                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF0F172A)),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    if (p.units.any((u) => u.barcode != null && u.barcode!.isNotEmpty))
+                                      Wrap(
+                                        spacing: 4,
+                                        children: p.units.where((u) => u.barcode != null && u.barcode!.isNotEmpty).map((u) {
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF1F5F9),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              '${u.unitName}: ${u.barcode}',
+                                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF475569), fontFeatures: [FontFeature.tabularFigures()]),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      )
+                                    else
+                                      Text(
+                                        p.barcode ?? 'ບໍ່ມີບາໂຄດ',
+                                        style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontFeatures: [FontFeature.tabularFigures()]),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Col 2: Category Badge
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                '${u.unitName}: ${LaoCurrencyFormatter.format(u.retailPrice)}',
-                                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF0F766E)),
+                                p.category,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
                               ),
-                            );
-                          }).toList(),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
 
-                    // Col 5: Compound Stock (Unpack Formatter)
-                    DataCell(
-                      !p.trackStock
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                        // Col 3: Cost Breakdown (THB & LAK)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('฿ ', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFF94A3B8))),
+                                  Text(
+                                    p.costBaht > 0 ? '${LaoCurrencyFormatter.formatNumber(p.costBaht)} ฿' : '-',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF334155),
+                                      fontFeatures: [FontFeature.tabularFigures()],
+                                    ),
+                                  ),
+                                  Text(' / ${p.cName}', style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+                                ],
                               ),
-                              child: const Text(
-                                'ບໍ່ນັບສາງ',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF64748B)),
+                              const SizedBox(height: 2),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('₭ ', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFF94A3B8))),
+                                  Text(
+                                    p.costKip > 0 ? '${LaoCurrencyFormatter.formatNumber(p.costKip)} ₭' : '-',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF0F172A),
+                                      fontFeatures: [FontFeature.tabularFigures()],
+                                    ),
+                                  ),
+                                  Text(' / ${p.cName}', style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+                                ],
                               ),
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (p.currentStockBaseUnits < 0)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                            ],
+                          ),
+                        ),
+
+                        // Col 4: Active Sale Units & Prices (Pill Badges)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: p.units.where((u) => u.isActive).map((u) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFECFDF5),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: const Color(0xFFA7F3D0)),
+                                  ),
+                                  child: Text(
+                                    '${u.unitName}: ${LaoCurrencyFormatter.format(u.retailPrice)}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF047857),
+                                      fontFeatures: [FontFeature.tabularFigures()],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+
+                        // Col 5: Compound Stock (Unpack Formatter)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          child: !p.trackStock
+                              ? Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFFFF1F2),
+                                      color: const Color(0xFFF1F5F9),
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: const Color(0xFFFECDD3)),
                                     ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const PhosphorIcon(PhosphorIconsBold.warningCircle, size: 12, color: Color(0xFFBE123C)),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'ໝົດສະຕັອກ (${p.negativeStockCompound})',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                            color: Color(0xFFBE123C),
-                                          ),
-                                        ),
-                                      ],
+                                    child: const Text(
+                                      'ບໍ່ນັບສາງ',
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
                                     ),
-                                  )
-                                else if (p.currentStockBaseUnits == 0)
-                                  const Text(
-                                    'ໝົດສະຕັອກ (0)',
-                                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900, color: Color(0xFFDC2626)),
-                                  )
-                                else
-                                  Wrap(
-                                    spacing: 4,
-                                    children: [
-                                      if (p.tier1Active && p.cartonCount > 0)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFFEF3C7),
-                                            borderRadius: BorderRadius.circular(4),
-                                            border: Border.all(color: const Color(0xFFFDE68A)),
-                                          ),
-                                          child: Text(
-                                            '${p.cartonCount} ${p.cName}',
-                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF78350F)),
-                                          ),
-                                        ),
-                                      if (p.tier2Active && p.packCount > 0)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFE0F2FE),
-                                            borderRadius: BorderRadius.circular(4),
-                                            border: Border.all(color: const Color(0xFFBAE6FD)),
-                                          ),
-                                          child: Text(
-                                            '${p.packCount} ${p.pName}',
-                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF0369A1)),
-                                          ),
-                                        ),
-                                      if (p.tier3Active && p.pieceCount > 0)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFF1F5F9),
-                                            borderRadius: BorderRadius.circular(4),
-                                            border: Border.all(color: const Color(0xFFCBD5E1)),
-                                          ),
-                                          child: Text(
-                                            '${p.pieceCount} ${p.pcName}',
-                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF334155)),
-                                          ),
-                                        ),
-                                    ],
                                   ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'ລວມທັງໝົດ: ${p.currentStockBaseUnits} ${p.baseUnit}',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: p.currentStockBaseUnits < 0 ? const Color(0xFFE11D48) : const Color(0xFF94A3B8),
-                                    fontWeight: p.currentStockBaseUnits < 0 ? FontWeight.w700 : FontWeight.w600,
-                                  ),
+                                )
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    if (p.currentStockBaseUnits < 0)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFFF1F2),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: const Color(0xFFFECDD3)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const PhosphorIcon(PhosphorIconsRegular.warningCircle, size: 13, color: Color(0xFFBE123C)),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'ໝົດສະຕັອກ (${p.negativeStockCompound})',
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                                color: Color(0xFFBE123C),
+                                                fontFeatures: [FontFeature.tabularFigures()],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    else if (p.currentStockBaseUnits == 0)
+                                      const Text(
+                                        'ໝົດສະຕັອກ (0)',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFFDC2626),
+                                          fontFeatures: [FontFeature.tabularFigures()],
+                                        ),
+                                      )
+                                    else
+                                      Wrap(
+                                        spacing: 4,
+                                        children: [
+                                          if (p.tier1Active && p.cartonCount > 0)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFEF3C7),
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: const Color(0xFFFDE68A)),
+                                              ),
+                                              child: Text(
+                                                '${p.cartonCount} ${p.cName}',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Color(0xFF78350F),
+                                                  fontFeatures: [FontFeature.tabularFigures()],
+                                                ),
+                                              ),
+                                            ),
+                                          if (p.tier2Active && p.packCount > 0)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFE0F2FE),
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: const Color(0xFFBAE6FD)),
+                                              ),
+                                              child: Text(
+                                                '${p.packCount} ${p.pName}',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Color(0xFF0369A1),
+                                                  fontFeatures: [FontFeature.tabularFigures()],
+                                                ),
+                                              ),
+                                            ),
+                                          if (p.tier3Active && p.pieceCount > 0)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFF1F5F9),
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                                              ),
+                                              child: Text(
+                                                '${p.pieceCount} ${p.pcName}',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Color(0xFF334155),
+                                                  fontFeatures: [FontFeature.tabularFigures()],
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'ລວມທັງໝົດ: ${p.currentStockBaseUnits} ${p.baseUnit}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: p.currentStockBaseUnits < 0 ? const Color(0xFFE11D48) : const Color(0xFF94A3B8),
+                                        fontWeight: p.currentStockBaseUnits < 0 ? FontWeight.w700 : FontWeight.w600,
+                                        fontFeatures: const [FontFeature.tabularFigures()],
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                    ),
+                        ),
 
-                    // Col 6: Conversion Ratio
-                    DataCell(
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (p.tier1Active && p.tier2Active)
-                            Text(
-                              '1 ${p.cName} = ${p.packsPerCarton} ${p.pName}',
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
-                            ),
-                          if (p.tier2Active && p.tier3Active && p.piecesPerPack > 1)
-                            Text(
-                              '1 ${p.pName} = ${p.piecesPerPack} ${p.pcName}',
-                              style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
-                            ),
-                          if (!p.tier2Active && !p.tier3Active)
-                            const Text('-', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
-                        ],
-                      ),
-                    ),
+                        // Col 6: Conversion Ratio
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (p.tier1Active && p.tier2Active)
+                                Text(
+                                  '1 ${p.cName} = ${p.packsPerCarton} ${p.pName}',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
+                                ),
+                              if (p.tier2Active && p.tier3Active && p.piecesPerPack > 1)
+                                Text(
+                                  '1 ${p.pName} = ${p.piecesPerPack} ${p.pcName}',
+                                  style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+                                ),
+                              if (!p.tier2Active && !p.tier3Active)
+                                const Text('-', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                            ],
+                          ),
+                        ),
 
-                    // Col 7: Actions (Edit & Delete)
-                    DataCell(
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IconButton(
-                            icon: const PhosphorIcon(PhosphorIconsBold.pencilSimple, size: 16, color: Color(0xFF475569)),
-                            onPressed: () => _openEditProductModal(p),
-                            style: IconButton.styleFrom(
-                              backgroundColor: const Color(0xFFF1F5F9),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              minimumSize: const Size(32, 32),
-                              padding: EdgeInsets.zero,
-                            ),
-                            tooltip: 'ແກ້ໄຂ',
+                        // Col 7: Actions (Edit & Delete) - 28x28px compact buttons
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 28,
+                                height: 28,
+                                child: IconButton(
+                                  icon: const PhosphorIcon(PhosphorIconsRegular.pencilSimple, size: 15, color: Color(0xFF475569)),
+                                  onPressed: () => _openEditProductModal(p),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  tooltip: 'ແກ້ໄຂ',
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              SizedBox(
+                                width: 28,
+                                height: 28,
+                                child: IconButton(
+                                  icon: const PhosphorIcon(PhosphorIconsRegular.trash, size: 15, color: Color(0xFFDC2626)),
+                                  onPressed: () => _confirmDeleteProduct(p),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: const Color(0xFFFEF2F2),
+                                    side: const BorderSide(color: Color(0xFFFECDD3)),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  tooltip: 'ລຶບສິນຄ້າ',
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          IconButton(
-                            icon: const PhosphorIcon(PhosphorIconsBold.trash, size: 16, color: Color(0xFFDC2626)),
-                            onPressed: () => _confirmDeleteProduct(p),
-                            style: IconButton.styleFrom(
-                              backgroundColor: const Color(0xFFFEF2F2),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              minimumSize: const Size(32, 32),
-                              padding: EdgeInsets.zero,
-                            ),
-                            tooltip: 'ລຶບສິນຄ້າ',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              }).toList(),
+                        ),
+                      ],
+                    );
+                  }),
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    },
-  ),
-);
+        );
+      },
+    ),
+  );
 }
 
   // --- MOBILE CARD LIST VIEW (< 768px) ---
@@ -971,16 +1087,16 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isHighlighted ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0),
               width: isHighlighted ? 1.5 : 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: isHighlighted ? const Color(0x1A0D9488) : const Color(0x06000000),
-                offset: const Offset(0, 1),
-                blurRadius: 3,
+                color: const Color(0xFF0F172A).withValues(alpha: 0.035),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
@@ -1036,7 +1152,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                               Flexible(
                                 child: Text(
                                   p.barcode!,
-                                  style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: Color(0xFF94A3B8)),
+                                  style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontFeatures: [FontFeature.tabularFigures()]),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -1049,23 +1165,23 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const PhosphorIcon(PhosphorIconsBold.pencilSimple, size: 18, color: Color(0xFF475569)),
+                        icon: const PhosphorIcon(PhosphorIconsRegular.pencilSimple, size: 16, color: Color(0xFF475569)),
                         onPressed: () => _openEditProductModal(p),
                         style: IconButton.styleFrom(
                           backgroundColor: const Color(0xFFF1F5F9),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          minimumSize: const Size(36, 36),
+                          minimumSize: const Size(32, 32),
                           padding: EdgeInsets.zero,
                         ),
                       ),
                       const SizedBox(width: 4),
                       IconButton(
-                        icon: const PhosphorIcon(PhosphorIconsBold.trash, size: 18, color: Color(0xFFDC2626)),
+                        icon: const PhosphorIcon(PhosphorIconsRegular.trash, size: 16, color: Color(0xFFDC2626)),
                         onPressed: () => _confirmDeleteProduct(p),
                         style: IconButton.styleFrom(
                           backgroundColor: const Color(0xFFFEF2F2),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          minimumSize: const Size(36, 36),
+                          minimumSize: const Size(32, 32),
                           padding: EdgeInsets.zero,
                         ),
                       ),
@@ -1091,12 +1207,22 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                         Text('ຕົ້ນທຶນ (${p.cName}): ', style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
                         Text(
                           p.costBaht > 0 ? '${LaoCurrencyFormatter.formatNumber(p.costBaht)} ฿' : '-',
-                          style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
                         ),
                         const Text(' / ', style: TextStyle(color: Color(0xFFCBD5E1))),
                         Text(
                           p.costKip > 0 ? '${LaoCurrencyFormatter.formatNumber(p.costKip)} ₭' : '-',
-                          style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF334155),
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
                         ),
                       ],
                     ),
@@ -1129,7 +1255,12 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                           ),
                           child: Text(
                             '${u.unitName}: ${LaoCurrencyFormatter.format(u.retailPrice)}',
-                            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF0F766E)),
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0F766E),
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
                           ),
                         );
                       }).toList(),
@@ -1160,11 +1291,20 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                           fontSize: 10.5,
                           fontWeight: FontWeight.w800,
                           color: Color(0xFFBE123C),
+                          fontFeatures: [FontFeature.tabularFigures()],
                         ),
                       ),
                     )
                   else if (p.currentStockBaseUnits == 0)
-                    const Text('ໝົດສະຕັອກ (0)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFFDC2626)))
+                    const Text(
+                      'ໝົດສະຕັອກ (0)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFFDC2626),
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    )
                   else
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1179,7 +1319,12 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                             ),
                             child: Text(
                               '${p.cartonCount} ${p.cName}',
-                              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF78350F)),
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF78350F),
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
                             ),
                           ),
                         if (p.tier2Active && p.packCount > 0)
@@ -1192,7 +1337,12 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                             ),
                             child: Text(
                               '${p.packCount} ${p.pName}',
-                              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF0369A1)),
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0369A1),
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
                             ),
                           ),
                         if (p.tier3Active && p.pieceCount > 0)
@@ -1205,7 +1355,12 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                             ),
                             child: Text(
                               '${p.pieceCount} ${p.pcName}',
-                              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Color(0xFF334155)),
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF334155),
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
                             ),
                           ),
                       ],

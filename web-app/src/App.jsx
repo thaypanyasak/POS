@@ -2027,17 +2027,19 @@ export default function App() {
     const totalCostLak = filteredTxs.reduce((sum, order) => sum + Number(order.total_cost_lak ?? order.total_cost ?? order.totalCost ?? 0), 0);
     const totalProfitLak = filteredTxs.reduce((sum, order) => sum + Number(order.gross_profit_lak ?? order.grossProfit ?? 0), 0);
 
+    const fallbackRate = (Number(exchangeRate) > 0 ? Number(exchangeRate) : 690);
+
     const totalRevenueThb = filteredTxs.reduce((sum, order) => {
       const explicitThb = Number(order.total_thb ?? order.totalThb ?? 0);
       if (explicitThb > 0) return sum + explicitThb;
-      const rate = Number(order.exchange_rate || order.exchangeRate) || 0;
+      const rate = Number(order.exchange_rate || order.exchangeRate) || fallbackRate;
       return sum + (rate > 0 ? Number(((order.total_lak ?? order.grandTotal ?? 0) / rate).toFixed(2)) : 0);
     }, 0);
 
     const totalCostThb = filteredTxs.reduce((sum, order) => {
       const explicitCostThb = Number(order.total_cost_thb ?? order.totalCostThb ?? 0);
       if (explicitCostThb > 0) return sum + explicitCostThb;
-      const rate = Number(order.exchange_rate || order.exchangeRate) || 0;
+      const rate = Number(order.exchange_rate || order.exchangeRate) || fallbackRate;
       const costLak = Number(order.total_cost_lak ?? order.total_cost ?? order.totalCost ?? 0);
       return sum + (rate > 0 ? Number((costLak / rate).toFixed(2)) : 0);
     }, 0);

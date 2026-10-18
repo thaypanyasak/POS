@@ -87,65 +87,47 @@ class ProductCard extends StatelessWidget {
             child: InkWell(
               onTap: onTap,
               child: Padding(
-                padding: const EdgeInsets.all(7.0),
+                padding: const EdgeInsets.fromLTRB(6.0, 6.0, 6.0, 2.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Product Image with Category Pill Badge (Matching Web App)
+                    // Product Image with AspectRatio 4/3 (Clean image without overlay badges)
                     Expanded(
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
+                      child: Center(
+                        child: AspectRatio(
+                          aspectRatio: 4 / 3,
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(8), bottom: Radius.circular(4)),
                             child: _buildProductImageOrFallback(),
                           ),
-                          // Category pill at bottom-left corner of image
-                          Positioned(
-                            bottom: 4,
-                            left: 4,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xCC020617), // slate-950/80
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                product.category,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
 
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 4),
 
-                    // Product Name (Bold, 1 line clamp)
-                    Text(
-                      product.name,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                        height: 1.15,
-                        color: AppColors.textPrimary,
+                    // Product Name (Font size 12px, weight 600, max 2 lines clamp)
+                    SizedBox(
+                      height: 32,
+                      child: Text(
+                        product.name,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12.0,
+                          height: 1.25,
+                          color: AppColors.textPrimary,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
 
-                    const SizedBox(height: 1),
+                    const SizedBox(height: 2),
 
-                    // Stock info on left + Unit selector button on right (Duy nhất 1 vị trí chuẩn ERP - Font compact)
-                    Row(
+                    // Stock info on left + Unit selector button on right (height 20px)
+                    SizedBox(
+                      height: 20,
+                      child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -156,7 +138,8 @@ class ProductCard extends StatelessWidget {
                                     'ບໍ່ນັບສາງ',
                                     style: TextStyle(
                                       fontSize: 9.5,
-                                      color: AppColors.textTertiary,
+                                      color: Color(0xFF94A3B8), // slate-400
+                                      fontWeight: FontWeight.w500,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -166,16 +149,14 @@ class ProductCard extends StatelessWidget {
                                     alignment: Alignment.centerLeft,
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                        vertical: 1,
+                                        horizontal: 5,
+                                        vertical: 1.5,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: AppColors.amber50,
+                                        color: const Color(0xFFFFFBEB), // amber-50
                                         borderRadius: BorderRadius.circular(4),
                                         border: Border.all(
-                                          color: AppColors.amber500.withValues(
-                                            alpha: 0.5,
-                                          ),
+                                          color: const Color(0xFFFDE68A), // amber-200
                                           width: 0.8,
                                         ),
                                       ),
@@ -184,7 +165,7 @@ class ProductCard extends StatelessWidget {
                                         style: TextStyle(
                                           fontSize: 9,
                                           fontWeight: FontWeight.w700,
-                                          color: AppColors.amber700,
+                                          color: Color(0xFFB45309), // amber-700
                                         ),
                                       ),
                                     ),
@@ -194,25 +175,23 @@ class ProductCard extends StatelessWidget {
                                     alignment: Alignment.centerLeft,
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                        vertical: 1,
+                                        horizontal: 5,
+                                        vertical: 1.5,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: AppColors.rose50,
+                                        color: const Color(0xFFFEF2F2), // rose-50
                                         borderRadius: BorderRadius.circular(4),
                                         border: Border.all(
-                                          color: AppColors.rose500.withValues(
-                                            alpha: 0.5,
-                                          ),
+                                          color: const Color(0xFFFECDD3), // rose-200
                                           width: 0.8,
                                         ),
                                       ),
                                       child: Text(
-                                        'ຕິດລົບ (${product.negativeStockCompound})',
+                                        'ຕິດລົບ (-${product.negativeStockCompound})',
                                         style: const TextStyle(
                                           fontSize: 9,
                                           fontWeight: FontWeight.w800,
-                                          color: AppColors.rose700,
+                                          color: Color(0xFFBE123C), // rose-700
                                         ),
                                       ),
                                     ),
@@ -223,16 +202,16 @@ class ProductCard extends StatelessWidget {
                                     text: TextSpan(
                                       style: const TextStyle(
                                         fontSize: 9.5,
-                                        color: Color(0xFF64748B),
+                                        color: Color(0xFF64748B), // slate-500
                                         fontWeight: FontWeight.w500,
                                       ),
                                       children: [
                                         const TextSpan(text: 'ສະຕັອກ: '),
                                         TextSpan(
-                                          text: product.stockBadgeText,
+                                          text: product.stockDisplayText,
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w700,
-                                            color: Color(0xFF1E293B),
+                                            color: Color(0xFF334155),
                                           ),
                                         ),
                                       ],
@@ -251,17 +230,17 @@ class ProductCard extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const PhosphorIcon(
-                                  PhosphorIconsBold.slidersHorizontal,
-                                  size: 10,
-                                  color: AppColors.primary,
+                                  PhosphorIconsRegular.faders,
+                                  size: 11,
+                                  color: Color(0xFF0D9488),
                                 ),
                                 const SizedBox(width: 2),
-                                Text(
+                                const Text(
                                   'ປັບຫົວໜ່ວຍ',
                                   style: TextStyle(
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w700,
-                                    color: AppColors.primaryDark,
+                                    color: Color(0xFF0F766E),
                                   ),
                                 ),
                               ],
@@ -270,15 +249,17 @@ class ProductCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
+        ),
 
-          // 2. Fast 1-Tap Unit Add Buttons Bar (Matching Web App)
+          // 2. Fast 1-Tap Unit Add Buttons Bar (Matching Web App, exactly 36px high)
           Container(
-            padding: const EdgeInsets.all(5),
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
             decoration: const BoxDecoration(
               color: AppColors.surfaceSubtle,
               border: Border(
@@ -394,7 +375,8 @@ class ProductCard extends StatelessWidget {
         onTap: () => onSelectUnit(unit),
         borderRadius: BorderRadius.circular(6),
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3.5),
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1.5),
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(6),
@@ -407,35 +389,42 @@ class ProductCard extends StatelessWidget {
               ),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                unit.unitName,
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: unitTextColor,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 1),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  LaoCurrencyFormatter.format(price, includeSymbol: false),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    color: priceTextColor,
-                    fontFamily: 'monospace',
-                    letterSpacing: -0.3,
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    unit.unitName,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: unitTextColor,
+                      height: 1.1,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                ),
+                  const SizedBox(height: 1),
+                  Text(
+                    LaoCurrencyFormatter.format(price, includeSymbol: false),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: priceTextColor,
+                      fontFamily: 'monospace',
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      letterSpacing: -0.3,
+                      height: 1.1,
+                    ),
+                    maxLines: 1,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

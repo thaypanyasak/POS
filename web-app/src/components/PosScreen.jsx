@@ -18,6 +18,8 @@ import {
   QrCode,
   HandCoins,
   Check,
+  Tag,
+  CaretDown,
 } from '@phosphor-icons/react';
 import { formatKip, formatCompoundStock, formatStockDisplay, formatDots, getEffectiveUnitPrice, PRICE_TIERS } from '../utils/formatters';
 import PriceOverrideModal from './PriceOverrideModal';
@@ -58,6 +60,7 @@ export default function PosScreen({
   // Modal for editing line item price (familiar customer / price override)
   const [overrideModalItem, setOverrideModalItem] = useState(null);
   const [openPriceMenuKey, setOpenPriceMenuKey] = useState(null);
+  const [customPriceInput, setCustomPriceInput] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanToast, setScanToast] = useState(null);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
@@ -262,7 +265,7 @@ export default function PosScreen({
 
   // Reusable High-Density Compact Cart for Desktop (35%) & Mobile Drawer
   const renderCartContent = (isDrawer = false) => (
-    <div className="flex flex-col h-[calc(100dvh-4rem)] max-h-[100dvh] md:h-full md:max-h-full min-h-0 overflow-hidden bg-white">
+    <div className="flex flex-col h-full max-h-full min-h-0 overflow-hidden bg-white">
       {/* 1. Sticky Amber Banner when editing an old transaction */}
       {renderEditingBanner()}
 
@@ -401,7 +404,7 @@ export default function PosScreen({
           return (
             <div
               key={`${item.product.id}_${item.unit.id}`}
-              className={`p-2 rounded-xl border bg-white flex flex-col gap-1 transition-all shadow-2xs ${
+              className={`p-1.5 px-2 rounded-lg border bg-white flex flex-col gap-1 transition-all shadow-2xs ${
                 isPriceMenuOpen ? 'relative z-30 overflow-visible' : 'relative z-0'
               } ${
                 isOverridden ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200/80 hover:border-slate-300'
@@ -409,8 +412,8 @@ export default function PosScreen({
             >
               {/* Product Thumbnail (Left) + 2 Rows (Right) */}
               <div className="flex items-center gap-2">
-                {/* Product Thumbnail */}
-                <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200/80 flex items-center justify-center self-center">
+                {/* Product Thumbnail (36px x 36px siêu gọn) */}
+                <div className="w-9 h-9 rounded-md bg-slate-100 overflow-hidden shrink-0 border border-slate-200/80 flex items-center justify-center self-center">
                   {imgUrl ? (
                     <img
                       src={imgUrl}
@@ -421,16 +424,16 @@ export default function PosScreen({
                       }}
                     />
                   ) : (
-                    <Package size={22} className="text-slate-300" weight="duotone" />
+                    <Package size={18} className="text-slate-300" weight="duotone" />
                   )}
                 </div>
 
                 {/* 2 Rows Container */}
-                <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
-                  {/* Row 1: Product Name, Line Total, Trash Button */}
-                  <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="font-bold text-xs text-slate-900 truncate" title={item.product.name}>
+                <div className="flex-1 min-w-0 flex flex-col justify-between gap-0.5">
+                  {/* Row 1: Product Name (Left) vs Single Price Button + Trash Button (Right) */}
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span className="font-semibold text-xs text-slate-900 truncate" title={item.product.name}>
                         {item.product.name}
                       </span>
                       {(() => {
@@ -442,7 +445,7 @@ export default function PosScreen({
                         if (currStock < lineBaseQty || currStock <= 0) {
                           return (
                             <span
-                              className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shrink-0"
+                              className="px-1 py-0.2 rounded text-[8.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shrink-0"
                               title="ຂາຍເກີນຈຳນວນສະຕັອກທີ່ມີ (ຂາຍຕິດລົບ)"
                             >
                               (ຂາຍຕິດລົບ)
@@ -453,106 +456,45 @@ export default function PosScreen({
                       })()}
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="font-black text-xs sm:text-sm font-mono text-slate-900">
-                        {formatKip(lineTotal)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeFromCart(item.product.id, item.unit.id)}
-                        className="text-slate-300 hover:text-rose-500 p-0.5 cursor-pointer shrink-0 transition-colors"
-                        title="ລຶບລາຍການ"
-                      >
-                        <Trash size={14} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Row 2: Unit Switcher (Enlarged) + Highlighted Editable Price + Stepper */}
-                  <div className="flex items-center justify-between gap-1.5 pt-0.5">
-                    <div className="flex items-center gap-1 flex-wrap min-w-0">
-                      {/* Unit Switcher if product has multiple units (Enlarged per user request) */}
-                      {item.product?.units && item.product.units.length > 1 ? (
-                        <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 gap-0.5 shrink-0">
-                          {item.product.units.map((u) => {
-                            const isSelected = (u.id && u.id === item.unit.id) || u.unitName === item.unit.unitName;
-                            return (
-                              <button
-                                key={u.id || u.unitName}
-                                type="button"
-                                onClick={() => changeCartItemUnit && changeCartItemUnit(item.product.id, item.unit.id, u)}
-                                className={`h-6 px-2 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
-                                  isSelected
-                                    ? 'bg-teal-600 text-white shadow-2xs'
-                                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-                                }`}
-                                title={`ປ່ຽນເປັນ ${u.unitName} (${formatDots(u.retailPrice)} ₭)`}
-                              >
-                                {u.unitName}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-teal-800 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200/60 shrink-0">
-                          {item.unit.unitName}
-                        </span>
-                      )}
-
-                      {/* Highlighted Price Override Button (Làm nổi bật số tiền sửa được) */}
-                      <button
-                        type="button"
-                        onClick={() => setOverrideModalItem(item)}
-                        className={`h-6 px-2 rounded-md font-bold font-mono text-xs flex items-center gap-1 transition-all cursor-pointer border shadow-2xs shrink-0 ${
-                          isOverridden
-                            ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-400 ring-1 ring-amber-400/50'
-                            : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border-teal-300 hover:border-teal-400'
-                        }`}
-                        title="ກົດເພື່ອປັບລາຄາພິເສດ (Edit Price)"
-                      >
-                        <span>@{formatDots(effectivePrice)}</span>
-                        <PencilSimple
-                          size={11}
-                          weight="bold"
-                          className={isOverridden ? 'text-amber-800' : 'text-teal-600'}
-                        />
-                        {isOverridden && (
-                          <span className="text-[9px] font-black uppercase tracking-wider bg-amber-200/80 px-1 rounded text-amber-900 ml-0.5">
-                            {item.overrideReason || 'ປັບ'}
-                          </span>
-                        )}
-                      </button>
-
-                      {/* Multi-Price Tier Selector Dropdown/Pill: [ ລາຄາ 1 ▾ ] */}
-                      <div className={`relative shrink-0 ${isPriceMenuOpen ? 'z-40' : ''}`}>
+                    {/* Bên phải: NƠI ĐẶT NÚT CHỌN GIÁ DUY NHẤT dạng [ 🏷️ {đơn_giá} ₭ ▾ ] + Icon Thùng rác */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {/* NÚT CHỌN GIÁ DUY NHẤT */}
+                      <div className="relative">
                         <button
                           type="button"
-                          onClick={() => setOpenPriceMenuKey(isPriceMenuOpen ? null : itemKey)}
-                          className={`h-6 px-1.5 rounded-md text-[10.5px] font-black flex items-center gap-0.5 transition-all border cursor-pointer shadow-2xs ${
-                            currentTier === 3
-                              ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300 ring-1 ring-amber-400/40'
-                              : currentTier === 2
-                              ? 'bg-sky-100 hover:bg-sky-200 text-sky-900 border-sky-300 ring-1 ring-sky-400/40'
-                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                          onClick={() => {
+                            if (isPriceMenuOpen) {
+                              setOpenPriceMenuKey(null);
+                            } else {
+                              setOpenPriceMenuKey(itemKey);
+                              setCustomPriceInput(effectivePrice > 0 ? formatDots(effectivePrice) : '');
+                            }
+                          }}
+                          className={`h-6 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-md px-2 text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs ${
+                            isOverridden ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-400/40' : ''
                           }`}
-                          title={`ລະດັບລາຄາປະຈຸບັນ: ລາຄາ ${currentTier} (ກົດເພື່ອປ່ຽນ)`}
+                          title="ກົດເພື່ອເລືອກລະດັບລາຄາ ຫຼື ປັບລາຄາພິເສດ"
                         >
-                          <span>{`ລາຄາ ${currentTier}`}</span>
-                          <span className="text-[9px] opacity-70">▾</span>
+                          <Tag size={11} weight="bold" className={isOverridden ? 'text-amber-800' : 'text-teal-700'} />
+                          <span className="font-mono tabular-nums">{formatDots(effectivePrice)} ₭</span>
+                          <CaretDown size={10} weight="bold" className="opacity-70" />
                         </button>
 
-                        {/* Floating Price Selector Dropdown Menu */}
+                        {/* MENU DROPDOWN POPOVER ALL-IN-ONE (bắt buộc neo theo mép phải right-0) */}
                         {isPriceMenuOpen && (
                           <>
                             <div
                               className="fixed inset-0 z-40"
                               onClick={() => setOpenPriceMenuKey(null)}
                             />
-                            <div className="absolute right-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-1 min-w-[240px] w-max max-w-[calc(100vw-32px)] flex flex-col gap-0.5 animate-in fade-in-50 zoom-in-95">
-                              <div className="px-2.5 py-1.5 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                            <div className="absolute right-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-lg border border-slate-200 p-2 min-w-[260px] max-w-[280px] w-[270px] flex flex-col gap-1 animate-in fade-in-50 zoom-in-95">
+                              {/* Header */}
+                              <div className="px-1 py-0.5 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center justify-between">
                                 <span>ເລືອກລະດັບລາຄາ:</span>
                                 <span className="text-teal-700 font-extrabold">{item.unit.unitName}</span>
                               </div>
+
+                              {/* Khu vực 1: Chọn nhanh mức giá cấu hình sẵn */}
                               {(() => {
                                 const tiers = [
                                   {
@@ -567,83 +509,199 @@ export default function PosScreen({
                                   },
                                   {
                                     tierNum: 3,
-                                    label: 'ລາຄາ 3 (ລາຄາສົ່ງ / VIP)',
+                                    label: 'ລາຄາ 3 (VIP/ຂາຍສົ່ງ)',
                                     price: Number(item.unit.price_3 ?? item.unit.price3 ?? 0),
                                   },
                                 ];
-                                // Conditional rendering: show only configured tiers (> 0)
                                 const availableTiers = tiers.filter((t) => t.price > 0);
                                 const displayTiers = availableTiers.length > 0 ? availableTiers : [tiers[0]];
 
-                                return displayTiers.map(({ tierNum, label, price }) => {
-                                  const isSelected = currentTier === tierNum;
-                                  return (
-                                    <button
-                                      key={tierNum}
-                                      type="button"
-                                      onClick={() => {
-                                        changeCartItemPriceTier && changeCartItemPriceTier(item.product.id, item.unit.id, tierNum);
-                                        setOpenPriceMenuKey(null);
-                                      }}
-                                      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-md hover:bg-slate-50 cursor-pointer text-xs transition-colors ${
-                                        isSelected
-                                          ? 'bg-teal-50 text-teal-900 font-bold'
-                                          : 'text-slate-700 font-medium'
-                                      }`}
-                                    >
-                                      <span className={`whitespace-nowrap font-medium ${isSelected ? 'text-teal-950 font-bold' : 'text-slate-700'}`}>
-                                        {label}
-                                      </span>
-                                      <div className="font-bold text-slate-900 whitespace-nowrap flex items-center gap-1.5 font-mono shrink-0">
-                                        <span>{formatDots(price)} ₭</span>
-                                        {isSelected && (
-                                          <Check size={14} weight="bold" className="text-teal-600 shrink-0" />
-                                        )}
-                                      </div>
-                                    </button>
-                                  );
-                                });
+                                return (
+                                  <div className="flex flex-col gap-0.5">
+                                    {displayTiers.map(({ tierNum, label, price }) => {
+                                      const isSelected = currentTier === tierNum && !isOverridden;
+                                      return (
+                                        <button
+                                          key={tierNum}
+                                          type="button"
+                                          onClick={() => {
+                                            if (isOverridden) {
+                                              handleResetPriceOverride(item.product.id, item.unit.id);
+                                            }
+                                            if (changeCartItemPriceTier) {
+                                              changeCartItemPriceTier(item.product.id, item.unit.id, tierNum);
+                                            }
+                                            setOpenPriceMenuKey(null);
+                                          }}
+                                          className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg hover:bg-slate-50 cursor-pointer text-xs transition-colors ${
+                                            isSelected
+                                              ? 'bg-teal-50 text-teal-900 font-bold'
+                                              : 'text-slate-700 font-medium'
+                                          }`}
+                                        >
+                                          <span className={`whitespace-nowrap ${isSelected ? 'text-teal-950 font-bold' : 'text-slate-700'}`}>
+                                            {label}
+                                          </span>
+                                          <div className="font-bold text-slate-900 whitespace-nowrap flex items-center gap-1.5 font-mono tabular-nums shrink-0">
+                                            <span>{formatDots(price)} ₭</span>
+                                            {isSelected && (
+                                              <Check size={14} weight="bold" className="text-teal-600 shrink-0" />
+                                            )}
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                );
                               })()}
+
+                              {/* Khu vực 2: Phân cách mảnh */}
+                              <div className="border-t border-slate-100 my-1.5" />
+
+                              {/* Khu vực 3: Nhập giá tùy chỉnh (Custom Override Price) */}
+                              <div className="flex flex-col gap-1 px-1">
+                                <span className="text-[10.5px] font-bold text-slate-500">
+                                  ປ້ອນລາຄາຕາມໃຈ (Custom Price):
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={customPriceInput}
+                                    onChange={(e) => {
+                                      const cleanVal = e.target.value.replace(/\D/g, '');
+                                      if (!cleanVal) {
+                                        setCustomPriceInput('');
+                                      } else {
+                                        setCustomPriceInput(Number(cleanVal).toLocaleString('de-DE'));
+                                      }
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        const cleanVal = String(customPriceInput).replace(/\D/g, '');
+                                        const parsed = parseInt(cleanVal, 10);
+                                        if (parsed > 0) {
+                                          handleApplyPriceOverride(item.product.id, item.unit.id, parsed, 'ປັບລາຄາພິເສດ');
+                                          setOpenPriceMenuKey(null);
+                                        }
+                                      }
+                                    }}
+                                    placeholder="ປ້ອນລາຄາ..."
+                                    className="flex-1 h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-mono font-bold tabular-nums focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const cleanVal = String(customPriceInput).replace(/\D/g, '');
+                                      const parsed = parseInt(cleanVal, 10);
+                                      if (parsed > 0) {
+                                        handleApplyPriceOverride(item.product.id, item.unit.id, parsed, 'ປັບລາຄາພິເສດ');
+                                        setOpenPriceMenuKey(null);
+                                      }
+                                    }}
+                                    className="h-8 px-3 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
+                                  >
+                                    OK
+                                  </button>
+                                </div>
+                                {isOverridden && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleResetPriceOverride(item.product.id, item.unit.id);
+                                      setOpenPriceMenuKey(null);
+                                    }}
+                                    className="text-[10px] text-rose-600 hover:text-rose-700 font-bold text-center mt-1 py-0.5 cursor-pointer"
+                                  >
+                                    ຣີເຊັດກັບລາຄາເດີມ
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </>
                         )}
                       </div>
                     </div>
+                  </div>
 
-                    {/* Stepper (- Qty +) */}
-                    <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200/80 shrink-0">
+                  {/* Row 2: HÀNG DƯỚI - GỌN GÀNG, KHÔNG CÒN NÚT GIÁ */}
+                  <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                    {/* Bên trái: CHỈ CÒN DUY NHẤT bộ chuyển đổi Đơn vị tính dạng Segmented Switch */}
+                    <div className="flex items-center min-w-0">
+                      {item.product?.units && item.product.units.length > 1 ? (
+                        <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-md border border-slate-200/80 gap-0.5 shrink-0">
+                          {item.product.units.map((u) => {
+                            const isSelected = (u.id && u.id === item.unit.id) || u.unitName === item.unit.unitName;
+                            return (
+                              <button
+                                key={u.id || u.unitName}
+                                type="button"
+                                onClick={() => changeCartItemUnit && changeCartItemUnit(item.product.id, item.unit.id, u)}
+                                className={`h-6 px-2 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center ${
+                                  isSelected
+                                    ? 'bg-teal-600 text-white shadow-2xs'
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                                }`}
+                                title={`ປ່ຽນເປັນ ${u.unitName} (${formatDots(u.retailPrice)} ₭)`}
+                              >
+                                {u.unitName}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-teal-800 font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200/60 shrink-0">
+                          {item.unit.unitName}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Bên phải: Bộ nút tăng giảm số lượng [- 1 +] và nút thùng rác xóa món */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <div className="h-6 rounded-md border border-slate-200 bg-slate-50 flex items-center p-0.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateCartQuantity(item.product.id, item.unit.id, item.quantity - 1)
+                          }
+                          className="w-5.5 h-5 rounded flex items-center justify-center text-slate-700 hover:bg-white active:scale-95 transition-all cursor-pointer font-bold"
+                          title="ຫຼຸດຈຳນວນ"
+                        >
+                          <Minus size={10} weight="bold" />
+                        </button>
+                        <span className="w-5 text-center font-black text-xs font-mono text-slate-900 tabular-nums">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateCartQuantity(item.product.id, item.unit.id, item.quantity + 1)
+                          }
+                          className="w-5.5 h-5 rounded flex items-center justify-center text-teal-800 hover:bg-white active:scale-95 transition-all cursor-pointer font-bold"
+                          title="ເພີ່ມຈຳນວນ"
+                        >
+                          <Plus size={10} weight="bold" />
+                        </button>
+                      </div>
+
+                      {/* Icon Thùng rác xóa món */}
                       <button
                         type="button"
-                        onClick={() =>
-                          updateCartQuantity(item.product.id, item.unit.id, item.quantity - 1)
-                        }
-                        className="w-6 h-6 rounded-md flex items-center justify-center text-slate-700 hover:bg-white active:scale-95 transition-all cursor-pointer font-bold"
-                        title="ຫຼຸດຈຳນວນ"
+                        onClick={() => removeFromCart(item.product.id, item.unit.id)}
+                        className="text-slate-300 hover:text-rose-500 hover:bg-rose-50 p-1 cursor-pointer shrink-0 transition-colors rounded"
+                        title="ລຶບລາຍການ"
                       >
-                        <Minus size={11} weight="bold" />
-                      </button>
-                      <span className="w-6 text-center font-black text-xs font-mono text-slate-900">
-                        {item.quantity}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateCartQuantity(item.product.id, item.unit.id, item.quantity + 1)
-                        }
-                        className="w-6 h-6 rounded-md flex items-center justify-center text-teal-800 hover:bg-white active:scale-95 transition-all cursor-pointer font-bold"
-                        title="ເພີ່ມຈຳນວນ"
-                      >
-                        <Plus size={11} weight="bold" />
+                        <Trash size={14} />
                       </button>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Beer Crate Deposit / Missing Crate Option (Slim single line) */}
+              {/* Beer Crate Deposit / Missing Crate Option (Slim & Compact) */}
               {isCrateEligible && (
-                <div className="bg-amber-50/70 px-2 py-0.5 rounded-md border border-amber-200/60 flex items-center justify-between gap-1 text-[10px] mt-0.5">
-                  <label className="flex items-center gap-1 cursor-pointer select-none min-w-0">
+                <div className="bg-amber-50/70 px-2.5 py-1 rounded-md border border-amber-200/80 flex items-center justify-between gap-1 mt-0.5">
+                  <label className="flex items-center cursor-pointer select-none min-w-0">
                     <input
                       type="checkbox"
                       checked={Boolean(item.noEmptyCrates)}
@@ -651,16 +709,16 @@ export default function PosScreen({
                         toggleCartItemCrateDeposit &&
                         toggleCartItemCrateDeposit(item.product.id, item.unit.id, e.target.checked)
                       }
-                      className="w-3 h-3 accent-amber-600 rounded cursor-pointer shrink-0"
+                      className="w-3.5 h-3.5 rounded text-teal-600 focus:ring-teal-500 cursor-pointer shrink-0 accent-teal-600"
                     />
-                    <span className="font-bold text-amber-950 text-[10px] truncate">
+                    <span className="text-[11px] font-semibold text-amber-900 ml-1.5 truncate">
                       ບໍ່ມີແກັດປ່ຽນ (+{formatDots(feePerCrate)} ₭)
                     </span>
                   </label>
 
                   {item.noEmptyCrates && (
                     <div className="flex items-center gap-1 shrink-0">
-                      <div className="flex items-center bg-white rounded border border-amber-300 p-0.2 shadow-2xs">
+                      <div className="border border-amber-300 bg-white rounded flex items-center h-6 shadow-2xs">
                         <button
                           type="button"
                           onClick={() =>
@@ -672,11 +730,11 @@ export default function PosScreen({
                             )
                           }
                           disabled={(item.missingCratesCount || item.quantity) <= 1}
-                          className="w-3.5 h-3.5 rounded flex items-center justify-center font-bold text-amber-900 text-[9px] hover:bg-amber-100 disabled:opacity-30 cursor-pointer"
+                          className="w-5 h-5 flex items-center justify-center text-slate-700 hover:bg-amber-100 rounded cursor-pointer font-bold disabled:opacity-30 disabled:cursor-not-allowed text-[10px]"
                         >
                           -
                         </button>
-                        <span className="w-3.5 text-center font-black text-[9.5px] font-mono text-amber-950">
+                        <span className="px-1.5 font-mono font-bold text-[11px] text-slate-800">
                           {missingCount}
                         </span>
                         <button
@@ -690,12 +748,12 @@ export default function PosScreen({
                             )
                           }
                           disabled={(item.missingCratesCount || item.quantity) >= item.quantity}
-                          className="w-3.5 h-3.5 rounded flex items-center justify-center font-bold text-amber-900 text-[9px] hover:bg-amber-100 disabled:opacity-30 cursor-pointer"
+                          className="w-5 h-5 flex items-center justify-center text-slate-700 hover:bg-amber-100 rounded cursor-pointer font-bold disabled:opacity-30 disabled:cursor-not-allowed text-[10px]"
                         >
                           +
                         </button>
                       </div>
-                      <span className="font-black text-amber-950 font-mono text-[9.5px]">
+                      <span className="text-[11px] font-bold font-mono tabular-nums text-amber-900 ml-0.5">
                         +{formatDots(crateFeeTotal)} ₭
                       </span>
                     </div>
@@ -717,8 +775,13 @@ export default function PosScreen({
         )}
       </div>
 
-      {/* 4. Footer Tổng tiền & Nút hành động: BẮT BUỘC shrink-0 dính sát đáy, không bao giờ bị che */}
-      <div className="shrink-0 p-2 sm:p-3 border-t border-slate-200 bg-slate-50/80 backdrop-blur-sm shadow-sm">
+      {/* 4. Footer Tổng tiền & Nút hành động: BẮT BUỘC shrink-0 dính sát đáy, không bao giờ bị che trên iPad Safari */}
+      <div 
+        className="shrink-0 p-2 sm:p-3 border-t border-slate-200 bg-slate-50/95 backdrop-blur-sm shadow-sm sticky bottom-0 z-20"
+        style={{
+          paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))'
+        }}
+      >
         {/* Hàng tổng tiền: Thu nhỏ font chữ, hiển thị trên 1 hàng ngang duy nhất */}
         <div className="flex items-baseline justify-between mb-2">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">

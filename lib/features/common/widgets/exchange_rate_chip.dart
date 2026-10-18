@@ -1,9 +1,7 @@
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/widgets/app_button.dart';
-import '../../../../core/localization/lao_currency_formatter.dart';
 import '../../../../providers/exchange_rate_provider.dart';
 
 /// Interactive Point-in-Time Exchange Rate Chip / Badge
@@ -98,313 +96,325 @@ class ExchangeRateChip extends ConsumerWidget {
 
   void _showEditRateDialog(BuildContext context, WidgetRef ref, double currentRate) {
     final controller = TextEditingController(text: currentRate.round().toString());
-    double tempRate = currentRate;
     bool isSaving = false;
 
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            void setRateValue(double r) {
+            String? errorMsg;
+
+            Future<void> handleSave() async {
+              final clean = controller.text.replaceAll(',', '').trim();
+              final val = double.tryParse(clean);
+              if (val == null || val <= 0) {
+                setDialogState(() {
+                  errorMsg = 'ກະລຸນາປ້ອນອັດຕາແລກປ່ຽນທີ່ຖືກຕ້ອງ (> 0)';
+                });
+                return;
+              }
+
               setDialogState(() {
-                tempRate = r;
-                controller.text = r.round().toString();
+                isSaving = true;
+                errorMsg = null;
               });
+
+              final success = await ref
+                  .read(exchangeRateProvider.notifier)
+                  .updateExchangeRate(val);
+
+              if (context.mounted) {
+                Navigator.of(ctx).pop();
+                if (success) {
+                  onRateUpdated?.call();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'ອັບເດດອັດຕາແລກປ່ຽນເປັນ 1 ฿ = ${val.round()} ₭ ສຳເລັດ!',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      backgroundColor: const Color(0xFF0F766E),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('ເກີດຂໍ້ຜິດພາດໃນການອັບເດດອັດຕາແລກປ່ຽນ'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                }
+              }
             }
 
-            return AlertDialog(
+            return Dialog(
+              backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(24),
+                side: const BorderSide(color: Color(0xFFF1F5F9)),
               ),
-              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
-              actionsPadding: const EdgeInsets.all(16),
-              title: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFECFDF5),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFA7F3D0)),
-                    ),
-                    child: const PhosphorIcon(
-                      PhosphorIconsBold.arrowsLeftRight,
-                      color: Color(0xFF059669),
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'ປັບປຸງອັດຕາແລກປ່ຽນ (THB/LAK)',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF0F172A),
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Exchange Rate Setting & Snapshot',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 10),
-
-                    // Current Rate Display Box
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              clipBehavior: Clip.antiAlias,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header (Icon + Title + Close Button)
+                      Row(
                         children: [
-                          const Text(
-                            'ອັດຕາແລກປ່ຽນປັດຈຸບັນ:',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF64748B),
-                              fontWeight: FontWeight.w600,
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0FDFA), // teal-50
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFCCFBF1)), // teal-100
+                            ),
+                            child: const Center(
+                              child: PhosphorIcon(
+                                PhosphorIconsBold.currencyCircleDollar,
+                                color: Color(0xFF0F766E), // teal-700
+                                size: 20,
+                              ),
                             ),
                           ),
-                          Text(
-                            '1 ฿ = ${LaoCurrencyFormatter.formatDots(currentRate.round())} ₭',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w900,
-                              fontFamily: 'monospace',
-                              color: Color(0xFF0F766E),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // Input Field
-                    const Text(
-                      'ກຳນົດອັດຕາແລກປ່ຽນໃໝ່ (1 THB = ? LAK):',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: controller,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      autofocus: true,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        fontFamily: 'monospace',
-                        color: Color(0xFF0F172A),
-                      ),
-                      decoration: InputDecoration(
-                        prefixIcon: const Padding(padding: EdgeInsets.only(left: 8, right: 4), child: PhosphorIcon(PhosphorIconsBold.pencilSimple, color: Color(0xFF0F766E), size: 18)),
-                        suffixText: 'ກີບ (LAK)',
-                        suffixStyle: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF64748B),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFF0F766E), width: 2),
-                        ),
-                      ),
-                      onChanged: (val) {
-                        final parsed = double.tryParse(val.replaceAll(',', '').trim());
-                        if (parsed != null && parsed > 0) {
-                          tempRate = parsed;
-                        }
-                      },
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // Quick Step Buttons & Presets
-                    Row(
-                      children: [
-                        OutlinedButton(
-                          onPressed: () {
-                            final current = double.tryParse(controller.text) ?? tempRate;
-                            if (current > 5) setRateValue(current - 5);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            minimumSize: const Size(40, 32),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                          ),
-                          child: const Text('-5 ₭', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        ),
-                        const SizedBox(width: 6),
-                        OutlinedButton(
-                          onPressed: () {
-                            final current = double.tryParse(controller.text) ?? tempRate;
-                            setRateValue(current + 5);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            minimumSize: const Size(40, 32),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                          ),
-                          child: const Text('+5 ₭', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: [680.0, 685.0, 690.0, 695.0, 700.0].map((preset) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 4.0),
-                                  child: ActionChip(
-                                    label: Text(
-                                      '${preset.round()}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: (tempRate.round() == preset.round())
-                                            ? Colors.white
-                                            : const Color(0xFF334155),
-                                      ),
-                                    ),
-                                    backgroundColor: (tempRate.round() == preset.round())
-                                        ? const Color(0xFF0F766E)
-                                        : const Color(0xFFF1F5F9),
-                                    padding: EdgeInsets.zero,
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () => setRateValue(preset),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // Accounting Rule Notice Banner (Point-in-Time Snapshot)
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF), // blue-50
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFBFDBFE)),
-                      ),
-                      child: const Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          PhosphorIcon(PhosphorIconsBold.info, size: 16, color: Color(0xFF2563EB)),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           Expanded(
-                            child: Text(
-                              'ຫຼັກການບັນຊີ Snapshot: ການປ່ຽນອັດຕາແລກປ່ຽນມື້ນີ້ ຈະມີຜົນຕໍ່ບິນໃໝ່ນັບແຕ່ເວລານີ້. ບິນໃນອະດີດຈະຮັກສາອັດຕາແລກປ່ຽນ Snapshot ຂອງຕົນໄວ້ຢ່າງຖາວອນ ໂດຍບໍ່ຖືກຄຳນວນຄືນ.',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                color: Color(0xFF1E40AF),
-                                height: 1.35,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  'ປັບອັດຕາແລກປ່ຽນ (THB / LAK)',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF0F172A),
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Store Settings • Point-in-time Snapshot',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            icon: const PhosphorIcon(PhosphorIconsBold.x, size: 18, color: Color(0xFF94A3B8)),
+                            style: IconButton.styleFrom(
+                              minimumSize: const Size(32, 32),
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            tooltip: 'ປິດ',
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // Accounting Principle Notice Banner (yellow / amber rounded-xl)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFFBEB), // amber-50
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFFDE68A)), // amber-200
+                        ),
+                        child: RichText(
+                          text: const TextSpan(
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF78350F), // amber-900
+                              height: 1.45,
+                              fontFamily: 'NotoSansLao',
+                            ),
+                            children: [
+                              TextSpan(text: '💡 '),
+                              TextSpan(
+                                text: 'ຫຼັກການບັນຊີ: ',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              TextSpan(
+                                text: 'ການປ່ຽນອັດຕາແລກປ່ຽນມື້ນີ້ຈະຖືກບັນທຶກເຂົ້າໃນບິນໃໝ່. ບິນຂາຍໃນອະດີດຈະຮັກສາອັດຕາແລກປ່ຽນ Snapshot ຂອງມື້ຂາຍ, ບໍ່ມີການຄິດໄລ່ຄືນ.',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // Input Label
+                      const Text(
+                        '1 ฿ (Baht) = ເທົ່າໃດກີບ?',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Input Field with ₭ (LAK) suffix
+                      Container(
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: TextField(
+                                controller: controller,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                autofocus: true,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  fontFamily: 'monospace',
+                                  color: Color(0xFF0F172A),
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                                decoration: const InputDecoration(
+                                  hintText: '0',
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                onSubmitted: (_) => handleSave(),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  PhosphorIcon(
+                                    PhosphorIconsBold.arrowsDownUp,
+                                    size: 14,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    '₭ (LAK)',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      if (errorMsg != null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF1F2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFFECDD3)),
+                          ),
+                          child: Text(
+                            errorMsg!,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFE11D48),
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 18),
+
+                      // Action Buttons (ຍົກເລີກ / ບັນທຶກ)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 42,
+                              child: TextButton(
+                                onPressed: isSaving ? null : () => Navigator.of(ctx).pop(),
+                                style: TextButton.styleFrom(
+                                  backgroundColor: const Color(0xFFF1F5F9), // slate-100
+                                  foregroundColor: const Color(0xFF334155), // slate-700
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'ຍົກເລີກ',
+                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: SizedBox(
+                              height: 42,
+                              child: ElevatedButton.icon(
+                                onPressed: isSaving ? null : handleSave,
+                                icon: isSaving
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const PhosphorIcon(
+                                        PhosphorIconsBold.check,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                label: const Text(
+                                  'ບັນທຶກ',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0D9488), // teal-600
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-              actions: [
-                AppButton(
-                  label: 'ຍົກເລີກ',
-                  variant: AppButtonVariant.ghost,
-                  height: 38,
-                  onPressed: isSaving ? null : () => Navigator.of(ctx).pop(),
-                ),
-                AppButton(
-                  label: 'ບັນທຶກ (Save)',
-                  variant: AppButtonVariant.primary,
-                  height: 38,
-                  icon: PhosphorIconsBold.floppyDisk,
-                  isLoading: isSaving,
-                  onPressed: isSaving
-                      ? null
-                      : () async {
-                          final val = double.tryParse(controller.text.replaceAll(',', '').trim());
-                          if (val == null || val <= 0) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('ກະລຸນາປ້ອນອັດຕາແລກປ່ຽນທີ່ຖືກຕ້ອງ (> 0)'),
-                                backgroundColor: AppColors.error,
-                              ),
-                            );
-                            return;
-                          }
-
-                          setDialogState(() => isSaving = true);
-
-                          final success = await ref
-                              .read(exchangeRateProvider.notifier)
-                              .updateExchangeRate(val);
-
-                          if (context.mounted) {
-                            Navigator.of(ctx).pop();
-                            if (success) {
-                              onRateUpdated?.call();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'ອັບເດດອັດຕາແລກປ່ຽນເປັນ 1 ฿ = ${val.round()} ₭ ສຳເລັດ!',
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                  backgroundColor: const Color(0xFF059669),
-                                  duration: const Duration(seconds: 2),
-                                ),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('ເກີດຂໍ້ຜິດພາດໃນການອັບເດດອັດຕາແລກປ່ຽນ'),
-                                  backgroundColor: AppColors.error,
-                                ),
-                              );
-                            }
-                          }
-                        },
-                ),
-              ],
             );
           },
         );

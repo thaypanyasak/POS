@@ -445,6 +445,64 @@ class PurchaseProvider extends StateNotifier<PurchaseState> {
       return false;
     }
   }
+
+  /// Delete Purchase Order and optionally revert stock in products table
+  Future<bool> deletePurchaseOrder(String purchaseOrderId) async {
+    final client = _client;
+    if (client == null) return false;
+
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    try {
+      // 1. Fetch current PO to identify items
+      final po = state.purchaseOrders.firstWhere((p) => p.id == purchaseOrderId);
+
+      // 2. Revert inventory stock if needed
+      for (final it in po.items) {
+        if (it.productId.isNotEmpty && it.importedBaseUnits > 0) {
+          try {
+            final prodData = await client
+                .from('products')
+                .select('id, current_stock_base_units')
+                .eq('id', it.productId)
+                .maybeSingle();
+
+            if (prodData != null) {
+              final currentStock = (prodData['current_stock_base_units'] as num?)?.toInt() ?? 0;
+              final addedUnits = it.importedBaseUnits;
+              final newStock = (currentStock - addedUnits).clamp(0, double.infinity).toInt();
+              await client
+                  .from('products')
+                  .update({
+                    'current_stock_base_units': newStock,
+                    'updated_at': DateTime.now().toIso8601String(),
+                  })
+                  .eq('id', it.productId);
+            }
+          } catch (e) {
+            debugPrint('Error reverting stock for ${it.productId}: $e');
+          }
+        }
+      }
+
+      // 3. Delete related debt payments & items
+      await client.from('supplier_debt_payments').delete().eq('purchase_order_id', purchaseOrderId);
+      await client.from('purchase_order_items').delete().eq('purchase_order_id', purchaseOrderId);
+
+      // 4. Delete the purchase order
+      await client.from('purchase_orders').delete().eq('id', purchaseOrderId);
+
+      // 5. Refresh Catalog and PO list
+      await ref.read(catalogProvider.notifier).fetchFromSupabase();
+      await fetchPurchaseOrders();
+
+      state = state.copyWith(isLoading: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, errorMessage: 'Failed to delete PO: $e');
+      return false;
+    }
+  }
 }
 
 /// Helper draft structure for items during purchase order creation

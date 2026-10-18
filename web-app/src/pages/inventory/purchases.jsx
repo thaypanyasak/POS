@@ -30,6 +30,8 @@ import {
   parseThb,
   formatThbTyping,
   formatCompoundStockUnits,
+  getSortedUnits,
+  formatStockDisplay,
 } from '../../utils/formatters';
 import {
   processMultiProductGRN,
@@ -746,32 +748,80 @@ export default function PurchasesView({
   };
 
 
-  // Helper to format quantity of an order in largest units
-  const formatOrderQuantity = (po) => {
-    // If order has single-product fields
-    if (po.tier1_qty || po.tier2_qty || po.tier3_qty) {
+  // Helper to format an individual item's quantity in its highest/original unit
+  const formatGrnItemQuantity = (item) => {
+    if (!item) return '-';
+    // 1. If explicit input unit_name and quantity exist
+    if (item.unit_name && (item.quantity !== undefined && item.quantity !== null && Number(item.quantity) > 0)) {
+      const q = Number(item.quantity);
+      const u = String(item.unit_name).trim();
+      return `${q} ${u}`;
+    }
+
+    const prod = products.find((p) => p.id === item.product_id);
+    const sorted = prod ? getSortedUnits(prod) : [];
+    const cName = sorted[0]?.unitName || 'ແກັດ';
+    const pName = sorted[1]?.unitName || 'ແພັກ';
+    const pcName = prod?.baseUnit || prod?.base_unit || 'ອັນ';
+
+    // 2. If tier1/tier2/tier3 quantities exist
+    if (item.tier1_qty > 0 || item.tier2_qty > 0 || item.tier3_qty > 0) {
       const parts = [];
-      if (po.tier1_qty > 0) parts.push(`${po.tier1_qty} ແກັດ/ລັງ`);
-      if (po.tier2_qty > 0) parts.push(`${po.tier2_qty} ແພັກ`);
-      if (po.tier3_qty > 0) parts.push(`${po.tier3_qty} ອັນ`);
+      if (item.tier1_qty > 0) parts.push(`${item.tier1_qty} ${cName}`);
+      if (item.tier2_qty > 0) parts.push(`${item.tier2_qty} ${pName}`);
+      if (item.tier3_qty > 0) parts.push(`${item.tier3_qty} ${pcName}`);
       if (parts.length > 0) return parts.join(' ');
     }
-    // Check purchase_order_items
+
+    // 3. Decompose from catalog product multi-tier ratios if base units exist
+    const baseUnits = Number(item.imported_base_units ?? item.base_units_added ?? 0);
+    if (baseUnits > 0) {
+      if (prod) {
+        const decomp = formatStockDisplay(baseUnits, sorted, prod.baseUnit || prod.base_unit || 'ອັນ');
+        if (decomp) return decomp;
+      }
+      return `${baseUnits} ${prod?.baseUnit || prod?.base_unit || 'ອັນ'}`;
+    }
+
+    return '-';
+  };
+
+  // Helper to format quantity of an order in largest units
+  const formatOrderQuantity = (po) => {
+    const prod = products.find((p) => p.id === po.product_id);
+    const sorted = prod ? getSortedUnits(prod) : [];
+    const cName = sorted[0]?.unitName || 'ແກັດ';
+    const pName = sorted[1]?.unitName || 'ແພັກ';
+    const pcName = prod?.baseUnit || prod?.base_unit || 'ອັນ';
+
+    // 1. If order has single-product fields
+    if (po.tier1_qty || po.tier2_qty || po.tier3_qty) {
+      const parts = [];
+      if (po.tier1_qty > 0) parts.push(`${po.tier1_qty} ${cName}`);
+      if (po.tier2_qty > 0) parts.push(`${po.tier2_qty} ${pName}`);
+      if (po.tier3_qty > 0) parts.push(`${po.tier3_qty} ${pcName}`);
+      if (parts.length > 0) return parts.join(' ');
+    }
+
+    // 2. Check purchase_order_items
     if (po.purchase_order_items && po.purchase_order_items.length > 0) {
       const first = po.purchase_order_items[0];
-      const parts = [];
-      if (first.tier1_qty > 0) parts.push(`${first.tier1_qty} ແກັດ/ລັງ`);
-      if (first.tier2_qty > 0) parts.push(`${first.tier2_qty} ແພັກ`);
-      if (first.tier3_qty > 0) parts.push(`${first.tier3_qty} ອັນ`);
-      if (parts.length > 0) {
-        return po.purchase_order_items.length > 1
-          ? `${parts.join(' ')} (+${po.purchase_order_items.length - 1} ລາຍການ)`
-          : parts.join(' ');
+      const firstStr = formatGrnItemQuantity(first);
+      if (po.purchase_order_items.length > 1) {
+        return `${firstStr} (+${po.purchase_order_items.length - 1} ລາຍການ)`;
       }
+      return firstStr;
     }
+
+    // 3. Single-product order fallback with imported_base_units
     if (po.imported_base_units) {
-      return `${po.imported_base_units} ຫົວໜ່ວຍ`;
+      if (prod) {
+        const decomp = formatStockDisplay(po.imported_base_units, sorted, prod.baseUnit || prod.base_unit || 'ອັນ');
+        if (decomp) return decomp;
+      }
+      return `${po.imported_base_units} ${prod?.baseUnit || prod?.base_unit || 'ອັນ'}`;
     }
+
     return '1 ລາຍການ';
   };
 
@@ -1189,17 +1239,17 @@ export default function PurchasesView({
             {/* DESKTOP DATA TABLE (>= 1024px, hidden lg:block) */}
             <div className="hidden lg:block bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+                <table className="w-full text-left border-collapse text-sm">
                   <thead>
-                    <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                      <th className="py-3 px-4">ລະຫັດບິນ & ວັນທີ</th>
-                      <th className="py-3 px-4">ຮ້ານສົ່ງ</th>
-                      <th className="py-3 px-4">ສິນຄ້າ & ຈຳນວນ</th>
-                      <th className="py-3 px-4 text-right">ມູນຄ່າຮັບເຂົ້າ ₭</th>
-                      <th className="py-3 px-4 text-right">ມູນຄ່າຮັບເຂົ້າ ฿</th>
-                      <th className="py-3 px-4 text-center">ສະຖານະຊຳລະ</th>
-                      <th className="py-3 px-4 text-right">ໜີ້ຄ້າງຊຳລະ</th>
-                      <th className="py-3 px-4 text-center">ຈັດການ</th>
+                    <tr className="bg-slate-50/90 text-slate-600 font-bold border-b border-slate-200 text-xs">
+                      <th className="py-3.5 px-4 font-bold">ລະຫັດບິນ & ວັນທີ</th>
+                      <th className="py-3.5 px-4 font-bold">ຮ້ານສົ່ງ</th>
+                      <th className="py-3.5 px-4 font-bold">ສິນຄ້າ & ຈຳນວນ</th>
+                      <th className="py-3.5 px-4 text-right font-bold">ມູນຄ່າຮັບເຂົ້າ ₭</th>
+                      <th className="py-3.5 px-4 text-right font-bold">ມູນຄ່າຮັບເຂົ້າ ฿</th>
+                      <th className="py-3.5 px-4 text-center font-bold">ສະຖານະຊຳລະ</th>
+                      <th className="py-3.5 px-4 text-right font-bold">ໜີ້ຄ້າງຊຳລະ</th>
+                      <th className="py-3.5 px-4 text-center font-bold">ຈັດການ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1218,71 +1268,71 @@ export default function PurchasesView({
                       return (
                         <tr key={po.id} className="hover:bg-slate-50/80 transition-colors">
                           {/* ລະຫັດບິນ & ວັນທີ */}
-                          <td className="py-3 px-4">
-                            <div className="font-mono font-bold text-slate-900">{po.id}</div>
-                            <div className="text-[10.5px] text-slate-400">{dateFormatted}</div>
+                          <td className="py-2.5 px-4">
+                            <div className="font-mono font-bold text-slate-900 text-[12.5px]">{po.id}</div>
+                            <div className="text-[11px] text-slate-400 mt-0.5">{dateFormatted}</div>
                           </td>
 
                           {/* ຮ້ານສົ່ງ */}
-                          <td className="py-3 px-4">
-                            <div className="font-bold text-slate-800">
+                          <td className="py-2.5 px-4">
+                            <div className="font-semibold text-slate-800 text-[12.5px]">
                               {po.suppliers?.name || 'ບໍ່ລະບຸຜູ້ສະໜອງ'}
                             </div>
                             {po.received_by && (
-                              <div className="text-[10.5px] text-slate-400">
+                              <div className="text-[11px] text-slate-400 mt-0.5">
                                 ຜູ້ຮັບ: {po.received_by}
                               </div>
                             )}
                           </td>
 
                           {/* ສິນຄ້າ & ຈຳນວນ */}
-                          <td className="py-3 px-4">
-                            <div className="font-bold text-slate-900 truncate max-w-xs" title={prodName}>
+                          <td className="py-2.5 px-4">
+                            <div className="font-bold text-slate-900 truncate max-w-xs text-[12.5px]" title={prodName}>
                               {prodName}
                             </div>
-                            <div className="text-[10.5px] font-mono text-teal-700 font-bold">
+                            <div className="text-[11px] font-mono text-teal-700 font-bold mt-0.5">
                               {qtyDisplay}
                             </div>
                           </td>
 
                           {/* ມູນຄ່າຮັບເຂົ້າ ₭ */}
-                          <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                          <td className="py-3 px-4 text-right font-bold text-slate-900 text-[13.5px]">
                             {formatKip(po.total_cost_lak)}
                           </td>
 
                           {/* ມູນຄ່າຮັບເຂົ້າ ฿ */}
-                          <td className="py-3 px-4 text-right font-mono font-bold text-slate-600">
+                          <td className="py-3 px-4 text-right font-mono font-semibold text-slate-600 text-[13px]">
                             {Number(po.total_cost_thb) > 0 ? `${formatThb(po.total_cost_thb)} ฿` : '-'}
                           </td>
 
                           {/* ສະຖານະຊຳລະ */}
                           <td className="py-3 px-4 text-center">
                             {po.payment_status === 'PAID' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
-                                <CheckCircle size={12} weight="bold" />
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                <CheckCircle size={13} weight="bold" />
                                 <span>ຈ່າຍຄົບ</span>
                               </span>
                             )}
                             {po.payment_status === 'PARTIAL' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
                                 <span>ຈ່າຍບາງສ່ວນ</span>
                               </span>
                             )}
                             {po.payment_status === 'DEBT' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 font-mono">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 font-mono">
                                 <span>ຕິດໜີ້</span>
                               </span>
                             )}
                           </td>
 
                           {/* ໜີ້ຄ້າງຊຳລະ */}
-                          <td className="py-3 px-4 text-right font-mono font-bold">
+                          <td className="py-3 px-4 text-right font-mono text-[13.5px]">
                             {debt > 0 ? (
-                              <span className="text-rose-600 font-black">
+                              <span className="text-rose-600 font-extrabold">
                                 {formatDots(debt)} ₭
                               </span>
                             ) : (
-                              <span className="text-teal-700">0 ₭</span>
+                              <span className="text-teal-700 font-semibold text-[13px]">0 ₭</span>
                             )}
                           </td>
 
@@ -1295,7 +1345,7 @@ export default function PurchasesView({
                                 className="p-1.5 text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-lg cursor-pointer transition-colors"
                                 title="ແກ້ໄຂ"
                               >
-                                <PencilSimple size={16} />
+                                <PencilSimple size={17} />
                               </button>
 
                               <button
@@ -1304,7 +1354,7 @@ export default function PurchasesView({
                                 className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
                                 title="ລຶບໃບຮັບສິນຄ້າ"
                               >
-                                <Trash size={16} />
+                                <Trash size={17} />
                               </button>
 
                               <button
@@ -1313,7 +1363,7 @@ export default function PurchasesView({
                                 className="p-1.5 text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-lg cursor-pointer transition-colors"
                                 title="ເບິ່ງລາຍລະອຽດ"
                               >
-                                <Eye size={17} />
+                                <Eye size={18} />
                               </button>
 
                               {debt > 0 && (
@@ -1325,10 +1375,10 @@ export default function PurchasesView({
                                     setRepayMethod('CASH');
                                     setRepayNote('');
                                   }}
-                                  className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-[11px] font-bold cursor-pointer transition-colors flex items-center gap-1 border border-rose-200 shadow-2xs"
+                                  className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold cursor-pointer transition-colors flex items-center gap-1 border border-rose-200 shadow-2xs"
                                   title="ຊຳລະໜີ້ຜູ້ສະໜອງ"
                                 >
-                                  <HandCoins size={14} weight="bold" />
+                                  <HandCoins size={15} weight="bold" />
                                   <span>ຊຳລະໜີ້</span>
                                 </button>
                               )}
@@ -1412,8 +1462,8 @@ export default function PurchasesView({
                             <td className="py-2.5 px-3 font-bold text-slate-800">
                               {it.product_name}
                             </td>
-                            <td className="py-2.5 px-3 text-center font-mono">
-                              {it.imported_base_units} ຫົວໜ່ວຍ
+                            <td className="py-2.5 px-3 text-center font-mono font-bold text-teal-700">
+                              {formatGrnItemQuantity(it)}
                             </td>
                             <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
                               {formatDots(it.cost_lak)} ₭

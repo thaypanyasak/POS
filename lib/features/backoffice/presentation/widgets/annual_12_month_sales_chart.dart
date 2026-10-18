@@ -4,13 +4,19 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/lao_currency_formatter.dart';
 import '../../../../data/remote/supabase_sync_service.dart';
+import '../../../../domain/models/sale_transaction.dart';
 
 /// Annual 12-Month Sales Trend Chart (Smooth Area Line Chart)
 /// Displays 12 months (Jan - Dec) with curved gradient fill and interactive touch tooltip.
 class Annual12MonthSalesChart extends StatefulWidget {
   final int? initialYear;
+  final List<SaleTransaction>? fallbackTransactions;
 
-  const Annual12MonthSalesChart({super.key, this.initialYear});
+  const Annual12MonthSalesChart({
+    super.key,
+    this.initialYear,
+    this.fallbackTransactions,
+  });
 
   @override
   State<Annual12MonthSalesChart> createState() => _Annual12MonthSalesChartState();
@@ -29,18 +35,73 @@ class _Annual12MonthSalesChartState extends State<Annual12MonthSalesChart> {
     _loadData();
   }
 
+  @override
+  void didUpdateWidget(covariant Annual12MonthSalesChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.fallbackTransactions != widget.fallbackTransactions) {
+      _loadData();
+    }
+  }
+
+  List<Map<String, dynamic>> _computeLocalMonths(int year) {
+    final laoMonthNames = [
+      'ມັງກອນ (01)', 'ກຸມພາ (02)', 'ມີນາ (03)', 'ເມສາ (04)',
+      'ພຶດສະພາ (05)', 'ມິຖຸນາ (06)', 'ກໍລະກົດ (07)', 'ສິງຫາ (08)',
+      'ກັນຍາ (09)', 'ຕຸລາ (10)', 'ພະຈິກ (11)', 'ທັນວາ (12)',
+    ];
+    final list = laoMonthNames.asMap().entries.map((e) => {
+      'monthIndex': e.key + 1,
+      'month': '${(e.key + 1).toString().padLeft(2, '0')}/$year',
+      'monthName': e.value,
+      'label': e.value,
+      'shortLabel': e.value,
+      'simpleMonth': (e.key + 1).toString().padLeft(2, '0'),
+      'revenue': 0,
+      'total_sales': 0,
+      'cost': 0,
+      'total_cost': 0,
+      'profit': 0,
+      'gross_profit': 0,
+      'count': 0,
+    }).toList();
+
+    final txs = widget.fallbackTransactions ?? [];
+    for (final t in txs) {
+      if (t.isCancelled || t.status == 'cancelled') continue;
+      if (t.createdAt.year == year) {
+        final mIdx = t.createdAt.month - 1;
+        if (mIdx >= 0 && mIdx < 12) {
+          list[mIdx]['revenue'] = (list[mIdx]['revenue'] as int) + t.grandTotal;
+          list[mIdx]['total_sales'] = (list[mIdx]['total_sales'] as int) + t.grandTotal;
+          list[mIdx]['cost'] = (list[mIdx]['cost'] as int) + t.totalCostOfGoods;
+          list[mIdx]['total_cost'] = (list[mIdx]['total_cost'] as int) + t.totalCostOfGoods;
+          list[mIdx]['profit'] = (list[mIdx]['profit'] as int) + t.grossProfit;
+          list[mIdx]['gross_profit'] = (list[mIdx]['gross_profit'] as int) + t.grossProfit;
+          list[mIdx]['count'] = (list[mIdx]['count'] as int) + 1;
+        }
+      }
+    }
+    return list;
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
       final res = await SupabaseSyncService.fetchAnnual12MonthSales(targetYear: _selectedYear);
       if (mounted) {
+        final bool hasRemoteRev = res.any((m) => ((m['revenue'] as int?) ?? 0) > 0);
         setState(() {
-          _months = res;
+          _months = hasRemoteRev ? res : _computeLocalMonths(_selectedYear);
           _isLoading = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _months = _computeLocalMonths(_selectedYear);
+          _isLoading = false;
+        });
+      }
     }
   }
 

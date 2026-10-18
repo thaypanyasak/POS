@@ -11,6 +11,10 @@ class PurchaseOrderItemModel {
   final int tier1Qty;
   final int tier2Qty;
   final int tier3Qty;
+  final String? unitId;
+  final String? unitName;
+  final int? tierLevel;
+  final int? quantity;
   final DateTime createdAt;
 
   PurchaseOrderItemModel({
@@ -26,6 +30,10 @@ class PurchaseOrderItemModel {
     this.tier1Qty = 0,
     this.tier2Qty = 0,
     this.tier3Qty = 0,
+    this.unitId,
+    this.unitName,
+    this.tierLevel,
+    this.quantity,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -39,10 +47,14 @@ class PurchaseOrderItemModel {
       costThb: (json['cost_thb'] as num?)?.toDouble() ?? 0.0,
       costLak: (json['cost_lak'] as num?)?.toInt() ?? 0,
       costVnd: (json['cost_vnd'] as num?)?.toInt() ?? 0,
-      importedBaseUnits: (json['imported_base_units'] as num?)?.toInt() ?? 0,
+      importedBaseUnits: (json['imported_base_units'] as num?)?.toInt() ?? (json['base_units_added'] as num?)?.toInt() ?? 0,
       tier1Qty: (json['tier1_qty'] as num?)?.toInt() ?? 0,
       tier2Qty: (json['tier2_qty'] as num?)?.toInt() ?? 0,
       tier3Qty: (json['tier3_qty'] as num?)?.toInt() ?? 0,
+      unitId: json['unit_id']?.toString(),
+      unitName: json['unit_name']?.toString(),
+      tierLevel: (json['tier_level'] as num?)?.toInt(),
+      quantity: (json['quantity'] as num?)?.toInt(),
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
@@ -63,6 +75,10 @@ class PurchaseOrderItemModel {
       'tier1_qty': tier1Qty,
       'tier2_qty': tier2Qty,
       'tier3_qty': tier3Qty,
+      if (unitId != null) 'unit_id': unitId,
+      if (unitName != null) 'unit_name': unitName,
+      if (tierLevel != null) 'tier_level': tierLevel,
+      if (quantity != null) 'quantity': quantity,
       'created_at': createdAt.toIso8601String(),
     };
   }

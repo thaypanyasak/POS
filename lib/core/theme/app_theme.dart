@@ -35,6 +35,7 @@ class AppStyles {
 class AppTheme {
   AppTheme._();
 
+  static const String laoFontFamily = 'Noto Sans Lao';
   static const double laoLineHeight = 1.45;
 
   static TextStyle _laoStyle({
@@ -54,9 +55,19 @@ class AppTheme {
   }
 
   static ThemeData get lightTheme {
+    final baseTextTheme = GoogleFonts.notoSansLaoTextTheme();
+    final googleFontName = GoogleFonts.notoSansLao().fontFamily;
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      fontFamily: laoFontFamily,
+      fontFamilyFallback: [
+        laoFontFamily,
+        if (googleFontName != null) googleFontName,
+        'Outfit',
+        'sans-serif',
+      ],
       scaffoldBackgroundColor: AppColors.background,
       primaryColor: AppColors.primary,
       colorScheme: const ColorScheme.light(
@@ -98,7 +109,7 @@ class AppTheme {
           color: AppColors.textPrimary,
         ),
       ),
-      textTheme: TextTheme(
+      textTheme: baseTextTheme.copyWith(
         displayLarge: _laoStyle(fontSize: 32, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
         displayMedium: _laoStyle(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
         displaySmall: _laoStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary),

@@ -122,7 +122,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
   void _requestDelete(CategoryModel cat, int productCount) {
     if (productCount > 0) {
       _showFeedback(
-        '️ ໝວດໝູ່ນີ້ກຳລັງມີສິນຄ້າຢູ່ $productCount ລາຍການ, ບໍ່ສາມາດລຶບໄດ້! ກະລຸນາຍ້າຍສິນຄ້າໄປໝວດອື່ນກ່ອນ.',
+        'ໝວດໝູ່ນີ້ກຳລັງມີສິນຄ້າຢູ່ $productCount ລາຍການ, ບໍ່ສາມາດລຶບໄດ້! ກະລຸນາຍ້າຍສິນຄ້າໄປໝວດອື່ນກ່ອນ.',
         isError: true,
       );
       return;
@@ -193,7 +193,8 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
 
     return Dialog(
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(isMobileWidth ? 18 : 24),
+        borderRadius: BorderRadius.circular(isMobileWidth ? 20 : 20),
+        side: const BorderSide(color: Color(0xFFE2E8F0)),
       ),
       backgroundColor: Colors.white,
       clipBehavior: Clip.antiAlias,
@@ -209,18 +210,15 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. Header Toolbar (Gradient Teal to Emerald)
+            // 1. Header Toolbar (Modern Clean Slate-50 with Subtle 1px Border)
             Container(
               padding: EdgeInsets.symmetric(
                 horizontal: isMobileWidth ? 14 : 20,
                 vertical: isMobileWidth ? 12 : 16,
               ),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF0F766E), Color(0xFF065F46)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
               ),
               child: Row(
                 children: [
@@ -228,10 +226,10 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
+                      color: const Color(0xFFCCFBF1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const PhosphorIcon(PhosphorIconsBold.folder, color: Colors.white, size: 20),
+                    child: const PhosphorIcon(PhosphorIconsBold.folder, color: Color(0xFF0D9488), size: 20),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -241,7 +239,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                         Text(
                           'ຈັດການໝວດໝູ່ສິນຄ້າ (Category Manager)',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: Color(0xFF0F172A),
                             fontWeight: FontWeight.w900,
                             fontSize: 15,
                             letterSpacing: -0.2,
@@ -251,7 +249,7 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                         Text(
                           'ເພີ່ມ, ແກ້ໄຂຊື່ ແລະ ລຶບໝວດໝູ່ໃນລະບົບ Supabase',
                           style: TextStyle(
-                            color: Colors.white70,
+                            color: Color(0xFF64748B),
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                           ),
@@ -261,9 +259,9 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const PhosphorIcon(PhosphorIconsBold.x, color: Colors.white, size: 20),
+                    icon: const PhosphorIcon(PhosphorIconsBold.x, color: Color(0xFF64748B), size: 18),
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.12),
+                      backgroundColor: const Color(0xFFF1F5F9),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     tooltip: 'ປິດໜ້າຕ່າງ',
@@ -311,10 +309,10 @@ class _CategoryManagementModalState extends ConsumerState<CategoryManagementModa
                 children: [
                   Expanded(
                     child: Container(
-                      height: 42,
+                      height: 40,
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: const Color(0xFFCBD5E1)),
                       ),
                       child: TextField(

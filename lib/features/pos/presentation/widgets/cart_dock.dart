@@ -797,16 +797,16 @@ class _CartDockState extends ConsumerState<CartDock> {
 
                   SizedBox(height: isCompactLandscape ? 5 : 8),
 
-                  // Action Buttons: ໃບບອກລາຄາ (Quotation) + Pay (Checkout)
+                  // Action Buttons: ໃບບອກລາຄາ (Quotation) + Pay (Checkout) - Height 40px balanced
                   Row(
                     children: [
-                      // Quotation / Proforma Receipt Button (Modern Tailwind Flat Style)
+                      // Quotation / Proforma Receipt Button
                       Expanded(
                         flex: 4,
                         child: AppButton(
                           label: 'ໃບບອກລາຄາ',
                           variant: AppButtonVariant.secondary,
-                          height: isCompactLandscape ? 40 : 44,
+                          height: 40,
                           icon: PhosphorIconsBold.fileText,
                           onPressed: cartState.isEmpty
                               ? null
@@ -824,7 +824,7 @@ class _CartDockState extends ConsumerState<CartDock> {
                               ? 'ບັນທຶກການແກ້ໄຂ'
                               : LaoStrings.pay,
                           variant: AppButtonVariant.primary,
-                          height: isCompactLandscape ? 40 : 44,
+                          height: 40,
                           icon: PhosphorIconsBold.creditCard,
                           onPressed: cartState.isEmpty
                               ? null

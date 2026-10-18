@@ -459,12 +459,15 @@ class Product {
     ProductUnit? pU;
     ProductUnit? pcU;
     for (final u in unitsList) {
-      if (u.tier == 3 || ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ'].contains(u.unitName))
+      if (u.tier == 3 || ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ'].contains(u.unitName)) {
         cU = u;
-      if (u.tier == 2 || ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂຫຼ'].contains(u.unitName))
+      }
+      if (u.tier == 2 || ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂຫຼ'].contains(u.unitName)) {
         pU = u;
-      if (u.tier == 1 || ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ'].contains(u.unitName))
+      }
+      if (u.tier == 1 || ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ'].contains(u.unitName)) {
         pcU = u;
+      }
     }
 
     if (cU != null && pU != null && cU.multiplier > pU.multiplier) {

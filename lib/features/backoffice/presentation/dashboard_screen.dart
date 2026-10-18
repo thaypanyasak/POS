@@ -10,14 +10,15 @@ import '../../../domain/models/sale_transaction.dart';
 import '../../pos/presentation/controllers/catalog_controller.dart';
 import '../../pos/presentation/controllers/transaction_controller.dart';
 import '../../common/widgets/exchange_rate_chip.dart';
+import '../../../providers/exchange_rate_provider.dart';
 import 'widgets/annual_12_month_sales_chart.dart';
 import 'widgets/month_comparison_dashboard_view.dart';
 
-enum DashboardTimeframe { daily, weekly, monthly, all, custom, compare }
+enum DashboardTimeframe { daily, yesterday, weekly, monthly, all, custom, compare }
 
 /// Financial & Profit Dashboard (ແຜງຄວບຄຸມລາຍຮັບ & ຕົ້ນທຶນ)
 /// Rebuilt to 100% match web-app (DashboardView.jsx & SPEC_FINANCIAL_DASHBOARD.md)
-/// 1. Top 4 Core Financial KPI Cards (Revenue, COGS, Gross Profit with Margin %, Avg Basket)
+/// 1. Top 4 Core Financial KPI Cards (Revenue, COGS, Gross Profit with Margin %, Negative/Restock Orders)
 /// 2. Payment Reconciliation Breakdown (Cash, Transfer/OnePay QR, Debt/Credit)
 /// 3. Hourly Sales Trend Chart (07:00 - 22:00) with peaks & tooltips
 /// 4. Sales by Category Breakdown (Progress Bar & Cards)
@@ -38,6 +39,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   List<SaleTransaction> _filterTransactions(List<SaleTransaction> allTxs) {
     final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
     return allTxs.where((tx) {
       if (tx.isCancelled || tx.status == 'cancelled') return false;
       switch (_selectedTimeframe) {
@@ -45,6 +47,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           return tx.createdAt.year == now.year &&
               tx.createdAt.month == now.month &&
               tx.createdAt.day == now.day;
+        case DashboardTimeframe.yesterday:
+          return tx.createdAt.year == yesterday.year &&
+              tx.createdAt.month == yesterday.month &&
+              tx.createdAt.day == yesterday.day;
         case DashboardTimeframe.weekly:
           final sevenDaysAgo = now.subtract(const Duration(days: 7));
           return tx.createdAt.isAfter(sevenDaysAgo);
@@ -125,13 +131,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     int debtTotal = 0;
     int debtCount = 0;
 
+    final currentRate = ref.watch(exchangeRateProvider).rate > 0 ? ref.watch(exchangeRateProvider).rate : 690.0;
+
     for (final tx in txs) {
       final double rLak = tx.totalLak;
-      final double rThb = tx.totalThb;
+      final double rate = tx.exchangeRate > 0 ? tx.exchangeRate : currentRate;
+      final double rThb = tx.totalThbValue != null && tx.totalThbValue! > 0
+          ? tx.totalThbValue!
+          : (rate > 0 ? rLak / rate : 0.0);
       final double cLak = tx.totalCostOfGoods.toDouble();
-      final double cThb = tx.exchangeRate > 0 ? (cLak / tx.exchangeRate) : 0.0;
+      final double cThb = rate > 0 ? (cLak / rate) : 0.0;
       final double pLak = tx.grossProfitLak;
-      final double pThb = tx.grossProfitThb;
+      final double pThb = rThb - cThb;
 
       totalRevenueLak += rLak;
       totalRevenueThb += rThb;
@@ -151,8 +162,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
 
     final double margin = totalRevenueLak > 0 ? (totalProfitLak / totalRevenueLak) * 100 : 0.0;
-    final int avgTicketLak = txs.isNotEmpty ? (totalRevenueLak / txs.length).round() : 0;
-    final double avgTicketThb = txs.isNotEmpty ? (totalRevenueThb / txs.length) : 0.0;
 
     // 2. Hourly Sales Breakdown (07:00 - 22:00)
     final List<_HourlyBucket> hourlyBuckets = [];
@@ -292,64 +301,72 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ? (constraints.maxWidth - (3 * 10)) / 4
                         : (constraints.maxWidth - 10) / 2;
 
+                    // Calculate negative stock items or orders that sold into negative
+                    final negativeProducts = products.where((p) => p.trackStock && p.currentStockBaseUnits < 0).toList();
+                    final negativeTxsCount = txs.where((tx) => tx.items.any((it) {
+                      final p = products.firstWhere((prod) => prod.id == it.product.id, orElse: () => it.product);
+                      return p.trackStock && p.currentStockBaseUnits < 0;
+                    })).length;
+
                     return Wrap(
                       spacing: 10,
                       runSpacing: 10,
                       children: [
-                        // KPI 1: Revenue
+                        // KPI 1: Revenue (Icon PhosphorIconsDuotone.coins in Teal #0D9488)
                         _buildKpiCard(
-                          title: 'ຍອດຂາຍລວມ (Revenue)',
+                          title: 'ຍອດຂາຍລວມ (Doanh thu)',
                           value: LaoCurrencyFormatter.format(totalRevenueLak.round()),
                           subValueThb: '≈ ${NumberFormat('#,##0').format(totalRevenueThb.round())} ฿',
-                          subLeft: 'ຈຳນວນ:',
+                          subLeft: 'ຈຳນວນບິນ:',
                           subRight: '${txs.length} ບິນສຳເລັດ',
-                          icon: PhosphorIconsBold.money,
-                          iconColor: const Color(0xFF0F766E),
-                          iconBg: const Color(0xFFF0FDFA),
-                          valueColor: const Color(0xFF0F766E),
+                          icon: PhosphorIconsDuotone.coins,
+                          iconColor: const Color(0xFF0D9488),
+                          iconBg: const Color(0xFFCCFBF1),
+                          valueColor: const Color(0xFF0D9488),
                           width: cardWidth,
                         ),
 
-                        // KPI 2: COGS
+                        // KPI 2: COGS (Icon PhosphorIconsDuotone.trendDown in Slate #64748B)
                         _buildKpiCard(
-                          title: 'ຕົ້ນທຶນສິນຄ້າລວມ (COGS)',
+                          title: 'ຕົ້ນທຶນສິນຄ້າ (Giá vốn Hàng bán)',
                           value: LaoCurrencyFormatter.format(totalCostLak.round()),
                           subValueThb: '≈ ${NumberFormat('#,##0').format(totalCostThb.round())} ฿',
                           subLeft: 'ຕົ້ນທຶນສິນຄ້າຂາຍອອກ',
-                          subRight: 'ທຶນຈິງ',
-                          icon: PhosphorIconsBold.package,
-                          iconColor: const Color(0xFFD97706),
-                          iconBg: const Color(0xFFFFFBEB),
+                          subRight: 'COGS',
+                          icon: PhosphorIconsDuotone.trendDown,
+                          iconColor: const Color(0xFF64748B),
+                          iconBg: const Color(0xFFF1F5F9),
                           valueColor: const Color(0xFF1E293B),
                           width: cardWidth,
                         ),
 
-                        // KPI 3: Gross Profit
+                        // KPI 3: Gross Profit (Icon PhosphorIconsDuotone.chartLineUp in Emerald #059669)
                         _buildKpiCard(
-                          title: 'ກຳໄລຂັ້ນຕົ້ນ (Gross Profit)',
+                          title: 'ກຳໄລຂັ້ນຕົ້ນ (Lợi nhuận gộp)',
                           value: LaoCurrencyFormatter.format(totalProfitLak.round()),
                           subValueThb: '≈ ${NumberFormat('#,##0').format(totalProfitThb.round())} ฿',
                           subLeft: 'ອັດຕາກຳໄລ:',
                           subRight: '${margin.toStringAsFixed(1)}%',
                           isMarginBadge: true,
-                          icon: PhosphorIconsBold.trendUp,
+                          icon: PhosphorIconsDuotone.chartLineUp,
                           iconColor: const Color(0xFF059669),
-                          iconBg: const Color(0xFFECFDF5),
+                          iconBg: const Color(0xFFD1FAE5),
                           valueColor: const Color(0xFF059669),
                           width: cardWidth,
                         ),
 
-                        // KPI 4: Avg Basket
+                        // KPI 4: Negative Stock / Needs Restock (Icon PhosphorIconsDuotone.warningCircle in Amber #D97706)
                         _buildKpiCard(
-                          title: 'ຍອດສະເລ່ຍຕໍ່ບິນ (Avg Basket)',
-                          value: LaoCurrencyFormatter.format(avgTicketLak),
-                          subValueThb: '≈ ${NumberFormat('#,##0').format(avgTicketThb.round())} ฿',
-                          subLeft: 'ສະເລ່ຍຕໍ່ 1 ລູກຄ້າ',
-                          subRight: 'ບິນ/ລູກຄ້າ',
-                          icon: PhosphorIconsBold.chartBar,
-                          iconColor: const Color(0xFF7C3AED),
-                          iconBg: const Color(0xFFF5F3FF),
-                          valueColor: const Color(0xFF0F172A),
+                          title: 'ບິນຂາຍຕິດລົບ / ຕ້ອງຕື່ມສາງ (Bán âm)',
+                          value: '${negativeTxsCount > 0 ? negativeTxsCount : negativeProducts.length} ${negativeTxsCount > 0 ? "ບິນ" : "ລາຍການ"}',
+                          subValueThb: '${negativeProducts.length} ສິນຄ້າຂາດສະຕັອກ',
+                          subLeft: 'ສະຖານະສາງ:',
+                          subRight: negativeProducts.isNotEmpty ? 'ຕ້ອງຕື່ມດ່ວນ' : 'ປົກກະຕິ',
+                          isAlertBadge: negativeProducts.isNotEmpty,
+                          icon: PhosphorIconsDuotone.warningCircle,
+                          iconColor: const Color(0xFFD97706),
+                          iconBg: const Color(0xFFFEF3C7),
+                          valueColor: negativeProducts.isNotEmpty ? const Color(0xFFB45309) : const Color(0xFF0F172A),
                           width: cardWidth,
                         ),
                       ],
@@ -380,7 +397,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               children: [
                                 _buildHourlyTrendWidget(hourlyBuckets, maxHourlyRev, txs.length),
                                 const SizedBox(height: 14),
-                                const Annual12MonthSalesChart(),
+                                Annual12MonthSalesChart(
+                                  fallbackTransactions: historyState.transactions,
+                                ),
                                 const SizedBox(height: 14),
                                 _buildCategoryBreakdownWidget(catList, totalCatRev),
                               ],
@@ -410,7 +429,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       children: [
                         _buildHourlyTrendWidget(hourlyBuckets, maxHourlyRev, txs.length),
                         const SizedBox(height: 14),
-                        const Annual12MonthSalesChart(),
+                        Annual12MonthSalesChart(
+                          fallbackTransactions: historyState.transactions,
+                        ),
                         const SizedBox(height: 14),
                         _buildCategoryBreakdownWidget(catList, totalCatRev),
                         const SizedBox(height: 14),
@@ -564,13 +585,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     required Color valueColor,
     required double width,
     bool isMarginBadge = false,
+    bool isAlertBadge = false,
   }) {
     return Container(
       width: width,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE2E8F0), width: 0.8),
         boxShadow: const [
           BoxShadow(
@@ -607,6 +629,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             style: TextStyle(
               fontSize: 19,
               fontWeight: FontWeight.w900,
+              fontFamily: 'monospace',
+              fontFeatures: const [FontFeature.tabularFigures()],
               color: valueColor,
               letterSpacing: -0.3,
             ),
@@ -620,6 +644,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 fontWeight: FontWeight.w700,
                 color: valueColor.withValues(alpha: 0.75),
                 fontFamily: 'monospace',
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ],
@@ -647,6 +672,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     child: Text(
                       subRight,
                       style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFF047857)),
+                    ),
+                  )
+                else if (isAlertBadge)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                    ),
+                    child: Text(
+                      subRight,
+                      style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Color(0xFFB45309)),
                     ),
                   )
                 else
