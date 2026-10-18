@@ -22,6 +22,7 @@ import {
   supabase
 } from './services/supabase';
 import queryClient from './services/queryClient';
+import { Capacitor } from '@capacitor/core';
 
 // Modular Components
 import Navbar from './components/Navbar';
@@ -2110,8 +2111,17 @@ export default function App() {
     ).length;
   }, [transactions]);
 
+  const isNativeApp = Capacitor.isNativePlatform();
+
   return (
-    <div className="flex flex-col md:flex-row h-full h-dvh min-h-screen w-full min-w-full max-w-full bg-slate-100 text-slate-900 overflow-hidden font-sans">
+    <div 
+      className="flex flex-col md:flex-row h-full h-dvh min-h-screen w-full min-w-full max-w-full bg-slate-100 text-slate-900 overflow-hidden font-sans"
+      style={{
+        paddingTop: isNativeApp ? 'env(safe-area-inset-top, 0px)' : '0px',
+        paddingLeft: isNativeApp ? 'env(safe-area-inset-left, 0px)' : '0px',
+        paddingRight: isNativeApp ? 'env(safe-area-inset-right, 0px)' : '0px',
+      }}
+    >
       {/* 1. LEFT SIDEBAR NAVBAR (Bottom bar on Mobile, Icon sidebar on Tablet/Desktop) */}
       <Navbar
         activeMainTab={activeMainTab}
