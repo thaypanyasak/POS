@@ -7,12 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ota:deploy": "vite build && npx @capgo/cli@latest bundle upload --channel=production --auto-bump=minor --apikey=7d88a2a7-471f-4175-be14-30353ccb8ee3"
   },
   "dependencies": {
     "@capacitor/cli": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
+    "@capgo/capacitor-updater": "^8.53.0",
     "@deedarb/capacitor-tcp-socket": "^8.3.2",
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/supabase-js": "^2.117.3",

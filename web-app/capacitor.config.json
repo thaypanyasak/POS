@@ -1,1 +1,13 @@
-﻿{"appId": "la.meiishop.pos", "appName": "MeiiShop POS", "webDir": "dist"}
+{
+  "appId": "la.meiishop.pos",
+  "appName": "MeiiShop POS",
+  "webDir": "dist",
+  "plugins": {
+    "CapacitorUpdater": {
+      "autoUpdate": true,
+      "statsUrl": "https://stats.capgo.app",
+      "channel": "production",
+      "key": "600b29bc-c506-49b6-9356-c8798229b1fe"
+    }
+  }
+}

@@ -17,12 +17,15 @@ import {
   ShieldCheck,
   CloudCheck,
   CloudSlash,
+  DownloadSimple,
+  Sparkle,
 } from '@phosphor-icons/react';
 import { Capacitor } from '@capacitor/core';
 import { updateExchangeRateInSupabase } from '../services/supabase';
 import queryClient from '../services/queryClient';
 import { formatDots } from '../utils/formatters';
 import { getPrinterConfig, savePrinterConfig, openCashDrawerDirect } from '../services/printerService';
+import { liveUpdater } from '../services/liveUpdateService';
 
 export default function SettingsView({
   exchangeRate = 0,
@@ -120,6 +123,39 @@ export default function SettingsView({
       }
     } catch (err) {
       onAlert?.(`ບໍ່ສາມາດເປີດລິ້ນຊັກ: ${err.message}`, 'ຂໍ້ຜິດພາດ', 'error');
+    }
+  };
+
+  const [liveUpdateInfo, setLiveUpdateInfo] = useState({ version: 'ກຳລັງໂຫຼດ...', isNative: false });
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    liveUpdater.getCurrentVersion().then((info) => {
+      if (isMounted) setLiveUpdateInfo(info);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleManualCheckUpdate = async () => {
+    if (!Capacitor.isNativePlatform()) {
+      onAlert?.('ລະບົບ Live Update OTA ຮອງຮັບສະເພາະເມື່ອເປີດຜ່ານ App Capacitor ໃນ iPad / iPhone.', 'ແຈ້ງເຕືອນ', 'info');
+      return;
+    }
+    setIsCheckingUpdate(true);
+    try {
+      const res = await liveUpdater.checkForUpdates();
+      if (res) {
+        onAlert?.('ກວດພົບເວີຊັນໃໝ່ ແລະ ດາວໂຫຼດສຳເລັດ! ກະລຸນາກົດນຳໃຊ້ເພື່ອໂຫຼດລະບົບໃໝ່.', 'ອັບເດດສຳເລັດ', 'success');
+      } else {
+        onAlert?.('ແອັບຂອງທ່ານເປັນເວີຊັນລ້າສຸດແລ້ວ!', 'ຂໍ້ມູນ', 'info');
+      }
+    } catch (e) {
+      onAlert?.(`ກວດສອບອັບເດດບໍ່ສຳເລັດ: ${e.message}`, 'ແຈ້ງເຕືອນ', 'warning');
+    } finally {
+      setIsCheckingUpdate(false);
     }
   };
 
@@ -525,6 +561,42 @@ export default function SettingsView({
                 <span className="font-mono text-xs font-bold text-slate-700 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
                   {transactionsCount} ບິນ
                 </span>
+              </div>
+            </div>
+
+            {/* Card 3: Live Update OTA (Cập nhật không cần cài lại IPA) */}
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 sm:p-4.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                    <Sparkle size={18} weight="fill" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                        ອັບເດດແອັບອັດຕະໂນມັດ (Live OTA)
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        {liveUpdateInfo.version}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      {liveUpdateInfo.isNative
+                        ? 'ອັບເດດລະບົບທັນທີໂດຍບໍ່ຕ້ອງລົງແອັບ .ipa ໃໝ່ (Native Local Cache)'
+                        : 'ກຳລັງເປີດຜ່ານ Web Browser'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleManualCheckUpdate}
+                  disabled={isCheckingUpdate}
+                  className="h-8 px-3 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50 shrink-0"
+                >
+                  <DownloadSimple size={14} weight="bold" className={isCheckingUpdate ? 'animate-bounce' : ''} />
+                  <span>{isCheckingUpdate ? 'ກຳລັງກວດ...' : 'ກວດສອບອັບເດດ'}</span>
+                </button>
               </div>
             </div>
           </div>
