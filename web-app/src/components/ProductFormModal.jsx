@@ -351,7 +351,7 @@ export default function ProductFormModal({
         {/* Header Actions */}
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Quick Presets */}
-          <div className="hidden lg:flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
+          {/* <div className="hidden lg:flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
             <span className="text-[11px] font-bold text-slate-400 px-2 flex items-center gap-1">
               <Sparkle size={13} weight="fill" className="text-amber-500" />
               <span>ແມ່ແບບ:</span>
@@ -396,7 +396,7 @@ export default function ProductFormModal({
             >
               🏷️ ຂາຍຍ່ອຍ (ອັນ)
             </button>
-          </div>
+          </div> */}
 
           <button
             type="button"

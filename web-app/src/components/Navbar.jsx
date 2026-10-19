@@ -5,6 +5,7 @@ import {
   Package,
   ClockCounterClockwise,
   ChartBar,
+  ChartPieSlice,
   Gear,
   CaretLeft,
   CaretRight,
@@ -77,6 +78,13 @@ export default function Navbar({
       sub: 'ລາຍຮັບ & ກຳໄລ',
       shortLabel: 'ລາຍຮັບ',
       icon: ChartBar,
+    },
+    {
+      id: 'sales-by-unit',
+      label: 'ຍອດຂາຍຕາມຫົວໜ່ວຍ',
+      sub: 'ແກັດ, ແພັກ, ອັນ & ລາຍຮັບ',
+      shortLabel: 'ຍອດຂາຍ',
+      icon: ChartPieSlice,
     },
     {
       id: 'settings',

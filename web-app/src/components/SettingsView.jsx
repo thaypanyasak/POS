@@ -2,28 +2,26 @@ import React, { useState, useEffect } from 'react';
 import {
   Gear,
   CurrencyCircleDollar,
-  Receipt,
-  CloudCheck,
-  CloudSlash,
   Folders,
   UsersThree,
   Plus,
   ArrowClockwise,
-  ShieldCheck,
-  DeviceTablet,
-  CheckCircle,
-  Tag,
-  ClockCounterClockwise,
   PencilSimple,
   FloppyDisk,
   X,
   Printer,
   HandCoins,
+  CheckCircle,
+  Tag,
+  CaretRight,
+  ShieldCheck,
+  CloudCheck,
+  CloudSlash,
 } from '@phosphor-icons/react';
 import { Capacitor } from '@capacitor/core';
 import { updateExchangeRateInSupabase } from '../services/supabase';
 import queryClient from '../services/queryClient';
-import { formatDots, parseDots } from '../utils/formatters';
+import { formatDots } from '../utils/formatters';
 import { getPrinterConfig, savePrinterConfig, openCashDrawerDirect } from '../services/printerService';
 
 export default function SettingsView({
@@ -126,12 +124,12 @@ export default function SettingsView({
   };
 
   return (
-    <div className="flex-1 h-full min-h-0 overflow-y-auto bg-slate-100 p-4 md:p-6 lg:p-8 overscroll-contain">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <div className="flex-1 h-full min-h-0 overflow-y-auto bg-slate-50 p-4 sm:p-6 overscroll-contain">
+      <div className="max-w-5xl mx-auto space-y-4 sm:space-y-5">
         {/* Header Bar */}
-        <div className="flex items-center justify-between pb-3 sm:pb-3.5 border-b border-slate-200/80 mb-3 sm:mb-4 gap-2.5 sm:gap-3 shrink-0">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 gap-3 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0 border border-teal-100">
               <Gear size={20} className="sm:w-5 sm:h-5" weight="duotone" />
             </div>
             <div className="min-w-0">
@@ -150,7 +148,7 @@ export default function SettingsView({
                 type="button"
                 onClick={onRefreshAll}
                 disabled={isLoading}
-                className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
+                className="p-2 sm:px-3 sm:py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200/80 shadow-2xs"
                 title="ໂຫຼດຂໍ້ມູນຄືນ"
               >
                 <ArrowClockwise size={15} weight="bold" className={isLoading ? 'animate-spin' : ''} />
@@ -160,59 +158,61 @@ export default function SettingsView({
           )}
         </div>
 
-        {/* 2x2 Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Card 1: Currency & Exchange Rate */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                  <CurrencyCircleDollar size={22} weight="fill" />
+        {/* 2-Column Minimal ERP Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-start">
+          {/* ================================================================ */}
+          {/* LEFT COLUMN: VẬN HÀNH & DỮ LIỆU GỐC                              */}
+          {/* ================================================================ */}
+          <div className="space-y-4 sm:space-y-5">
+            {/* Card 1: Currency & Exchange Rate */}
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 sm:p-5">
+              <div className="flex items-center gap-2.5 mb-3.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+                  <CurrencyCircleDollar size={20} weight="fill" />
                 </div>
-                <div>
-                  <h2 className="text-base font-bold text-slate-900">
+                <div className="min-w-0">
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900">
                     ອັດຕາຕົ້ນທຶນເງິນບາດ (THB / LAK)
                   </h2>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-[11.5px] text-slate-500 truncate">
                     ໃຊ້ສຳລັບແປງຕົ້ນທຶນສິນຄ້ານຳເຂົ້າຈາກໄທ ເປັນກີບລາວ
                   </p>
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="p-3 sm:p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <span className="text-xs text-slate-500 font-semibold block">
+                  <span className="text-[10.5px] text-slate-500 font-semibold uppercase tracking-wider block mb-1">
                     ອັດຕາແລກປ່ຽນປະຈຸບັນ
                   </span>
                   {!isEditingRate ? (
-                    <div className="mt-1 flex items-baseline gap-2">
-                      <span className="font-mono text-2xl font-black text-slate-900 tabular-nums">
-                        1 ฿ = {formatDots(exchangeRate)} ₭
-                      </span>
-                    </div>
+                    <span className="inline-flex items-center px-3 py-1 rounded-lg bg-amber-50 border border-amber-200/90 text-amber-900 font-mono text-base sm:text-lg font-black tracking-tight tabular-nums shadow-2xs">
+                      1 ฿ = {formatDots(exchangeRate)} ₭
+                    </span>
                   ) : (
-                    <div className="mt-1.5 flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <span className="text-xs font-mono font-bold text-slate-500">1 ฿ =</span>
                       <input
                         type="number"
                         value={rateInput}
                         onChange={(e) => setRateInput(e.target.value)}
-                        className="w-28 px-2.5 py-1.5 bg-white border border-teal-400 rounded-lg text-sm font-mono font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                        className="w-28 h-8 px-2.5 bg-white border border-teal-500 rounded-lg text-sm font-mono font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
                         placeholder="0"
+                        autoFocus
                       />
                       <span className="text-xs font-mono font-bold text-slate-500">₭</span>
                     </div>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="shrink-0">
                   {!isEditingRate ? (
                     <button
                       type="button"
                       onClick={() => setIsEditingRate(true)}
                       className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-teal-700 border border-teal-200 shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
                     >
-                      <PencilSimple size={14} weight="bold" />
+                      <PencilSimple size={13} weight="bold" />
                       <span>ແກ້ໄຂ</span>
                     </button>
                   ) : (
@@ -224,7 +224,8 @@ export default function SettingsView({
                           setIsEditingRate(false);
                         }}
                         disabled={isSavingRate}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 cursor-pointer"
+                        className="h-8 px-2.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 cursor-pointer"
+                        title="ຍົກເລີກ"
                       >
                         <X size={14} weight="bold" />
                       </button>
@@ -232,45 +233,134 @@ export default function SettingsView({
                         type="button"
                         onClick={handleSaveRate}
                         disabled={isSavingRate}
-                        className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95 transition-all"
+                        className="h-8 px-3 rounded-lg text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95 transition-all"
                       >
                         <FloppyDisk size={14} weight="bold" />
-                        <span>{isSavingRate ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກ'}</span>
+                        <span>{isSavingRate ? '...' : 'ບັນທຶກ'}</span>
                       </button>
                     </div>
                   )}
                 </div>
               </div>
-              <p className="text-xs text-slate-500 mt-3 leading-relaxed">
-                ໝາຍເຫດ: ລາຄາຕົ້ນທຶນບາດຂອງສິນຄ້າຈະຖືກຄິດໄລ່ອັດຕະໂນມັດຕາມອັດຕານີ້ (1 ບາດ = {formatDots(exchangeRate)} ກີບ) ເພື່ອຮັບປະກັນກຳໄລຂັ້ນຕົ້ນທີ່ຖືກຕ້ອງ.
-              </p>
+            </div>
+
+            {/* Card 2: Master Data (Single Divided List Group) */}
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 sm:p-5">
+              <div className="flex items-center gap-2.5 mb-3.5">
+                <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 border border-slate-200">
+                  <Folders size={20} weight="bold" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                    ຈັດການຂໍ້ມູນຫຼັກ (Master Data)
+                  </h2>
+                  <p className="text-[11.5px] text-slate-500 truncate">
+                    ໝວດໝູ່ສິນຄ້າ, ຜູ້ສະໜອງ ແລະ ການເພີ່ມສິນຄ້າໃໝ່
+                  </p>
+                </div>
+              </div>
+
+              {/* Divided List Group */}
+              <div className="border border-slate-200/90 rounded-xl divide-y divide-slate-100 bg-white overflow-hidden shadow-2xs">
+                {onOpenCategoryManager && (
+                  <button
+                    type="button"
+                    onClick={onOpenCategoryManager}
+                    className="w-full flex items-center justify-between p-3 sm:py-3.5 sm:px-4 hover:bg-slate-50/90 transition-colors text-left cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100">
+                        <Tag size={16} weight="bold" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs sm:text-[13px] font-bold text-slate-800 group-hover:text-teal-700 transition-colors block truncate">
+                          ຈັດການໝວດໝູ່ສິນຄ້າ (Categories)
+                        </span>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          ເພີ່ມ, ແກ້ໄຂ ແລະ ຈັດລະບຽບກຸ່ມສິນຄ້າ
+                        </p>
+                      </div>
+                    </div>
+                    <CaretRight size={15} weight="bold" className="text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                  </button>
+                )}
+
+                {onOpenSupplierManager && (
+                  <button
+                    type="button"
+                    onClick={onOpenSupplierManager}
+                    className="w-full flex items-center justify-between p-3 sm:py-3.5 sm:px-4 hover:bg-slate-50/90 transition-colors text-left cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100">
+                        <UsersThree size={16} weight="bold" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs sm:text-[13px] font-bold text-slate-800 group-hover:text-teal-700 transition-colors block truncate">
+                          ຈັດການຜູ້ສະໜອງ (Suppliers)
+                        </span>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          ລາຍຊື່ຜູ້ສະໜອງ, ເບີໂທ ແລະ ຍອດໜີ້ຄ້າງຈ່າຍ
+                        </p>
+                      </div>
+                    </div>
+                    <CaretRight size={15} weight="bold" className="text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                  </button>
+                )}
+
+                {onAddNewProduct && (
+                  <button
+                    type="button"
+                    onClick={onAddNewProduct}
+                    className="w-full flex items-center justify-between p-3 sm:py-3.5 sm:px-4 hover:bg-slate-50/90 transition-colors text-left cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100">
+                        <Plus size={16} weight="bold" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs sm:text-[13px] font-bold text-slate-800 group-hover:text-teal-700 transition-colors block truncate">
+                          ເພີ່ມສິນຄ້າໃໝ່ (Add Product)
+                        </span>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          ລົງທະບຽນບາໂຄດ, ລາຄາ ແລະ 3 ລະດັບຫົວໜ່ວຍ
+                        </p>
+                      </div>
+                    </div>
+                    <CaretRight size={15} weight="bold" className="text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Card 2: Receipt Printing & LAN/Wi-Fi Hardware Configuration */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-                    <Printer size={22} weight="bold" />
+          {/* ================================================================ */}
+          {/* RIGHT COLUMN: MÁY IN & CƠ SỞ DỮ LIỆU                              */}
+          {/* ================================================================ */}
+          <div className="space-y-4 sm:space-y-5">
+            {/* Card 1: EasyPrint ES-8803WA Hardware Configuration */}
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 sm:p-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100">
+                    <Printer size={20} weight="bold" />
                   </div>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                      <span>ເຄື່ອງພິມບິນຄວາມຮ້ອນ (Thermal Printer)</span>
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5">
+                      <span className="truncate">ເຄື່ອງພິມ EasyPrint ES-8803WA</span>
+                      <span className="text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
                         ESC/POS
                       </span>
                     </h2>
-                    <p className="text-xs text-slate-500">
-                      ກຳນົດ IP, Port (LAN/Wi-Fi) ສຳລັບ EasyPrint ES-8803WA ແລະ ຂະໜາດເຈ້ຍ
+                    <p className="text-[11.5px] text-slate-500 truncate">
+                      LAN / Wi-Fi IP (Port 9100)
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                <div className="shrink-0">
                   <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold ${
                       Capacitor.isNativePlatform()
                         ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                         : 'bg-sky-50 text-sky-800 border border-sky-200'
@@ -281,301 +371,160 @@ export default function SettingsView({
                         Capacitor.isNativePlatform() ? 'bg-emerald-500 animate-pulse' : 'bg-sky-500'
                       }`}
                     ></span>
-                    <span>{Capacitor.isNativePlatform() ? 'Capacitor Native (Direct Socket)' : 'Web Browser (System Print)'}</span>
+                    <span>{Capacitor.isNativePlatform() ? 'Direct Socket' : 'System Print'}</span>
                   </span>
                 </div>
               </div>
 
-              {/* IP Address & Port Settings */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    IP ເຄື່ອງພິມ LAN / Wi-Fi (EasyPrint ES-8803WA)
+              {/* IP Address & Port (3-Column Grid) */}
+              <div className="grid grid-cols-3 gap-2.5 mb-3.5">
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    IP ເຄື່ອງພິມ LAN/Wi-Fi
                   </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={printerIp}
-                      onChange={(e) => setPrinterIp(e.target.value)}
-                      placeholder="192.168.1.200"
-                      className="w-full h-10 px-3 font-mono font-bold text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 focus:bg-white transition-all shadow-2xs"
-                    />
-                  </div>
-                  <span className="text-[10.5px] text-slate-400 mt-1 block">
-                    ຄ່າເລີ່ມຕົ້ນມາດຕະຖານ: 192.168.1.200 (ກວດສອບ IP ເທິງໃບ Self-test ຂອງເຄື່ອງພິມ)
-                  </span>
+                  <input
+                    type="text"
+                    value={printerIp}
+                    onChange={(e) => setPrinterIp(e.target.value)}
+                    placeholder="192.168.1.200"
+                    className="w-full h-9 px-3 font-mono font-bold text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 focus:bg-white transition-all shadow-2xs"
+                  />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Port ເຄື່ອງພິມ (RAW)
+                <div className="col-span-1">
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Port (RAW)
                   </label>
                   <input
                     type="number"
                     value={printerPort}
                     onChange={(e) => setPrinterPort(e.target.value)}
                     placeholder="9100"
-                    className="w-full h-10 px-3 font-mono font-bold text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 focus:bg-white transition-all shadow-2xs"
+                    className="w-full h-9 px-3 font-mono font-bold text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 focus:bg-white transition-all shadow-2xs text-center"
                   />
-                  <span className="text-[10.5px] text-slate-400 mt-1 block">
-                    ມາດຕະຖານ: 9100
-                  </span>
                 </div>
               </div>
 
-              {/* Paper Width Options */}
-              <div className="mb-4">
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              {/* Paper Width Options (h-14 buttons) */}
+              <div className="mb-3.5">
+                <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
                   ຂະໜາດເຈ້ຍພິມ (Paper Width)
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
                     onClick={() => handlePaperWidthChange(80)}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={`h-14 px-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                       paperWidth === 80
-                        ? 'bg-teal-50 border-teal-500 text-teal-900 ring-2 ring-teal-500/20'
+                        ? 'bg-teal-50 border-teal-500 text-teal-900 ring-1 ring-teal-500'
                         : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs sm:text-sm">80 mm (3 ນິ້ວ - ES-8803WA)</span>
-                      {paperWidth === 80 && (
-                        <CheckCircle size={18} weight="fill" className="text-teal-600 shrink-0" />
-                      )}
+                    <div className="min-w-0 pr-1">
+                      <span className="font-bold text-xs block truncate">80 mm (ES-8803WA)</span>
+                      <span className="text-[10px] text-slate-500 block truncate">
+                        ມາດຕະຖານຕັ້ງໂຕະ (576 dots)
+                      </span>
                     </div>
-                    <span className="text-[10.5px] text-slate-500 mt-0.5 block">
-                      ມາດຕະຖານຕັ້ງໂຕະ (576 dots)
-                    </span>
+                    {paperWidth === 80 && (
+                      <CheckCircle size={17} weight="fill" className="text-teal-600 shrink-0" />
+                    )}
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handlePaperWidthChange(58)}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={`h-14 px-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                       paperWidth === 58
-                        ? 'bg-teal-50 border-teal-500 text-teal-900 ring-2 ring-teal-500/20'
+                        ? 'bg-teal-50 border-teal-500 text-teal-900 ring-1 ring-teal-500'
                         : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs sm:text-sm">58 mm (2 ນິ້ວ - ແບບພົກພາ)</span>
-                      {paperWidth === 58 && (
-                        <CheckCircle size={18} weight="fill" className="text-teal-600 shrink-0" />
-                      )}
+                    <div className="min-w-0 pr-1">
+                      <span className="font-bold text-xs block truncate">58 mm (ພົກພາ)</span>
+                      <span className="text-[10px] text-slate-500 block truncate">
+                        ເຄື່ອງພິມນ້ອຍ (384 dots)
+                      </span>
                     </div>
-                    <span className="text-[10.5px] text-slate-500 mt-0.5 block">
-                      ເຄື່ອງພິມຂະໜາດນ້ອຍ (384 dots)
-                    </span>
+                    {paperWidth === 58 && (
+                      <CheckCircle size={17} weight="fill" className="text-teal-600 shrink-0" />
+                    )}
                   </button>
                 </div>
               </div>
 
-              {/* Hardware Toggles: Drawer Kick & Auto-Cut */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-100">
-                <label className="flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/80 cursor-pointer text-xs font-bold text-slate-800 transition-colors">
+              {/* Hardware Toggles: Drawer Kick & Auto-Cut (Horizontal) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                <label className="flex items-center gap-2 p-2 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/80 cursor-pointer text-[11px] font-bold text-slate-800 transition-colors">
                   <input
                     type="checkbox"
                     checked={printerDrawerKick}
                     onChange={(e) => setPrinterDrawerKick(e.target.checked)}
-                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 accent-teal-600"
+                    className="w-3.5 h-3.5 text-teal-600 rounded focus:ring-teal-500 accent-teal-600 shrink-0"
                   />
-                  <span>ເປີດລິ້ນຊັກເງິນອັດຕະໂນມັດ (Cash Drawer Kick)</span>
+                  <span className="truncate">ເປີດລິ້ນຊັກເງິນ (Drawer Kick)</span>
                 </label>
 
-                <label className="flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/80 cursor-pointer text-xs font-bold text-slate-800 transition-colors">
+                <label className="flex items-center gap-2 p-2 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/80 cursor-pointer text-[11px] font-bold text-slate-800 transition-colors">
                   <input
                     type="checkbox"
                     checked={printerAutoCut}
                     onChange={(e) => setPrinterAutoCut(e.target.checked)}
-                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 accent-teal-600"
+                    className="w-3.5 h-3.5 text-teal-600 rounded focus:ring-teal-500 accent-teal-600 shrink-0"
                   />
-                  <span>ຕັດເຈ້ຍອັດຕະໂນມັດ (Auto Cutter)</span>
+                  <span className="truncate">ຕັດເຈ້ຍອັດຕະໂນມັດ (Auto Cut)</span>
                 </label>
               </div>
-            </div>
 
-            {/* Action Bar: Save & Kick Drawer Test */}
-            <div className="mt-4 pt-3.5 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2">
+              {/* Action Bar: Save & Kick Drawer Test */}
+              <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={handleTestKickDrawer}
-                  className="h-9 px-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                  className="h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
                   title="ທົດສອບຄຳສັ່ງເປີດລິ້ນຊັກເງິນ ESC/POS"
                 >
-                  <HandCoins size={15} weight="bold" />
-                  <span>ທົດສອບເປີດລິ້ນຊັກ</span>
+                  <HandCoins size={14} weight="bold" />
+                  <span>ທົດສອບລິ້ນຊັກ</span>
                 </button>
-              </div>
 
-              <button
-                type="button"
-                onClick={handleSavePrinterSettings}
-                className="h-9 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
-              >
-                <FloppyDisk size={15} weight="bold" />
-                <span>ບັນທຶກການຕັ້ງຄ່າເຄື່ອງພິມ</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Card 3: Quick Master Data Management */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-                <Folders size={22} weight="bold" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-slate-900">
-                  ຈັດການຂໍ້ມູນຫຼັກ (Master Data)
-                </h2>
-                <p className="text-xs text-slate-500">
-                  ໝວດໝູ່ສິນຄ້າ, ຜູ້ສະໜອງ ແລະ ການເພີ່ມສິນຄ້າໃໝ່
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2.5">
-              {onOpenCategoryManager && (
                 <button
                   type="button"
-                  onClick={onOpenCategoryManager}
-                  className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-teal-50/50 hover:border-teal-300 transition-all text-left cursor-pointer group"
+                  onClick={handleSavePrinterSettings}
+                  className="h-8 px-3.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
-                      <Tag size={18} weight="bold" />
-                    </div>
-                    <div>
-                      <span className="text-xs md:text-sm font-bold text-slate-800 group-hover:text-teal-800">
-                        ຈັດການໝວດໝູ່ສິນຄ້າ (Categories)
-                      </span>
-                      <p className="text-[11px] text-slate-500">
-                        ເພີ່ມ, ແກ້ໄຂ ແລະ ຈັດລະບຽບກຸ່ມສິນຄ້າ
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold text-teal-700 group-hover:underline">
-                    ເປີດ &rarr;
-                  </span>
+                  <FloppyDisk size={14} weight="bold" />
+                  <span>ບັນທຶກຕັ້ງຄ່າ</span>
                 </button>
-              )}
-
-              {onOpenSupplierManager && (
-                <button
-                  type="button"
-                  onClick={onOpenSupplierManager}
-                  className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-teal-50/50 hover:border-teal-300 transition-all text-left cursor-pointer group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
-                      <UsersThree size={18} weight="bold" />
-                    </div>
-                    <div>
-                      <span className="text-xs md:text-sm font-bold text-slate-800 group-hover:text-teal-800">
-                        ຈັດການຜູ້ສະໜອງ (Suppliers)
-                      </span>
-                      <p className="text-[11px] text-slate-500">
-                        ລາຍຊື່ຜູ້ສະໜອງ, ເບີໂທ ແລະ ຍອດໜີ້ຄ້າງຈ່າຍ
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold text-teal-700 group-hover:underline">
-                    ເປີດ &rarr;
-                  </span>
-                </button>
-              )}
-
-              {onAddNewProduct && (
-                <button
-                  type="button"
-                  onClick={onAddNewProduct}
-                  className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-teal-50/50 hover:border-teal-300 transition-all text-left cursor-pointer group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center">
-                      <Plus size={18} weight="bold" />
-                    </div>
-                    <div>
-                      <span className="text-xs md:text-sm font-bold text-slate-800 group-hover:text-teal-800">
-                        ເພີ່ມສິນຄ້າໃໝ່ (Add Product)
-                      </span>
-                      <p className="text-[11px] text-slate-500">
-                        ລົງທະບຽນບາໂຄດ, ລາຄາ ແລະ 3 ລະດັບຫົວໜ່ວຍ
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold text-teal-700 group-hover:underline">
-                    ເປີດ &rarr;
-                  </span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Card 4: Cloud Database & System Health */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
-                <ShieldCheck size={22} weight="bold" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-slate-900">
-                  ຖານຂໍ້ມູນ Supabase & ສະຖານະ
-                </h2>
-                <p className="text-xs text-slate-500">
-                  ການຊິ້ງຄ໌ຂໍ້ມູນຄລາວ ແລະ ແຄຊໃນເຄື່ອງ
-                </p>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-                <span className="text-xs font-semibold text-slate-600">ສະຖານະຄລາວ</span>
-                <div className="flex items-center gap-1.5">
-                  {isCloudSynced ? (
-                    <>
-                      <CloudCheck size={16} className="text-teal-600" weight="fill" />
-                      <span className="text-xs font-bold text-teal-700">Online (Synced)</span>
-                    </>
-                  ) : (
-                    <>
-                      <CloudSlash size={16} className="text-amber-600" weight="fill" />
-                      <span className="text-xs font-bold text-amber-700">Offline / Local Cache</span>
-                    </>
-                  )}
-                </div>
+            {/* Card 2: Supabase Status (Thanh tiện ích mỏng - Utility Bar) */}
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-3 sm:p-3.5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                {isCloudSynced ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
+                    <span>Online (Synced)</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                    <span>Offline Cache</span>
+                  </span>
+                )}
+                <span className="text-[11px] text-slate-500 hidden sm:inline truncate">
+                  Supabase Cloud
+                </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-                  <span className="text-slate-500 block">ສິນຄ້າໃນລະບົບ</span>
-                  <span className="font-mono text-base font-bold text-slate-800">
-                    {productsCount} ລາຍການ
-                  </span>
-                  {outOfStockCount > 0 && (
-                    <span className="text-[11px] font-mono text-rose-500 font-bold block mt-0.5">
-                      (ໝົດສະຕັອກ: {outOfStockCount})
-                    </span>
-                  )}
-                </div>
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-                  <span className="text-slate-500 block">ບິນຂາຍທັງໝົດ</span>
-                  <span className="font-mono text-base font-bold text-slate-800">
-                    {transactionsCount} ບິນ
-                  </span>
-                  {debtCount > 0 && (
-                    <span className="text-[11px] font-mono text-rose-500 font-bold block mt-0.5">
-                      (ຕິດໜີ້: {debtCount})
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-2 text-[11px] text-slate-400 flex items-center justify-between">
-                <span>MeiiShop POS • Vientiane Laos</span>
-                <span className="font-mono font-medium">DESIGN.md Compliant</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="font-mono text-xs font-bold text-slate-700 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
+                  {productsCount} ລາຍການ
+                </span>
+                <span className="font-mono text-xs font-bold text-slate-700 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
+                  {transactionsCount} ບິນ
+                </span>
               </div>
             </div>
           </div>

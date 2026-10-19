@@ -29,12 +29,114 @@ import {
   formatThb,
   parseThb,
   formatThbTyping,
+  getProductHighestStockDisplay,
 } from '../../utils/formatters';
 import BarcodeScannerModal from '../BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../../hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep, playErrorBeep } from '../../utils/audioFeedback';
 import { updateExchangeRateInSupabase, fetchExchangeRate } from '../../services/supabase';
 import queryClient from '../../services/queryClient';
+
+/**
+ * Editable Quantity Stepper with local state to allow deleting/backspacing to empty
+ * and defaulting back to 1 onBlur if empty or <= 0.
+ */
+function GrnQuantityStepper({ quantity, onUpdateQuantity, onStepQuantity, size = 'sm' }) {
+  const [localQty, setLocalQty] = useState(quantity != null && quantity !== '' ? String(quantity) : '1');
+
+  // Sync external quantity changes (e.g. from step buttons or reset)
+  useEffect(() => {
+    if (quantity !== undefined && quantity !== null) {
+      setLocalQty(quantity === '' ? '' : String(quantity));
+    }
+  }, [quantity]);
+
+  const handleChange = (e) => {
+    const val = e.target.value;
+    // Allow empty string so user can clear and type directly
+    if (val === '' || /^[0-9]+$/.test(val)) {
+      setLocalQty(val);
+      if (val !== '' && Number(val) > 0) {
+        onUpdateQuantity?.(Number(val));
+      }
+    }
+  };
+
+  const handleBlur = () => {
+    if (localQty === '' || Number(localQty) <= 0) {
+      setLocalQty('1');
+      onUpdateQuantity?.(1);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.target.blur();
+    }
+  };
+
+  if (size === 'lg') {
+    return (
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          type="button"
+          onClick={() => onStepQuantity?.(-1)}
+          className="w-11 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-lg active:scale-95 flex items-center justify-center cursor-pointer border border-slate-200 transition-colors"
+        >
+          -
+        </button>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={localQty}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          onFocus={(e) => e.target.select()}
+          className="w-14 h-11 text-center bg-white border border-slate-200 rounded-xl text-base font-mono font-black text-slate-900 focus:outline-none focus:ring-1 focus:ring-teal-500 selection:bg-teal-500 selection:text-white"
+        />
+        <button
+          type="button"
+          onClick={() => onStepQuantity?.(1)}
+          className="w-11 h-11 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-700 font-black text-lg active:scale-95 flex items-center justify-center cursor-pointer border border-teal-200 transition-colors"
+        >
+          +
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-0.5">
+      <button
+        type="button"
+        onClick={() => onStepQuantity?.(-1)}
+        className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold active:scale-95 flex items-center justify-center cursor-pointer text-xs shrink-0 transition-colors"
+      >
+        -
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={localQty}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        onFocus={(e) => e.target.select()}
+        className="w-11 h-7 text-center bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-teal-500 p-0 selection:bg-teal-500 selection:text-white"
+      />
+      <button
+        type="button"
+        onClick={() => onStepQuantity?.(1)}
+        className="w-7 h-7 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold active:scale-95 flex items-center justify-center cursor-pointer text-xs shrink-0 transition-colors"
+      >
+        +
+      </button>
+    </div>
+  );
+}
 
 /**
  * Enterprise Multi-Product Goods Receipt Note (GRN) Form
@@ -758,16 +860,25 @@ export default function MultiProductGRNForm({
                 {/* DESKTOP DATA TABLE (>= 1024px, hidden lg:block)          */}
                 {/* ======================================================== */}
                 <div className="hidden lg:block overflow-x-auto">
-                  <table className="w-full min-w-[700px] text-left border-collapse text-xs">
+                  <table className="w-full min-w-[850px] text-left border-collapse text-xs table-fixed">
+                    <colgroup>
+                      <col className="w-[195px]" />
+                      <col className="w-[115px]" />
+                      <col className="w-[105px]" />
+                      <col className="w-[105px]" />
+                      <col className="w-[145px]" />
+                      <col className="w-[135px]" />
+                      <col className="w-[60px]" />
+                    </colgroup>
                     <thead>
                       <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                        <th className="py-3 px-4 min-w-[200px] max-w-[240px]">ຮູບ & ຊື່ສິນຄ້າ</th>
-                        <th className="py-3 px-3 w-[115px]">ຫົວໜ່ວຍນຳເຂົ້າ</th>
-                        <th className="py-3 px-2 text-center w-[95px]">ຈຳນວນ</th>
-                        <th className="py-3 px-2 text-right w-[80px]">ຕົ້ນທຶນ ฿</th>
-                        <th className="py-3 px-2 text-right w-[110px]">ຕົ້ນທຶນ ₭</th>
-                        <th className="py-3 px-3 text-right w-[110px]">ລວມເງິນ ₭</th>
-                        <th className="py-3 px-2 text-center w-[75px]">ຈັດການ</th>
+                        <th className="py-3 px-3 w-[195px]">ຮູບ & ຊື່ສິນຄ້າ</th>
+                        <th className="py-3 px-2 w-[115px]">ຫົວໜ່ວຍນຳເຂົ້າ</th>
+                        <th className="py-3 px-1 text-center w-[105px]">ຈຳນວນ</th>
+                        <th className="py-3 px-1.5 text-right w-[105px]">ຕົ້ນທຶນ ฿</th>
+                        <th className="py-3 px-1.5 text-right w-[145px]">ຕົ້ນທຶນ ₭</th>
+                        <th className="py-3 px-3 text-right w-[135px]">ລວມເງິນ ₭</th>
+                        <th className="py-3 px-1 text-center w-[60px]">ຈັດການ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -781,7 +892,7 @@ export default function MultiProductGRNForm({
                           <React.Fragment key={`${item.product.id}-${item.unitId}-${idx}`}>
                             <tr className="hover:bg-slate-50/80 transition-colors">
                               {/* Product Info */}
-                              <td className="py-3 px-4 min-w-[200px] max-w-[240px]">
+                              <td className="py-3 px-3 w-[195px]">
                                 <div className="flex items-center gap-2.5">
                                   {item.product.imageUrl || item.product.image_url ? (
                                     <img
@@ -796,16 +907,13 @@ export default function MultiProductGRNForm({
                                   )}
                                   <div className="min-w-0 flex-1">
                                     <div
-                                      className="font-semibold text-slate-800 text-[13px] leading-snug line-clamp-2"
+                                      className="font-semibold text-slate-800 text-[13px] leading-snug line-clamp-2 break-words"
                                       title={item.product.name}
                                     >
                                       {item.product.name}
                                     </div>
-                                    <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5">
-                                      <span>ສະຕັອກ: {item.product.currentStockBaseUnits || 0} {item.product.baseUnit}</span>
-                                      {item.multiplier > 1 && (
-                                        <span className="text-teal-700 font-medium">| 1 {item.unitName} = {item.multiplier} {item.product.baseUnit}</span>
-                                      )}
+                                    <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                                      <span>ສະຕັອກ: {getProductHighestStockDisplay(item.product)}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -821,7 +929,7 @@ export default function MultiProductGRNForm({
                                   {sorted.length > 0 ? (
                                     sorted.map((u) => (
                                       <option key={u.id} value={u.id}>
-                                        {u.unitName} {u.multiplier > 1 ? `(${u.multiplier})` : ''}
+                                        {u.unitName}
                                       </option>
                                     ))
                                   ) : (
@@ -831,54 +939,36 @@ export default function MultiProductGRNForm({
                               </td>
 
                               {/* Quantity Stepper */}
-                              <td className="py-3 px-1 w-[95px]">
-                                <div className="flex items-center justify-center gap-0.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => onStepItemQuantity(idx, -1)}
-                                    className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold active:scale-95 flex items-center justify-center cursor-pointer text-xs"
-                                  >
-                                    -
-                                  </button>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    value={item.quantity}
-                                    onChange={(e) => onUpdateItemQuantity(idx, e.target.value)}
-                                    className="w-10 h-7 text-center bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-teal-500 p-0"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => onStepItemQuantity(idx, 1)}
-                                    className="w-7 h-7 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold active:scale-95 flex items-center justify-center cursor-pointer text-xs"
-                                  >
-                                    +
-                                  </button>
-                                </div>
+                              <td className="py-3 px-1 text-center w-[105px]">
+                                <GrnQuantityStepper
+                                  quantity={item.quantity}
+                                  onUpdateQuantity={(newQty) => onUpdateItemQuantity(idx, newQty)}
+                                  onStepQuantity={(delta) => onStepItemQuantity(idx, delta)}
+                                />
                               </td>
 
                               {/* Cost THB */}
-                              <td className="py-3 px-1.5 w-[80px]">
+                              <td className="py-3 px-1.5 w-[105px]">
                                 <div className="relative">
                                   <input
                                     type="text"
                                     value={item.costThb}
                                     onChange={(e) => onUpdateItemCostThb(idx, e.target.value)}
-                                    className={`w-full pr-4 pl-1.5 py-1.5 text-right bg-white border rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 ${
+                                    className={`w-full pr-5 pl-2 py-1.5 text-right bg-white border rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 ${
                                       item.isManualMode
                                         ? 'border-amber-300 focus:ring-amber-500'
                                         : 'border-slate-200 focus:ring-teal-500'
                                     }`}
                                     placeholder="0"
                                   />
-                                  <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">
+                                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold pointer-events-none">
                                     ฿
                                   </span>
                                 </div>
                               </td>
 
                               {/* Cost LAK + Mode Switch */}
-                              <td className="py-3 px-1.5 w-[110px]">
+                              <td className="py-3 px-1.5 w-[145px]">
                                 <div className="flex items-center gap-1">
                                   <button
                                     type="button"
@@ -900,19 +990,19 @@ export default function MultiProductGRNForm({
                                       <Link size={11} weight="bold" />
                                     )}
                                   </button>
-                                  <div className="relative flex-1">
+                                  <div className="relative flex-1 min-w-0">
                                     <input
                                       type="text"
                                       value={item.costLak}
                                       onChange={(e) => onUpdateItemCostLak(idx, e.target.value)}
-                                      className={`w-full pr-4 pl-1.5 py-1.5 text-right bg-white border rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 ${
+                                      className={`w-full pr-5 pl-2 py-1.5 text-right bg-white border rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 ${
                                         item.isManualMode
                                           ? 'border-amber-300 focus:ring-amber-500'
                                           : 'border-slate-200 focus:ring-teal-500'
                                       }`}
                                       placeholder="0"
                                     />
-                                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">
+                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold pointer-events-none">
                                       ₭
                                     </span>
                                   </div>
@@ -920,20 +1010,20 @@ export default function MultiProductGRNForm({
                               </td>
 
                               {/* Line Total */}
-                              <td className="py-3 px-3 text-right w-[110px]">
-                                <div className="font-mono font-black text-slate-900 text-sm">
+                              <td className="py-3 px-3 text-right w-[135px]">
+                                <div className="font-mono font-bold text-slate-900 text-[13px] tabular-nums truncate">
                                   {formatKip(lineTotalLak)}
                                 </div>
                                 {lineTotalThb > 0 && (
-                                  <div className="text-[11px] font-mono font-bold text-slate-400">
+                                  <div className="text-[11px] font-mono font-medium text-slate-500 tabular-nums truncate">
                                     {formatThb(lineTotalThb)} ฿
                                   </div>
                                 )}
                               </td>
 
                               {/* Actions */}
-                              <td className="py-3 px-3 text-center">
-                                <div className="flex items-center justify-center gap-1.5">
+                              <td className="py-3 px-1 text-center w-[60px]">
+                                <div className="flex items-center justify-center gap-1">
                                   <button
                                     type="button"
                                     onClick={() => onToggleItemRetail(idx)}
@@ -944,7 +1034,7 @@ export default function MultiProductGRNForm({
                                     }`}
                                     title="ປັບລາຄາຂາຍ"
                                   >
-                                    <PencilSimple size={15} />
+                                    <PencilSimple size={14} />
                                   </button>
                                   <button
                                     type="button"
@@ -952,7 +1042,7 @@ export default function MultiProductGRNForm({
                                     className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 cursor-pointer transition-all active:scale-95"
                                     title="ລຶບລາຍການ"
                                   >
-                                    <Trash size={15} />
+                                    <Trash size={14} />
                                   </button>
                                 </div>
                               </td>
@@ -1034,7 +1124,7 @@ export default function MultiProductGRNForm({
                               {item.product.name}
                             </span>
                             <span className="text-[10px] font-mono text-slate-400 shrink-0">
-                              (ມີ {item.product.currentStockBaseUnits || 0} {item.product.baseUnit})
+                              (ສະຕັອກ: {getProductHighestStockDisplay(item.product)})
                             </span>
                           </div>
                           <button
@@ -1058,7 +1148,7 @@ export default function MultiProductGRNForm({
                               {sorted.length > 0 ? (
                                 sorted.map((u) => (
                                   <option key={u.id} value={u.id}>
-                                    {u.unitName} {u.multiplier > 1 ? `(${u.multiplier} ${item.product.baseUnit})` : ''}
+                                    {u.unitName}
                                   </option>
                                 ))
                               ) : (
@@ -1068,29 +1158,12 @@ export default function MultiProductGRNForm({
                           </div>
 
                           {/* Touch Quantity Stepper (>= 44x44px) */}
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => onStepItemQuantity(idx, -1)}
-                              className="w-11 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-lg active:scale-95 flex items-center justify-center cursor-pointer border border-slate-200"
-                            >
-                              -
-                            </button>
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => onUpdateItemQuantity(idx, e.target.value)}
-                              className="w-14 h-11 text-center bg-white border border-slate-200 rounded-xl text-base font-mono font-black text-slate-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => onStepItemQuantity(idx, 1)}
-                              className="w-11 h-11 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-700 font-black text-lg active:scale-95 flex items-center justify-center cursor-pointer border border-teal-200"
-                            >
-                              +
-                            </button>
-                          </div>
+                          <GrnQuantityStepper
+                            size="lg"
+                            quantity={item.quantity}
+                            onUpdateQuantity={(newQty) => onUpdateItemQuantity(idx, newQty)}
+                            onStepQuantity={(delta) => onStepItemQuantity(idx, delta)}
+                          />
                         </div>
 
                         {/* Row 3: Cost THB & Cost LAK with Dual Mode Toggle */}

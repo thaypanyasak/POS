@@ -1058,7 +1058,7 @@ class _PurchaseEntryScreenState extends ConsumerState<PurchaseEntryScreen> {
                         children: [
                           const PhosphorIcon(PhosphorIconsBold.package, size: 14, color: Color(0xFF0D9488)),
                           const SizedBox(width: 6),
-                          Text('${u.unitName} (×${u.multiplier})', style: const TextStyle(fontSize: 12, color: Color(0xFF0F172A))),
+                          Text(u.unitName, style: const TextStyle(fontSize: 12, color: Color(0xFF0F172A))),
                         ],
                       ),
                     );
@@ -1075,7 +1075,7 @@ class _PurchaseEntryScreenState extends ConsumerState<PurchaseEntryScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          '${item.unitName} (×${item.multiplier})',
+                          item.unitName,
                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
                         ),
                         const SizedBox(width: 4),

@@ -8,7 +8,7 @@ import {
   CircleNotch,
 } from '@phosphor-icons/react';
 import { formatKip } from '../utils/formatters';
-import { printReceiptSmart, getPrinterConfig } from '../services/printerService';
+import { printReceiptSmart, getPrinterConfig, savePrinterConfig } from '../services/printerService';
 import { Capacitor } from '@capacitor/core';
 
 export default function ReceiptModal({
@@ -44,6 +44,7 @@ export default function ReceiptModal({
       const res = await printReceiptSmart({
         elementId: 'thermal-receipt-print-area',
         receipt,
+        paperWidth,
         allowFallback: true,
       });
 
@@ -67,12 +68,12 @@ export default function ReceiptModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-slate-100 rounded-3xl max-w-md w-full p-4 shadow-2xl flex flex-col gap-3 animate-in zoom-in-95 duration-200 max-h-[95vh] overflow-y-auto relative">
+    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 print:static print:inset-auto print:p-0 print:bg-transparent print:backdrop-blur-none print:block">
+      <div className="bg-slate-100 rounded-3xl max-w-md w-full p-4 shadow-2xl flex flex-col gap-3 animate-in zoom-in-95 duration-200 max-h-[95vh] overflow-y-auto relative print:static print:max-h-none print:h-auto print:overflow-visible print:p-0 print:shadow-none print:border-none print:bg-white print:w-full print:max-w-none">
         {/* Print Feedback Toast inside modal */}
         {printFeedback && (
           <div
-            className={`absolute top-16 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-xl text-xs font-bold shadow-xl border animate-in fade-in slide-in-from-top-2 duration-150 flex items-center gap-1.5 ${
+            className={`absolute top-16 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-xl text-xs font-bold shadow-xl border animate-in fade-in slide-in-from-top-2 duration-150 flex items-center gap-1.5 no-print ${
               printFeedback.type === 'success'
                 ? 'bg-emerald-600 text-white border-emerald-500'
                 : 'bg-rose-600 text-white border-rose-500'
@@ -83,7 +84,7 @@ export default function ReceiptModal({
         )}
 
         {/* Top Toolbar: 80mm vs 58mm Paper Toggle & Close */}
-        <div className="flex items-center justify-between pb-2 border-b border-slate-200 bg-white p-2.5 rounded-2xl">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-200 bg-white p-2.5 rounded-2xl no-print">
           <div className="flex items-center gap-2">
             <Receipt size={18} className="text-teal-600" weight="bold" />
             <span className="text-xs font-bold text-slate-900">ໃບບິນ MeiiShop</span>
@@ -91,7 +92,10 @@ export default function ReceiptModal({
           <div className="flex items-center gap-2">
             <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
               <button
-                onClick={() => setPaperWidth(80)}
+                onClick={() => {
+                  setPaperWidth(80);
+                  savePrinterConfig({ paperWidth: 80 });
+                }}
                 className={`px-2 py-0.5 rounded text-[10.5px] font-bold ${
                   paperWidth === 80 ? 'bg-teal-600 text-white' : 'text-slate-600'
                 }`}
@@ -99,7 +103,10 @@ export default function ReceiptModal({
                 80mm
               </button>
               <button
-                onClick={() => setPaperWidth(58)}
+                onClick={() => {
+                  setPaperWidth(58);
+                  savePrinterConfig({ paperWidth: 58 });
+                }}
                 className={`px-2 py-0.5 rounded text-[10.5px] font-bold ${
                   paperWidth === 58 ? 'bg-teal-600 text-white' : 'text-slate-600'
                 }`}
@@ -119,29 +126,29 @@ export default function ReceiptModal({
         {/* Authentic Thermal Receipt Paper Container */}
         <div
           id="thermal-receipt-print-area"
-          className={`bg-white mx-auto p-4 border border-slate-200 shadow-sm text-slate-900 ${
-            paperWidth === 80 ? 'w-full max-w-[380px]' : 'w-full max-w-[280px]'
+          className={`bg-white mx-auto p-4 border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto ${
+            paperWidth === 80 ? 'paper-80mm w-full max-w-[380px]' : 'paper-58mm w-full max-w-[280px]'
           }`}
         >
           {/* Store Logo Badge & Header */}
-          <div className="text-center pb-3">
-            <div className="inline-block bg-teal-700 text-white font-black text-sm px-3 py-1 rounded mb-1 tracking-wider">
+          <div className="text-center pb-1.5">
+            <div className="inline-block bg-teal-700 text-white font-black text-xs px-2.5 py-0.5 rounded mb-0.5 tracking-wider">
               MeiiShop
             </div>
-            <h2 className="text-base font-black text-slate-900 leading-tight">ຮ້ານ MeiiShop</h2>
-            <p className="text-[10px] text-slate-600 font-bold">
+            <h2 className="text-sm font-black text-slate-900 leading-normal pt-0.5">ຮ້ານ MeiiShop</h2>
+            <p className="text-[9.5px] text-slate-600 font-bold leading-normal">
               ຂາຍຍົກ - ຂາຍຍ່ອຍ ສິນຄ້າອຸປະໂພກ ບໍລິໂພກ
             </p>
-            <p className="text-[9.5px] text-slate-500">
+            <p className="text-[9px] text-slate-500 leading-normal">
               ຖະໜົນ ໄກສອນ ພົມວິຫານ, ບ້ານ ໂພນສະຫວ່າງ, ນະຄອນຫຼວງວຽງຈັນ
             </p>
-            <p className="text-[9.5px] text-slate-600 font-bold">
+            <p className="text-[9px] text-slate-600 font-bold leading-normal">
               ໂທ: 020 5555 9999 / 021 214 555
             </p>
           </div>
 
           {/* Receipt Title Banner */}
-          <div className="py-1 border-y-2 border-slate-900 text-center font-black text-xs my-2">
+          <div className="py-0.5 border-y-2 border-slate-900 text-center font-black text-xs my-1 leading-normal">
             ໃບບິນຮັບເງິນ / RECEIPT
           </div>
 
@@ -152,14 +159,14 @@ export default function ReceiptModal({
                 <Prohibit size={18} weight="bold" />
                 <span>ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ (VOID)</span>
               </div>
-              <p className="text-[9.5px] font-medium opacity-95 mt-0.5">
+              <p className="text-[9.5px] font-medium opacity-95 mt-0.5 leading-normal">
                 {receipt.cancelledAt ? `ວັນທີຍົກເລີກ: ${new Date(receipt.cancelledAt).toLocaleString('lo-LA')}` : 'ບິນຖືກຍົກເລີກແລ້ວ'} • ສິນຄ້າຖືກສົ່ງຄືນເຂົ້າສາງແລ້ວ
               </p>
             </div>
           )}
 
           {/* Metadata Info - 2 Rows with 2 Items Per Row (No Receipt Number, since barcode is at bottom) */}
-          <div className="flex flex-col gap-1 text-[10.5px] text-slate-700 pb-2">
+          <div className="flex flex-col gap-1 text-[10.5px] text-slate-700 pb-2 leading-normal">
             {isCancelled && (
               <div className="flex justify-between items-center bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
                 <span className="font-bold text-rose-800">ສະຖານະ:</span>
@@ -171,13 +178,13 @@ export default function ReceiptModal({
 
             {/* Row 1: Cashier/Seller (Left) + Customer (Right) */}
             <div className="flex justify-between items-center">
-              <div className="flex items-center gap-1 truncate max-w-[48%]">
+              <div className="flex items-center gap-1 truncate max-w-[48%] pt-0.5">
                 <span className="text-slate-500">ຜູ້ຂາຍ:</span>
                 <span className="font-medium text-slate-800 truncate">
                   {receipt.cashierName || 'Meii'}
                 </span>
               </div>
-              <div className="flex items-center justify-end gap-1 truncate max-w-[50%]">
+              <div className="flex items-center justify-end gap-1 truncate max-w-[50%] pt-0.5">
                 <span className="text-slate-500">ລູກຄ້າ:</span>
                 <span className="font-bold text-slate-900 truncate">
                   {receipt.customerName || 'ລູກຄ້າທົ່ວໄປ'}
@@ -187,11 +194,11 @@ export default function ReceiptModal({
 
             {/* Row 2: Date & Time (Left) + Payment Method (Right) */}
             <div className="flex justify-between items-center pt-0.5">
-              <div className="flex items-center gap-1 font-mono text-[10px] text-slate-700">
+              <div className="flex items-center gap-1 font-mono text-[10px] text-slate-700 pt-0.5">
                 <span className="font-sans text-slate-500">ວັນທີ:</span>
                 <span>{new Date(receipt.createdAt).toLocaleString('lo-LA')}</span>
               </div>
-              <div className="flex items-center gap-1 text-[10.5px]">
+              <div className="flex items-center gap-1 text-[10.5px] pt-0.5">
                 <span className="text-slate-500">ຊຳລະ:</span>
                 <span className={`font-bold ${receipt.paymentMethod === 'debt' ? 'text-amber-800' : 'text-teal-800'}`}>
                   {receipt.paymentMethod === 'cash'
@@ -207,16 +214,16 @@ export default function ReceiptModal({
           </div>
 
           {/* Items Table Header - 4 Columns: Name (40%), Qty (15%), Price (20%), Total (25%) */}
-          <div className="border-t border-dashed border-slate-300 pt-2 pb-1 flex items-center font-extrabold text-[10px] text-slate-800">
-            <span className="w-[40%] text-left">ຊື່ລາຍການ</span>
-            <span className="w-[15%] text-center">ຈຳນວນ</span>
-            <span className="w-[20%] text-right">ລາຄາ</span>
-            <span className="w-[25%] text-right">ລວມ (₭)</span>
+          <div className="border-t border-dashed border-slate-300 pt-2 pb-1 flex items-center font-extrabold text-[10px] text-slate-800 leading-normal">
+            <span className="w-[40%] flex-1 text-left pt-0.5">ຊື່ລາຍການ</span>
+            <span className="w-[15%] shrink-0 text-center pt-0.5">ຈຳນວນ</span>
+            <span className="w-[20%] shrink-0 text-right pt-0.5">ລາຄາ</span>
+            <span className="w-[25%] shrink-0 text-right pt-0.5">ລວມ (₭)</span>
           </div>
           <div className="border-b border-slate-400 mb-1.5"></div>
 
           {/* Item Rows - Single Line 4-Column Layout */}
-          <div className="flex flex-col gap-1.5 pb-2.5 border-b border-dashed border-slate-300">
+          <div className="flex flex-col gap-1 pb-2 border-b border-dashed border-slate-300">
             {receiptItems.length > 0 ? (
               receiptItems.map((it, i) => {
                 const prodName = it.product?.name || it.productName || it.product_name || 'ສິນຄ້າ';
@@ -241,26 +248,26 @@ export default function ReceiptModal({
                 const crateDepositTotal = Number(it.crateDepositTotal) || (hasMissingCrates ? missingCount * feePerCrate : 0);
 
                 return (
-                  <div key={i} className="flex flex-col text-[11px] leading-tight">
+                  <div key={i} className="receipt-item-row flex flex-col text-[11px] leading-normal py-0.5">
                     {/* Main Row: 4 Columns with Product Name allowed up to 2 lines */}
-                    <div className="flex items-start text-slate-900">
-                      <span className="w-[40%] font-bold text-left line-clamp-2 pr-1 break-words leading-tight" title={`${prodName} (${unitName})`}>
+                    <div className="product-name-row flex items-start text-slate-900 overflow-visible">
+                      <span className="w-[40%] flex-1 font-bold text-left pr-1 break-words leading-normal overflow-visible" title={`${prodName} (${unitName})`}>
                         {prodName} <span className="font-medium text-slate-700">({unitName})</span>
                       </span>
-                      <span className="w-[15%] text-center font-mono text-[10.5px] text-slate-800">
+                      <span className="w-[15%] shrink-0 text-center font-mono text-[10.5px] text-slate-800">
                         {qty}x
                       </span>
-                      <span className="w-[20%] text-right font-mono text-[10.5px] text-slate-700">
+                      <span className="w-[20%] shrink-0 text-right font-mono text-[10.5px] text-slate-700">
                         {formatKip(price).replace(' ₭', '')}
                       </span>
-                      <span className="w-[25%] text-right font-bold font-mono text-slate-950">
+                      <span className="w-[25%] shrink-0 text-right font-bold font-mono text-slate-950">
                         {formatKip(baseLineTotal).replace(' ₭', '')}
                       </span>
                     </div>
 
                     {/* Crate Deposit row for bottles/beers without empty crates to exchange (+30.000 ₭/crate) */}
                     {hasMissingCrates && missingCount > 0 && (
-                      <div className="flex items-center text-[10px] text-amber-950 bg-amber-50/90 py-0.5 px-1 rounded mt-0.5 border border-amber-200">
+                      <div className="flex items-center text-[10px] text-amber-950 bg-amber-50/90 py-0.5 px-1 rounded mt-0.5 border border-amber-200 leading-normal">
                         <span className="w-[40%] font-bold text-left truncate text-amber-900" title="ບໍ່ມີລັງປ່ຽນ (ຄ່າມັດຈຳແກັດ)">
                           ↳ ບໍ່ມີລັງປ່ຽນ
                         </span>
@@ -338,46 +345,46 @@ export default function ReceiptModal({
                 )}
                 <div className="border-b-2 border-slate-900 my-1"></div>
                 <div className="flex justify-between items-center py-0.5">
-                  <span className="font-black text-sm text-slate-900">ຍອດຊຳລະສຸດທິ:</span>
-                  <span className="font-black text-lg text-teal-800 font-mono tracking-tight">
+                  <span className="font-black text-sm text-slate-900 leading-normal pt-0.5">ຍອດຊຳລະສຸດທິ:</span>
+                  <span className="font-black text-lg text-teal-800 font-mono tracking-tight pt-0.5">
                     {formatKip(finalGrandTotal)}
                   </span>
                 </div>
                 <div className="border-b-2 border-slate-900 my-1"></div>
 
                 {(receipt.paymentMethod === 'debt' || receipt.isDebt) ? (
-                  <div className="bg-amber-50/80 p-2 rounded-xl border border-amber-300 flex flex-col gap-1.5 my-1">
+                  <div className="bg-amber-50/80 p-2 rounded-xl border border-amber-300 flex flex-col gap-1.5 my-1 leading-normal">
                     <div className="flex justify-between items-center text-slate-800">
-                      <span className="font-bold text-[11px]">ຈ່າຍແລ້ວ / ຈ່າຍກ່ອນ (Paid):</span>
-                      <span className="font-mono font-black text-emerald-800 text-xs">
+                      <span className="font-bold text-[11px] pt-0.5">ຈ່າຍແລ້ວ / ຈ່າຍກ່ອນ (Paid):</span>
+                      <span className="font-mono font-black text-emerald-800 text-xs pt-0.5">
                         {formatKip(receipt.paidAmount ?? receipt.amountTendered ?? 0)}
                       </span>
                     </div>
                     <div className="border-b border-dashed border-amber-300"></div>
                     <div className="flex justify-between items-center text-red-700 font-black">
-                      <span className="text-xs">ຍອດຄ້າງຊຳລະ (Debt Balance):</span>
-                      <span className="font-mono text-sm tracking-tight font-black">
+                      <span className="text-xs pt-0.5">ຍອດຄ້າງຊຳລະ (Debt Balance):</span>
+                      <span className="font-mono text-sm tracking-tight font-black pt-0.5">
                         {formatKip(receipt.debtAmount ?? Math.max(0, receipt.grandTotal - (receipt.paidAmount ?? receipt.amountTendered ?? 0)))}
                       </span>
                     </div>
                     {receipt.debtNote && (
-                      <div className="text-[9.5px] text-amber-950 font-medium italic pt-1 border-t border-amber-200">
+                      <div className="text-[9.5px] text-amber-950 font-medium italic pt-1 border-t border-amber-200 leading-normal">
                         * ໝາຍເຫດ: {receipt.debtNote}
                       </div>
                     )}
                   </div>
                 ) : (
                   <>
-                    <div className="flex justify-between text-slate-700">
-                      <span>ຮັບເງິນມາ (Tendered):</span>
-                      <span className="font-bold font-mono text-slate-900">
+                    <div className="flex justify-between text-slate-700 leading-normal">
+                      <span className="pt-0.5">ຮັບເງິນມາ (Tendered):</span>
+                      <span className="font-bold font-mono text-slate-900 pt-0.5">
                         {formatKip(receipt.amountTendered)}
                       </span>
                     </div>
                     {receipt.paymentMethod === 'cash' && (
-                      <div className="flex justify-between text-slate-900 font-bold">
-                        <span>ເງິນທອນ (Change):</span>
-                        <span className="font-mono text-emerald-800 text-xs">
+                      <div className="flex justify-between text-slate-900 font-bold leading-normal">
+                        <span className="pt-0.5">ເງິນທອນ (Change):</span>
+                        <span className="font-mono text-emerald-800 text-xs pt-0.5">
                           {formatKip(receipt.changeAmount)}
                         </span>
                       </div>
@@ -390,41 +397,41 @@ export default function ReceiptModal({
 
           {/* QR Code in receipt for transfer payments or unpaid debt - Frameless & Minimal */}
           {(isTransferPayment || (receipt.paymentMethod === 'debt' && (receipt.debtAmount ?? receipt.grandTotal) > 0)) && (
-            <div className="my-2 py-1 text-center flex flex-col items-center">
+            <div className="my-1.5 py-0.5 text-center flex flex-col items-center leading-normal">
               <img
                 src="/qr.jpg"
                 alt="Lao QR Payment"
-                className="w-32 h-32 object-contain"
+                className="w-24 h-24 object-contain"
                 onError={(e) => {
                   e.currentTarget.src =
-                    'https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=LAO_QR_BCEL_POS_DEMO';
+                    'https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=LAO_QR_BCEL_POS_DEMO';
                 }}
               />
-              <span className="text-[11.5px] font-black text-slate-900 mt-1 font-mono">
+              <span className="text-[11px] font-black text-slate-900 mt-0.5 font-mono pt-0.5">
                 ຍອດໂອນ: {formatKip((receipt.paymentMethod === 'debt' || receipt.isDebt) ? (receipt.debtAmount ?? receipt.grandTotal) : receipt.grandTotal)}
               </span>
             </div>
           )}
 
           {/* Signatures Section (Customized for Debt vs Normal Cash) */}
-          <div className="border-t border-dashed border-slate-300 pt-3 pb-2 grid grid-cols-2 text-[10px] text-slate-600 text-center">
+          <div className="border-t border-dashed border-slate-300 pt-2 pb-1.5 grid grid-cols-2 text-[9.5px] text-slate-600 text-center leading-normal">
             <div>
-              <p className="font-bold text-slate-700">
+              <p className="font-bold text-slate-700 leading-normal pt-0.5">
                 {(receipt.paymentMethod === 'debt' || receipt.isDebt) ? 'ລາຍເຊັນຜູ້ຄ້າງຊຳລະ (Debtor)' : 'ຜູ້ຮັບເຄື່ອງ (Customer)'}
               </p>
-              <p className="mt-7 text-slate-400">................................</p>
+              <p className="mt-3.5 text-slate-400">................................</p>
             </div>
             <div>
-              <p className="font-bold text-slate-700">
+              <p className="font-bold text-slate-700 leading-normal pt-0.5">
                 {(receipt.paymentMethod === 'debt' || receipt.isDebt) ? 'ລາຍເຊັນຜູ້ຂາຍ (Seller)' : 'ພະນັກງານຂາຍ (Cashier)'}
               </p>
-              <p className="mt-7 text-slate-400">................................</p>
+              <p className="mt-3.5 text-slate-400">................................</p>
             </div>
           </div>
 
           {/* Barcode Strip (Realistic seamless thermal printer barcode lines, no huge gaps) */}
-          <div className="border-t border-dashed border-slate-300 pt-3 text-center">
-            <div className="flex items-center justify-center h-8 my-1.5 overflow-hidden select-none">
+          <div className="border-t border-dashed border-slate-300 pt-2 text-center leading-normal">
+            <div className="flex items-center justify-center h-6 my-1 overflow-hidden select-none">
               {[2, 1, 3, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1, 2, 4, 1, 3, 1, 2, 1, 4, 2, 1, 3, 1, 2, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1, 2, 4].map((w, idx) => (
                 <div
                   key={idx}
@@ -433,21 +440,20 @@ export default function ReceiptModal({
                 />
               ))}
             </div>
-            <span className="text-[10px] text-slate-600 font-mono tracking-widest block font-bold">
+            <span className="text-[9.5px] text-slate-600 font-mono tracking-widest block font-bold pt-0.5">
               {receipt.receiptNumber}
             </span>
-            <p className="text-[10.5px] text-slate-700 mt-2 font-bold leading-tight">
+            <p className="text-[10px] text-slate-700 mt-1 font-bold leading-normal pt-0.5">
               ຂໍຂອບໃຈລູກຄ້າທີ່ມາອຸດໜູນ! ໂອກາດໜ້າເຊີນໃໝ່ເດີ
             </p>
-            <p className="text-[9.5px] text-slate-500 mt-0.5">
+            <p className="text-[9px] text-slate-500 mt-0.5 leading-normal">
               ສິນຄ້າຊື້ແລ້ວ ບໍ່ຮັບປ່ຽນ ຫຼື ຄືນເງິນ • ກະລຸນາກວດສອບເງິນທອນ
             </p>
-            
           </div>
         </div>
 
         {/* Action Buttons Toolbar */}
-        <div className="flex items-center gap-2 pt-2">
+        <div className="flex items-center gap-2 pt-2 no-print">
           {/* Cancel/Void Bill Button */}
           {isCancelled ? (
             <div className="py-2.5 px-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 select-none">

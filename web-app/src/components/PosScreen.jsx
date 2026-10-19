@@ -30,6 +30,88 @@ import queryClient from '../services/queryClient';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
 
+/**
+ * Interactive Cart Quantity Stepper:
+ * - Allows typing directly (e.g. 50 items)
+ * - Auto-selects all text on focus for instant overwrite (type '50' without needing backspace)
+ * - Allows deleting/clearing to empty string without removing the item or resetting to 1 while typing
+ * - Safely restores to 1 onBlur if left empty or <= 0
+ * - Wider width (w-10 sm:w-11) to comfortably display 2-3 digits
+ */
+function CartQuantityStepper({ quantity, onUpdateQuantity, onStepQuantity }) {
+  const [localQty, setLocalQty] = useState(
+    quantity !== undefined && quantity !== null && quantity !== '' ? String(quantity) : '1'
+  );
+
+  // Sync external quantity changes (e.g. step button clicks or cart reset)
+  useEffect(() => {
+    if (quantity !== undefined && quantity !== null) {
+      setLocalQty(quantity === '' ? '' : String(quantity));
+    }
+  }, [quantity]);
+
+  const handleChange = (e) => {
+    const val = e.target.value;
+    // Allow empty string so user can clear and type directly without item being deleted
+    if (val === '' || /^[0-9]+$/.test(val)) {
+      setLocalQty(val);
+      if (val !== '' && Number(val) > 0) {
+        onUpdateQuantity?.(Number(val));
+      }
+    }
+  };
+
+  const handleBlur = () => {
+    if (localQty === '' || Number(localQty) <= 0) {
+      setLocalQty('1');
+      onUpdateQuantity?.(1);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.target.blur();
+    }
+  };
+
+  const handleFocus = (e) => {
+    e.target.select();
+  };
+
+  return (
+    <div className="h-6.5 rounded-md border border-slate-200 bg-slate-50 flex items-center p-0.5 shrink-0 focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/30 transition-all">
+      <button
+        type="button"
+        onClick={() => onStepQuantity?.(-1)}
+        className="w-4 h-5.5 rounded flex items-center justify-center text-slate-700 hover:bg-white active:scale-95 transition-all cursor-pointer font-bold shrink-0"
+        title="ຫຼຸດຈຳນວນ"
+      >
+        <Minus size={10} weight="bold" />
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={localQty}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        onFocus={handleFocus}
+        className="w-7 sm:w-11 h-5 text-center font-black text-xs font-mono text-slate-900 tabular-nums bg-transparent border-0 focus:outline-none p-0 selection:bg-teal-500 selection:text-white"
+        title="ກົດເພື່ອພິມຈຳນວນທີ່ຕ້ອງການ"
+      />
+      <button
+        type="button"
+        onClick={() => onStepQuantity?.(1)}
+        className="w-4 h-5.5 rounded flex items-center justify-center text-teal-800 hover:bg-white active:scale-95 transition-all cursor-pointer font-bold shrink-0"
+        title="ເພີ່ມຈຳນວນ"
+      >
+        <Plus size={10} weight="bold" />
+      </button>
+    </div>
+  );
+}
+
 export default function PosScreen({
   categories,
   activeCategory,
@@ -642,31 +724,15 @@ export default function PosScreen({
 
                     {/* Bên phải: Bộ nút tăng giảm số lượng [- 1 +] và nút thùng rác xóa món */}
                     <div className="flex items-center gap-1 shrink-0">
-                      <div className="h-6 rounded-md border border-slate-200 bg-slate-50 flex items-center p-0.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateCartQuantity(item.product.id, item.unit.id, item.quantity - 1)
-                          }
-                          className="w-5.5 h-5 rounded flex items-center justify-center text-slate-700 hover:bg-white active:scale-95 transition-all cursor-pointer font-bold"
-                          title="ຫຼຸດຈຳນວນ"
-                        >
-                          <Minus size={10} weight="bold" />
-                        </button>
-                        <span className="w-5 text-center font-black text-xs font-mono text-slate-900 tabular-nums">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateCartQuantity(item.product.id, item.unit.id, item.quantity + 1)
-                          }
-                          className="w-5.5 h-5 rounded flex items-center justify-center text-teal-800 hover:bg-white active:scale-95 transition-all cursor-pointer font-bold"
-                          title="ເພີ່ມຈຳນວນ"
-                        >
-                          <Plus size={10} weight="bold" />
-                        </button>
-                      </div>
+                      <CartQuantityStepper
+                        quantity={item.quantity}
+                        onUpdateQuantity={(newQty) =>
+                          updateCartQuantity(item.product.id, item.unit.id, newQty)
+                        }
+                        onStepQuantity={(delta) =>
+                          updateCartQuantity(item.product.id, item.unit.id, item.quantity + delta)
+                        }
+                      />
 
                       {/* Icon Thùng rác xóa món */}
                       <button
@@ -962,21 +1028,21 @@ export default function PosScreen({
                       {p.name}
                     </h3>
 
-                    {/* Hiển thị tồn kho hiện tại (Duy nhất 1 vị trí chuẩn ERP - Clean flat text display) */}
-                    <div className="flex items-center mt-1 pt-1 border-t border-slate-100 text-xs">
+                    {/* Hiển thị tồn kho hiện tại (Chuẩn phụ đề text-[11px] font-medium, mt-0.5 mb-1) */}
+                    <div className="flex items-center mt-0.5 mb-1 pt-1 border-t border-slate-100 text-[11px] leading-tight">
                       {!hasTrackStock ? (
-                        <span className="text-slate-400 font-medium text-xs">ບໍ່ນັບສາງ</span>
+                        <span className="text-slate-400 font-medium text-[11px]">ບໍ່ນັບສາງ</span>
                       ) : isZeroStock ? (
-                        <span className="text-amber-600 font-semibold text-xs" title="ສິນຄ້າໝົດສາງ (ຂາຍຕໍ່ໄດ້)">
+                        <span className="text-amber-600 font-medium text-[11px]" title="ສິນຄ້າໝົດສາງ (ຂາຍຕໍ່ໄດ້)">
                           ໝົດສາງ (0)
                         </span>
                       ) : isNegativeStock ? (
-                        <span className="text-rose-600 font-semibold text-xs truncate" title={`ສະຕັອກ : ${formatNegativeStockCompound(p)}`}>
-                          ສະຕັອກ : {formatNegativeStockCompound(p)}
+                        <span className="text-rose-600 font-medium text-[11px] truncate" title={`ສະຕັອກ : ${stockVal}`}>
+                          ສະຕັອກ : {stockVal}
                         </span>
                       ) : (
-                        <span className="text-xs text-slate-600 font-medium truncate" title={`ສະຕັອກ : ${formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}`}>
-                          ສະຕັອກ : <strong className="text-slate-700 font-bold">{formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}</strong>
+                        <span className="text-slate-500 font-medium text-[11px] truncate" title={`ສະຕັອກ : ${formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}`}>
+                          ສະຕັອກ : <span className="text-slate-600 font-medium">{formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}</span>
                         </span>
                       )}
                     </div>

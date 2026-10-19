@@ -387,7 +387,16 @@ export default function PurchasesView({
   };
 
   const handleUpdateItemQuantity = (index, val) => {
-    const q = Math.max(1, parseInt(val, 10) || 1);
+    if (val === '' || val === null || val === undefined) {
+      setGrnCartItems((prev) => {
+        const next = [...prev];
+        if (next[index]) next[index] = { ...next[index], quantity: '' };
+        return next;
+      });
+      return;
+    }
+    const num = typeof val === 'number' ? val : parseInt(val, 10);
+    const q = isNaN(num) || num <= 0 ? 1 : num;
     setGrnCartItems((prev) => {
       const next = [...prev];
       if (next[index]) next[index] = { ...next[index], quantity: q };
@@ -653,6 +662,7 @@ export default function PurchasesView({
         : debtAmountNumber;
 
       const grnPayload = {
+        po_id: editingPoId || null,
         po_code: effectivePoCode,
         supplier_id: selectedSupplierId || null,
         receiver_name: receivedBy.trim() || 'ໄມ້ຄຳ (Meii)',
@@ -758,7 +768,7 @@ export default function PurchasesView({
       return `${q} ${u}`;
     }
 
-    const prod = products.find((p) => p.id === item.product_id);
+    const prod = products.find((p) => p.id === item.product_id || (item.product_name && p.name === item.product_name));
     const sorted = prod ? getSortedUnits(prod) : [];
     const cName = sorted[0]?.unitName || 'ແກັດ';
     const pName = sorted[1]?.unitName || 'ແພັກ';
@@ -776,7 +786,12 @@ export default function PurchasesView({
     // 3. Decompose from catalog product multi-tier ratios if base units exist
     const baseUnits = Number(item.imported_base_units ?? item.base_units_added ?? 0);
     if (baseUnits > 0) {
-      if (prod) {
+      if (prod && sorted.length > 0) {
+        const topUnit = sorted[0];
+        const mult = Math.max(1, Number(topUnit.multiplier) || 1);
+        if (mult > 1 && baseUnits >= mult && baseUnits % mult === 0) {
+          return `${baseUnits / mult} ${topUnit.unitName}`;
+        }
         const decomp = formatStockDisplay(baseUnits, sorted, prod.baseUnit || prod.base_unit || 'ອັນ');
         if (decomp) return decomp;
       }
@@ -788,7 +803,7 @@ export default function PurchasesView({
 
   // Helper to format quantity of an order in largest units
   const formatOrderQuantity = (po) => {
-    const prod = products.find((p) => p.id === po.product_id);
+    const prod = products.find((p) => p.id === po.product_id || (po.product_name && p.name === po.product_name));
     const sorted = prod ? getSortedUnits(prod) : [];
     const cName = sorted[0]?.unitName || 'ແກັດ';
     const pName = sorted[1]?.unitName || 'ແພັກ';
@@ -815,7 +830,12 @@ export default function PurchasesView({
 
     // 3. Single-product order fallback with imported_base_units
     if (po.imported_base_units) {
-      if (prod) {
+      if (prod && sorted.length > 0) {
+        const topUnit = sorted[0];
+        const mult = Math.max(1, Number(topUnit.multiplier) || 1);
+        if (mult > 1 && po.imported_base_units >= mult && po.imported_base_units % mult === 0) {
+          return `${po.imported_base_units / mult} ${topUnit.unitName}`;
+        }
         const decomp = formatStockDisplay(po.imported_base_units, sorted, prod.baseUnit || prod.base_unit || 'ອັນ');
         if (decomp) return decomp;
       }

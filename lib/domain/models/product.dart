@@ -249,6 +249,34 @@ class Product {
     baseUnitName: baseUnit,
   );
 
+  /// Active units sorted from highest tier (largest multiplier) to lowest
+  List<ProductUnit> get unitsHighestToLowest {
+    final list = units.where((u) => u.isActive).toList();
+    list.sort((a, b) => b.multiplier.compareTo(a.multiplier));
+    return list;
+  }
+
+  /// Clean negative stock display formatted to highest unit: "ຕິດລົບ -{số} {đơn_vị_cao_nhất}"
+  String get negativeHighestUnitStockText {
+    if (currentStockBaseUnits >= 0) return '';
+    final sorted = unitsHighestToLowest;
+    final topUnit = sorted.isNotEmpty ? sorted.first : null;
+    final topUnitName = topUnit?.unitName ?? cName;
+    final topMult = topUnit != null && topUnit.multiplier > 1 ? topUnit.multiplier : 1;
+    final absBase = currentStockBaseUnits.abs();
+
+    if (topMult > 1 && absBase >= topMult) {
+      if (absBase % topMult == 0) {
+        final qty = absBase ~/ topMult;
+        return 'ຕິດລົບ -$qty $topUnitName';
+      } else {
+        final qtyStr = (absBase / topMult).toStringAsFixed(1).replaceAll('.0', '');
+        return 'ຕິດລົບ -$qtyStr $topUnitName';
+      }
+    }
+    return 'ຕິດລົບ -$absBase $topUnitName';
+  }
+
   /// Full ERP stock display string
   String get stockDisplayText => StockFormatHelper.formatStockDisplay(
     currentStockBaseUnits,

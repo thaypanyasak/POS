@@ -28,6 +28,7 @@ import { Capacitor } from '@capacitor/core';
 import Navbar from './components/Navbar';
 import PosScreen from './components/PosScreen';
 import DashboardView from './components/DashboardView';
+import SalesByUnitReportView from './components/reports/SalesByUnitReportView';
 import ProductsView from './components/ProductsView';
 import HistoryView from './components/HistoryView';
 import PurchasesView from './pages/inventory/purchases';
@@ -46,8 +47,48 @@ import { useHardwareBarcodeScanner } from './hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep, playErrorBeep } from './utils/audioFeedback';
 
 export default function App() {
-  // Navigation Tabs: 'pos' | 'dashboard' | 'products' | 'history'
-  const [activeMainTab, setActiveMainTab] = useState('pos');
+  // Navigation Tabs: 'pos' | 'dashboard' | 'products' | 'history' | 'purchases' | 'sales-by-unit' | 'settings'
+  const [activeMainTab, setActiveMainTab] = useState(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const path = window.location.pathname;
+        const hash = window.location.hash;
+        if (path === '/reports/sales-by-unit' || hash.includes('sales-by-unit')) {
+          return 'sales-by-unit';
+        }
+      }
+    } catch (_) {}
+    return 'pos';
+  });
+
+  const handleTabChange = (tabId) => {
+    setActiveMainTab(tabId);
+    try {
+      if (typeof window !== 'undefined') {
+        if (tabId === 'sales-by-unit') {
+          window.history.pushState(null, '', '/reports/sales-by-unit');
+        } else if (window.location.pathname === '/reports/sales-by-unit') {
+          window.history.pushState(null, '', '/');
+        }
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        if (typeof window !== 'undefined') {
+          const path = window.location.pathname;
+          const hash = window.location.hash;
+          if (path === '/reports/sales-by-unit' || hash.includes('sales-by-unit')) {
+            setActiveMainTab('sales-by-unit');
+          }
+        }
+      } catch (_) {}
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Products Data (Supabase Live Sync with local cache, NO mock data)
   const [products, setProducts] = useState(() => {
@@ -2172,7 +2213,7 @@ export default function App() {
       {/* 1. LEFT SIDEBAR NAVBAR (Bottom bar on Mobile, Icon sidebar on Tablet/Desktop) */}
       <Navbar
         activeMainTab={activeMainTab}
-        setActiveMainTab={setActiveMainTab}
+        setActiveMainTab={handleTabChange}
         isCollapsed={isSidebarCollapsed}
         setIsCollapsed={setIsSidebarCollapsed}
         isCloudSynced={isCloudSynced}
@@ -2270,6 +2311,16 @@ export default function App() {
             onRefresh={handleRefreshAllFromSupabase}
             isLoading={isRefreshing}
             onAlert={openAlert}
+          />
+        )}
+
+        {activeMainTab === 'sales-by-unit' && (
+          <SalesByUnitReportView
+            transactions={transactions}
+            products={products}
+            exchangeRate={exchangeRate}
+            onRefresh={handleRefreshAllFromSupabase}
+            isLoading={isRefreshing}
           />
         )}
 

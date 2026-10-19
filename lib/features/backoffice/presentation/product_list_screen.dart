@@ -635,7 +635,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
       clipBehavior: Clip.antiAlias,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final tableWidth = constraints.maxWidth < 1200 ? 1200.0 : constraints.maxWidth;
+          final tableWidth = constraints.maxWidth < 980 ? 980.0 : constraints.maxWidth;
 
           return SingleChildScrollView(
             scrollDirection: Axis.vertical,
@@ -646,13 +646,13 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                 width: tableWidth,
                 child: Table(
                 columnWidths: const {
-                  0: FlexColumnWidth(2.6), // ຮູບ & ຊື່ສິນຄ້າ
-                  1: FlexColumnWidth(1.2), // ໝວດໝູ່
-                  2: FlexColumnWidth(1.5), // ຕົ້ນທຶນບາດ (฿) & ກີບ (₭)
-                  3: FlexColumnWidth(1.6), // ລະດັບຫົວໜ່ວຍຂາຍ
-                  4: FlexColumnWidth(1.5), // ສາງຄົງເຫຼືອ (Stock)
-                  5: FlexColumnWidth(1.2), // ອັດຕາສ່ວນ (Ratio)
-                  6: FixedColumnWidth(80), // ຈັດການ (Actions)
+                  0: FlexColumnWidth(2.2), // ຮູບ & ຊື່ສິນຄ້າ (22% min 200px)
+                  1: FlexColumnWidth(1.2), // ໝວດໝູ່ (12% min 110px)
+                  2: FlexColumnWidth(1.3), // ຕົ້ນທຶນບາດ (฿) & ກີບ (₭) (13% min 110px)
+                  3: FlexColumnWidth(2.5), // ລະດັບຫົວໜ່ວຍຂາຍ (25% min 230px)
+                  4: FlexColumnWidth(1.4), // ສາງຄົງເຫຼືອ (Stock) (14% min 130px)
+                  5: FlexColumnWidth(1.0), // ອັດຕາສ່ວນ (Ratio) (10% min 100px)
+                  6: FixedColumnWidth(60), // ຈັດການ (Actions) (4% min 60px)
                 },
                 defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                 children: [
@@ -690,7 +690,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                         child: Text('ອັດຕາສ່ວນ (Ratio)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: Color(0xFF64748B))),
                       ),
                       Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 11),
                         child: Center(child: Text('ຈັດການ', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: Color(0xFF64748B)))),
                       ),
                     ],
@@ -834,7 +834,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                           ),
                         ),
 
-                        // Col 4: Active Sale Units & Prices (Pill Badges)
+                        // Col 4: Active Sale Units & Prices (Pill Badges - Highest to Lowest unit)
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           child: Align(
@@ -843,7 +843,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                               spacing: 6,
                               runSpacing: 4,
                               crossAxisAlignment: WrapCrossAlignment.center,
-                              children: p.units.where((u) => u.isActive).map((u) {
+                              children: p.unitsHighestToLowest.map((u) {
                                 return Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
@@ -884,117 +884,101 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                                     ),
                                   ),
                                 )
-                              : Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    if (p.currentStockBaseUnits < 0)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFFF1F2),
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: const Color(0xFFFECDD3)),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
+                              : p.currentStockBaseUnits < 0
+                                  ? Text(
+                                      p.negativeHighestUnitStockText,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFFE11D48),
+                                        fontFeatures: [FontFeature.tabularFigures()],
+                                      ),
+                                    )
+                                  : p.currentStockBaseUnits == 0
+                                      ? const Text(
+                                          'ໝົດສະຕັອກ (0)',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFFE11D48),
+                                            fontFeatures: [FontFeature.tabularFigures()],
+                                          ),
+                                        )
+                                      : Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
-                                            const PhosphorIcon(PhosphorIconsRegular.warningCircle, size: 13, color: Color(0xFFBE123C)),
-                                            const SizedBox(width: 4),
+                                            Wrap(
+                                              spacing: 4,
+                                              children: [
+                                                if (p.tier1Active && p.cartonCount > 0)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFFEF3C7),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      border: Border.all(color: const Color(0xFFFDE68A)),
+                                                    ),
+                                                    child: Text(
+                                                      '${p.cartonCount} ${p.cName}',
+                                                      style: const TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: Color(0xFF78350F),
+                                                        fontFeatures: [FontFeature.tabularFigures()],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                if (p.tier2Active && p.packCount > 0)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFE0F2FE),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      border: Border.all(color: const Color(0xFFBAE6FD)),
+                                                    ),
+                                                    child: Text(
+                                                      '${p.packCount} ${p.pName}',
+                                                      style: const TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: Color(0xFF0369A1),
+                                                        fontFeatures: [FontFeature.tabularFigures()],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                if (p.tier3Active && p.pieceCount > 0)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFF1F5F9),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      border: Border.all(color: const Color(0xFFCBD5E1)),
+                                                    ),
+                                                    child: Text(
+                                                      '${p.pieceCount} ${p.pcName}',
+                                                      style: const TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: Color(0xFF334155),
+                                                        fontFeatures: [FontFeature.tabularFigures()],
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 2),
                                             Text(
-                                              'ໝົດສະຕັອກ (${p.negativeStockCompound})',
+                                              'ລວມທັງໝົດ: ${p.currentStockBaseUnits} ${p.subTierUnit.unitName}',
                                               style: const TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                                color: Color(0xFFBE123C),
+                                                fontSize: 10,
+                                                color: Color(0xFF94A3B8),
+                                                fontWeight: FontWeight.w500,
                                                 fontFeatures: [FontFeature.tabularFigures()],
                                               ),
                                             ),
                                           ],
                                         ),
-                                      )
-                                    else if (p.currentStockBaseUnits == 0)
-                                      const Text(
-                                        'ໝົດສະຕັອກ (0)',
-                                        style: TextStyle(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w800,
-                                          color: Color(0xFFDC2626),
-                                          fontFeatures: [FontFeature.tabularFigures()],
-                                        ),
-                                      )
-                                    else
-                                      Wrap(
-                                        spacing: 4,
-                                        children: [
-                                          if (p.tier1Active && p.cartonCount > 0)
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFFEF3C7),
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: const Color(0xFFFDE68A)),
-                                              ),
-                                              child: Text(
-                                                '${p.cartonCount} ${p.cName}',
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: Color(0xFF78350F),
-                                                  fontFeatures: [FontFeature.tabularFigures()],
-                                                ),
-                                              ),
-                                            ),
-                                          if (p.tier2Active && p.packCount > 0)
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFE0F2FE),
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: const Color(0xFFBAE6FD)),
-                                              ),
-                                              child: Text(
-                                                '${p.packCount} ${p.pName}',
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: Color(0xFF0369A1),
-                                                  fontFeatures: [FontFeature.tabularFigures()],
-                                                ),
-                                              ),
-                                            ),
-                                          if (p.tier3Active && p.pieceCount > 0)
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFF1F5F9),
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: const Color(0xFFCBD5E1)),
-                                              ),
-                                              child: Text(
-                                                '${p.pieceCount} ${p.pcName}',
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: Color(0xFF334155),
-                                                  fontFeatures: [FontFeature.tabularFigures()],
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'ລວມທັງໝົດ: ${p.currentStockBaseUnits} ${p.baseUnit}',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: p.currentStockBaseUnits < 0 ? const Color(0xFFE11D48) : const Color(0xFF94A3B8),
-                                        fontWeight: p.currentStockBaseUnits < 0 ? FontWeight.w700 : FontWeight.w600,
-                                        fontFeatures: const [FontFeature.tabularFigures()],
-                                      ),
-                                    ),
-                                  ],
-                                ),
                         ),
 
                         // Col 6: Conversion Ratio
@@ -1241,11 +1225,11 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Prices
+                  // Prices: Reversed order (Highest to lowest unit)
                   Flexible(
                     child: Wrap(
                       spacing: 4,
-                      children: p.units.where((u) => u.isActive).map((u) {
+                      children: p.unitsHighestToLowest.map((u) {
                         return Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
@@ -1278,21 +1262,13 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                       child: const Text('ບໍ່ນັບສາງ', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
                     )
                   else if (p.currentStockBaseUnits < 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF1F2),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: const Color(0xFFFECDD3)),
-                      ),
-                      child: Text(
-                        'ໝົດສະຕັອກ (${p.negativeStockCompound})',
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFFBE123C),
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
+                    Text(
+                      p.negativeHighestUnitStockText,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFE11D48),
+                        fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     )
                   else if (p.currentStockBaseUnits == 0)
@@ -1300,8 +1276,8 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                       'ໝົດສະຕັອກ (0)',
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFDC2626),
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFE11D48),
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     )

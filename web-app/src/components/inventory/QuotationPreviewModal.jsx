@@ -7,6 +7,7 @@ import {
   ShareNetwork,
 } from '@phosphor-icons/react';
 import { formatKip, formatDots, getEffectiveUnitPrice } from '../../utils/formatters';
+import { printReceiptSmart } from '../../services/printerService';
 
 export default function QuotationPreviewModal({
   isOpen,
@@ -37,7 +38,7 @@ export default function QuotationPreviewModal({
 
   // Window browser print
   const handleBrowserPrint = () => {
-    window.print();
+    printReceiptSmart({ elementId: 'quotation-print-area' });
   };
 
   // Raw ESC/POS thermal printer simulation / Web Serial or Network raw print trigger
@@ -87,46 +88,46 @@ export default function QuotationPreviewModal({
             }}
           >
             {/* Store Branding */}
-            <div className="text-center pb-2 border-b-2 border-slate-900">
-              <h2 className="text-lg font-black tracking-tight uppercase">ຮ້ານ Meiishop</h2>
-              <div className="text-xs font-black tracking-wider uppercase mt-0.5 text-slate-800">
+            <div className="text-center pb-2 border-b-2 border-slate-900 leading-normal">
+              <h2 className="text-lg font-black tracking-tight uppercase leading-normal pt-0.5">ຮ້ານ Meiishop</h2>
+              <div className="text-xs font-black tracking-wider uppercase mt-0.5 text-slate-800 leading-normal pt-0.5">
                 ໃບບອກລາຄາ / QUOTATION
               </div>
-              <div className="text-[10.5px] font-extrabold text-red-600 bg-red-50 py-0.5 px-2 rounded-md border border-red-200 inline-block mt-1">
+              <div className="text-[10.5px] font-extrabold text-red-600 bg-red-50 py-0.5 px-2 rounded-md border border-red-200 inline-block mt-1 leading-normal">
                 *** ໃບນີ້ບໍ່ແມ່ນໃບບິນຮັບເງິນ / NOT A RECEIPT ***
               </div>
             </div>
 
             {/* Slip Meta */}
-            <div className="py-2.5 flex flex-col gap-1 text-[11px] border-b border-dashed border-slate-300 font-medium text-slate-700">
+            <div className="py-2.5 flex flex-col gap-1 text-[11px] border-b border-dashed border-slate-300 font-medium text-slate-700 leading-normal">
               <div className="flex justify-between">
-                <span>ເລກທີໃບສະເໜີ:</span>
-                <span className="font-mono font-bold text-slate-950">{quotationNumber}</span>
+                <span className="pt-0.5">ເລກທີໃບສະເໜີ:</span>
+                <span className="font-mono font-bold text-slate-950 pt-0.5">{quotationNumber}</span>
               </div>
               <div className="flex justify-between">
-                <span>ວັນທີ & ເວລາ:</span>
-                <span className="font-mono">{dateStr} {timeStr}</span>
+                <span className="pt-0.5">ວັນທີ & ເວລາ:</span>
+                <span className="font-mono pt-0.5">{dateStr} {timeStr}</span>
               </div>
               <div className="flex justify-between">
-                <span>ພະນັກງານ:</span>
-                <span className="font-bold text-slate-900">{cashierName}</span>
+                <span className="pt-0.5">ພະນັກງານ:</span>
+                <span className="font-bold text-slate-900 pt-0.5">{cashierName}</span>
               </div>
               <div className="flex justify-between">
-                <span>ລູກຄ້າ:</span>
-                <span className="font-bold text-slate-900">{customerName || 'ລູກຄ້າທົ່ວໄປ'}</span>
+                <span className="pt-0.5">ລູກຄ້າ:</span>
+                <span className="font-bold text-slate-900 pt-0.5">{customerName || 'ລູກຄ້າທົ່ວໄປ'}</span>
               </div>
             </div>
 
             {/* Table Header */}
-            <div className="pt-2 pb-1 border-b border-slate-400 flex items-center text-[10.5px] font-black text-slate-800">
-              <span className="w-[44%] text-left">ຊື່ລາຍການ</span>
-              <span className="w-[14%] text-center">ຈຳນວນ</span>
-              <span className="w-[20%] text-right">ລາຄາ</span>
-              <span className="w-[22%] text-right">ລວມ (₭)</span>
+            <div className="pt-2 pb-1 border-b border-slate-400 flex items-center text-[10.5px] font-black text-slate-800 leading-normal">
+              <span className="w-[44%] flex-1 text-left pt-0.5">ຊື່ລາຍການ</span>
+              <span className="w-[14%] shrink-0 text-center pt-0.5">ຈຳນວນ</span>
+              <span className="w-[20%] shrink-0 text-right pt-0.5">ລາຄາ</span>
+              <span className="w-[22%] shrink-0 text-right pt-0.5">ລວມ (₭)</span>
             </div>
 
             {/* Line items */}
-            <div className="py-1.5 flex flex-col gap-1.5 border-b border-dashed border-slate-300">
+            <div className="py-1 flex flex-col gap-1 border-b border-dashed border-slate-300">
               {cart.map((it, idx) => {
                 const prodName = it.product?.name || 'ສິນຄ້າ';
                 const unitName = it.unit?.unitName || 'ອັນ';
@@ -142,25 +143,25 @@ export default function QuotationPreviewModal({
                 const crateFeeTotal = hasMissingCrates ? missingCount * feePerCrate : 0;
 
                 return (
-                  <div key={idx} className="flex flex-col text-[11px] leading-tight">
-                    <div className="flex items-start text-slate-900">
-                      <span className="w-[44%] font-bold text-left line-clamp-2 pr-1 break-words">
+                  <div key={idx} className="receipt-item-row flex flex-col text-[11px] leading-normal py-0.5">
+                    <div className="product-name-row flex items-start text-slate-900 overflow-visible">
+                      <span className="w-[44%] flex-1 font-bold text-left pr-1 break-words leading-normal overflow-visible">
                         {prodName} <span className="font-normal text-slate-600">({unitName})</span>
                       </span>
-                      <span className="w-[14%] text-center font-mono text-[10px] text-slate-700">
+                      <span className="w-[14%] shrink-0 text-center font-mono text-[10px] text-slate-700">
                         {it.quantity}x
                       </span>
-                      <span className="w-[20%] text-right font-mono text-[10.5px]">
+                      <span className="w-[20%] shrink-0 text-right font-mono text-[10.5px]">
                         {formatDots(effectivePrice)}
                       </span>
-                      <span className="w-[22%] text-right font-mono font-bold text-slate-950">
+                      <span className="w-[22%] shrink-0 text-right font-mono font-bold text-slate-950">
                         {formatDots(baseTotal)}
                       </span>
                     </div>
 
                     {/* Beer Crate line if applicable */}
                     {hasMissingCrates && missingCount > 0 && (
-                      <div className="flex items-center text-[9.5px] text-amber-900 bg-amber-50/80 py-0.5 px-1 rounded mt-0.5 border border-amber-200">
+                      <div className="flex items-center text-[9.5px] text-amber-900 bg-amber-50/80 py-0.5 px-1 rounded mt-0.5 border border-amber-200 leading-normal">
                         <span className="w-[44%] font-medium text-left truncate">↳ ບໍ່ມີລັງປ່ຽນ</span>
                         <span className="w-[14%] text-center font-mono">{missingCount}x</span>
                         <span className="w-[20%] text-right font-mono">{formatDots(feePerCrate)}</span>

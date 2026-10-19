@@ -95,6 +95,24 @@ export function getProductStockDetails(p, exchangeRate = 0) {
   const isNegativeStock = !isUntracked && rawStock < 0;
   const isZeroStock = !isUntracked && rawStock === 0;
 
+  // Active units sorted by multiplier descending (highest unit first, e.g. Tier 3 -> Tier 2 -> Tier 1)
+  const sortedUnitsDesc = (p.units || [])
+    .filter((u) => u && u.isActive !== false)
+    .slice()
+    .sort((a, b) => (Number(b.multiplier) || 1) - (Number(a.multiplier) || 1));
+
+  // Highest unit formatting for negative stock: "ຕິດລົບ -{số_lượng} {đơn_vị_cao_nhất}"
+  const highestUnit = sortedUnitsDesc.length > 0 ? sortedUnitsDesc[0] : null;
+  const highestUnitName = highestUnit?.unitName || cName || 'ແກັດ';
+  const highestMult = Math.max(1, Number(highestUnit?.multiplier) || 1);
+  const negativeHighestQty = Math.abs(rawStock) >= highestMult && highestMult > 1
+    ? (Math.abs(rawStock) % highestMult === 0
+        ? Math.abs(rawStock) / highestMult
+        : (Math.abs(rawStock) / highestMult).toFixed(1).replace('.0', ''))
+    : Math.abs(rawStock);
+
+  const negativeStockText = `ຕິດລົບ -${negativeHighestQty} ${highestUnitName}`;
+
   const stockDisplayText = formatStockDisplay(p, null, pcName, { prefix: 'ໝົດສະຕັອກ' });
   const negativeCompound = formatNegativeStockCompound(p, null, pcName);
 
@@ -152,6 +170,10 @@ export function getProductStockDetails(p, exchangeRate = 0) {
     }
   }
 
+  // Lowest unit name for "ລວມທັງໝົດ"
+  const lowestUnit = sortedUnitsDesc.length > 0 ? sortedUnitsDesc[sortedUnitsDesc.length - 1] : null;
+  const lowestUnitName = lowestUnit?.unitName || p.baseUnit || pcName || 'ອັນ';
+
   return {
     cartonUnitName,
     cartonCostKip,
@@ -160,6 +182,9 @@ export function getProductStockDetails(p, exchangeRate = 0) {
     isNegativeStock,
     isZeroStock,
     rawStock,
+    negativeStockText,
+    sortedUnitsDesc,
+    lowestUnitName,
     stockDisplayText,
     negativeCompound,
     cartonUnit,
@@ -457,10 +482,10 @@ export default function ProductsView({
 
               {/* Bottom Row: Selling Units & Stock Badge */}
               <div className="flex flex-col gap-2 pt-1 border-t border-slate-100">
-                {/* Selling Units Badges */}
+                {/* Selling Units Badges: Reversed order (highest to lowest) */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-[11px] text-slate-400 font-bold shrink-0">ລາຄາ:</span>
-                  {p.units.map((u) => (
+                  {info.sortedUnitsDesc.map((u) => (
                     <span
                       key={u.id}
                       className="px-2 py-0.5 rounded-lg bg-teal-50 text-[11px] font-extrabold text-teal-800 border border-teal-200"
@@ -478,23 +503,13 @@ export default function ProductsView({
                       ບໍ່ນັບສາງ
                     </span>
                   ) : info.isNegativeStock ? (
-                    <div className="flex flex-col gap-0.5 items-end">
-                      <span className="bg-rose-50 text-rose-700 border border-rose-200 font-bold px-2.5 py-1 rounded-md text-xs inline-flex items-center gap-1">
-                        {info.stockDisplayText}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        ລວມທັງໝົດ: {info.rawStock} {info.pcName}
-                      </span>
-                    </div>
+                    <span className="text-rose-600 font-bold text-xs">
+                      {info.negativeStockText}
+                    </span>
                   ) : info.isZeroStock ? (
-                    <div className="flex flex-col gap-0.5 items-end">
-                      <span className="text-red-500 font-black text-xs">
-                        ໝົດສະຕັອກ (0)
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        ລວມທັງໝົດ: 0 {info.pcName}
-                      </span>
-                    </div>
+                    <span className="text-rose-600 font-semibold text-xs">
+                      ໝົດສະຕັອກ (0)
+                    </span>
                   ) : (
                     <div className="flex flex-col gap-0.5 items-end">
                       <div className="flex items-center gap-1.5 flex-wrap font-bold">
@@ -515,7 +530,7 @@ export default function ProductsView({
                         )}
                       </div>
                       <span className="text-[10px] text-slate-400 font-medium">
-                        ລວມທັງໝົດ: {info.rawStock} {info.pcName}
+                        ລວມທັງໝົດ: {info.rawStock} {info.lowestUnitName}
                       </span>
                     </div>
                   )}
@@ -528,16 +543,16 @@ export default function ProductsView({
 
       {/* 3. B: TABLET & DESKTOP VIEW (>= 768px) - Responsive Horizontal Scroll Table */}
       <div className="hidden md:block w-full overflow-x-auto rounded-2xl border border-slate-200 shadow-xs overscroll-x-contain touch-pan-y bg-white mb-10">
-        <table className="w-full min-w-[950px] text-left text-xs border-collapse">
+        <table className="w-full min-w-[980px] text-left text-xs border-collapse">
           <thead>
             <tr className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 text-slate-700 font-extrabold">
-              <th className="py-3.5 px-4">ຮູບ & ຊື່ສິນຄ້າ</th>
-              <th className="py-3.5 px-3">ໝວດໝູ່</th>
-              <th className="py-3.5 px-3">ຕົ້ນທຶນບາດ (฿) & ກີບ (₭)</th>
-              <th className="py-3.5 px-3">ລະດັບຫົວໜ່ວຍຂາຍ</th>
-              <th className="py-3.5 px-3">ສາງຄົງເຫຼືອ (Stock)</th>
-              <th className="py-3.5 px-3">ອັດຕາສ່ວນ (Ratio)</th>
-              <th className="py-3.5 px-4 text-center">ຈັດການ</th>
+              <th className="py-3.5 px-4 w-[22%] min-w-[200px]">ຮູບ & ຊື່ສິນຄ້າ</th>
+              <th className="py-3.5 px-3 w-[12%] min-w-[110px]">ໝວດໝູ່</th>
+              <th className="py-3.5 px-3 w-[13%] min-w-[110px]">ຕົ້ນທຶນບາດ (฿) & ກີບ (₭)</th>
+              <th className="py-3.5 px-3 w-[25%] min-w-[230px]">ລະດັບຫົວໜ່ວຍຂາຍ</th>
+              <th className="py-3.5 px-3 w-[14%] min-w-[130px]">ສາງຄົງເຫຼືອ (Stock)</th>
+              <th className="py-3.5 px-3 w-[10%] min-w-[100px]">ອັດຕາສ່ວນ (Ratio)</th>
+              <th className="py-3.5 px-4 w-[4%] min-w-[60px] text-center">ຈັດການ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -622,10 +637,10 @@ export default function ProductsView({
                     </div>
                   </td>
 
-                  {/* Units Chips */}
+                  {/* Units Chips: Reversed order (Highest to lowest unit) */}
                   <td className="py-3 px-3">
                     <div className="flex items-center gap-1 flex-wrap">
-                      {p.units.map((u) => (
+                      {info.sortedUnitsDesc.map((u) => (
                         <span
                           key={u.id}
                           className="px-2 py-0.5 rounded-md bg-slate-100 text-[10.5px] font-bold text-slate-700 border border-slate-200"
@@ -643,25 +658,13 @@ export default function ProductsView({
                         ບໍ່ນັບສາງ
                       </span>
                     ) : info.isNegativeStock ? (
-                      <div className="flex flex-col gap-1 text-xs">
-                        <div>
-                          <span className="bg-rose-50 text-rose-700 border border-rose-200 font-bold px-2.5 py-1 rounded-md text-xs inline-flex items-center gap-1">
-                            {info.stockDisplayText}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-medium">
-                          ລວມທັງໝົດ: {info.rawStock} {info.pcName}
-                        </span>
-                      </div>
+                      <span className="text-rose-600 font-bold text-xs inline-block">
+                        {info.negativeStockText}
+                      </span>
                     ) : info.isZeroStock ? (
-                      <div className="flex flex-col gap-1 text-xs">
-                        <span className="text-red-500 font-bold text-[11px]">
-                          ໝົດສະຕັອກ (0)
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-medium">
-                          ລວມທັງໝົດ: 0 {info.pcName}
-                        </span>
-                      </div>
+                      <span className="text-rose-600 font-semibold text-xs inline-block">
+                        ໝົດສະຕັອກ (0)
+                      </span>
                     ) : (
                       <div className="flex flex-col gap-1 text-xs">
                         <div className="flex items-center gap-1.5 flex-wrap font-bold">
@@ -681,16 +684,9 @@ export default function ProductsView({
                             </span>
                           )}
                         </div>
-                        {info.packUnit && info.totalPacksCount && (
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            ລວມທັງໝົດ: {info.totalPacksCount} {info.pName}
-                          </span>
-                        )}
-                        {!info.packUnit && (
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            ລວມທັງໝົດ: {info.rawStock} {info.pcName}
-                          </span>
-                        )}
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          ລວມທັງໝົດ: {info.rawStock} {info.lowestUnitName}
+                        </span>
                       </div>
                     )}
                   </td>

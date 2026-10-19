@@ -62,12 +62,7 @@ class ProductCard extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color:
-              isNegativeStock
-                  ? AppColors.danger.withValues(alpha: 0.35)
-                  : isZeroStock
-                  ? AppColors.warning.withValues(alpha: 0.35)
-                  : AppColors.border,
+          color: AppColors.border,
           width: 1.0,
         ),
         boxShadow: const [
@@ -145,7 +140,7 @@ class ProductCard extends StatelessWidget {
                                 'ໝົດສາງ (0)',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                   color: Color(0xFFD97706), // amber-600
                                 ),
                                 maxLines: 1,
@@ -153,10 +148,10 @@ class ProductCard extends StatelessWidget {
                               )
                             : isNegativeStock
                             ? Text(
-                                'ສະຕັອກ : ${product.negativeStockCompound}',
+                                'ສະຕັອກ : ${product.currentStockBaseUnits}',
                                 style: const TextStyle(
                                   fontSize: 11,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                   color: Color(0xFFE11D48), // rose-600
                                 ),
                                 maxLines: 1,
@@ -176,7 +171,7 @@ class ProductCard extends StatelessWidget {
                                     TextSpan(
                                       text: product.stockDisplayText,
                                       style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
+                                        fontWeight: FontWeight.w500,
                                         color: Color(0xFF334155),
                                       ),
                                     ),

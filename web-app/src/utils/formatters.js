@@ -489,3 +489,39 @@ export const PRICE_TIERS = [
   { tier: 2, label: 'ລາຄາ 2', desc: 'ລູກຄ້າປະຈຳ', shortDesc: 'ລູກຄ້າປະຈຳ' },
   { tier: 3, label: 'ລາຄາ 3', desc: 'ລາຄາສົ່ງ / VIP', shortDesc: 'ຂາຍສົ່ງ/VIP' },
 ];
+
+/**
+ * Formats stock simplified to the highest available packaging unit (e.g. "0 ຕັບ", "2 ແກັດ", "5 ອັນ")
+ * Omits breakdown formula like "| 1 ຕັບ = 60 ອັນ"
+ */
+export const getProductHighestStockDisplay = (product) => {
+  if (!product) return '0';
+  if (product.trackStock === false || product.track_stock === false) {
+    return 'ບໍ່ນັບສາງ';
+  }
+
+  const rawStock = Number(product.currentStockBaseUnits ?? product.current_stock_base_units ?? 0);
+  const prodUnits = (product.units || []).filter((u) => u && u.isActive !== false);
+  const sorted = [...prodUnits].sort((a, b) => (Number(b.multiplier) || 1) - (Number(a.multiplier) || 1));
+
+  if (sorted.length > 0) {
+    const topUnit = sorted[0];
+    const mult = Math.max(1, Number(topUnit.multiplier) || 1);
+    const unitName = topUnit.unitName || product.baseUnit || 'ອັນ';
+
+    if (mult > 1) {
+      const count = Math.floor(rawStock / mult);
+      const rem = rawStock % mult;
+      if (rem > 0) {
+        return count > 0
+          ? `${count} ${unitName} ${rem} ${product.baseUnit || 'ອັນ'}`
+          : `${rem} ${product.baseUnit || 'ອັນ'}`;
+      }
+      return `${count} ${unitName}`;
+    }
+    return `${rawStock} ${unitName}`;
+  }
+
+  return `${rawStock} ${product.baseUnit || 'ອັນ'}`;
+};
+

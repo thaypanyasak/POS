@@ -92,7 +92,7 @@ html, body, #root {
    ========================================================================= */
 @supports (padding-top: env(safe-area-inset-top)) {
   .native-safe-area-shell {
-    padding-top: env(safe-area-inset-top, 0px) !important;
+    padding-top: max(16px, env(safe-area-inset-top)) !important;
     padding-left: 0px !important;
     padding-right: 0px !important;
   }
@@ -102,34 +102,127 @@ html, body, #root {
       padding-top: 0px !important;
       padding-left: 0px !important;
       padding-right: 0px !important;
+      width: 100vw !important;
+      max-width: none !important;
     }
   }
 }
 
-
 /* Thermal Receipt Print Styles */
-
 @media print {
   @page {
-    size: 80mm auto;
-    margin: 0;
+    size: 80mm 297mm;
+    margin: 0mm;
   }
-  body * {
-    visibility: hidden;
-  }
-  #thermal-receipt-print-area, #thermal-receipt-print-area *,
-  #quotation-print-area, #quotation-print-area * {
-    visibility: visible;
-  }
-  #thermal-receipt-print-area,
-  #quotation-print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 80mm;
-    margin: 0;
-    padding: 2mm 3mm;
+
+  /* Reset html, body, and root so no 100vh / overflow:hidden traps print layout */
+  html, body {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
     background: #ffffff !important;
     color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* When printing, hide all normal app views in #root except print containers */
+  #root > *:not(.print-container-host) {
+    display: none !important;
+  }
+
+  /* If inside modal or host, make ancestors static with no overflow */
+  body:has(#thermal-receipt-print-area) #root,
+  body:has(#thermal-receipt-print-area) #root > div,
+  body:has(#thermal-receipt-print-area) .fixed {
+    position: static !important;
+    display: block !important;
+    height: auto !important;
+    min-height: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Thermal Receipt Print Container */
+  #thermal-receipt-print-area,
+  #quotation-print-area {
+    position: static !important;
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    page-break-inside: auto !important;
+    box-sizing: border-box !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    line-height: 1.4 !important;
+  }
+
+  /* Khổ K80: width 72mm !important; margin: 0 auto; */
+  #thermal-receipt-print-area.paper-80mm,
+  #thermal-receipt-print-area:not(.paper-58mm),
+  #quotation-print-area {
+    width: 72mm !important;
+    max-width: 72mm !important;
+    margin: 0 auto !important;
+  }
+
+  /* Khổ K58: width 48mm !important; margin: 0 auto; */
+  #thermal-receipt-print-area.paper-58mm {
+    width: 48mm !important;
+    max-width: 48mm !important;
+    margin: 0 auto !important;
+  }
+
+  /* Thermal Typography rules to prevent clipping Lao diacritics */
+  #thermal-receipt-print-area td,
+  #thermal-receipt-print-area th,
+  #thermal-receipt-print-area p,
+  #thermal-receipt-print-area span,
+  #thermal-receipt-print-area h2,
+  #thermal-receipt-print-area div,
+  #quotation-print-area td,
+  #quotation-print-area th,
+  #quotation-print-area p,
+  #quotation-print-area span,
+  #quotation-print-area h2,
+  #quotation-print-area div {
+    color: #000000 !important;
+    line-height: 1.4 !important;
+    overflow: visible !important;
+  }
+
+  /* Đệm đỉnh nhẹ cho từng dòng sản phẩm, tránh cắt cụt các dấu thanh âm phía trên (້, ິ, ີ, ຶ, ື) */
+  #thermal-receipt-print-area .receipt-item-row,
+  #thermal-receipt-print-area tr,
+  #quotation-print-area .receipt-item-row,
+  #quotation-print-area tr {
+    padding-top: 3px !important;
+    padding-bottom: 2px !important;
+    overflow: visible !important;
+  }
+
+  #thermal-receipt-print-area .product-name-row,
+  #quotation-print-area .product-name-row {
+    padding-top: 2px !important;
+    padding-bottom: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Explicitly hide non-printable UI elements */
+  .no-print,
+  button,
+  nav,
+  header {
+    display: none !important;
   }
 }
+

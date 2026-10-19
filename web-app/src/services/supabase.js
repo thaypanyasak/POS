@@ -1331,16 +1331,29 @@ export async function processMultiProductGRN(payload) {
  */
 async function fallbackProcessMultiProductGRN(payload) {
   try {
-    const poId = payload.po_code;
+    const targetId = payload.po_id || payload.po_code;
+    const poId = targetId;
     const items = payload.items || [];
     const firstItem = items[0] || null;
 
     // 1. Check if PO exists to perform Revert
-    const { data: oldPo } = await supabase
-      .from('purchase_orders')
-      .select('id, product_id, imported_base_units, purchase_order_items(*)')
-      .eq('id', poId)
-      .maybeSingle();
+    let oldPo = null;
+    if (payload.po_id) {
+      const { data } = await supabase
+        .from('purchase_orders')
+        .select('id, product_id, imported_base_units, purchase_order_items(*)')
+        .eq('id', payload.po_id)
+        .maybeSingle();
+      oldPo = data;
+    }
+    if (!oldPo && payload.po_code) {
+      const { data } = await supabase
+        .from('purchase_orders')
+        .select('id, product_id, imported_base_units, purchase_order_items(*)')
+        .eq('id', payload.po_code)
+        .maybeSingle();
+      oldPo = data;
+    }
 
     if (oldPo) {
       const oldItems = oldPo.purchase_order_items || [];
