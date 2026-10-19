@@ -9,33 +9,13 @@ import {
   ArrowClockwise
 } from '@phosphor-icons/react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { playSuccessBeep } from '../utils/audioFeedback';
 
 /**
  * Play high-frequency retail POS scanner beep via Web Audio API + haptic vibrate
  */
 function triggerScanFeedback() {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (AudioCtx) {
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1950, ctx.currentTime);
-      gain.gain.setValueAtTime(0.2, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.11);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.11);
-    }
-  } catch (_) {}
-
-  try {
-    if (navigator.vibrate) {
-      navigator.vibrate(70);
-    }
-  } catch (_) {}
+  playSuccessBeep();
 }
 
 export default function BarcodeScannerModal({

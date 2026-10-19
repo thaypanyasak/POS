@@ -1321,6 +1321,13 @@ export async function processMultiProductGRN(payload) {
 
 /**
  * Fallback client transaction when Postgres RPC is not yet registered in Supabase
+ * Ensures 100% Revert & Apply integrity even on client fallback:
+ * 1. If PO exists: Revert old items' base units out of products.current_stock_base_units
+ * 2. Calculate consistent payment & debt: paid >= total ? PAID (debt=0) : (paid > 0 ? PARTIAL : DEBT)
+ * 3. Upsert purchase_orders
+ * 4. Replace purchase_order_items
+ * 5. Add new items' base units into products
+ * 6. Clean up old initial payment logs and insert updated initial payment
  */
 async function fallbackProcessMultiProductGRN(payload) {
   try {
@@ -1328,7 +1335,84 @@ async function fallbackProcessMultiProductGRN(payload) {
     const items = payload.items || [];
     const firstItem = items[0] || null;
 
-    // 1. Insert into purchase_orders
+    // 1. Check if PO exists to perform Revert
+    const { data: oldPo } = await supabase
+      .from('purchase_orders')
+      .select('id, product_id, imported_base_units, purchase_order_items(*)')
+      .eq('id', poId)
+      .maybeSingle();
+
+    if (oldPo) {
+      const oldItems = oldPo.purchase_order_items || [];
+      if (oldItems.length > 0) {
+        for (const oldIt of oldItems) {
+          const pid = oldIt.product_id;
+          const units = Number(oldIt.imported_base_units) || 0;
+          if (pid && units > 0) {
+            const { data: dbProd } = await supabase
+              .from('products')
+              .select('current_stock_base_units')
+              .eq('id', pid)
+              .maybeSingle();
+            if (dbProd) {
+              const curStock = Number(dbProd.current_stock_base_units) || 0;
+              await supabase
+                .from('products')
+                .update({
+                  current_stock_base_units: curStock - units,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', pid);
+            }
+          }
+        }
+      } else if (oldPo.product_id && Number(oldPo.imported_base_units) > 0) {
+        const { data: dbProd } = await supabase
+          .from('products')
+          .select('current_stock_base_units')
+          .eq('id', oldPo.product_id)
+          .maybeSingle();
+        if (dbProd) {
+          const curStock = Number(dbProd.current_stock_base_units) || 0;
+          await supabase
+            .from('products')
+            .update({
+              current_stock_base_units: curStock - Number(oldPo.imported_base_units),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', oldPo.product_id);
+        }
+      }
+
+      // Delete old items and old initial debt logs
+      await supabase.from('purchase_order_items').delete().eq('purchase_order_id', poId);
+      await supabase
+        .from('supplier_debt_payments')
+        .delete()
+        .eq('purchase_order_id', poId)
+        .or('note.ilike.%Initial payment%,note.ilike.%Outstanding Debt%,note.ilike.%ອັບເດດໃບຮັບ%');
+    }
+
+    // 2. Consistent Payment & Debt Calculation
+    const totalLak = Number(payload.total_lak) || 0;
+    let paidLak = Number(payload.paid_amount_lak) || 0;
+    let paymentStatus = payload.payment_status || 'PAID';
+    let debtLak = 0;
+
+    if (paidLak >= totalLak) {
+      paymentStatus = 'PAID';
+      debtLak = 0;
+      paidLak = totalLak;
+    } else if (paidLak > 0) {
+      paymentStatus = 'PARTIAL';
+      debtLak = totalLak - paidLak;
+    } else {
+      paymentStatus = 'DEBT';
+      paidLak = 0;
+      debtLak = totalLak;
+    }
+
+    // 3. Insert/Update purchase_orders
     const poPayload = {
       id: poId,
       supplier_id: payload.supplier_id || null,
@@ -1337,16 +1421,19 @@ async function fallbackProcessMultiProductGRN(payload) {
         ? `${firstItem?.product_name || 'ສິນຄ້າ'} (+${items.length - 1} ລາຍການ)`
         : (firstItem?.product_name || 'ສິນຄ້າຮັບເຂົ້າ'),
       imported_base_units: items.reduce((sum, it) => sum + (Number(it.base_units_added) || 0), 0),
-      total_cost_lak: Number(payload.total_lak) || 0,
+      total_cost_lak: totalLak,
       total_cost_thb: Number(payload.total_thb) || 0,
-      paid_amount: Number(payload.paid_amount_lak) || 0,
-      debt_amount: Number(payload.debt_amount_lak) || 0,
-      payment_status: payload.payment_status || 'PAID',
+      paid_amount: paidLak,
+      debt_amount: debtLak,
+      payment_status: paymentStatus,
       received_by: payload.receiver_name || 'ໄມ້ຄຳ (Meii)',
       note: payload.notes || null,
-      created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+
+    if (!oldPo) {
+      poPayload.created_at = new Date().toISOString();
+    }
 
     let { error: poErr } = await supabase.from('purchase_orders').upsert(poPayload);
     if (poErr) {
@@ -1354,10 +1441,8 @@ async function fallbackProcessMultiProductGRN(payload) {
       return { success: false, error: poErr.message };
     }
 
-    // 2. Insert items into purchase_order_items
+    // 4. Insert items into purchase_order_items
     if (items.length > 0) {
-      await supabase.from('purchase_order_items').delete().eq('purchase_order_id', poId);
-
       const itemsPayload = items.map((it) => ({
         purchase_order_id: poId,
         product_id: it.product_id,
@@ -1377,14 +1462,14 @@ async function fallbackProcessMultiProductGRN(payload) {
 
       await supabase.from('purchase_order_items').insert(itemsPayload);
 
-      // 3. Cascade stock, track_stock, and cost to products table
+      // 5. Cascade stock, track_stock, and cost to products table
       for (const it of items) {
         const prodId = it.product_id;
         if (!prodId) continue;
 
         const { data: dbProd } = await supabase
           .from('products')
-          .select('current_stock_base_units')
+          .select('current_stock_base_units, cost_per_base_unit')
           .eq('id', prodId)
           .single();
 
@@ -1411,7 +1496,7 @@ async function fallbackProcessMultiProductGRN(payload) {
           costKip: Number(it.cost_lak_entered) || 0,
         });
 
-        // 4. Update product_units retail_price_overrides
+        // 6. Update product_units retail_price_overrides
         if (it.retail_price_overrides && typeof it.retail_price_overrides === 'object') {
           for (const [unitId, price] of Object.entries(it.retail_price_overrides)) {
             if (Number(price) > 0) {
@@ -1422,14 +1507,14 @@ async function fallbackProcessMultiProductGRN(payload) {
       }
     }
 
-    // 5. Debt / initial payment record
-    if (Number(payload.paid_amount_lak) > 0) {
+    // 7. Debt / initial payment record
+    if (paidLak > 0) {
       await supabase.from('supplier_debt_payments').insert({
         purchase_order_id: poId,
-        payment_amount: Number(payload.paid_amount_lak),
+        payment_amount: paidLak,
         currency: 'LAK',
         payment_method: 'CASH',
-        note: 'ຊຳລະເບື້ອງຕົ້ນຕອນຮັບສິນຄ້າ (Initial payment at GRN)',
+        note: oldPo ? 'ຊຳລະເບື້ອງຕົ້ນ (ອັບເດດໃບຮັບ) (Updated initial payment at GRN)' : 'ຊຳລະເບື້ອງຕົ້ນຕອນຮັບສິນຄ້າ (Initial payment at GRN)',
       });
     }
 
@@ -1539,156 +1624,42 @@ export async function addSupplierDebtPaymentInSupabase(poId, paymentAmount, curr
 }
 
 /**
- * 8. Update Purchase Order (GRN) details with Delta Stock Calculation
- * VẤN ĐỀ 2 & 3:
- * - Tính chênh lệch: ΔQty = NewBaseUnits - OldBaseUnits
- * - Cập nhật tồn kho sản phẩm: new_stock = current_stock + ΔQty
- * - Tự động kích hoạt track_stock = true
- * - Cập nhật giá vốn mới vào products và giá bán lẻ vào product_units
- * - Cập nhật purchase_orders và purchase_order_items
+ * 8. Update Purchase Order (GRN) details with Atomic Revert & Apply
+ * Delegates to atomic processMultiProductGRN to ensure 100% ACID compliance
+ * and zero stock over-accumulation.
  */
 export async function updatePurchaseOrderInSupabase(poId, poData, draftItems = []) {
   try {
-    const firstDraft = draftItems && draftItems.length > 0 ? draftItems[0] : null;
+    const items = (draftItems || []).map((d) => ({
+      product_id: d.product?.id || d.productId || poData.productId,
+      product_name: d.product?.name || d.productName || poData.productName || 'ສິນຄ້າ',
+      unit_id: d.unitId || d.unit_id || null,
+      unit_name: d.unitName || d.unit_name || null,
+      tier_level: Number(d.tierLevel || 1),
+      quantity: Number(d.quantity || 1),
+      base_units_added: Number(d.importedBaseUnits ?? d.imported_base_units ?? 0),
+      cost_lak_entered: Number(d.costLak || 0),
+      cost_thb_entered: Number(d.costThb || 0),
+      cost_per_base_unit: Number(d.costPerBaseUnit || 0),
+      line_total_lak: Number(d.lineTotalLak || (Number(d.quantity || 1) * Number(d.costLak || 0))),
+      line_total_thb: Number(d.lineTotalThb || (Number(d.quantity || 1) * Number(d.costThb || 0))),
+      retail_price_overrides: d.retailPriceOverrides || {},
+    }));
 
-    // 1. Fetch current (old) purchase order to get original imported base units & product id
-    const { data: oldPo } = await supabase
-      .from('purchase_orders')
-      .select('*, purchase_order_items(*)')
-      .eq('id', poId)
-      .single();
-
-    let oldBaseUnits = 0;
-    if (oldPo) {
-      if (oldPo.imported_base_units !== undefined && oldPo.imported_base_units !== null) {
-        oldBaseUnits = Number(oldPo.imported_base_units) || 0;
-      } else if (oldPo.purchase_order_items && oldPo.purchase_order_items.length > 0) {
-        oldBaseUnits = oldPo.purchase_order_items.reduce(
-          (sum, it) => sum + (Number(it.imported_base_units) || 0),
-          0
-        );
-      }
-    }
-
-    const newBaseUnits = Number(firstDraft?.importedBaseUnits ?? poData.importedBaseUnits ?? 0);
-    const targetProdId = firstDraft?.product?.id || poData.productId || oldPo?.product_id || oldPo?.purchase_order_items?.[0]?.product_id;
-
-    // Delta Stock Calculation: ΔQty = newBaseUnits - oldBaseUnits
-    const deltaQty = newBaseUnits - oldBaseUnits;
-
-    // 2. Cascade Delta Stock & Price updates to products table
-    if (targetProdId) {
-      const { data: prodData } = await supabase
-        .from('products')
-        .select('id, current_stock_base_units, track_stock')
-        .eq('id', targetProdId)
-        .single();
-
-      const currentStock = Number(prodData?.current_stock_base_units) || 0;
-      const newStock = Math.max(0, currentStock + deltaQty);
-
-      const prodUpdatePayload = {
-        current_stock_base_units: newStock,
-        track_stock: true, // VẤN ĐỀ 3: Tự động kích hoạt theo dõi kho
-        cost_per_base_unit: Number(firstDraft?.costPerBaseUnit || poData.costPerBaseUnit || 0),
-        updated_at: new Date().toISOString(),
-      };
-
-      const cLakVal = Number(firstDraft?.costLak || poData.costLak);
-      const cThbVal = Number(firstDraft?.costThb || poData.costThb);
-      if (cLakVal > 0) prodUpdatePayload.cost_lak = cLakVal;
-      if (cThbVal > 0) prodUpdatePayload.cost_thb = cThbVal;
-
-      let { error: pUpErr } = await supabase.from('products').update(prodUpdatePayload).eq('id', targetProdId);
-      if (pUpErr && (pUpErr.message?.includes('cost_lak') || pUpErr.message?.includes('cost_thb'))) {
-        delete prodUpdatePayload.cost_lak;
-        delete prodUpdatePayload.cost_thb;
-        await supabase.from('products').update(prodUpdatePayload).eq('id', targetProdId);
-      }
-
-      saveProductMetaLocal({
-        id: targetProdId,
-        costBaht: cThbVal || 0,
-        costKip: cLakVal || 0,
-      });
-    }
-
-    // 3. Update purchase_orders record
-    let poPayload = {
+    const grnPayload = {
+      po_code: poId,
       supplier_id: poData.supplierId || null,
-      product_id: targetProdId || null,
-      product_name: firstDraft?.product?.name || poData.productName || oldPo?.product_name || 'ສິນຄ້າຮັບເຂົ້າ',
-      imported_base_units: newBaseUnits,
-      tier1_qty: Number(firstDraft?.tier1Qty || poData.tier1Qty || 0),
-      tier2_qty: Number(firstDraft?.tier2Qty || poData.tier2Qty || 0),
-      tier3_qty: Number(firstDraft?.tier3Qty || poData.tier3Qty || 0),
-      cost_thb: Number(firstDraft?.costThb || poData.costThb || 0),
-      cost_lak: Number(firstDraft?.costLak || poData.costLak || 0),
-      cost_per_base_unit: Number(firstDraft?.costPerBaseUnit || poData.costPerBaseUnit || 0),
-      total_cost_lak: Number(poData.totalCostLak) || 0,
-      total_cost_thb: Number(poData.totalCostThb) || 0,
-      paid_amount: Number(poData.paidAmount) || 0,
-      debt_amount: Number(poData.debtAmount) || 0,
+      receiver_name: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
+      total_lak: Number(poData.totalCostLak) || 0,
+      total_thb: Number(poData.totalCostThb) || 0,
       payment_status: poData.paymentStatus || 'PAID',
-      received_by: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
-      note: poData.note || null,
-      updated_at: new Date().toISOString(),
+      paid_amount_lak: Number(poData.paidAmount) || 0,
+      debt_amount_lak: Number(poData.debtAmount) || 0,
+      notes: poData.note || '',
+      items,
     };
 
-    let { error: updateErr } = await supabase
-      .from('purchase_orders')
-      .update(poPayload)
-      .eq('id', poId);
-
-    if (updateErr && (updateErr.code === '42703' || (updateErr.message && (updateErr.message.includes('cost_lak') || updateErr.message.includes('column'))))) {
-      const basePayload = {
-        supplier_id: poData.supplierId || null,
-        total_cost_lak: Number(poData.totalCostLak) || 0,
-        total_cost_thb: Number(poData.totalCostThb) || 0,
-        paid_amount: Number(poData.paidAmount) || 0,
-        debt_amount: Number(poData.debtAmount) || 0,
-        payment_status: poData.paymentStatus || 'PAID',
-        received_by: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
-        note: poData.note || null,
-        updated_at: new Date().toISOString(),
-      };
-      const retryResult = await supabase.from('purchase_orders').update(basePayload).eq('id', poId);
-      updateErr = retryResult.error;
-    }
-
-    if (updateErr) {
-      return { success: false, error: updateErr.message };
-    }
-
-    // 4. Update purchase_order_items (Replace old items with new items)
-    await supabase.from('purchase_order_items').delete().eq('purchase_order_id', poId);
-    if (draftItems && draftItems.length > 0) {
-      const itemsPayload = draftItems.map((d) => ({
-        purchase_order_id: poId,
-        product_id: d.product?.id || targetProdId,
-        product_name: d.product?.name || poData.productName || 'ສິນຄ້າຮັບເຂົ້າ',
-        cost_per_base_unit: Number(d.costPerBaseUnit) || 0,
-        cost_thb: Number(d.costThb) || 0,
-        cost_lak: Number(d.costLak) || 0,
-        cost_vnd: Number(d.costVnd) || 0,
-        imported_base_units: Number(d.importedBaseUnits) || 0,
-        tier1_qty: Number(d.tier1Qty) || 0,
-        tier2_qty: Number(d.tier2Qty) || 0,
-        tier3_qty: Number(d.tier3Qty) || 0,
-      }));
-      await supabase.from('purchase_order_items').insert(itemsPayload);
-    }
-
-    // 5. Retail price overrides for units
-    if (firstDraft?.retailPriceOverrides && typeof firstDraft.retailPriceOverrides === 'object') {
-      for (const [unitId, newPrice] of Object.entries(firstDraft.retailPriceOverrides)) {
-        await supabase.from('product_units').update({
-          retail_price: Number(newPrice) || 0,
-        }).eq('id', unitId);
-      }
-    }
-
-    return { success: true };
+    return await processMultiProductGRN(grnPayload);
   } catch (e) {
     console.error('updatePurchaseOrderInSupabase exception:', e);
     return { success: false, error: e.message };
@@ -1696,9 +1667,8 @@ export async function updatePurchaseOrderInSupabase(poId, poData, draftItems = [
 }
 
 /**
- * 9. Delete Purchase Order (GRN) and revert inventory stock
- * VẤN ĐỀ 4:
- * - Trừ lại số lượng tồn kho tương ứng đã nhập của phiếu đó khỏi products:
+ * 9. Delete Purchase Order (GRN) and revert inventory stock for ALL items
+ * - Trừ lại số lượng tồn kho tương ứng đã nhập của TẤT CẢ các sản phẩm trong phiếu:
  *   new_stock = current_stock - GRN_BaseUnits
  * - Hủy/xóa các bản ghi công nợ liên quan trong supplier_debt_payments
  * - Xóa bản ghi purchase_order_items
@@ -1706,7 +1676,7 @@ export async function updatePurchaseOrderInSupabase(poId, poData, draftItems = [
  */
 export async function deletePurchaseOrderInSupabase(poId) {
   try {
-    // 1. Fetch current PO to identify product and imported base units
+    // 1. Fetch current PO with all purchase_order_items
     const { data: po, error: poErr } = await supabase
       .from('purchase_orders')
       .select('*, purchase_order_items(*)')
@@ -1717,47 +1687,62 @@ export async function deletePurchaseOrderInSupabase(poId) {
       return { success: false, error: poErr?.message || 'ບໍ່ພົບໃບຮັບສິນຄ້ານີ້ໃນລະບົບ' };
     }
 
-    // 2. Identify target product and base units to revert
-    let importedUnits = 0;
-    if (po.imported_base_units !== undefined && po.imported_base_units !== null) {
-      importedUnits = Number(po.imported_base_units) || 0;
-    } else if (po.purchase_order_items && po.purchase_order_items.length > 0) {
-      importedUnits = po.purchase_order_items.reduce(
-        (sum, it) => sum + (Number(it.imported_base_units) || 0),
-        0
-      );
-    }
+    // 2. Revert inventory stock from products table for all items in this PO
+    const items = po.purchase_order_items || [];
+    if (items.length > 0) {
+      for (const it of items) {
+        if (it.product_id && Number(it.imported_base_units) > 0) {
+          const { data: prodData } = await supabase
+            .from('products')
+            .select('id, current_stock_base_units')
+            .eq('id', it.product_id)
+            .maybeSingle();
 
-    const prodId = po.product_id || po.purchase_order_items?.[0]?.product_id;
-
-    // 3. Revert inventory stock from products table
-    if (prodId && importedUnits > 0) {
-      const { data: prodData } = await supabase
-        .from('products')
-        .select('id, current_stock_base_units')
-        .eq('id', prodId)
-        .single();
-
-      if (prodData) {
-        const currentStock = Number(prodData.current_stock_base_units) || 0;
-        const newStock = Math.max(0, currentStock - importedUnits);
-        await supabase
+          if (prodData) {
+            const currentStock = Number(prodData.current_stock_base_units) || 0;
+            const newStock = currentStock - Number(it.imported_base_units);
+            await supabase
+              .from('products')
+              .update({
+                current_stock_base_units: newStock,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', it.product_id);
+          }
+        }
+      }
+    } else {
+      // Legacy single-product fallback
+      const prodId = po.product_id;
+      const importedUnits = Number(po.imported_base_units) || 0;
+      if (prodId && importedUnits > 0) {
+        const { data: prodData } = await supabase
           .from('products')
-          .update({
-            current_stock_base_units: newStock,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', prodId);
+          .select('id, current_stock_base_units')
+          .eq('id', prodId)
+          .maybeSingle();
+
+        if (prodData) {
+          const currentStock = Number(prodData.current_stock_base_units) || 0;
+          const newStock = currentStock - importedUnits;
+          await supabase
+            .from('products')
+            .update({
+              current_stock_base_units: newStock,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', prodId);
+        }
       }
     }
 
-    // 4. Delete related supplier_debt_payments
+    // 3. Delete related supplier_debt_payments
     await supabase.from('supplier_debt_payments').delete().eq('purchase_order_id', poId);
 
-    // 5. Delete related purchase_order_items
+    // 4. Delete related purchase_order_items
     await supabase.from('purchase_order_items').delete().eq('purchase_order_id', poId);
 
-    // 6. Delete purchase_orders row
+    // 5. Delete purchase_orders row
     const { error: delErr } = await supabase.from('purchase_orders').delete().eq('id', poId);
     if (delErr) {
       return { success: false, error: delErr.message };

@@ -936,18 +936,97 @@ class GrnCartNotifier extends StateNotifier<GrnCartState> {
     final poId = payload['po_code'] as String;
     final items = payload['items'] as List<dynamic>;
 
-    // Step 1: Insert purchase_orders
-    await client.from('purchase_orders').insert({
+    // Step 0: Check if PO already exists to revert old inventory
+    final oldPoRes = await client
+        .from('purchase_orders')
+        .select('id, product_id, imported_base_units, purchase_order_items(*)')
+        .eq('id', poId)
+        .maybeSingle();
+
+    if (oldPoRes != null) {
+      final oldItems = (oldPoRes['purchase_order_items'] as List<dynamic>?) ?? [];
+      if (oldItems.isNotEmpty) {
+        for (final oldIt in oldItems) {
+          final pid = oldIt['product_id'] as String?;
+          final units = (oldIt['imported_base_units'] as num?)?.toInt() ?? 0;
+          if (pid != null && units > 0) {
+            try {
+              final prodRes = await client
+                  .from('products')
+                  .select('current_stock_base_units')
+                  .eq('id', pid)
+                  .maybeSingle();
+              if (prodRes != null) {
+                final curStock = (prodRes['current_stock_base_units'] as num?)?.toInt() ?? 0;
+                await client.from('products').update({
+                  'current_stock_base_units': curStock - units,
+                  'updated_at': now,
+                }).eq('id', pid);
+              }
+            } catch (e) {
+              debugPrint('Fallback revert error for $pid: $e');
+            }
+          }
+        }
+      } else if (oldPoRes['product_id'] != null) {
+        final pid = oldPoRes['product_id'] as String;
+        final units = (oldPoRes['imported_base_units'] as num?)?.toInt() ?? 0;
+        if (units > 0) {
+          try {
+            final prodRes = await client
+                .from('products')
+                .select('current_stock_base_units')
+                .eq('id', pid)
+                .maybeSingle();
+            if (prodRes != null) {
+              final curStock = (prodRes['current_stock_base_units'] as num?)?.toInt() ?? 0;
+              await client.from('products').update({
+                'current_stock_base_units': curStock - units,
+                'updated_at': now,
+              }).eq('id', pid);
+            }
+          } catch (_) {}
+        }
+      }
+
+      // Delete old items and old initial debt logs
+      await client.from('purchase_order_items').delete().eq('purchase_order_id', poId);
+      await client
+          .from('supplier_debt_payments')
+          .delete()
+          .eq('purchase_order_id', poId);
+    }
+
+    // Consistent Payment & Debt Calculation
+    final totalLak = (payload['total_lak'] as num).toInt();
+    int paidLak = (payload['paid_amount_lak'] as num?)?.toInt() ?? 0;
+    String paymentStatus = (payload['payment_status'] as String?) ?? 'PAID';
+    int debtLak = 0;
+
+    if (paidLak >= totalLak) {
+      paymentStatus = 'PAID';
+      debtLak = 0;
+      paidLak = totalLak;
+    } else if (paidLak > 0) {
+      paymentStatus = 'PARTIAL';
+      debtLak = totalLak - paidLak;
+    } else {
+      paymentStatus = 'DEBT';
+      paidLak = 0;
+      debtLak = totalLak;
+    }
+
+    // Step 1: Upsert purchase_orders
+    await client.from('purchase_orders').upsert({
       'id': poId,
       if (payload['supplier_id'] != null) 'supplier_id': payload['supplier_id'],
-      'total_cost_lak': payload['total_lak'],
+      'total_cost_lak': totalLak,
       'total_cost_thb': payload['total_thb'],
-      'paid_amount': payload['paid_amount_lak'],
-      'debt_amount': payload['debt_amount_lak'],
-      'payment_status': payload['payment_status'],
+      'paid_amount': paidLak,
+      'debt_amount': debtLak,
+      'payment_status': paymentStatus,
       'received_by': payload['receiver_name'],
       'note': payload['notes'],
-      'created_at': now,
       'updated_at': now,
     });
 
@@ -1017,21 +1096,30 @@ class GrnCartNotifier extends StateNotifier<GrnCartState> {
     }
 
     // Step 4: Debt payment if applicable
-    if (payload['payment_status'] == 'DEBT' ||
-        payload['payment_status'] == 'PARTIAL') {
-      final debtAmt = (payload['debt_amount_lak'] as num).toInt();
-      if (debtAmt > 0) {
-        try {
-          await client.from('supplier_debt_payments').insert({
-            'purchase_order_id': poId,
-            'payment_amount': 0,
-            'currency': 'LAK',
-            'payment_method': 'DEBT_RECORD',
-            'note': 'ບັນທຶກຍອດໜີ້ຄ້າງຊຳລະເລີ່ມຕົ້ນ (Initial debt record)',
-            'created_at': now,
-          });
-        } catch (_) {}
-      }
+    if (paidLak > 0) {
+      try {
+        await client.from('supplier_debt_payments').insert({
+          'purchase_order_id': poId,
+          'payment_amount': paidLak,
+          'currency': 'LAK',
+          'payment_method': 'CASH',
+          'note': oldPoRes != null
+              ? 'ຊຳລະເບື້ອງຕົ້ນ (ອັບເດດໃບຮັບ) (Updated initial payment at GRN)'
+              : 'ຊຳລະເບື້ອງຕົ້ນຕອນຮັບສິນຄ້າ (Initial payment at GRN)',
+          'created_at': now,
+        });
+      } catch (_) {}
+    } else if (debtLak > 0) {
+      try {
+        await client.from('supplier_debt_payments').insert({
+          'purchase_order_id': poId,
+          'payment_amount': 0,
+          'currency': 'LAK',
+          'payment_method': 'DEBT_RECORD',
+          'note': 'ບັນທຶກຍອດໜີ້ຄ້າງຊຳລະເລີ່ມຕົ້ນ (Initial debt record)',
+          'created_at': now,
+        });
+      } catch (_) {}
     }
   }
 }

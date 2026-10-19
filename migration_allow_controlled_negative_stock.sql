@@ -322,8 +322,17 @@ DECLARE
     v_unit_price BIGINT;
     v_first_prod_id TEXT := NULL;
     v_first_prod_name TEXT := 'ສິນຄ້າຮັບເຂົ້າ';
+    
+    -- Các biến phục vụ cơ chế Revert & Apply
+    v_is_update BOOLEAN := FALSE;
+    v_old_item RECORD;
+    v_cur_stock INT8;
+    v_reverted_stock INT8;
+    v_legacy_prod_id TEXT;
+    v_legacy_prod_name TEXT;
+    v_legacy_units INT8;
 BEGIN
-    -- 1. Trích xuất Header thông tin phiếu nhập
+    -- 1. Trích xuất thông tin Header phiếu nhập
     v_po_code := payload->>'po_code';
     IF v_po_code IS NULL OR trim(v_po_code) = '' THEN
         RAISE EXCEPTION 'Mã phiếu nhập (po_code) không được để trống!';
@@ -338,30 +347,155 @@ BEGIN
     v_receiver_name := COALESCE(payload->>'receiver_name', 'ໄມ້ຄຳ (Meii)');
     v_total_lak := COALESCE((payload->>'total_lak')::INT8, 0);
     v_total_thb := COALESCE((payload->>'total_thb')::NUMERIC, 0.00);
-    v_payment_status := COALESCE(payload->>'payment_status', 'PAID');
-    v_paid_amount_lak := COALESCE((payload->>'paid_amount_lak')::INT8, 0);
-    v_debt_amount_lak := COALESCE((payload->>'debt_amount_lak')::INT8, 0);
     v_notes := payload->>'notes';
 
+    -- 2. Kiểm tra danh sách items mới
     v_items := payload->'items';
     IF v_items IS NULL OR jsonb_array_length(v_items) = 0 THEN
         RAISE EXCEPTION 'Phiếu nhập kho phải có ít nhất 1 sản phẩm!';
     END IF;
 
-    -- Lấy thông tin sản phẩm đầu tiên để tương thích ngược bảng purchase_orders
+    -- 3. CẬP NHẬT CÔNG NỢ & TIỀN THANH TOÁN (PAYMENT & DEBT CONSISTENCY)
+    v_paid_amount_lak := COALESCE((payload->>'paid_amount_lak')::INT8, 0);
+    IF v_paid_amount_lak >= v_total_lak THEN
+        v_payment_status := 'PAID';
+        v_debt_amount_lak := 0;
+        v_paid_amount_lak := v_total_lak; -- Tránh tiền trả vượt quá tổng tiền làm nợ bị âm
+    ELSIF v_paid_amount_lak > 0 THEN
+        v_payment_status := 'PARTIAL';
+        v_debt_amount_lak := v_total_lak - v_paid_amount_lak;
+    ELSE
+        v_payment_status := 'DEBT';
+        v_paid_amount_lak := 0;
+        v_debt_amount_lak := v_total_lak;
+    END IF;
+
+    -- 4. BƯỚC 1 & 2: KIỂM TRA PHIẾU CŨ & HOÀN TÁC (REVERT) SỐ LƯỢNG CŨ RA KHỎI KHO
+    SELECT EXISTS(SELECT 1 FROM public.purchase_orders WHERE id = v_po_code) INTO v_is_update;
+
+    IF v_is_update THEN
+        -- 4.1. Trường hợp phiếu đã có danh sách items trong purchase_order_items
+        IF EXISTS (SELECT 1 FROM public.purchase_order_items WHERE purchase_order_id = v_po_code) THEN
+            FOR v_old_item IN
+                SELECT product_id, product_name, imported_base_units
+                FROM public.purchase_order_items
+                WHERE purchase_order_id = v_po_code
+            LOOP
+                IF v_old_item.product_id IS NOT NULL AND v_old_item.imported_base_units > 0 THEN
+                    -- Khóa dòng sản phẩm để trừ trả lại số lượng cũ
+                    SELECT COALESCE(current_stock_base_units, 0)
+                    INTO v_cur_stock
+                    FROM public.products
+                    WHERE id = v_old_item.product_id
+                    FOR UPDATE;
+
+                    IF FOUND THEN
+                        -- Trừ trả lại tồn kho cũ: stock = stock - old_quantity
+                        v_reverted_stock := v_cur_stock - v_old_item.imported_base_units;
+
+                        UPDATE public.products
+                        SET current_stock_base_units = v_reverted_stock,
+                            updated_at = NOW()
+                        WHERE id = v_old_item.product_id;
+
+                        -- Ghi Thẻ kho Thao tác Hoàn kho cũ (ADJUST_OUT)
+                        INSERT INTO public.inventory_movements (
+                            product_id,
+                            product_name,
+                            movement_type,
+                            reference_type,
+                            reference_id,
+                            quantity_change,
+                            balance_before,
+                            balance_after,
+                            note,
+                            created_at,
+                            created_by
+                        ) VALUES (
+                            v_old_item.product_id,
+                            COALESCE(v_old_item.product_name, 'ສິນຄ້າ'),
+                            'ADJUST_OUT',
+                            'PURCHASE_ORDER',
+                            v_po_code,
+                            -v_old_item.imported_base_units,
+                            v_cur_stock,
+                            v_reverted_stock,
+                            'ຮອນຄືນສະຕັອກເກົ່າກ່ອນອັບເດດໃບຮັບ: ' || v_po_code,
+                            NOW(),
+                            v_receiver_name
+                        );
+                    END IF;
+                END IF;
+            END LOOP;
+        ELSE
+            -- 4.2. Tương thích ngược: Phiếu cũ đơn sản phẩm lưu trên header purchase_orders
+            SELECT product_id, product_name, COALESCE(imported_base_units, 0)
+            INTO v_legacy_prod_id, v_legacy_prod_name, v_legacy_units
+            FROM public.purchase_orders
+            WHERE id = v_po_code;
+
+            IF v_legacy_prod_id IS NOT NULL AND v_legacy_units > 0 THEN
+                SELECT COALESCE(current_stock_base_units, 0)
+                INTO v_cur_stock
+                FROM public.products
+                WHERE id = v_legacy_prod_id
+                FOR UPDATE;
+
+                IF FOUND THEN
+                    v_reverted_stock := v_cur_stock - v_legacy_units;
+
+                    UPDATE public.products
+                    SET current_stock_base_units = v_reverted_stock,
+                        updated_at = NOW()
+                    WHERE id = v_legacy_prod_id;
+
+                    INSERT INTO public.inventory_movements (
+                        product_id,
+                        product_name,
+                        movement_type,
+                        reference_type,
+                        reference_id,
+                        quantity_change,
+                        balance_before,
+                        balance_after,
+                        note,
+                        created_at,
+                        created_by
+                    ) VALUES (
+                        v_legacy_prod_id,
+                        COALESCE(v_legacy_prod_name, 'ສິນຄ້າ'),
+                        'ADJUST_OUT',
+                        'PURCHASE_ORDER',
+                        v_po_code,
+                        -v_legacy_units,
+                        v_cur_stock,
+                        v_reverted_stock,
+                        'ຮອນຄືນສະຕັອກເກົ່າ (Single PO) ກ່ອນອັບເດດ: ' || v_po_code,
+                        NOW(),
+                        v_receiver_name
+                    );
+                END IF;
+            END IF;
+        END IF;
+
+        -- Xóa các dòng purchase_order_items cũ sau khi đã hoàn tồn kho xong
+        DELETE FROM public.purchase_order_items WHERE purchase_order_id = v_po_code;
+    END IF;
+
+    -- 5. LẤY THÔNG TIN SẢN PHẨM ĐẦU TIÊN & TÍNH TỔNG SỐ LƯỢNG MỚI
     v_first_prod_id := v_items->0->>'product_id';
     v_first_prod_name := COALESCE(v_items->0->>'product_name', 'ສິນຄ້າຮັບເຂົ້າ');
     IF jsonb_array_length(v_items) > 1 THEN
         v_first_prod_name := v_first_prod_name || ' (+' || (jsonb_array_length(v_items) - 1)::TEXT || ' ລາຍການ)';
     END IF;
 
-    -- Tính tổng số lượng quy đổi base units của cả phiếu
+    v_total_base_units := 0;
     FOR v_item IN SELECT * FROM jsonb_array_elements(v_items)
     LOOP
         v_total_base_units := v_total_base_units + COALESCE((v_item->>'base_units_added')::INT8, 0);
     END LOOP;
 
-    -- BƯỚC 1: LƯU HEADER VÀO BẢNG purchase_orders
+    -- 6. BƯỚC 4: CẬP NHẬT HEADER VÀO BẢNG purchase_orders
     INSERT INTO public.purchase_orders (
         id,
         supplier_id,
@@ -395,17 +529,24 @@ BEGIN
     )
     ON CONFLICT (id) DO UPDATE SET
         supplier_id = EXCLUDED.supplier_id,
+        product_id = EXCLUDED.product_id,
+        product_name = EXCLUDED.product_name,
+        imported_base_units = EXCLUDED.imported_base_units,
         total_cost_lak = EXCLUDED.total_cost_lak,
         total_cost_thb = EXCLUDED.total_cost_thb,
         paid_amount = EXCLUDED.paid_amount,
         debt_amount = EXCLUDED.debt_amount,
         payment_status = EXCLUDED.payment_status,
+        received_by = EXCLUDED.received_by,
+        note = EXCLUDED.note,
         updated_at = NOW();
 
-    -- Xóa các dòng purchase_order_items cũ nếu có
-    DELETE FROM public.purchase_order_items WHERE purchase_order_id = v_po_code;
+    -- Dọn dẹp items cũ nếu có (phòng hờ trường hợp tạo mới)
+    IF NOT v_is_update THEN
+        DELETE FROM public.purchase_order_items WHERE purchase_order_id = v_po_code;
+    END IF;
 
-    -- BƯỚC 2: DUYỆT TỪNG MÓN ĐỂ INSERT ITEMS, CỘNG KHO (CẤN TRỪ ÂM KHO) & TÍNH MOVING AVERAGE COST
+    -- 7. BƯỚC 3: DUYỆT TỪNG MÓN MỚI, GHI ITEMS & CỘNG KHO (APPLY NEW QUANTITY)
     FOR v_item IN SELECT * FROM jsonb_array_elements(v_items)
     LOOP
         v_item_count := v_item_count + 1;
@@ -415,7 +556,7 @@ BEGIN
         v_cost_lak := COALESCE((v_item->>'cost_lak_entered')::INT8, 0);
         v_cost_thb := COALESCE((v_item->>'cost_thb_entered')::NUMERIC, 0.00);
 
-        -- Insert vào purchase_order_items
+        -- 7.1. Insert dòng chi tiết vào purchase_order_items
         INSERT INTO public.purchase_order_items (
             purchase_order_id,
             product_id,
@@ -448,7 +589,7 @@ BEGIN
             NOW()
         );
 
-        -- BƯỚC 3: CẬP NHẬT PRODUCTS & CẤN TRỪ ÂM KHO TỰ NHIÊN
+        -- 7.2. Cập nhật products: stock mới = stock hiện tại + số lượng mới
         SELECT 
             COALESCE(current_stock_base_units, 0),
             COALESCE(cost_per_base_unit, 0)
@@ -458,15 +599,12 @@ BEGIN
         FOR UPDATE;
 
         IF FOUND THEN
-            -- Công thức cấn trừ chuẩn ERP: Tồn mới = Tồn cũ (âm hoặc dương) + Lượng nhập mới
-            -- TUYỆT ĐỐI KHÔNG dùng GREATEST(0, ...) để hệ thống tự động bù trừ âm kho chính xác
             v_new_stock := v_old_stock + v_base_units_added;
             
-            -- Tính giá vốn bình quân gia quyền di động (Moving Average Cost)
+            -- Tính giá vốn bình quân di động (Moving Average Cost)
             IF v_old_stock > 0 AND v_cost_per_base > 0 THEN
                 v_new_mac_cost := ROUND(((v_old_stock * v_old_cost) + (v_base_units_added * v_cost_per_base))::NUMERIC / v_new_stock);
             ELSE
-                -- Khi tồn cũ <= 0 (đã bán âm kho), lượng nhập mới định hình giá vốn thực tế mới
                 v_new_mac_cost := CASE WHEN v_cost_per_base > 0 THEN v_cost_per_base ELSE v_old_cost END;
             END IF;
 
@@ -480,7 +618,7 @@ BEGIN
                 updated_at = NOW()
             WHERE id = v_prod_id;
 
-            -- Ghi Thẻ kho Thao tác Nhập kho (public.inventory_movements)
+            -- Ghi Thẻ kho Thao tác Nhập kho (IN_PURCHASE)
             INSERT INTO public.inventory_movements (
                 product_id,
                 product_name,
@@ -504,13 +642,16 @@ BEGIN
                 v_old_stock,
                 v_new_stock,
                 v_cost_per_base,
-                'ຮັບສິນຄ້າເຂົ້າສາງເລກທີ: ' || v_po_code,
+                CASE 
+                    WHEN v_is_update THEN 'ຮັບສິນຄ້າເຂົ້າສາງ (ອັບເດດໃບຮັບ): ' || v_po_code
+                    ELSE 'ຮັບສິນຄ້າເຂົ້າສາງເລກທີ: ' || v_po_code
+                END,
                 NOW(),
                 v_receiver_name
             );
         END IF;
 
-        -- BƯỚC 4: CẬP NHẬT GIÁ BÁN product_units NẾU CÓ OVERRIDES
+        -- 7.3. Cập nhật giá bán lẻ product_units nếu có overrides
         v_unit_overrides := v_item->'retail_price_overrides';
         IF v_unit_overrides IS NOT NULL AND jsonb_typeof(v_unit_overrides) = 'object' THEN
             FOR v_unit_key, v_unit_price IN 
@@ -525,7 +666,14 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- BƯỚC 5: TẠO BẢN GHI THANH TOÁN CÔNG NỢ NHÀ CUNG CẤP
+    -- 8. GHI NHẬN LỊCH SỬ THANH TOÁN & CÔNG NỢ (supplier_debt_payments)
+    IF v_is_update THEN
+        -- Xóa các log ghi nhận ban đầu cũ để tránh trùng lặp khi sửa phiếu
+        DELETE FROM public.supplier_debt_payments
+        WHERE purchase_order_id = v_po_code
+          AND (note LIKE '%Initial payment%' OR note LIKE '%Outstanding Debt%' OR note LIKE '%ອັບເດດໃບຮັບ%');
+    END IF;
+
     IF v_paid_amount_lak > 0 THEN
         INSERT INTO public.supplier_debt_payments (
             purchase_order_id,
@@ -539,7 +687,10 @@ BEGIN
             v_paid_amount_lak,
             'LAK',
             'CASH',
-            'ຊຳລະເບື້ອງຕົ້ນຕອນຮັບສິນຄ້າ (Initial payment at GRN)',
+            CASE 
+                WHEN v_is_update THEN 'ຊຳລະເບື້ອງຕົ້ນ (ອັບເດດໃບຮັບ) (Updated initial payment at GRN)'
+                ELSE 'ຊຳລະເບື້ອງຕົ້ນຕອນຮັບສິນຄ້າ (Initial payment at GRN)'
+            END,
             NOW()
         );
     END IF;
@@ -557,7 +708,10 @@ BEGIN
             0,
             'LAK',
             'CASH',
-            'ບັນທຶກໜີ້ສິນ (Outstanding Debt recorded)',
+            CASE 
+                WHEN v_is_update THEN 'ບັນທຶກໜີ້ສິນ (ອັບເດດໃບຮັບ) (Updated debt recorded)'
+                ELSE 'ບັນທຶກໜີ້ສິນ (Outstanding Debt recorded)'
+            END,
             NOW()
         );
     END IF;
@@ -565,9 +719,17 @@ BEGIN
     RETURN jsonb_build_object(
         'success', true,
         'po_code', v_po_code,
+        'is_update', v_is_update,
         'item_count', v_item_count,
         'total_base_units', v_total_base_units,
-        'message', 'Multi-Product GRN processed successfully with ledger and automatic negative stock reconciliation'
+        'total_lak', v_total_lak,
+        'paid_amount_lak', v_paid_amount_lak,
+        'debt_amount_lak', v_debt_amount_lak,
+        'payment_status', v_payment_status,
+        'message', CASE 
+            WHEN v_is_update THEN 'ອັບເດດໃບຮັບສິນຄ້າ ແລະ ປັບປຸງສະຕັອກສຳເລັດ (GRN updated & stock reconciled with ACID revert & apply)'
+            ELSE 'ບັນທຶກຮັບສິນຄ້າເຂົ້າສາງສຳເລັດ (GRN processed successfully)'
+        END
     );
 
 EXCEPTION WHEN OTHERS THEN
@@ -575,6 +737,19 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
+-- Alias RPC function: update_grn(payload JSONB)
+CREATE OR REPLACE FUNCTION public.update_grn(payload JSONB)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    RETURN public.process_multi_product_grn(payload);
+END;
+$$;
+
 GRANT EXECUTE ON FUNCTION public.process_multi_product_grn(JSONB) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.update_grn(JSONB) TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';

@@ -14,6 +14,8 @@ import {
 } from '@phosphor-icons/react';
 import { formatKip, formatBaht, getCartonUnitInfo, formatStockDisplay, formatNegativeStockCompound } from '../utils/formatters';
 import BarcodeScannerModal from './BarcodeScannerModal';
+import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
+import { playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
 
 /**
  * Shared helper to resolve unit tiers, cost conversions, and stock counts for both Mobile Card & Desktop Table
@@ -225,14 +227,16 @@ export default function ProductsView({
     );
 
     if (matched) {
+      playSuccessBeep();
       setScannedHighlightId(matched.id);
       setScanToast({
         type: 'success',
-        message: `ພົບສິນຄ້າ "${matched.name}"`,
+        message: `ພົບສິນຄ້າ "${matched.name}" (${cleanCode})`,
       });
       setTimeout(() => setScanToast(null), 3000);
       setTimeout(() => setScannedHighlightId(null), 6000);
     } else {
+      playErrorBeep();
       setScanToast({
         type: 'error',
         message: `ບໍ່ພົບສິນຄ້າທີ່ມີບາໂຄດ: "${cleanCode}"`,
@@ -240,6 +244,17 @@ export default function ProductsView({
       setTimeout(() => setScanToast(null), 3500);
     }
   };
+
+  // Global Hardware Barcode Scanner Listener for Catalog Screen
+  // Auto-populates search filter and focuses on the matched product immediately
+  useHardwareBarcodeScanner({
+    onScan: handleScanBarcode,
+    enabled: true,
+    maxInterval: 50,
+    minLength: 3,
+    preventDefaultOnEnter: true,
+    cleanActiveInput: false,
+  });
 
   return (
     <main
@@ -322,10 +337,11 @@ export default function ProductsView({
             type="button"
             onClick={() => setScannerOpen(true)}
             className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1.5 sm:py-1 rounded-lg bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center gap-1 active:scale-95"
-            title="ເປີດກ້ອງສະແກນບາໂຄດສິນຄ້າ (Camera Barcode Scanner)"
+            title="ເປີດກ້ອງສະແກນບາໂຄດສິນຄ້າ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
           >
             <Barcode size={15} weight="bold" />
             <span className="text-[10.5px] font-bold">ສະແກນ</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Hardware Scanner Ready"></span>
           </button>
         </div>
 

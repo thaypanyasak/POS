@@ -124,132 +124,67 @@ class ProductCard extends StatelessWidget {
 
                     const SizedBox(height: 2),
 
-                    // Stock info on left + Unit selector button on right (height 20px)
+                    // Stock info clean flat text display (height 20px)
                     SizedBox(
                       height: 20,
-                      child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child:
-                              !product.trackStock
-                                  ? const Text(
-                                    'ບໍ່ນັບສາງ',
-                                    style: TextStyle(
-                                      fontSize: 9.5,
-                                      color: Color(0xFF94A3B8), // slate-400
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  )
-                                  : isZeroStock
-                                  ? Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
-                                        vertical: 1.5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFFFBEB), // amber-50
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                          color: const Color(0xFFFDE68A), // amber-200
-                                          width: 0.8,
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'ໝົດສາງ (0)',
-                                        style: TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFFB45309), // amber-700
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                  : isNegativeStock
-                                  ? Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
-                                        vertical: 1.5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFEF2F2), // rose-50
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                          color: const Color(0xFFFECDD3), // rose-200
-                                          width: 0.8,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        'ຕິດລົບ (-${product.negativeStockCompound})',
-                                        style: const TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w800,
-                                          color: Color(0xFFBE123C), // rose-700
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                  : RichText(
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    text: TextSpan(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: !product.trackStock
+                            ? const Text(
+                                'ບໍ່ນັບສາງ',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF94A3B8), // slate-400
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : isZeroStock
+                            ? const Text(
+                                'ໝົດສາງ (0)',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFD97706), // amber-600
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : isNegativeStock
+                            ? Text(
+                                'ສະຕັອກ : ${product.negativeStockCompound}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFE11D48), // rose-600
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : RichText(
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                text: TextSpan(
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF475569), // slate-600
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  children: [
+                                    const TextSpan(text: 'ສະຕັອກ : '),
+                                    TextSpan(
+                                      text: product.stockDisplayText,
                                       style: const TextStyle(
-                                        fontSize: 9.5,
-                                        color: Color(0xFF64748B), // slate-500
-                                        fontWeight: FontWeight.w500,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF334155),
                                       ),
-                                      children: [
-                                        const TextSpan(text: 'ສະຕັອກ: '),
-                                        TextSpan(
-                                          text: product.stockDisplayText,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            color: Color(0xFF334155),
-                                          ),
-                                        ),
-                                      ],
                                     ),
-                                  ),
-                        ),
-                        InkWell(
-                          onTap: onOpenUnitSelector,
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 2,
-                              vertical: 1,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const PhosphorIcon(
-                                  PhosphorIconsRegular.faders,
-                                  size: 11,
-                                  color: Color(0xFF0D9488),
+                                  ],
                                 ),
-                                const SizedBox(width: 2),
-                                const Text(
-                                  'ປັບຫົວໜ່ວຍ',
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF0F766E),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                              ),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

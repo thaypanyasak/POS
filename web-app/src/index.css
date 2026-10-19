@@ -85,6 +85,28 @@ html, body, #root {
   background: #94a3b8;
 }
 
+/* =========================================================================
+   Mobile Native / PWA / Capacitor Orientation-Aware Safe Area System
+   - Portrait: Đẩy nhẹ top để né tai thỏ / Dynamic Island / Status Bar
+   - Landscape: Tràn viền 100% full-screen, loại bỏ padding 2 bên mép
+   ========================================================================= */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .native-safe-area-shell {
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    padding-left: 0px !important;
+    padding-right: 0px !important;
+  }
+
+  @media (orientation: landscape) {
+    .native-safe-area-shell {
+      padding-top: 0px !important;
+      padding-left: 0px !important;
+      padding-right: 0px !important;
+    }
+  }
+}
+
+
 /* Thermal Receipt Print Styles */
 
 @media print {

@@ -21,12 +21,14 @@ import {
   Tag,
   CaretDown,
 } from '@phosphor-icons/react';
-import { formatKip, formatCompoundStock, formatStockDisplay, formatDots, getEffectiveUnitPrice, PRICE_TIERS } from '../utils/formatters';
+import { formatKip, formatCompoundStock, formatStockDisplay, formatNegativeStockCompound, formatDots, getEffectiveUnitPrice, PRICE_TIERS } from '../utils/formatters';
 import PriceOverrideModal from './PriceOverrideModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import QuotationPreviewModal from './inventory/QuotationPreviewModal';
 import ExchangeRateBadge from './common/ExchangeRateBadge';
 import queryClient from '../services/queryClient';
+import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
+import { playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
 
 export default function PosScreen({
   categories,
@@ -79,22 +81,36 @@ export default function PosScreen({
     );
 
     if (matched) {
-      // Find matching unit or default to first unit
-      let targetUnit = matched.units[0];
-      const matchingUnit = matched.units.find(
+      // Find matching unit or default to piece / first unit
+      let targetUnit = matched.units?.[0];
+      const matchingUnit = matched.units?.find(
         (u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanCode
       );
-      if (matchingUnit) targetUnit = matchingUnit;
+      if (matchingUnit) {
+        targetUnit = matchingUnit;
+      } else if (matched.units && matched.units.length > 0) {
+        targetUnit = matched.units.find((u) => u.tier === 1) || matched.units[0];
+      } else {
+        targetUnit = {
+          id: `${matched.id}_default`,
+          unitName: matched.baseUnit || 'ອັນ',
+          multiplier: 1,
+          retailPrice: matched.price || matched.retailPrice || 0,
+        };
+      }
 
+      // Automatically add product or increment +1 in cart
       addToCart(matched, targetUnit, 1);
+      playSuccessBeep();
       setScannerOpen(false);
       setSearchQuery('');
       setScanToast({
         type: 'success',
-        message: `ເພີ່ມ "${matched.name}" (${targetUnit.unitName}) ເຂົ້າກະຕ່າແລ້ວ!`,
+        message: `ເພີ່ມ "${matched.name}" (${targetUnit.unitName}) +1 ເຂົ້າກະຕ່າແລ້ວ!`,
       });
       setTimeout(() => setScanToast(null), 3000);
     } else {
+      playErrorBeep();
       setScanToast({
         type: 'error',
         message: `ບໍ່ພົບສິນຄ້າທີ່ມີບາໂຄດ: "${barcode}"`,
@@ -103,48 +119,16 @@ export default function PosScreen({
     }
   };
 
-  // Global Hardware Barcode Scanner Wedge Listener
-  // Tự động bắt máy quét phần cứng USB / Bluetooth (< 45ms giữa các phím)
-  // ngay cả khi con trỏ chuột không focus vào ô tìm kiếm
-  useEffect(() => {
-    let barcodeBuffer = '';
-    let lastKeyTime = Date.now();
-
-    const handleGlobalKeyDown = (e) => {
-      const now = Date.now();
-      const delta = now - lastKeyTime;
-      lastKeyTime = now;
-
-      // Khi phím Enter được kích hoạt và đệm đã tích lũy chuỗi quét siêu tốc (>= 3 ký tự)
-      if (e.key === 'Enter') {
-        if (barcodeBuffer.length >= 3) {
-          e.preventDefault();
-          e.stopPropagation();
-          const scannedCode = barcodeBuffer.trim();
-          barcodeBuffer = '';
-          handleScanBarcode(scannedCode);
-          return;
-        }
-        barcodeBuffer = '';
-        return;
-      }
-
-      // Nếu khoảng cách giữa 2 phím > 45ms, đó là người dùng gõ tay thông thường -> reset đệm
-      if (delta > 45) {
-        barcodeBuffer = '';
-      }
-
-      // Chỉ tích lũy các ký tự in được thông thường, không gom phím Control/Alt/Meta
-      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        barcodeBuffer += e.key;
-      }
-    };
-
-    window.addEventListener('keydown', handleGlobalKeyDown, true);
-    return () => {
-      window.removeEventListener('keydown', handleGlobalKeyDown, true);
-    };
-  }, [products, filteredProducts, addToCart]);
+  // Global Hardware Barcode Scanner Listener (USB / OTG / Bluetooth HID Keyboard)
+  // Auto-detects rapid keystrokes (< 50ms) ending in Enter without requiring focus
+  useHardwareBarcodeScanner({
+    onScan: handleScanBarcode,
+    enabled: true,
+    maxInterval: 50,
+    minLength: 3,
+    preventDefaultOnEnter: true,
+    cleanActiveInput: true,
+  });
 
   const handleSearchKeyDown = (e) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
@@ -879,10 +863,11 @@ export default function PosScreen({
               type="button"
               onClick={() => setScannerOpen(true)}
               className="h-11 px-3.5 rounded-xl bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white border border-teal-200 shadow-2xs flex items-center gap-1.5 font-bold text-xs sm:text-sm cursor-pointer transition-all active:scale-95 shrink-0"
-              title="ເປີດກ້ອງສະແກນບາໂຄດ (Camera Barcode Scanner)"
+              title="ເປີດກ້ອງສະແກນບາໂຄດ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
             >
               <Barcode size={20} weight="bold" />
               <span className="hidden sm:inline">ສະແກນ</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Hardware Scanner Ready"></span>
             </button>
 
             {/* Pill Badge hiển thị & điều chỉnh tỷ giá THB/LAK (Point-in-Time Snapshot) */}
@@ -977,35 +962,23 @@ export default function PosScreen({
                       {p.name}
                     </h3>
 
-                    {/* Hiển thị tồn kho hiện tại (Duy nhất 1 vị trí chuẩn ERP - Kích thước chữ nhỏ gọn gàng) */}
-                    <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100 text-[10px]">
+                    {/* Hiển thị tồn kho hiện tại (Duy nhất 1 vị trí chuẩn ERP - Clean flat text display) */}
+                    <div className="flex items-center mt-1 pt-1 border-t border-slate-100 text-xs">
                       {!hasTrackStock ? (
-                        <span className="text-slate-400 font-medium text-[9.5px]">ບໍ່ນັບສາງ</span>
+                        <span className="text-slate-400 font-medium text-xs">ບໍ່ນັບສາງ</span>
                       ) : isZeroStock ? (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="ສິນຄ້າໝົດສາງ (ຂາຍຕໍ່ໄດ້)">
+                        <span className="text-amber-600 font-semibold text-xs" title="ສິນຄ້າໝົດສາງ (ຂາຍຕໍ່ໄດ້)">
                           ໝົດສາງ (0)
                         </span>
                       ) : isNegativeStock ? (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200 font-mono tracking-tight" title="ສິນຄ້າຕິດລົບ (ຂາຍຕໍ່ໄດ້)">
-                          {formatStockDisplay(p, null, p.baseUnit || 'ອັນ', { prefix: 'ຕິດລົບ' })}
+                        <span className="text-rose-600 font-semibold text-xs truncate" title={`ສະຕັອກ : ${formatNegativeStockCompound(p)}`}>
+                          ສະຕັອກ : {formatNegativeStockCompound(p)}
                         </span>
                       ) : (
-                        <span className="text-[9.5px] text-slate-500 font-medium truncate" title={`ສະຕັອກ: ${formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}`}>
-                          ສະຕັອກ: <strong className="text-slate-700 font-bold">{formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}</strong>
+                        <span className="text-xs text-slate-600 font-medium truncate" title={`ສະຕັອກ : ${formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}`}>
+                          ສະຕັອກ : <strong className="text-slate-700 font-bold">{formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}</strong>
                         </span>
                       )}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openUnitSelector(p);
-                        }}
-                        className="text-teal-700 hover:text-teal-800 font-bold flex items-center gap-0.5 text-[9.5px] cursor-pointer shrink-0 ml-1 py-0.5 px-1 rounded hover:bg-teal-50 transition-colors"
-                        title="ປັບຫົວໜ່ວຍອື່ນ"
-                      >
-                        <SlidersHorizontal size={10} weight="bold" />
-                        <span>ປັບຫົວໜ່ວຍ</span>
-                      </button>
                     </div>
                   </div>
 

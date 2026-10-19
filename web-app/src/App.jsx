@@ -42,6 +42,8 @@ import CategoryManagerModal from './components/CategoryManagerModal';
 import ConfirmDialogModal from './components/ConfirmDialogModal';
 
 import { formatDots, parseDots, parseCurrencyInput, formatCompoundStock, getEffectiveUnitPrice, PRICE_TIERS } from './utils/formatters';
+import { useHardwareBarcodeScanner } from './hooks/useHardwareBarcodeScanner';
+import { playSuccessBeep, playErrorBeep } from './utils/audioFeedback';
 
 export default function App() {
   // Navigation Tabs: 'pos' | 'dashboard' | 'products' | 'history'
@@ -1149,6 +1151,54 @@ export default function App() {
     }
   };
 
+  // Global Hardware Barcode Scanner Fallback (Triggered on any screen, e.g. Dashboard or History)
+  useHardwareBarcodeScanner({
+    onScan: (barcode) => {
+      const cleanCode = String(barcode).trim().toLowerCase();
+      const matched = products.find(
+        (p) =>
+          (p.barcode && String(p.barcode).trim().toLowerCase() === cleanCode) ||
+          (p.units && p.units.some((u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanCode))
+      );
+
+      if (matched) {
+        let targetUnit = matched.units?.[0];
+        const matchingUnit = matched.units?.find(
+          (u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanCode
+        );
+        if (matchingUnit) {
+          targetUnit = matchingUnit;
+        } else if (matched.units && matched.units.length > 0) {
+          targetUnit = matched.units.find((u) => u.tier === 1) || matched.units[0];
+        } else {
+          targetUnit = {
+            id: `${matched.id}_default`,
+            unitName: matched.baseUnit || 'ອັນ',
+            multiplier: 1,
+            retailPrice: matched.price || matched.retailPrice || 0,
+          };
+        }
+
+        addToCart(matched, targetUnit, 1);
+        playSuccessBeep();
+        setActiveMainTab('pos');
+      } else {
+        playErrorBeep();
+        openAlert(`ບໍ່ພົບສິນຄ້າທີ່ມີບາໂຄດ: "${barcode}"`, 'ບໍ່ພົບສິນຄ້າ', 'warning');
+      }
+    },
+    enabled:
+      activeMainTab !== 'pos' &&
+      activeMainTab !== 'products' &&
+      !productFormModalOpen &&
+      !checkoutModalOpen &&
+      !receiptModalOpen,
+    maxInterval: 50,
+    minLength: 3,
+    preventDefaultOnEnter: true,
+    cleanActiveInput: true,
+  });
+
   const changeCartItemPriceTier = (productId, unitId, newTier) => {
     setCart((prevCart) =>
       prevCart.map((item) => {
@@ -2115,12 +2165,9 @@ export default function App() {
 
   return (
     <div 
-      className="flex flex-col md:flex-row h-full h-dvh min-h-screen w-full min-w-full max-w-full bg-slate-100 text-slate-900 overflow-hidden font-sans"
-      style={{
-        paddingTop: isNativeApp ? 'env(safe-area-inset-top, 0px)' : '0px',
-        paddingLeft: isNativeApp ? 'env(safe-area-inset-left, 0px)' : '0px',
-        paddingRight: isNativeApp ? 'env(safe-area-inset-right, 0px)' : '0px',
-      }}
+      className={`flex flex-col md:flex-row h-full h-dvh min-h-screen w-full min-w-full max-w-full bg-slate-100 text-slate-900 overflow-hidden font-sans ${
+        isNativeApp ? 'native-safe-area-shell' : ''
+      }`}
     >
       {/* 1. LEFT SIDEBAR NAVBAR (Bottom bar on Mobile, Icon sidebar on Tablet/Desktop) */}
       <Navbar

@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Receipt,
   X,
   Printer,
   QrCode,
-  Prohibit
+  Prohibit,
+  CircleNotch,
 } from '@phosphor-icons/react';
 import { formatKip } from '../utils/formatters';
+import { printReceiptSmart, getPrinterConfig } from '../services/printerService';
+import { Capacitor } from '@capacitor/core';
 
 export default function ReceiptModal({
   isOpen,
@@ -29,9 +32,56 @@ export default function ReceiptModal({
 
   const isTransferPayment = receipt.paymentMethod !== 'cash';
 
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printFeedback, setPrintFeedback] = useState(null);
+
+  const handlePrint = async () => {
+    if (isPrinting) return;
+    setIsPrinting(true);
+    setPrintFeedback(null);
+
+    try {
+      const res = await printReceiptSmart({
+        elementId: 'thermal-receipt-print-area',
+        receipt,
+        allowFallback: true,
+      });
+
+      if (res.mode === 'socket') {
+        setPrintFeedback({
+          type: 'success',
+          message: res.message,
+        });
+        setTimeout(() => setPrintFeedback(null), 4000);
+      }
+    } catch (err) {
+      console.error('Print error:', err);
+      setPrintFeedback({
+        type: 'error',
+        message: `ເກີດຂໍ້ຜິດພາດ: ${err.message}`,
+      });
+      setTimeout(() => setPrintFeedback(null), 5000);
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-slate-100 rounded-3xl max-w-md w-full p-4 shadow-2xl flex flex-col gap-3 animate-in zoom-in-95 duration-200 max-h-[95vh] overflow-y-auto">
+      <div className="bg-slate-100 rounded-3xl max-w-md w-full p-4 shadow-2xl flex flex-col gap-3 animate-in zoom-in-95 duration-200 max-h-[95vh] overflow-y-auto relative">
+        {/* Print Feedback Toast inside modal */}
+        {printFeedback && (
+          <div
+            className={`absolute top-16 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-xl text-xs font-bold shadow-xl border animate-in fade-in slide-in-from-top-2 duration-150 flex items-center gap-1.5 ${
+              printFeedback.type === 'success'
+                ? 'bg-emerald-600 text-white border-emerald-500'
+                : 'bg-rose-600 text-white border-rose-500'
+            }`}
+          >
+            <span>{printFeedback.message}</span>
+          </div>
+        )}
+
         {/* Top Toolbar: 80mm vs 58mm Paper Toggle & Close */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-200 bg-white p-2.5 rounded-2xl">
           <div className="flex items-center gap-2">
@@ -425,11 +475,16 @@ export default function ReceiptModal({
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
-            className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+            onClick={handlePrint}
+            disabled={isPrinting}
+            className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
           >
-            <Printer size={16} />
-            <span>ພິມໃບບິນ ({paperWidth}mm)</span>
+            {isPrinting ? (
+              <CircleNotch size={16} className="animate-spin text-teal-400" />
+            ) : (
+              <Printer size={16} />
+            )}
+            <span>{isPrinting ? 'ກຳລັງພິມ...' : `ພິມໃບບິນ (${paperWidth}mm)`}</span>
           </button>
         </div>
       </div>

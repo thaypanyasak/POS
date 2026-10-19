@@ -25,6 +25,8 @@ import {
 import { createPurchaseOrderInSupabase } from '../../services/supabase';
 import { queryClient } from '../../services/queryClient';
 import BarcodeScannerModal from '../BarcodeScannerModal';
+import { useHardwareBarcodeScanner } from '../../hooks/useHardwareBarcodeScanner';
+import { playSuccessBeep, playErrorBeep } from '../../utils/audioFeedback';
 
 export default function PurchaseEntryModal({
   isOpen,
@@ -283,11 +285,23 @@ export default function PurchaseEntryModal({
 
     if (matched) {
       handleSelectProduct(matched.id);
+      playSuccessBeep();
       onAlert?.(`ພົບສິນຄ້າ: ${matched.name}`, 'ສະແກນສຳເລັດ', 'success');
     } else {
+      playErrorBeep();
       onAlert?.(`ບໍ່ພົບສິນຄ້າທີ່ມີ Barcode "${scannedCode}"`, 'ແຈ້ງເຕືອນ', 'warning');
     }
   };
+
+  // Hardware barcode scanner support inside single purchase entry modal
+  useHardwareBarcodeScanner({
+    onScan: handleBarcodeScanned,
+    enabled: isOpen,
+    maxInterval: 50,
+    minLength: 3,
+    preventDefaultOnEnter: true,
+    cleanActiveInput: true,
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();

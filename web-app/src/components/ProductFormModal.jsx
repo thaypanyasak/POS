@@ -26,6 +26,8 @@ import {
 import { formatDots } from '../utils/formatters';
 import { compressProductImage, formatFileSize } from '../utils/imageCompressor';
 import BarcodeScannerModal from './BarcodeScannerModal';
+import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
+import { playSuccessBeep } from '../utils/audioFeedback';
 
 export default function ProductFormModal({
   isOpen,
@@ -255,6 +257,19 @@ export default function ProductFormModal({
     }
     setScannerOpen(false);
   };
+
+  // Hardware barcode scanner support inside product editor modal
+  useHardwareBarcodeScanner({
+    onScan: (scannedCode) => {
+      handleScanBarcodeSuccess(scannedCode);
+      playSuccessBeep();
+    },
+    enabled: isOpen,
+    maxInterval: 50,
+    minLength: 3,
+    preventDefaultOnEnter: true,
+    cleanActiveInput: true,
+  });
 
   if (!isOpen) return null;
 

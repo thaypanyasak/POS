@@ -17,10 +17,14 @@ import {
   PencilSimple,
   FloppyDisk,
   X,
+  Printer,
+  HandCoins,
 } from '@phosphor-icons/react';
+import { Capacitor } from '@capacitor/core';
 import { updateExchangeRateInSupabase } from '../services/supabase';
 import queryClient from '../services/queryClient';
 import { formatDots, parseDots } from '../utils/formatters';
+import { getPrinterConfig, savePrinterConfig, openCashDrawerDirect } from '../services/printerService';
 
 export default function SettingsView({
   exchangeRate = 0,
@@ -68,13 +72,56 @@ export default function SettingsView({
     }
   };
 
-  const [localPaperWidth, setLocalPaperWidth] = useState(receiptPaperWidth);
+  // Printer Settings State (LAN / Wi-Fi IP, Port, Paper Width)
+  const [printerIp, setPrinterIp] = useState(() => getPrinterConfig().ip);
+  const [printerPort, setPrinterPort] = useState(() => getPrinterConfig().port);
+  const [printerAutoCut, setPrinterAutoCut] = useState(() => getPrinterConfig().autoCut);
+  const [printerDrawerKick, setPrinterDrawerKick] = useState(() => getPrinterConfig().drawerKick);
+
+  const [localPaperWidth, setLocalPaperWidth] = useState(() => getPrinterConfig().paperWidth || receiptPaperWidth);
   const paperWidth = setReceiptPaperWidth ? receiptPaperWidth : localPaperWidth;
+
   const handlePaperWidthChange = (val) => {
     if (setReceiptPaperWidth) {
       setReceiptPaperWidth(val);
-    } else {
-      setLocalPaperWidth(val);
+    }
+    setLocalPaperWidth(val);
+    savePrinterConfig({ paperWidth: val });
+  };
+
+  const handleSavePrinterSettings = () => {
+    savePrinterConfig({
+      ip: printerIp.trim(),
+      port: parseInt(printerPort, 10) || 9100,
+      paperWidth,
+      autoCut: printerAutoCut,
+      drawerKick: printerDrawerKick,
+    });
+    onAlert?.(
+      `ບັນທຶກການຕັ້ງຄ່າເຄື່ອງພິມ ${printerIp.trim()}:${printerPort} (${paperWidth}mm) ສຳເລັດ!`,
+      'ສຳເລັດ',
+      'success'
+    );
+  };
+
+  const handleTestKickDrawer = async () => {
+    try {
+      if (!Capacitor.isNativePlatform()) {
+        onAlert?.(
+          'ຄຳສັ່ງເປີດລິ້ນຊັກເງິນ ESC/POS ຮອງຮັບສະເພາະເມື່ອເປີດຜ່ານ App Capacitor ທີ່ເຊື່ອມຕໍ່ IP ເຄື່ອງພິມ LAN/Wi-Fi.',
+          'ແຈ້ງເຕືອນ',
+          'info'
+        );
+        return;
+      }
+      const res = await openCashDrawerDirect();
+      if (res.success) {
+        onAlert?.('ສົ່ງຄຳສັ່ງເປີດລິ້ນຊັກເງິນສຳເລັດແລ້ວ!', 'ສຳເລັດ', 'success');
+      } else {
+        onAlert?.(res.message, 'ແຈ້ງເຕືອນ', 'warning');
+      }
+    } catch (err) {
+      onAlert?.(`ບໍ່ສາມາດເປີດລິ້ນຊັກ: ${err.message}`, 'ຂໍ້ຜິດພາດ', 'error');
     }
   };
 
@@ -200,69 +247,176 @@ export default function SettingsView({
             </div>
           </div>
 
-          {/* Card 2: Receipt Printing Width */}
+          {/* Card 2: Receipt Printing & LAN/Wi-Fi Hardware Configuration */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-                  <Receipt size={22} weight="bold" />
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                    <Printer size={22} weight="bold" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <span>ເຄື່ອງພິມບິນຄວາມຮ້ອນ (Thermal Printer)</span>
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                        ESC/POS
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      ກຳນົດ IP, Port (LAN/Wi-Fi) ສຳລັບ EasyPrint ES-8803WA ແລະ ຂະໜາດເຈ້ຍ
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-base font-bold text-slate-900">
-                    ຂະໜາດເຈ້ຍພິມບິນ (Thermal Receipt)
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    ກຳນົດຂະໜາດເຈ້ຍສຳລັບເຄື່ອງພິມຄວາມຮ້ອນ POS
-                  </p>
+
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                      Capacitor.isNativePlatform()
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                        : 'bg-sky-50 text-sky-800 border border-sky-200'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        Capacitor.isNativePlatform() ? 'bg-emerald-500 animate-pulse' : 'bg-sky-500'
+                      }`}
+                    ></span>
+                    <span>{Capacitor.isNativePlatform() ? 'Capacitor Native (Direct Socket)' : 'Web Browser (System Print)'}</span>
+                  </span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <button
-                  type="button"
-                  onClick={() => handlePaperWidthChange(80)}
-                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
-                    paperWidth === 80
-                      ? 'bg-teal-50 border-teal-500 text-teal-900 ring-2 ring-teal-500/20'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm">80 mm (ມາດຕະຖານ)</span>
-                    {paperWidth === 80 && (
-                      <CheckCircle size={18} weight="fill" className="text-teal-600" />
-                    )}
+              {/* IP Address & Port Settings */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    IP ເຄື່ອງພິມ LAN / Wi-Fi (EasyPrint ES-8803WA)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={printerIp}
+                      onChange={(e) => setPrinterIp(e.target.value)}
+                      placeholder="192.168.1.200"
+                      className="w-full h-10 px-3 font-mono font-bold text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 focus:bg-white transition-all shadow-2xs"
+                    />
                   </div>
-                  <span className="text-[11px] text-slate-500 mt-1 block">
-                    ເໝາະສຳລັບເຄື່ອງພິມຕັ້ງໂຕະ ໜ້າກວ້າງ 3 ນິ້ວ
+                  <span className="text-[10.5px] text-slate-400 mt-1 block">
+                    ຄ່າເລີ່ມຕົ້ນມາດຕະຖານ: 192.168.1.200 (ກວດສອບ IP ເທິງໃບ Self-test ຂອງເຄື່ອງພິມ)
                   </span>
-                </button>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => handlePaperWidthChange(58)}
-                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
-                    paperWidth === 58
-                      ? 'bg-teal-50 border-teal-500 text-teal-900 ring-2 ring-teal-500/20'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm">58 mm (ແບບພົກພາ)</span>
-                    {paperWidth === 58 && (
-                      <CheckCircle size={18} weight="fill" className="text-teal-600" />
-                    )}
-                  </div>
-                  <span className="text-[11px] text-slate-500 mt-1 block">
-                    ເໝາະສຳລັບເຄື່ອງພິມ Bluetooth ຂະໜາດນ້ອຍ 2 ນິ້ວ
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Port ເຄື່ອງພິມ (RAW)
+                  </label>
+                  <input
+                    type="number"
+                    value={printerPort}
+                    onChange={(e) => setPrinterPort(e.target.value)}
+                    placeholder="9100"
+                    className="w-full h-10 px-3 font-mono font-bold text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 focus:bg-white transition-all shadow-2xs"
+                  />
+                  <span className="text-[10.5px] text-slate-400 mt-1 block">
+                    ມາດຕະຖານ: 9100
                   </span>
-                </button>
+                </div>
+              </div>
+
+              {/* Paper Width Options */}
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  ຂະໜາດເຈ້ຍພິມ (Paper Width)
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handlePaperWidthChange(80)}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      paperWidth === 80
+                        ? 'bg-teal-50 border-teal-500 text-teal-900 ring-2 ring-teal-500/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs sm:text-sm">80 mm (3 ນິ້ວ - ES-8803WA)</span>
+                      {paperWidth === 80 && (
+                        <CheckCircle size={18} weight="fill" className="text-teal-600 shrink-0" />
+                      )}
+                    </div>
+                    <span className="text-[10.5px] text-slate-500 mt-0.5 block">
+                      ມາດຕະຖານຕັ້ງໂຕະ (576 dots)
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handlePaperWidthChange(58)}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      paperWidth === 58
+                        ? 'bg-teal-50 border-teal-500 text-teal-900 ring-2 ring-teal-500/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs sm:text-sm">58 mm (2 ນິ້ວ - ແບບພົກພາ)</span>
+                      {paperWidth === 58 && (
+                        <CheckCircle size={18} weight="fill" className="text-teal-600 shrink-0" />
+                      )}
+                    </div>
+                    <span className="text-[10.5px] text-slate-500 mt-0.5 block">
+                      ເຄື່ອງພິມຂະໜາດນ້ອຍ (384 dots)
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Hardware Toggles: Drawer Kick & Auto-Cut */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-100">
+                <label className="flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/80 cursor-pointer text-xs font-bold text-slate-800 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={printerDrawerKick}
+                    onChange={(e) => setPrinterDrawerKick(e.target.checked)}
+                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 accent-teal-600"
+                  />
+                  <span>ເປີດລິ້ນຊັກເງິນອັດຕະໂນມັດ (Cash Drawer Kick)</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/80 cursor-pointer text-xs font-bold text-slate-800 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={printerAutoCut}
+                    onChange={(e) => setPrinterAutoCut(e.target.checked)}
+                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 accent-teal-600"
+                  />
+                  <span>ຕັດເຈ້ຍອັດຕະໂນມັດ (Auto Cutter)</span>
+                </label>
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>ຮູບແບບຟອນໃບບິນ:</span>
-              <span className="font-mono font-bold text-slate-700">Noto Sans Lao & Monospace</span>
+            {/* Action Bar: Save & Kick Drawer Test */}
+            <div className="mt-4 pt-3.5 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleTestKickDrawer}
+                  className="h-9 px-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                  title="ທົດສອບຄຳສັ່ງເປີດລິ້ນຊັກເງິນ ESC/POS"
+                >
+                  <HandCoins size={15} weight="bold" />
+                  <span>ທົດສອບເປີດລິ້ນຊັກ</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSavePrinterSettings}
+                className="h-9 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+              >
+                <FloppyDisk size={15} weight="bold" />
+                <span>ບັນທຶກການຕັ້ງຄ່າເຄື່ອງພິມ</span>
+              </button>
             </div>
           </div>
 
