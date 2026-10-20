@@ -342,40 +342,41 @@ export default function SalesByUnitReportView({
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 bg-slate-50 font-sans overflow-hidden select-none">
       {/* 1. TOP HEADER & FILTER BAR */}
-      <div className="bg-white border-b border-slate-200/80 px-4 md:px-6 py-3 shrink-0 shadow-2xs z-10">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 shrink-0 shadow-2xs z-10">
+        <div className="flex items-center justify-between gap-2.5 sm:gap-3">
           {/* Title & Description */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200/80 flex items-center justify-center text-teal-700 shrink-0 shadow-2xs">
-              <ChartPieSlice size={22} weight="bold" />
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0 border border-teal-100">
+              <ChartPieSlice size={20} className="sm:w-5 sm:h-5" weight="duotone" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base md:text-lg font-extrabold text-slate-900 tracking-tight leading-tight">
-                  ລາຍງານຂາຍຕາມຫົວໜ່ວຍ (Sales by Product & Unit)
-                </h1>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200/80">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span className="truncate">
+                  <span className="sm:hidden">ລາຍງານຂາຍຕາມຫົວໜ່ວຍ</span>
+                  <span className="hidden sm:inline">ລາຍງານຂາຍຕາມຫົວໜ່ວຍ (Sales by Unit)</span>
+                </span>
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
                   {filteredTransactions.length} ບິນ
                 </span>
-              </div>
-              <p className="text-xs text-slate-500 font-medium leading-tight mt-0.5">
+              </h2>
+              <p className="text-[11.5px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block truncate">
                 ສະຫຼຸບຍອດຂາຍຕາມຂັ້ນຫົວໜ່ວຍ: ແກັດ, ແພັກ, ອັນ ແລະ ລາຍຮັບແຍກແຕ່ລະສິນຄ້າ
               </p>
             </div>
           </div>
 
           {/* Right Actions: Export CSV, Print & Refresh Buttons */}
-          <div className="flex items-center gap-2 self-end lg:self-center">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Export CSV Button */}
             <button
               type="button"
               onClick={handleExportCSV}
               disabled={displayedProducts.length === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-teal-700 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+              className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-teal-700 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5"
               title="ສົ່ງອອກໄຟລ໌ Excel / CSV"
             >
-              <Export size={14} weight="bold" />
-              <span className="hidden sm:inline">Excel/CSV</span>
+              <Export size={15} weight="bold" />
+              <span className="hidden md:inline">Excel/CSV</span>
             </button>
 
             {/* Print Button */}
@@ -383,11 +384,11 @@ export default function SalesByUnitReportView({
               type="button"
               onClick={handlePrint}
               disabled={displayedProducts.length === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-teal-700 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+              className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-teal-700 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5"
               title="ພິມລາຍງານ"
             >
-              <Printer size={14} weight="bold" />
-              <span className="hidden sm:inline">ພິມ</span>
+              <Printer size={15} weight="bold" />
+              <span className="hidden md:inline">ພິມ</span>
             </button>
 
             {/* Refresh Button */}
@@ -396,11 +397,11 @@ export default function SalesByUnitReportView({
                 type="button"
                 onClick={onRefresh}
                 disabled={isLoading}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-teal-700 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50"
+                className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-teal-700 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 title="ໂຫຼດຂໍ້ມູນໃໝ່"
               >
-                <ArrowClockwise size={14} weight="bold" className={isLoading ? 'animate-spin text-teal-600' : ''} />
-                <span>ຣີເຟຣຊ</span>
+                <ArrowClockwise size={15} weight="bold" className={isLoading ? 'animate-spin text-teal-600' : ''} />
+                <span className="hidden sm:inline">ຣີເຟຣຊ</span>
               </button>
             )}
           </div>
