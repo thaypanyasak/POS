@@ -7,10 +7,10 @@ import {
   WarningCircle,
   Barcode,
   ArrowClockwise,
-  Keyboard
+  Keyboard,
+  ArrowsClockwise
 } from '@phosphor-icons/react';
 import { Capacitor } from '@capacitor/core';
-import { BarcodeScanner as NativeBarcodeScanner } from 'capacitor-barcode-scanner';
 import { Haptics, NotificationType } from '@capacitor/haptics';
 import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
 import { playSuccessBeep } from '../utils/audioFeedback';
@@ -34,7 +34,7 @@ export default function BarcodeScannerModal({
   onClose,
   onScanSuccess,
   title = 'ສະແກນບາໂຄດສິນຄ້າ (Barcode Scanner)',
-  description = 'ສ່ອງກ້ອງໃສ່ບາໂຄດສິນຄ້າເພື່ອສະແກນອັດຕະໂນມັດ'
+  description = 'ວາງບາໂຄດໃຫ້ຕົງກັບກອບສີ່ຫຼ່ຽມເພື່ອສະແກນອັດຕະໂນມັດ'
 }) {
   const [errorMsg, setErrorMsg] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -43,6 +43,9 @@ export default function BarcodeScannerModal({
   const [lastScanned, setLastScanned] = useState(null);
   const [manualCode, setManualCode] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
+  const [focusPoint, setFocusPoint] = useState(null);
+  const [availableCameras, setAvailableCameras] = useState([]);
+  const [activeCameraId, setActiveCameraId] = useState(null);
 
   const scannerRef = useRef(null);
   const isOperatingRef = useRef(false);
@@ -62,11 +65,15 @@ export default function BarcodeScannerModal({
     setIsTorchOn(false);
     setShowManualInput(false);
     setManualCode('');
+    setFocusPoint(null);
+    // Assign fresh unique container ID for this modal session
+    containerId.current = `html5qr-viewfinder-${Math.random().toString(36).slice(2, 8)}`;
 
+    // Short delay to ensure modal DOM is mounted and painted
     const timer = setTimeout(() => {
       if (!isMounted) return;
-      initUnifiedScanner();
-    }, 150);
+      startEmbeddedScanner();
+    }, 180);
 
     return () => {
       isMounted = false;
@@ -76,86 +83,37 @@ export default function BarcodeScannerModal({
   }, [isOpen]);
 
   const cleanupScanner = async () => {
-    // Remove scanner-active transparency class from body
-    if (typeof document !== 'undefined') {
-      document.body.classList.remove('scanner-active', 'barcode-scanner-active');
+    if (scannerRef.current) {
+      const scanner = scannerRef.current;
+      scannerRef.current = null;
+      try {
+        const state = scanner.getState();
+        if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
+          await scanner.stop();
+        }
+      } catch (e) {
+        console.debug('[BarcodeScanner] Stop error ignored:', e);
+      }
+      try {
+        scanner.clear();
+      } catch (e) {
+        console.debug('[BarcodeScanner] Clear error ignored:', e);
+      }
     }
 
-    if (scannerRef.current) {
-      try {
-        const state = scannerRef.current.getState();
-        if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
-          await scannerRef.current.stop();
-        }
-        scannerRef.current.clear();
-      } catch (e) {
-        console.debug('[BarcodeScanner] Cleanup ignored:', e);
-      }
-      scannerRef.current = null;
-    }
+    // Clean DOM node if present
+    try {
+      const el = document.getElementById(containerId.current);
+      if (el) el.innerHTML = '';
+    } catch (_) {}
+
     isOperatingRef.current = false;
   };
 
-  /* ========================================================================= */
-  /* UNIFIED SCANNER: THỬ NATIVE TRƯỚC, NẾU CHƯA CÓ NATIVE CHUYỂN SANG WEB      */
-  /* ========================================================================= */
-  const initUnifiedScanner = async () => {
-    // 1. Nếu đang chạy Native Capacitor: Thử mở Native Hardware BarcodeScanner
-    if (Capacitor.isNativePlatform()) {
-      try {
-        setIsInitializing(false);
-
-        // Kích hoạt class trong suốt trên body để camera phần cứng hiển thị mượt mà 60 FPS
-        document.body.classList.add('scanner-active', 'barcode-scanner-active');
-
-        const scanResult = await NativeBarcodeScanner.scan();
-
-        document.body.classList.remove('scanner-active', 'barcode-scanner-active');
-
-        if (scanResult && scanResult.result && scanResult.code) {
-          const cleaned = String(scanResult.code).trim();
-          if (cleaned) {
-            // Debounce check
-            const now = Date.now();
-            if (now - lastScannedTimeRef.current > 800) {
-              lastScannedTimeRef.current = now;
-              await triggerScanFeedback();
-              setLastScanned(cleaned);
-              if (onScanSuccess) onScanSuccess(cleaned);
-              if (onClose) onClose();
-              return;
-            }
-          }
-        }
-        // User cancel/back
-        if (onClose) onClose();
-        return;
-      } catch (err) {
-        document.body.classList.remove('scanner-active', 'barcode-scanner-active');
-        const errString = String(err?.message || err);
-        console.warn('[BarcodeScanner] Native scanner failed or not installed:', errString);
-
-        if (errString.includes('cancel') || errString.includes('user')) {
-          if (onClose) onClose();
-          return;
-        }
-        if (errString.includes('Permission') || errString.includes('denied')) {
-          setErrorMsg('ແອັບຕ້ອງການສິດເຂົ້າເຖິງກ້ອງຖ່າຍຮູບ. ກະລຸນາເປີດສິດ Camera ໃນ Settings.');
-          setShowManualInput(true);
-          return;
-        }
-        // Fallback sang Web Full-Frame Scanner
-      }
-    }
-
-    // 2. Mở Web Camera Full-Frame Scanner
-    await startWebCameraScanner();
-  };
-
-  /* ========================================================================= */
-  /* 2. WEB FULL-FRAME SCANNER (TỐC ĐỘ CAO, QUÉT TOÀN BỘ KHUNG HÌNH 95%)        */
-  /* ========================================================================= */
-  const startWebCameraScanner = async () => {
+  /**
+   * Starts high-speed embedded scanner with focused reticle region
+   */
+  const startEmbeddedScanner = async (overrideCameraId = null) => {
     if (isOperatingRef.current) return;
     isOperatingRef.current = true;
     setIsInitializing(true);
@@ -172,28 +130,57 @@ export default function BarcodeScannerModal({
         return;
       }
 
-      // Giới hạn định dạng phổ biến nhất để tối ưu hoá decode tốc độ cực nhanh (< 0.1s)
+      // 1. Enumerate and discover cameras on device/browser
+      let chosenCameraId = overrideCameraId;
+      try {
+        const cameras = await Html5Qrcode.getCameras();
+        if (cameras && cameras.length > 0) {
+          setAvailableCameras(cameras);
+          if (!chosenCameraId) {
+            // Mobile/Tablet: Prefer rear/back camera
+            const backCam = cameras.find(c => /back|rear|environment|sau|หลัง/i.test(c.label));
+            // Laptop/Desktop/Unknown: Fallback to last or first available camera
+            chosenCameraId = backCam ? backCam.id : (cameras[cameras.length - 1]?.id || cameras[0].id);
+          }
+        }
+      } catch (enumErr) {
+        console.warn('[BarcodeScanner] getCameras discovery error:', enumErr);
+      }
+
+      setActiveCameraId(chosenCameraId);
+
+      // Target camera: specific deviceId if discovered, or environment fallback
+      const cameraTarget = chosenCameraId ? chosenCameraId : { facingMode: 'environment' };
+
+      // 2. Instantiate a fresh Html5Qrcode instance
       const html5QrCode = new Html5Qrcode(containerId.current, {
         formatsToSupport: [
           Html5QrcodeSupportedFormats.EAN_13,
           Html5QrcodeSupportedFormats.EAN_8,
           Html5QrcodeSupportedFormats.CODE_128,
           Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.UPC_E,
           Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.QR_CODE,
         ],
+        useBarCodeDetectorIfSupported: true,
         verbose: false,
       });
 
       scannerRef.current = html5QrCode;
 
-      // Full-Frame 95% diện tích: Quét nhạy mọi góc độ, không cần căn ô vuông
+      // 3. Restrict scanning bounding box to the center reticle (speeds up decode 3x)
       const config = {
         fps: 25,
-        qrbox: (viewfinderWidth, viewfinderHeight) => ({
-          width: Math.floor(viewfinderWidth * 0.95),
-          height: Math.floor(viewfinderHeight * 0.95)
-        }),
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          // Standard retail horizontal barcode rectangle matching reticle UI
+          const w = Math.min(Math.floor(viewfinderWidth * 0.78), 280);
+          const h = Math.min(Math.floor(viewfinderHeight * 0.56), 200);
+          return {
+            width: Math.max(180, w),
+            height: Math.max(140, h),
+          };
+        },
         aspectRatio: 1.0,
         disableFlip: true,
       };
@@ -210,7 +197,7 @@ export default function BarcodeScannerModal({
         }
         lastScannedTimeRef.current = now;
 
-        // Feedback tức thì & đóng ngay
+        // Feedback & clean close
         await triggerScanFeedback();
         setLastScanned(cleaned);
 
@@ -221,61 +208,45 @@ export default function BarcodeScannerModal({
 
       const qrCodeErrorCallback = () => {};
 
-      // Cấu hình Camera HD 720p tối ưu cho thuật toán Web: nhẹ CPU hơn 1080p, tốc độ giải mã tăng gấp 2 lần
-      const cameraConstraints = {
-        facingMode: 'environment',
-        width: { ideal: 1280, min: 640 },
-        height: { ideal: 720, min: 480 },
-        advanced: [
-          { focusMode: 'continuous' }
-        ]
-      };
+      // 4. Start camera feed directly on the chosen camera device
+      await html5QrCode.start(
+        cameraTarget,
+        config,
+        onScanCallback,
+        qrCodeErrorCallback
+      );
 
-      let started = false;
-
-      try {
-        await html5QrCode.start(
-          cameraConstraints,
-          config,
-          onScanCallback,
-          qrCodeErrorCallback
-        );
-        started = true;
-      } catch (camErr) {
-        console.warn('[BarcodeScanner] HD constraints fallback to simple environment:', camErr);
-      }
-
-      if (!started) {
-        await html5QrCode.start(
-          { facingMode: 'environment' },
-          config,
-          onScanCallback,
-          qrCodeErrorCallback
-        );
-        started = true;
-      }
-
-      // Đảm bảo cờ video bắt buộc cho iOS Safari / WebKit không bị chặn
       ensureVideoElementAttributes(containerId.current);
-      setIsInitializing(false);
-      isOperatingRef.current = false;
 
-      // Kiểm tra đèn Flash
+      // 5. Fine-tune continuous auto focus if supported
+      try {
+        await html5QrCode.applyVideoConstraints({
+          advanced: [
+            { focusMode: 'continuous' }
+          ]
+        });
+      } catch (_) {}
+
+      // 6. Check for flashlight / torch support
       try {
         const capabilities = html5QrCode.getRunningTrackCapabilities();
         if (capabilities && capabilities.torch) {
           setHasTorch(true);
         }
       } catch (_) {}
+
+      setIsInitializing(false);
+      isOperatingRef.current = false;
     } catch (err) {
-      console.error('[BarcodeScanner] Web Camera start error:', err);
+      console.error('[BarcodeScanner] Camera start error:', err);
+      await cleanupScanner();
       setIsInitializing(false);
       isOperatingRef.current = false;
 
       let friendly = 'ບໍ່ສາມາດເປີດກ້ອງໄດ້: ';
-      if (err?.name === 'NotAllowedError' || String(err).includes('Permission')) {
-        friendly = 'ແອັບຕ້ອງການສິດເຂົ້າເຖິງກ້ອງຖ່າຍຮູບ. ກະລຸນາເປີດສິດ Camera ໃນ Settings.';
-      } else if (err?.name === 'NotFoundError' || String(err).includes('DevicesNotFoundError')) {
+      if (err?.name === 'NotAllowedError' || String(err).includes('Permission') || String(err).includes('denied')) {
+        friendly = 'ແອັບຕ້ອງການສິດເຂົ້າເຖິງກ້ອງຖ່າຍຮູບ. ກະລຸນາເປີດສິດ Camera ໃນ Browser/Settings.';
+      } else if (err?.name === 'NotFoundError' || String(err).includes('DevicesNotFoundError') || String(err).includes('No cameras')) {
         friendly = 'ບໍ່ພົບກ້ອງຖ່າຍຮູບໃນອຸປະກອນນີ້.';
       } else {
         friendly += (err?.message || String(err));
@@ -299,7 +270,7 @@ export default function BarcodeScannerModal({
     } catch (_) {}
   };
 
-  const handleToggleWebTorch = async () => {
+  const handleToggleTorch = async () => {
     try {
       if (!scannerRef.current || !hasTorch) return;
       const nextState = !isTorchOn;
@@ -308,8 +279,41 @@ export default function BarcodeScannerModal({
       });
       setIsTorchOn(nextState);
     } catch (e) {
-      console.warn('Web torch toggle error:', e);
+      console.warn('Torch toggle error:', e);
     }
+  };
+
+  const handleSwitchCamera = async () => {
+    if (availableCameras.length < 2 || isOperatingRef.current) return;
+    const currentIndex = availableCameras.findIndex(c => c.id === activeCameraId);
+    const nextIndex = (currentIndex + 1) % availableCameras.length;
+    const nextCamera = availableCameras[nextIndex];
+    if (nextCamera) {
+      await startEmbeddedScanner(nextCamera.id);
+    }
+  };
+
+  const handleTapViewfinder = async (e) => {
+    if (showManualInput || errorMsg || isInitializing) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    setFocusPoint({ x, y, id: Date.now() });
+    setTimeout(() => {
+      setFocusPoint(null);
+    }, 800);
+
+    // Re-lock continuous autofocus
+    try {
+      if (scannerRef.current) {
+        await scannerRef.current.applyVideoConstraints({
+          advanced: [
+            { focusMode: 'continuous' }
+          ]
+        });
+      }
+    } catch (_) {}
   };
 
   const handleManualSubmit = (e) => {
@@ -324,7 +328,7 @@ export default function BarcodeScannerModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[120] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[120] bg-slate-950/85 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-150">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl flex flex-col text-white">
         {/* Header Bar */}
         <div className="p-3.5 bg-slate-800/95 border-b border-slate-700/60 flex items-center justify-between">
@@ -333,55 +337,88 @@ export default function BarcodeScannerModal({
               <Camera size={18} weight="bold" />
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-xs font-black text-white leading-tight">
-                  {title}
-                </h3>
-              </div>
+              <h3 className="text-xs font-black text-white leading-tight">
+                {title}
+              </h3>
               <p className="text-[10px] text-slate-400">
                 {description}
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700/60 rounded-xl transition-all cursor-pointer"
-          >
-            <X size={18} weight="bold" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Camera Switch button if multiple cameras available */}
+            {availableCameras.length > 1 && !errorMsg && !showManualInput && (
+              <button
+                type="button"
+                onClick={handleSwitchCamera}
+                title="ປ່ຽນກ້ອງຖ່າຍຮູບ (Switch Camera)"
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700/60 rounded-xl transition-all cursor-pointer"
+              >
+                <ArrowsClockwise size={18} weight="bold" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700/60 rounded-xl transition-all cursor-pointer"
+            >
+              <X size={18} weight="bold" />
+            </button>
+          </div>
         </div>
 
-        {/* Viewfinder Camera Area */}
-        <div className="relative w-full aspect-square bg-black flex items-center justify-center overflow-hidden">
-          {/* Web HTML5 QR Code Mount Element */}
+        {/* Viewfinder Camera Area with tap-to-focus */}
+        <div
+          onClick={handleTapViewfinder}
+          className="relative w-full aspect-square bg-black flex items-center justify-center overflow-hidden cursor-crosshair select-none"
+        >
+          {/* HTML5 QR Code Mount Element */}
           <div
             id={containerId.current}
             className="w-full h-full [&_video]:w-full [&_video]:h-full [&_video]:object-cover"
           />
 
-          {/* Full-Frame Aiming Reticle Overlay (95% detection zone, zero friction) */}
+          {/* Aiming Reticle Framing Box ("Khung vuông barcode như cũ") */}
           {!errorMsg && !isInitializing && !showManualInput && (
-            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-3">
-              <div className="relative w-full h-full rounded-2xl border-2 border-teal-400/80 shadow-[0_0_24px_rgba(20,184,166,0.25)] flex items-center justify-center overflow-hidden">
-                <div className="absolute top-0 left-0 w-6 h-6 border-t-3 border-l-3 border-teal-400 rounded-tl-lg" />
-                <div className="absolute top-0 right-0 w-6 h-6 border-t-3 border-r-3 border-teal-400 rounded-tr-lg" />
-                <div className="absolute bottom-0 left-0 w-6 h-6 border-b-3 border-l-3 border-teal-400 rounded-bl-lg" />
-                <div className="absolute bottom-0 right-0 w-6 h-6 border-b-3 border-r-3 border-teal-400 rounded-br-lg" />
+            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4">
+              {/* Outer Shadow Mask creates dark cutout with crisp transparent center reticle */}
+              <div
+                className="relative w-[78%] h-[56%] max-w-[280px] max-h-[200px] rounded-2xl border-2 border-teal-400 shadow-[0_0_0_9999px_rgba(15,23,42,0.6),0_0_24px_rgba(20,184,166,0.35)] flex items-center justify-center overflow-hidden"
+              >
+                {/* 4 High-Visibility Rounded Corner Accents */}
+                <div className="absolute top-0 left-0 w-5 h-5 border-t-3 border-l-3 border-teal-400 rounded-tl-xl" />
+                <div className="absolute top-0 right-0 w-5 h-5 border-t-3 border-r-3 border-teal-400 rounded-tr-xl" />
+                <div className="absolute bottom-0 left-0 w-5 h-5 border-b-3 border-l-3 border-teal-400 rounded-bl-xl" />
+                <div className="absolute bottom-0 right-0 w-5 h-5 border-b-3 border-r-3 border-teal-400 rounded-br-xl" />
 
-                <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-teal-400 to-transparent shadow-[0_0_10px_#14b8a6] animate-pulse" />
+                {/* Subtle Center Focus Target */}
+                <div className="w-1.5 h-1.5 rounded-full bg-teal-400/60 shadow-[0_0_6px_#2dd4bf]" />
+
+                {/* Animated Red Laser Scan Line */}
+                <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-red-500 to-transparent shadow-[0_0_10px_#ef4444] animate-barcode-laser" />
               </div>
 
-              <span className="absolute bottom-4 text-[10.5px] font-bold text-white/95 bg-slate-900/85 px-3 py-1 rounded-full backdrop-blur-md flex items-center gap-1.5 border border-white/10 shadow-lg">
-                <Barcode size={14} weight="bold" className="text-teal-400" />
-                <span>ສ່ອງບາໂຄດມຸມໃດກໍ່ໄດ້ (Full-Frame Detection)</span>
-              </span>
+              {/* Barcode Alignment Guide */}
+              <div className="mt-3.5 flex items-center gap-1.5 px-3 py-1 bg-slate-900/90 border border-white/10 rounded-full text-white/95 text-[11px] font-bold shadow-lg backdrop-blur-md">
+                <Barcode size={15} weight="bold" className="text-teal-400" />
+                <span>ຈັດບາໂຄດໃຫ້ຕົງກັບກອບສີ່ຫຼ່ຽມ</span>
+              </div>
+            </div>
+          )}
+
+          {/* Interactive Tap-to-Focus Ring Indicator */}
+          {focusPoint && (
+            <div
+              className="absolute pointer-events-none w-12 h-12 border-2 border-amber-400 rounded-xl shadow-[0_0_12px_rgba(251,191,36,0.6)] animate-focus-ring z-20 flex items-center justify-center"
+              style={{ left: focusPoint.x, top: focusPoint.y }}
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
             </div>
           )}
 
           {/* Loading Camera State */}
           {isInitializing && !errorMsg && (
-            <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center gap-3 p-4">
+            <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center gap-3 p-4 z-10">
               <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin" />
               <span className="text-xs font-bold text-slate-300">
                 ກຳລັງເປີດກ້ອງ (Starting Camera)...
@@ -391,7 +428,7 @@ export default function BarcodeScannerModal({
 
           {/* Error / Permission Denied State or Manual Fallback View */}
           {(errorMsg || showManualInput) && (
-            <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center gap-3 p-5 text-center">
+            <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center gap-3 p-5 text-center z-10">
               {errorMsg && (
                 <>
                   <WarningCircle size={36} className="text-rose-500" weight="fill" />
@@ -430,7 +467,7 @@ export default function BarcodeScannerModal({
                   onClick={() => {
                     setErrorMsg(null);
                     setShowManualInput(false);
-                    startWebCameraScanner();
+                    startEmbeddedScanner();
                   }}
                   className="mt-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1 border border-slate-700 cursor-pointer transition-all"
                 >
@@ -447,7 +484,7 @@ export default function BarcodeScannerModal({
           {hasTorch ? (
             <button
               type="button"
-              onClick={handleToggleWebTorch}
+              onClick={handleToggleTorch}
               className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                 isTorchOn
                   ? 'bg-amber-400 text-slate-950 font-black shadow-md'

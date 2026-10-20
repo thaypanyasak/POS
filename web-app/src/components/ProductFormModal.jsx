@@ -322,7 +322,7 @@ export default function ProductFormModal({
     <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col w-screen h-screen overflow-hidden animate-in fade-in duration-150 select-none font-sans">
       {/* 1. TOP FULLSCREEN HEADER (Compact Touch POS: strictly h-14 / 56px on mobile) */}
       <header className="bg-white border-b border-slate-200/90 px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between shrink-0 shadow-xs z-10">
-        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+        <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
           <button
             type="button"
             onClick={onClose}
@@ -332,18 +332,13 @@ export default function ProductFormModal({
             <ArrowLeft size={17} weight="bold" />
           </button>
           <div className="min-w-0">
-            <h2 className="text-sm xs:text-base font-bold text-slate-900 inline-flex items-center gap-1.5 truncate">
-              <PlusCircle size={18} className="text-teal-600 shrink-0 hidden xs:inline-block" weight="fill" />
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight flex items-center gap-2 truncate">
               <span className="truncate">
                 {productToEdit ? 'ແກ້ໄຂສິນຄ້າ' : 'ເພີ່ມສິນຄ້າໃໝ່'}
               </span>
-              <span className="hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 shrink-0">
-                Full Screen
-              </span>
-              <span className="inline-block sm:hidden w-2 h-2 rounded-full bg-teal-500 shrink-0" title="Full Screen Mode"></span>
             </h2>
-            <p className="hidden lg:block text-xs text-slate-500 line-clamp-1">
-              ຕົ້ນທຶນບາດ/ກີບ, ສະຕັອກສິນຄ້າ ແລະ Switch ເປີດ/ປິດ 3 ລະດັບຫົວໜ່ວຍ (ຍົກລັງ, ແພັກ, ຂາຍຍ່ອຍ)
+            <p className="text-[11.5px] sm:text-xs text-slate-500 mt-0.5 hidden xl:block truncate">
+              ຕົ້ນທຶນບາດ/ກີບ, ສະຕັອກສິນຄ້າ ແລະ 3 ລະດັບຫົວໜ່ວຍຂາຍ (ຍົກລັງ, ແພັກ, ຂາຍຍ່ອຍ)
             </p>
           </div>
         </div>
@@ -755,8 +750,8 @@ export default function ProductFormModal({
                   <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                     {/* Carton Stock */}
                     {enableCarton && (
-                      <div className="p-2 bg-amber-50/60 rounded-lg sm:rounded-xl border border-amber-200/80">
-                        <label className="text-[9.5px] sm:text-[10px] font-bold text-amber-900 block mb-0.5 truncate" title={cartonUnitName || 'ແກັດ'}>
+                      <div className="p-2 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-200">
+                        <label className="text-[9.5px] sm:text-[10px] font-bold text-slate-700 block mb-0.5 truncate" title={cartonUnitName || 'ແກັດ'}>
                           {cartonUnitName || 'ແກັດ'}:
                         </label>
                         <input
@@ -765,15 +760,15 @@ export default function ProductFormModal({
                           value={stockCartons}
                           onChange={(e) => setStockCartons(formatDots(e.target.value))}
                           placeholder="0"
-                          className="w-full h-8 sm:h-8.5 px-2 py-1 bg-white border border-amber-300 rounded-md text-xs font-mono font-black text-amber-950 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          className="w-full h-8 sm:h-8.5 px-2 py-1 bg-white border border-slate-300 rounded-md text-xs font-mono font-black text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         />
                       </div>
                     )}
 
                     {/* Pack Stock */}
                     {enablePack && (
-                      <div className="p-2 bg-sky-50/60 rounded-lg sm:rounded-xl border border-sky-200/80">
-                        <label className="text-[9.5px] sm:text-[10px] font-bold text-sky-900 block mb-0.5 truncate" title={packUnitName || 'ແພັກ'}>
+                      <div className="p-2 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-200">
+                        <label className="text-[9.5px] sm:text-[10px] font-bold text-slate-700 block mb-0.5 truncate" title={packUnitName || 'ແພັກ'}>
                           {packUnitName || 'ແພັກ'}:
                         </label>
                         <input
@@ -782,7 +777,7 @@ export default function ProductFormModal({
                           value={stockPacks}
                           onChange={(e) => setStockPacks(formatDots(e.target.value))}
                           placeholder="0"
-                          className="w-full h-8 sm:h-8.5 px-2 py-1 bg-white border border-sky-300 rounded-md text-xs font-mono font-black text-sky-950 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                          className="w-full h-8 sm:h-8.5 px-2 py-1 bg-white border border-slate-300 rounded-md text-xs font-mono font-black text-slate-900 focus:outline-none focus:ring-1 focus:ring-sky-500"
                         />
                       </div>
                     )}
@@ -799,7 +794,7 @@ export default function ProductFormModal({
                           value={stockPieces}
                           onChange={(e) => setStockPieces(formatDots(e.target.value))}
                           placeholder="0"
-                          className="w-full h-8 sm:h-8.5 px-2 py-1 bg-white border border-slate-300 rounded-md text-xs font-mono font-black text-slate-950 focus:outline-none focus:ring-1 focus:ring-teal-600"
+                          className="w-full h-8 sm:h-8.5 px-2 py-1 bg-white border border-slate-300 rounded-md text-xs font-mono font-black text-slate-900 focus:outline-none focus:ring-1 focus:ring-teal-600"
                         />
                       </div>
                     )}
@@ -847,12 +842,12 @@ export default function ProductFormModal({
               {/* TIER 3: CARTON (Carton / Box / Sack - Top Tier) */}
               <div
                 className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all ${
-                  enableCarton ? 'bg-white border-amber-200/90 shadow-2xs ring-1 ring-amber-500/10' : 'bg-slate-50/70 border-slate-200 opacity-60'
+                  enableCarton ? 'bg-white border-amber-200/80 shadow-2xs ring-1 ring-amber-400/20' : 'bg-slate-50/70 border-slate-200 opacity-60'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 flex items-center justify-center font-black text-[11px]">
+                    <div className="w-5 h-5 rounded-md bg-amber-100/70 text-amber-900 border border-amber-200/50 flex items-center justify-center font-black text-[11px]">
                       1
                     </div>
                     <div>
@@ -887,7 +882,7 @@ export default function ProductFormModal({
                           onClick={() => setCartonUnitName(s)}
                           className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
                             cartonUnitName === s
-                              ? 'bg-amber-600 text-white shadow-2xs'
+                              ? 'bg-amber-500 text-white shadow-2xs'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
                         >
@@ -941,78 +936,64 @@ export default function ProductFormModal({
                     </div>
 
                     {/* 3 Price Tiers Grid (ລາຄາ 1, ລາຄາ 2, ລາຄາ 3) */}
-                    <div className="bg-amber-50/50 p-2 sm:p-2.5 rounded-lg border border-amber-200/80">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10.5px] font-black text-amber-950 flex items-center gap-1.5">
-                          <Coins size={14} weight="duotone" className="text-amber-700" />
-                          <span>ຕາຕະລາງ 3 ລະດັບລາຄາຂາຍຍົກລັງ (Multi-Price Tiers):</span>
-                        </span>
-                        <span className="text-[9px] text-amber-800/80 hidden xs:inline">
-                          (ລາຄາ 2 & 3 ບໍ່ບັງຄັບ)
-                        </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
+                      {/* Price 1: Standard (Mandatory / Default POS) */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-800 block mb-0.5">
+                          ລາຄາ 1 (ມາດຕະຖານ) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={cartonPrice}
+                          onChange={(e) => setCartonPrice(formatDots(e.target.value))}
+                          placeholder="0"
+                          className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-amber-400 focus:bg-white rounded-lg text-xs font-bold text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-amber-400/40"
+                        />
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
-                        {/* Price 1: Standard (Mandatory / Default POS) */}
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-800 flex items-center justify-between mb-0.5">
-                            <span className="truncate">ລາຄາ 1 (ມາດຕະຖານ) <span className="text-rose-500">*</span></span>
-                            <span className="text-[8.5px] font-extrabold text-teal-700 bg-teal-100/90 px-1 rounded shrink-0">ຫຼັກ POS</span>
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={cartonPrice}
-                            onChange={(e) => setCartonPrice(formatDots(e.target.value))}
-                            placeholder="0"
-                            className="w-full h-8.5 sm:h-9 px-2.5 bg-white border border-teal-500 rounded-lg text-xs font-black text-teal-900 font-mono focus:outline-none focus:ring-1 focus:ring-teal-600"
-                          />
-                        </div>
 
-                        {/* Price 2: Regular Customer */}
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-700 flex items-center justify-between mb-0.5">
-                            <span className="truncate">ລາຄາ 2 (ລູກຄ້າປະຈຳ)</span>
-                            <span className="text-[8.5px] text-sky-700 bg-sky-100/80 px-1 rounded shrink-0">ຂາປະຈຳ</span>
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={cartonPrice2}
-                            onChange={(e) => setCartonPrice2(formatDots(e.target.value))}
-                            placeholder="(ບໍ່ກຳນົດ)"
-                            className="w-full h-8.5 sm:h-9 px-2.5 bg-white border border-slate-300 focus:border-sky-500 rounded-lg text-xs font-bold text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
-                          />
-                        </div>
+                      {/* Price 2: Regular Customer */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                          ລາຄາ 2 (ລູກຄ້າປະຈຳ)
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={cartonPrice2}
+                          onChange={(e) => setCartonPrice2(formatDots(e.target.value))}
+                          placeholder="(ບໍ່ກຳນົດ)"
+                          className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
+                        />
+                      </div>
 
-                        {/* Price 3: Wholesale / VIP */}
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-700 flex items-center justify-between mb-0.5">
-                            <span className="truncate">ລາຄາ 3 (ລາຄາສົ່ງ/VIP)</span>
-                            <span className="text-[8.5px] text-amber-800 bg-amber-100 px-1 rounded font-bold shrink-0">VIP/ສົ່ງ</span>
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={cartonPrice3}
-                            onChange={(e) => setCartonPrice3(formatDots(e.target.value))}
-                            placeholder="(ບໍ່ກຳນົດ)"
-                            className="w-full h-8.5 sm:h-9 px-2.5 bg-white border border-slate-300 focus:border-amber-500 rounded-lg text-xs font-bold text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
-                          />
-                        </div>
+                      {/* Price 3: Wholesale / VIP */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                          ລາຄາ 3 (ລາຄາສົ່ງ/VIP)
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={cartonPrice3}
+                          onChange={(e) => setCartonPrice3(formatDots(e.target.value))}
+                          placeholder="(ບໍ່ກຳນົດ)"
+                          className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
+                        />
                       </div>
                     </div>
 
                     {/* Tier 1 Barcode Input with Camera Scanner */}
-                    <div className="p-2 sm:p-2.5 bg-amber-50/70 border border-amber-200/90 rounded-lg sm:rounded-xl">
+                    <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-[10px] sm:text-[10.5px] font-bold text-amber-900 flex items-center gap-1.5">
-                          <Barcode size={13} className="text-amber-700" />
+                        <label className="text-[10px] sm:text-[10.5px] font-bold text-slate-700 flex items-center gap-1.5">
+                          <Barcode size={13} className="text-amber-500" />
                           <span>ບາໂຄດເທິງແກັດ/ລັງ (Carton Barcode)</span>
                         </label>
                         <button
                           type="button"
                           onClick={() => handleOpenScannerFor('carton')}
-                          className="text-[9.5px] font-black text-amber-900 hover:text-amber-950 flex items-center gap-1 cursor-pointer bg-white hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-300 transition-all active:scale-95 shadow-2xs"
+                          className="text-[9.5px] font-bold text-slate-700 hover:text-slate-900 flex items-center gap-1 cursor-pointer bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded border border-slate-200 transition-all active:scale-95 shadow-2xs"
                           title="ສະແກນບາໂຄດເທິງແກັດ"
                         >
                           <Camera size={11} weight="bold" />
@@ -1024,7 +1005,7 @@ export default function ProductFormModal({
                         value={cartonBarcode}
                         onChange={(e) => setCartonBarcode && setCartonBarcode(e.target.value)}
                         placeholder="ຍິງບາໂຄດເທິງລັງ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"
-                        className="w-full h-8 sm:h-8.5 px-2.5 bg-white border border-amber-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40"
                       />
                       {checkBarcodeDuplicate(cartonBarcode) && (
                         <p className="text-[9.5px] text-amber-800 font-bold mt-1 flex items-center gap-1">
@@ -1035,7 +1016,7 @@ export default function ProductFormModal({
                     </div>
 
                     {/* Crate Deposit Setting */}
-                    <div className="mt-1 pt-1.5 border-t border-amber-200/80 bg-amber-50/50 p-2 sm:p-2.5 rounded-lg sm:rounded-xl border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <div className="mt-1 pt-1.5 border-t border-slate-200/80 bg-slate-50 p-2 sm:p-2.5 rounded-lg sm:rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                       <div className="flex items-start gap-2">
                         <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
                           <input
@@ -1044,30 +1025,30 @@ export default function ProductFormModal({
                             onChange={(e) => setHasCrateDeposit && setHasCrateDeposit(e.target.checked)}
                             className="sr-only peer"
                           />
-                          <div className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-amber-600"></div>
+                          <div className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-amber-500"></div>
                         </label>
                         <div>
-                          <span className="text-[11px] sm:text-xs font-black text-amber-950 block">
+                          <span className="text-[11px] sm:text-xs font-bold text-slate-800 block">
                             ຄ່າມັດຈຳລັງ (Crate Deposit)
                           </span>
-                          <span className="text-[9.5px] text-amber-800 leading-tight block">
+                          <span className="text-[9.5px] text-slate-500 leading-tight block">
                             ສຳລັບເບຍຍົກແກັດ: ເມື່ອລູກຄ້າບໍ່ມີແກັດເປົ່າມາປ່ຽນ
                           </span>
                         </div>
                       </div>
 
                       {hasCrateDeposit && (
-                        <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0 bg-white p-1 rounded-md border border-amber-300 shadow-2xs">
-                          <span className="text-[10px] font-bold text-amber-900">+ ຄ່າແກັດ:</span>
+                        <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0 bg-white p-1 rounded-md border border-slate-200 shadow-2xs">
+                          <span className="text-[10px] font-bold text-slate-700">+ ຄ່າແກັດ:</span>
                           <input
                             type="text"
                             inputMode="numeric"
                             value={crateDepositFee}
                             onChange={(e) => setCrateDepositFee && setCrateDepositFee(formatDots(e.target.value))}
                             placeholder="30.000"
-                            className="w-18 h-7 px-1.5 bg-amber-50/40 border border-amber-300 rounded text-xs font-black text-amber-950 font-mono text-center focus:bg-white focus:outline-none"
+                            className="w-18 h-7 px-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-800 font-mono text-center focus:bg-white focus:outline-none focus:border-amber-400"
                           />
-                          <span className="text-[10px] font-black text-amber-900 font-mono">₭</span>
+                          <span className="text-[10px] font-bold text-slate-600 font-mono">₭</span>
                         </div>
                       )}
                     </div>
@@ -1166,78 +1147,64 @@ export default function ProductFormModal({
                     </div>
 
                     {/* 3 Price Tiers Grid (ລາຄາ 1, ລາຄາ 2, ລາຄາ 3) */}
-                    <div className="bg-sky-50/50 p-2 sm:p-2.5 rounded-lg border border-sky-200/80">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10.5px] font-black text-sky-950 flex items-center gap-1.5">
-                          <Coins size={14} weight="duotone" className="text-sky-700" />
-                          <span>ຕາຕະລາງ 3 ລະດັບລາຄາຂາຍແພັກ (Multi-Price Tiers):</span>
-                        </span>
-                        <span className="text-[9px] text-sky-800/80 hidden xs:inline">
-                          (ລາຄາ 2 & 3 ບໍ່ບັງຄັບ)
-                        </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
+                      {/* Price 1: Standard */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-800 block mb-0.5">
+                          ລາຄາ 1 (ມາດຕະຖານ) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={packPrice}
+                          onChange={(e) => setPackPrice(formatDots(e.target.value))}
+                          placeholder="0"
+                          className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-sky-500 focus:bg-white rounded-lg text-xs font-bold text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        />
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
-                        {/* Price 1: Standard */}
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-800 flex items-center justify-between mb-0.5">
-                            <span className="truncate">ລາຄາ 1 (ມາດຕະຖານ) <span className="text-rose-500">*</span></span>
-                            <span className="text-[8.5px] font-extrabold text-teal-700 bg-teal-100/90 px-1 rounded shrink-0">ຫຼັກ POS</span>
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={packPrice}
-                            onChange={(e) => setPackPrice(formatDots(e.target.value))}
-                            placeholder="0"
-                            className="w-full h-8.5 sm:h-9 px-2.5 bg-white border border-teal-500 rounded-lg text-xs font-black text-teal-900 font-mono focus:outline-none focus:ring-1 focus:ring-teal-600"
-                          />
-                        </div>
 
-                        {/* Price 2: Regular Customer */}
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-700 flex items-center justify-between mb-0.5">
-                            <span className="truncate">ລາຄາ 2 (ລູກຄ້າປະຈຳ)</span>
-                            <span className="text-[8.5px] text-sky-700 bg-sky-100/80 px-1 rounded shrink-0">ຂາປະຈຳ</span>
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={packPrice2}
-                            onChange={(e) => setPackPrice2(formatDots(e.target.value))}
-                            placeholder="(ບໍ່ກຳນົດ)"
-                            className="w-full h-8.5 sm:h-9 px-2.5 bg-white border border-slate-300 focus:border-sky-500 rounded-lg text-xs font-bold text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
-                          />
-                        </div>
+                      {/* Price 2: Regular Customer */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                          ລາຄາ 2 (ລູກຄ້າປະຈຳ)
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={packPrice2}
+                          onChange={(e) => setPackPrice2(formatDots(e.target.value))}
+                          placeholder="(ບໍ່ກຳນົດ)"
+                          className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
+                        />
+                      </div>
 
-                        {/* Price 3: Wholesale / VIP */}
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-700 flex items-center justify-between mb-0.5">
-                            <span className="truncate">ລາຄາ 3 (ລາຄາສົ່ງ/VIP)</span>
-                            <span className="text-[8.5px] text-amber-800 bg-amber-100 px-1 rounded font-bold shrink-0">VIP/ສົ່ງ</span>
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={packPrice3}
-                            onChange={(e) => setPackPrice3(formatDots(e.target.value))}
-                            placeholder="(ບໍ່ກຳນົດ)"
-                            className="w-full h-8.5 sm:h-9 px-2.5 bg-white border border-slate-300 focus:border-amber-500 rounded-lg text-xs font-bold text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
-                          />
-                        </div>
+                      {/* Price 3: Wholesale / VIP */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                          ລາຄາ 3 (ລາຄາສົ່ງ/VIP)
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={packPrice3}
+                          onChange={(e) => setPackPrice3(formatDots(e.target.value))}
+                          placeholder="(ບໍ່ກຳນົດ)"
+                          className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
+                        />
                       </div>
                     </div>
 
                     {/* Tier 2 Barcode Input with Camera Scanner */}
-                    <div className="p-2 sm:p-2.5 bg-sky-50/70 border border-sky-200/90 rounded-lg sm:rounded-xl">
+                    <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-[10px] sm:text-[10.5px] font-bold text-sky-900 flex items-center gap-1.5">
-                          <Barcode size={13} className="text-sky-700" />
+                        <label className="text-[10px] sm:text-[10.5px] font-bold text-slate-700 flex items-center gap-1.5">
+                          <Barcode size={13} className="text-sky-500" />
                           <span>ບາໂຄດເທິງແພັກ (Pack Barcode)</span>
                         </label>
                         <button
                           type="button"
                           onClick={() => handleOpenScannerFor('pack')}
-                          className="text-[9.5px] font-black text-sky-900 hover:text-sky-950 flex items-center gap-1 cursor-pointer bg-white hover:bg-sky-100 px-2 py-0.5 rounded border border-sky-300 transition-all active:scale-95 shadow-2xs"
+                          className="text-[9.5px] font-bold text-slate-700 hover:text-slate-900 flex items-center gap-1 cursor-pointer bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded border border-slate-200 transition-all active:scale-95 shadow-2xs"
                           title="ສະແກນບາໂຄດເທິງແພັກ"
                         >
                           <Camera size={11} weight="bold" />
@@ -1249,7 +1216,7 @@ export default function ProductFormModal({
                         value={packBarcode}
                         onChange={(e) => setPackBarcode && setPackBarcode(e.target.value)}
                         placeholder="ຍິງບາໂຄດເທິງແພັກ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"
-                        className="w-full h-8 sm:h-8.5 px-2.5 bg-white border border-sky-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
                       />
                       {checkBarcodeDuplicate(packBarcode) && (
                         <p className="text-[9.5px] text-amber-800 font-bold mt-1 flex items-center gap-1">
@@ -1328,78 +1295,64 @@ export default function ProductFormModal({
                     </div>
 
                     {/* 3 Price Tiers Grid (ລາຄາ 1, ລາຄາ 2, ລາຄາ 3) */}
-                    <div className="bg-teal-50/50 p-2 sm:p-2.5 rounded-lg border border-teal-200/80">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10.5px] font-black text-teal-950 flex items-center gap-1.5">
-                          <Coins size={14} weight="duotone" className="text-teal-700" />
-                          <span>ຕາຕະລາງ 3 ລະດັບລາຄາຂາຍຍ່ອຍ (Multi-Price Tiers):</span>
-                        </span>
-                        <span className="text-[9px] text-teal-800/80 hidden xs:inline">
-                          (ລາຄາ 2 & 3 ບໍ່ບັງຄັບ)
-                        </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
+                      {/* Price 1: Standard */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-800 block mb-0.5">
+                          ລາຄາ 1 (ມາດຕະຖານ) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={piecePrice}
+                          onChange={(e) => setPiecePrice(formatDots(e.target.value))}
+                          placeholder="0"
+                          className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-teal-500 focus:bg-white rounded-lg text-xs font-bold text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-teal-500"
+                        />
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
-                        {/* Price 1: Standard */}
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-800 flex items-center justify-between mb-0.5">
-                            <span className="truncate">ລາຄາ 1 (ມາດຕະຖານ) <span className="text-rose-500">*</span></span>
-                            <span className="text-[8.5px] font-extrabold text-teal-700 bg-teal-100/90 px-1 rounded shrink-0">ຫຼັກ POS</span>
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={piecePrice}
-                            onChange={(e) => setPiecePrice(formatDots(e.target.value))}
-                            placeholder="0"
-                            className="w-full h-8.5 sm:h-9 px-2.5 bg-white border border-teal-500 rounded-lg text-xs font-black text-teal-900 font-mono focus:outline-none focus:ring-1 focus:ring-teal-600"
-                          />
-                        </div>
 
-                        {/* Price 2: Regular Customer */}
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-700 flex items-center justify-between mb-0.5">
-                            <span className="truncate">ລາຄາ 2 (ລູກຄ້າປະຈຳ)</span>
-                            <span className="text-[8.5px] text-sky-700 bg-sky-100/80 px-1 rounded shrink-0">ຂາປະຈຳ</span>
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={piecePrice2}
-                            onChange={(e) => setPiecePrice2(formatDots(e.target.value))}
-                            placeholder="(ບໍ່ກຳນົດ)"
-                            className="w-full h-8.5 sm:h-9 px-2.5 bg-white border border-slate-300 focus:border-sky-500 rounded-lg text-xs font-bold text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
-                          />
-                        </div>
+                      {/* Price 2: Regular Customer */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                          ລາຄາ 2 (ລູກຄ້າປະຈຳ)
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={piecePrice2}
+                          onChange={(e) => setPiecePrice2(formatDots(e.target.value))}
+                          placeholder="(ບໍ່ກຳນົດ)"
+                          className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
+                        />
+                      </div>
 
-                        {/* Price 3: Wholesale / VIP */}
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-700 flex items-center justify-between mb-0.5">
-                            <span className="truncate">ລາຄາ 3 (ລາຄາສົ່ງ/VIP)</span>
-                            <span className="text-[8.5px] text-amber-800 bg-amber-100 px-1 rounded font-bold shrink-0">VIP/ສົ່ງ</span>
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={piecePrice3}
-                            onChange={(e) => setPiecePrice3(formatDots(e.target.value))}
-                            placeholder="(ບໍ່ກຳນົດ)"
-                            className="w-full h-8.5 sm:h-9 px-2.5 bg-white border border-slate-300 focus:border-amber-500 rounded-lg text-xs font-bold text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
-                          />
-                        </div>
+                      {/* Price 3: Wholesale / VIP */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-0.5">
+                          ລາຄາ 3 (ລາຄາສົ່ງ/VIP)
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={piecePrice3}
+                          onChange={(e) => setPiecePrice3(formatDots(e.target.value))}
+                          placeholder="(ບໍ່ກຳນົດ)"
+                          className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
+                        />
                       </div>
                     </div>
 
                     {/* Tier 3 Barcode Input with Camera Scanner */}
-                    <div className="p-2 sm:p-2.5 bg-teal-50/70 border border-teal-200/90 rounded-lg sm:rounded-xl">
+                    <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-[10px] sm:text-[10.5px] font-bold text-teal-950 flex items-center gap-1.5">
-                          <Barcode size={13} className="text-teal-700" />
+                        <label className="text-[10px] sm:text-[10.5px] font-bold text-slate-700 flex items-center gap-1.5">
+                          <Barcode size={13} className="text-teal-600" />
                           <span>ບາໂຄດເທິງອັນ/ແກ້ວ/ຊອງ (Piece Barcode)</span>
                         </label>
                         <button
                           type="button"
                           onClick={() => handleOpenScannerFor('piece')}
-                          className="text-[9.5px] font-black text-teal-900 hover:text-teal-950 flex items-center gap-1 cursor-pointer bg-white hover:bg-teal-100 px-2 py-0.5 rounded border border-teal-300 transition-all active:scale-95 shadow-2xs"
+                          className="text-[9.5px] font-bold text-slate-700 hover:text-slate-900 flex items-center gap-1 cursor-pointer bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded border border-slate-200 transition-all active:scale-95 shadow-2xs"
                           title="ສະແກນບາໂຄດຂາຍຍ່ອຍ"
                         >
                           <Camera size={11} weight="bold" />
@@ -1411,7 +1364,7 @@ export default function ProductFormModal({
                         value={pieceBarcode}
                         onChange={(e) => setPieceBarcode && setPieceBarcode(e.target.value)}
                         placeholder="ຍິງບາໂຄດເທິງຊອງ/ກະປ໋ອງ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"
-                        className="w-full h-8 sm:h-8.5 px-2.5 bg-white border border-teal-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                        className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                       />
                       {checkBarcodeDuplicate(pieceBarcode) && (
                         <p className="text-[9.5px] text-amber-800 font-bold mt-1 flex items-center gap-1">

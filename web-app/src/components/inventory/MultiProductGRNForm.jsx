@@ -593,7 +593,7 @@ export default function MultiProductGRNForm({
       <div className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 pb-12">
         <div className="max-w-6xl mx-auto space-y-3.5 sm:space-y-4">
           {/* ============================================================ */}
-          {/* 📦 CARD 1: ຂໍ້ມູນຮ້ານສົ່ງ & ຜູ້ຮັບສິນຄ້າ (Header Info)             */}
+          {/* CARD 1: ຂໍ້ມູນຮ້ານສົ່ງ & ຜູ້ຮັບສິນຄ້າ (Header Info)             */}
           {/* ============================================================ */}
           <div className="bg-white p-3.5 sm:p-4 md:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col gap-2.5 sm:gap-3">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -668,7 +668,7 @@ export default function MultiProductGRNForm({
           </div>
 
           {/* ============================================================ */}
-          {/* 🔍 CARD 2: ຄົ້ນຫາ & ສະແກນສິນຄ້າ (Catalog Picker & Scanner)       */}
+          {/* CARD 2: ຄົ້ນຫາ & ສະແກນສິນຄ້າ (Catalog Picker & Scanner)       */}
           {/* ============================================================ */}
           <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col gap-2.5 relative">
             <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
@@ -789,7 +789,7 @@ export default function MultiProductGRNForm({
           </div>
 
           {/* ============================================================ */}
-          {/* 📋 CARD 3: ລາຍການສິນຄ້າຮັບເຂົ້າສາງ (Multi-Product Cart Items)   */}
+          {/* CARD 3: ລາຍການສິນຄ້າຮັບເຂົ້າສາງ (Multi-Product Cart Items)   */}
           {/* ============================================================ */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
             {/* Header Badge */}

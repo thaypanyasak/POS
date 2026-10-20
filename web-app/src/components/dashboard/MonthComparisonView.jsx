@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import MonthPickerGroup from './MonthPickerGroup';
 import DualBarComparisonChart from './DualBarComparisonChart';
 import { fetchDualMonthTransactions } from '../../services/supabase';
-import { formatKip } from '../../utils/formatters';
+import { formatKip, formatCompoundStock } from '../../utils/formatters';
 import {
   TrendUp,
   TrendDown,
@@ -18,6 +18,7 @@ import {
   ClockCountdown,
   Tag,
   ArrowsClockwise,
+  Package,
 } from '@phosphor-icons/react';
 
 const CATEGORY_COLORS = [
@@ -403,15 +404,20 @@ function MonthDashboardColumn({
                       style={{ backgroundColor: cat.color }}
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                     ></span>
-                    <span className="text-[11px] font-bold text-slate-800 truncate">
-                      {cat.name}
-                    </span>
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-bold text-slate-800 truncate block">
+                        {cat.name}
+                      </span>
+                      <span className="text-[9.5px] text-slate-400 block">
+                        ຂາຍໄດ້ {cat.quantity} ລາຍການ
+                      </span>
+                    </div>
                   </div>
                   <div className="text-right shrink-0">
                     <span className="text-[11px] font-mono font-black text-slate-900 block">
                       {formatKip(cat.revenue)}
                     </span>
-                    <span className="text-[9px] font-bold text-teal-700">
+                    <span className="text-[9px] font-bold text-teal-700 bg-teal-50 px-1 py-0.2 rounded border border-teal-100">
                       {cat.percentage}%
                     </span>
                   </div>
@@ -436,40 +442,59 @@ function MonthDashboardColumn({
 
         {topSellers.length === 0 ? (
           <div className="py-4 text-center text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+            <Package size={20} className="mx-auto text-slate-300 mb-1" />
             <p className="text-[11px] font-bold">ບໍ່ມີລາຍການຂາຍໃນເດືອນນີ້</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="flex flex-col gap-2">
             {topSellers.map((item, idx) => (
-              <div key={item.id} className="py-2 flex items-center justify-between text-xs hover:bg-slate-50 px-1 rounded">
+              <div
+                key={item.id || idx}
+                className="p-2 rounded-xl border border-slate-200/90 hover:border-teal-300 bg-slate-50/60 hover:bg-white flex items-center justify-between gap-2 transition-all"
+              >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-[10px] shrink-0 ${
-                      idx === 0
-                        ? 'bg-amber-400 text-white'
-                        : idx === 1
-                        ? 'bg-slate-300 text-slate-700'
-                        : idx === 2
-                        ? 'bg-amber-700/60 text-white'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    {idx + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <span className="font-bold text-slate-800 block truncate text-[11.5px]">
-                      {item.name}
+                  <div className="relative shrink-0">
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className="w-8 h-8 rounded-lg object-cover border border-slate-200 bg-white"
+                      onError={(e) => {
+                        e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80';
+                      }}
+                    />
+                    <span
+                      className={`absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full text-[8.5px] font-black flex items-center justify-center text-white ${
+                        idx === 0
+                          ? 'bg-amber-500 ring-1 ring-amber-200'
+                          : idx === 1
+                          ? 'bg-slate-400'
+                          : idx === 2
+                          ? 'bg-amber-700'
+                          : 'bg-slate-300 text-slate-700'
+                      }`}
+                    >
+                      {idx + 1}
                     </span>
-                    <span className="text-[10px] text-slate-400 block">
-                      {item.qty} {item.unit}
+                  </div>
+                  <div className="min-w-0">
+                    <h5 className="text-[11.5px] font-black text-slate-800 truncate" title={item.name}>
+                      {item.name}
+                    </h5>
+                    <span className="text-[10px] text-teal-700 font-bold block">
+                      ຂາຍແລ້ວ: {item.formattedSold || `${item.qty} ${item.unit}`}
                     </span>
                   </div>
                 </div>
 
                 <div className="text-right shrink-0">
-                  <span className="font-mono font-black text-slate-900 text-xs block">
+                  <span className="text-xs font-mono font-black text-slate-900 block">
                     {formatKip(item.revenue)}
                   </span>
+                  {item.profit > 0 && (
+                    <span className="text-[9.5px] text-emerald-700 font-bold block">
+                      +{formatKip(item.profit)}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
@@ -502,27 +527,61 @@ export default function MonthComparisonView({
   const loadComparisonData = async () => {
     setIsLoading(true);
     try {
+      const filterLocal = (ymStr) => {
+        const parts = (ymStr || '').split('-');
+        if (parts.length < 2) return [];
+        const y = Number(parts[0]);
+        const m = Number(parts[1]);
+        return fallbackTransactions.filter((t) => {
+          if (t.status === 'cancelled' || t.isCancelled) return false;
+          const d = new Date(t.createdAt);
+          return d.getFullYear() === y && d.getMonth() + 1 === m;
+        });
+      };
+
+      const enrichWithFallbackItems = (list, localList) => {
+        return (list || []).map((tx) => {
+          if (tx.items && tx.items.length > 0) return tx;
+          const match = localList.find((ft) => ft.id === tx.id || ft.receiptNumber === tx.receiptNumber);
+          if (match && (match.items?.length > 0 || match.sale_transaction_items?.length > 0)) {
+            return {
+              ...tx,
+              items: match.items || match.sale_transaction_items || [],
+              sale_transaction_items: match.sale_transaction_items || match.items || [],
+            };
+          }
+          return tx;
+        });
+      };
+
+      const localA = filterLocal(monthA);
+      const localB = filterLocal(monthB);
+
       const res = await fetchDualMonthTransactions(monthA, monthB);
-      if (res && (res.txsA.length > 0 || res.txsB.length > 0)) {
-        setTxsA(res.txsA);
-        setTxsB(res.txsB);
+      if (res) {
+        const listA = res.txsA && res.txsA.length > 0 ? res.txsA : localA;
+        const listB = res.txsB && res.txsB.length > 0 ? res.txsB : localB;
+        setTxsA(enrichWithFallbackItems(listA, localA));
+        setTxsB(enrichWithFallbackItems(listB, localB));
       } else {
-        const filterLocal = (ymStr) => {
-          const parts = (ymStr || '').split('-');
-          if (parts.length < 2) return [];
-          const y = Number(parts[0]);
-          const m = Number(parts[1]);
-          return fallbackTransactions.filter((t) => {
-            if (t.status === 'cancelled' || t.isCancelled) return false;
-            const d = new Date(t.createdAt);
-            return d.getFullYear() === y && d.getMonth() + 1 === m;
-          });
-        };
-        setTxsA(filterLocal(monthA));
-        setTxsB(filterLocal(monthB));
+        setTxsA(localA);
+        setTxsB(localB);
       }
     } catch (err) {
       console.warn('loadComparisonData error:', err);
+      const filterLocal = (ymStr) => {
+        const parts = (ymStr || '').split('-');
+        if (parts.length < 2) return [];
+        const y = Number(parts[0]);
+        const m = Number(parts[1]);
+        return fallbackTransactions.filter((t) => {
+          if (t.status === 'cancelled' || t.isCancelled) return false;
+          const d = new Date(t.createdAt);
+          return d.getFullYear() === y && d.getMonth() + 1 === m;
+        });
+      };
+      setTxsA(filterLocal(monthA));
+      setTxsB(filterLocal(monthB));
     } finally {
       setIsLoading(false);
     }
@@ -530,7 +589,7 @@ export default function MonthComparisonView({
 
   useEffect(() => {
     loadComparisonData();
-  }, [monthA, monthB]);
+  }, [monthA, monthB, fallbackTransactions.length]);
 
   // Helper to compute deep-dive analytics for any single month
   const computeMonthAnalytics = (txList) => {
@@ -597,7 +656,7 @@ export default function MonthComparisonView({
     if (maxRev === 0) maxRev = 10000;
     const hourlyData = { hours, maxRev };
 
-    // Category Breakdown
+    // 4. Category Breakdown
     const catMap = {};
     let totalCatRev = 0;
 
@@ -605,13 +664,20 @@ export default function MonthComparisonView({
       const items = tx.items || tx.sale_transaction_items || [];
       items.forEach((it) => {
         const prodId = it.product?.id || it.productId || it.product_id;
-        const prod = products.find((p) => p.id === prodId);
+        const prodName = it.productName || it.product?.name || '';
+        const prod = products.find(
+          (p) =>
+            (prodId && p.id === prodId) ||
+            (prodName && p.name && p.name.trim().toLowerCase() === prodName.trim().toLowerCase())
+        );
         const cat =
           prod?.category ||
           it.product?.category ||
-          (it.productName?.includes('ເບຍ') ? 'ເບຍ/ເຄື່ອງດື່ມ' : 'ທົ່ວໄປ');
+          (prodName.includes('ເບຍ') ? 'ເບຍ/ເຄື່ອງດື່ມມີທາດເຫຼົ້າ' : 'ທົ່ວໄປ');
 
-        const lineTot = Number(it.lineTotal || it.line_total) || 0;
+        const lineTot =
+          Number(it.lineTotal ?? it.line_total) ||
+          ((Number(it.unitPrice ?? it.unit_price ?? it.unit?.retailPrice ?? 0)) * (Number(it.quantity) || 1));
         const qty = Number(it.quantity) || 1;
 
         if (!catMap[cat]) catMap[cat] = { name: cat, revenue: 0, quantity: 0 };
@@ -624,35 +690,81 @@ export default function MonthComparisonView({
     const categoryList = Object.values(catMap)
       .map((cat, idx) => ({
         ...cat,
-        percentage: totalCatRev > 0 ? Math.round((cat.revenue / totalCatRev) * 100) : 0,
+        percentage: totalCatRev > 0 ? Number(((cat.revenue / totalCatRev) * 100).toFixed(1)) : 0,
         color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
       }))
       .sort((a, b) => b.revenue - a.revenue);
 
     const categoryData = { list: categoryList, totalRev: totalCatRev };
 
-    // Top 5 Sellers
+    // 5. Top 5 Best Sellers
     const itemsMap = {};
     txList.forEach((tx) => {
       const items = tx.items || tx.sale_transaction_items || [];
       items.forEach((it) => {
-        const id = it.product?.id || it.productId || it.product_id || it.productName;
-        const name = it.productName || it.product?.name || 'ສິນຄ້າ';
+        const prodId = it.product?.id || it.productId || it.product_id;
+        const prodName = it.productName || it.product?.name || '';
+        const prod = products.find(
+          (p) =>
+            (prodId && p.id === prodId) ||
+            (prodName && p.name && p.name.trim().toLowerCase() === prodName.trim().toLowerCase())
+        );
+        const id = prod?.id || prodId || prodName || ('item_' + Math.random());
+        const name = prodName || prod?.name || 'ສິນຄ້າ';
         const qty = Number(it.quantity) || 1;
-        const lineTot = Number(it.lineTotal || it.line_total) || 0;
-        const unit = it.unitName || it.unit?.unitName || 'ອັນ';
+        const mult = Number(it.unit?.multiplier || it.multiplier || prod?.units?.find(u => u.unitName === (it.unitName || it.unit_name))?.multiplier) || 1;
+        const baseUnitsSold = qty * mult;
+        const lineTot =
+          Number(it.lineTotal ?? it.line_total) ||
+          ((Number(it.unitPrice ?? it.unit_price ?? it.unit?.retailPrice ?? 0)) * qty);
+        const lineCost = Number(it.lineCost ?? it.line_cost) || 0;
+        const lineProfit = it.lineProfit !== undefined
+          ? Number(it.lineProfit)
+          : it.line_profit !== undefined
+          ? Number(it.line_profit)
+          : Math.max(0, lineTot - lineCost);
+        const unit = it.unitName || it.unit?.unitName || it.unit_name || prod?.baseUnit || 'ອັນ';
 
         if (!itemsMap[id]) {
-          itemsMap[id] = { id, name, qty: 0, revenue: 0, unit };
+          itemsMap[id] = {
+            id,
+            name,
+            imageUrl: prod?.imageUrl || prod?.image_url || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80',
+            productObj: prod,
+            qty: 0,
+            totalBaseUnits: 0,
+            revenue: 0,
+            profit: 0,
+            unit,
+          };
         }
         itemsMap[id].qty += qty;
+        itemsMap[id].totalBaseUnits += baseUnitsSold;
         itemsMap[id].revenue += lineTot;
+        itemsMap[id].profit += lineProfit;
       });
     });
 
     const topSellers = Object.values(itemsMap)
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
+      .slice(0, 5)
+      .map((item) => {
+        let formattedSold = `${item.qty} ${item.unit}`;
+        if (item.productObj) {
+          try {
+            const tempProd = {
+              ...item.productObj,
+              currentStockBaseUnits: item.totalBaseUnits,
+              trackStock: true,
+            };
+            formattedSold = formatCompoundStock(tempProd).replace(/ \(ລວມທັງໝົດ:.*\)/, '');
+          } catch (_) {}
+        }
+        return {
+          ...item,
+          formattedSold,
+        };
+      });
 
     return { summary, hourlyData, categoryData, topSellers };
   };

@@ -179,8 +179,9 @@ export default function ReceiptModal({
             {isCancelled && (
               <div className="flex justify-between items-center bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
                 <span className="font-bold text-rose-800">ສະຖານະ:</span>
-                <span className="font-black text-rose-700 uppercase">
-                  🚫 ຍົກເລີກແລ້ວ (Cancelled)
+                <span className="font-black text-rose-700 uppercase flex items-center gap-1">
+                  <Prohibit size={13} weight="bold" />
+                  <span>ຍົກເລີກແລ້ວ (Cancelled)</span>
                 </span>
               </div>
             )}

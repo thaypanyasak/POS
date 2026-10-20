@@ -7,6 +7,7 @@ import {
   Truck,
   WarningCircle,
   CheckCircle,
+  MapPin,
 } from '@phosphor-icons/react';
 import {
   createSupplierInSupabase,
@@ -173,8 +174,15 @@ export default function SupplierManagementModal({
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                        {s.address ? `📍 ${s.address}` : 'ບໍ່ມີທີ່ຢູ່'}
+                      <div className="text-[11px] text-slate-500 truncate mt-0.5 flex items-center gap-1">
+                        {s.address ? (
+                          <>
+                            <MapPin size={12} weight="fill" className="text-slate-400 shrink-0" />
+                            <span className="truncate">{s.address}</span>
+                          </>
+                        ) : (
+                          'ບໍ່ມີທີ່ຢູ່'
+                        )}
                       </div>
                       {s.note && (
                         <div className="text-[10px] text-slate-400 italic mt-0.5 truncate">

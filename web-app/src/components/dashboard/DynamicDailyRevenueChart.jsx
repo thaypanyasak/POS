@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { formatKip } from '../../utils/formatters';
-import { ChartLineUp, CalendarBlank } from '@phosphor-icons/react';
+import { ChartLineUp, CalendarBlank, Lightbulb } from '@phosphor-icons/react';
 
 /**
  * DynamicDailyRevenueChart Component:
@@ -100,8 +100,9 @@ export default function DynamicDailyRevenueChart({ transactions = [], startDate,
             </span>
           </>
         ) : (
-          <span className="text-slate-400 italic">
-            💡 ກົດ ຫຼື ຊີ້ໃສ່ແທ່ງກຣາຟເພື່ອເບິ່ງລາຍລະອຽດຍອດຂາຍ & ກຳໄລຂອງມື້ນັ້ນ
+          <span className="text-slate-400 italic flex items-center gap-1.5">
+            <Lightbulb size={15} weight="duotone" className="text-amber-500 shrink-0" />
+            <span>ກົດ ຫຼື ຊີ້ໃສ່ແທ່ງກຣາຟເພື່ອເບິ່ງລາຍລະອຽດຍອດຂາຍ & ກຳໄລຂອງມື້ນັ້ນ</span>
           </span>
         )}
       </div>

@@ -11,6 +11,7 @@ import {
   Bank,
   Money,
   HandCoins,
+  FloppyDisk,
 } from '@phosphor-icons/react';
 import { formatKip, formatDots, parseDots, getEffectiveUnitPrice } from '../utils/formatters';
 
@@ -122,8 +123,9 @@ export default function CheckoutModal({
             />
           </div>
           {paymentMethod === 'debt' && (!customerName || customerName.trim() === 'ລູກຄ້າທົ່ວໄປ') && (
-            <span className="text-[10px] text-amber-800 bg-amber-100 font-bold px-2 py-0.5 rounded-full ml-1 shrink-0 animate-pulse border border-amber-300">
-              ⚠️ ຄວນໃສ່ຊື່ລູກຄ້າ
+            <span className="text-[10px] text-amber-800 bg-amber-100 font-bold px-2 py-0.5 rounded-full ml-1 shrink-0 animate-pulse border border-amber-300 flex items-center gap-1">
+              <WarningCircle size={13} weight="fill" className="text-amber-600" />
+              <span>ຄວນໃສ່ຊື່ລູກຄ້າ</span>
             </span>
           )}
         </div>
@@ -451,8 +453,17 @@ export default function CheckoutModal({
                 : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
             }`}
           >
-            <Check size={16} weight="bold" />
-            <span>{editingOldTransaction ? '💾 ບັນທຶກການແກ້ໄຂ' : 'ຢືນຢັນ & ພິມໃບບິນ'}</span>
+            {editingOldTransaction ? (
+              <>
+                <FloppyDisk size={16} weight="bold" />
+                <span>ບັນທຶກການແກ້ໄຂ</span>
+              </>
+            ) : (
+              <>
+                <Check size={16} weight="bold" />
+                <span>ຢືນຢັນ & ພິມໃບບິນ</span>
+              </>
+            )}
           </button>
         </div>
       </div>

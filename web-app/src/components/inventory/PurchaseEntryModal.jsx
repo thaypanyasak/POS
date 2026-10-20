@@ -443,7 +443,7 @@ export default function PurchaseEntryModal({
             className="px-4 sm:px-5 py-2.5 bg-[#0D9488] hover:bg-[#0f766e] text-white font-black text-xs rounded-lg shadow-md shadow-teal-700/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
             <FloppyDisk size={16} weight="bold" />
-            <span>{isSubmitting ? 'ກຳລັງບັນທຶກ...' : '💾 ບັນທຶກໃບຮັບສິນຄ້າເຂົ້າສາງ'}</span>
+            <span>{isSubmitting ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກໃບຮັບສິນຄ້າເຂົ້າສາງ'}</span>
           </button>
         </div>
       </header>
@@ -458,7 +458,7 @@ export default function PurchaseEntryModal({
           className="max-w-6xl mx-auto space-y-6"
         >
           {/* ============================================================ */}
-          {/* 📦 CARD 1: ຂໍ້ມູນແຫຼ່ງສະໜອງ & ຜູ້ຮັບສິນຄ້າ (Supplier & Receiver Info) */}
+          {/* CARD 1: ຂໍ້ມູນແຫຼ່ງສະໜອງ & ຜູ້ຮັບສິນຄ້າ (Supplier & Receiver Info) */}
           {/* ============================================================ */}
           <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col gap-4">
             <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
@@ -466,7 +466,7 @@ export default function PurchaseEntryModal({
                 <Truck size={18} weight="duotone" />
               </div>
               <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                📦 CARD 1: ຂໍ້ມູນແຫຼ່ງສະໜອງ & ຜູ້ຮັບສິນຄ້າ (Supplier & Receiver Info)
+                CARD 1: ຂໍ້ມູນແຫຼ່ງສະໜອງ & ຜູ້ຮັບສິນຄ້າ (Supplier & Receiver Info)
               </h3>
             </div>
 
@@ -517,7 +517,7 @@ export default function PurchaseEntryModal({
           </div>
 
           {/* ============================================================ */}
-          {/* 🏷️ CARD 2: ຂໍ້ມູນສິນຄ້າ, ຕົ້ນທຶນ & ຈຳນວນຮັບເຂົ້າ (Product, Cost & Stock Summing) */}
+          {/* CARD 2: ຂໍ້ມູນສິນຄ້າ, ຕົ້ນທຶນ & ຈຳນວນຮັບເຂົ້າ (Product, Cost & Stock Summing) */}
           {/* ============================================================ */}
           <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col gap-5">
             <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
@@ -526,7 +526,7 @@ export default function PurchaseEntryModal({
                   <Package size={18} weight="duotone" />
                 </div>
                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                  🏷️ CARD 2: ຂໍ້ມູນສິນຄ້າ, ຕົ້ນທຶນ & ຈຳນວນຮັບເຂົ້າ (Product, Cost & Stock Summing)
+                  CARD 2: ຂໍ້ມູນສິນຄ້າ, ຕົ້ນທຶນ & ຈຳນວນຮັບເຂົ້າ (Product, Cost & Stock Summing)
                 </h3>
               </div>
 
@@ -745,7 +745,7 @@ export default function PurchaseEntryModal({
           </div>
 
           {/* ============================================================ */}
-          {/* 💰 CARD 3: ຍອດລວມຕົ້ນທຶນຊື້ & ຈັດການໜີ້ສິນ (Total Cost & AP)    */}
+          {/* CARD 3: ຍອດລວມຕົ້ນທຶນຊື້ & ຈັດການໜີ້ສິນ (Total Cost & AP)    */}
           {/* ============================================================ */}
           <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col gap-5">
             <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
@@ -753,7 +753,7 @@ export default function PurchaseEntryModal({
                 <Coins size={18} weight="duotone" />
               </div>
               <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                💰 CARD 3: ຍອດລວມຕົ້ນທຶນຊື້ & ຈັດການໜີ້ສິນ (Total Cost & Accounts Payable)
+                CARD 3: ຍອດລວມຕົ້ນທຶນຊື້ & ຈັດການໜີ້ສິນ (Total Cost & Accounts Payable)
               </h3>
             </div>
 

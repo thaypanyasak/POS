@@ -20,6 +20,8 @@ import {
   DownloadSimple,
   Sparkle,
   CircleNotch,
+  RocketLaunch,
+  ArrowCounterClockwise,
 } from '@phosphor-icons/react';
 import { Capacitor } from '@capacitor/core';
 import { updateExchangeRateInSupabase } from '../services/supabase';
@@ -164,8 +166,11 @@ export default function SettingsView({
     }
   };
 
-  const [liveUpdateInfo, setLiveUpdateInfo] = useState({ version: 'ກຳລັງໂຫຼດ...', isNative: false });
+  const [liveUpdateInfo, setLiveUpdateInfo] = useState({ version: 'ກຳລັງໂຫຼດ...', isNative: false, channel: 'production', pendingVersion: null });
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [lastCheckedTime, setLastCheckedTime] = useState(null);
+  const [downloadProgress, setDownloadProgress] = useState(null);
+  const [isHeaderRefreshing, setIsHeaderRefreshing] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -183,20 +188,103 @@ export default function SettingsView({
       return;
     }
     setIsCheckingUpdate(true);
+    setDownloadProgress(null);
     try {
-      const res = await liveUpdater.checkForUpdates();
-      if (res) {
-        onAlert?.('ກວດພົບເວີຊັນໃໝ່ ແລະ ດາວໂຫຼດສຳເລັດ! ລະບົບກຳລັງໂຫຼດເວີຊັນໃໝ່...', 'ອັບເດດສຳເລັດ', 'success');
+      const res = await liveUpdater.checkForUpdates({
+        onProgress: (p) => setDownloadProgress(p.percent),
+      });
+
+      setLastCheckedTime(new Date());
+
+      if (res && res.hasUpdate) {
+        playSuccessBeep();
+        onAlert?.(
+          `ກວດພົບເວີຊັນໃໝ່ ${res.version}! ລະບົບກຳລັງອັບເດດ ແລະ ຣີສະຕາດແອັບທັນທີ...`,
+          'ອັບເດດສຳເລັດ',
+          'success'
+        );
         setTimeout(async () => {
-          await liveUpdater.applyUpdate(res);
+          await liveUpdater.applyUpdateAndReload(res.bundle);
         }, 1200);
       } else {
-        onAlert?.('ແອັບຂອງທ່ານເປັນເວີຊັນລ້າສຸດແລ້ວ!', 'ຂໍ້ມູນ', 'info');
+        const info = await liveUpdater.getCurrentVersion();
+        setLiveUpdateInfo(info);
+        playSuccessBeep();
+        onAlert?.('ແອັບຂອງທ່ານເປັນເວີຊັນລ້າສຸດແລ້ວ! (ບໍ່ມີເວີຊັນໃໝ່)', 'ຂໍ້ມູນ', 'info');
       }
     } catch (e) {
+      console.error('Check update error:', e);
+      playErrorBeep();
       onAlert?.(`ກວດສອບອັບເດດບໍ່ສຳເລັດ: ${e.message}`, 'ແຈ້ງເຕືອນ', 'warning');
     } finally {
       setIsCheckingUpdate(false);
+      setDownloadProgress(null);
+    }
+  };
+
+  const handleApplyPendingUpdate = async () => {
+    if (!liveUpdateInfo.pendingBundle) return;
+    try {
+      playSuccessBeep();
+      onAlert?.('ກຳລັງເປີດໃຊ້ງານເວີຊັນໃໝ່ ແລະ ຣີສະຕາດແອັບ...', 'ອັບເດດ', 'success');
+      setTimeout(async () => {
+        await liveUpdater.applyUpdateAndReload(liveUpdateInfo.pendingBundle);
+      }, 800);
+    } catch (e) {
+      playErrorBeep();
+      onAlert?.(`ບໍ່ສາມາດນຳໃຊ້ເວີຊັນໃໝ່: ${e.message}`, 'ຂໍ້ຜິດພາດ', 'error');
+    }
+  };
+
+  const handleQuickReload = async () => {
+    await liveUpdater.reloadApp();
+  };
+
+  const handleHeaderRefresh = async () => {
+    if (isHeaderRefreshing || isLoading) return;
+    setIsHeaderRefreshing(true);
+    try {
+      // 1. Refresh Supabase database
+      if (onRefreshAll) {
+        await onRefreshAll();
+      }
+
+      // 2. If on Native, also check for Capgo OTA update
+      if (Capacitor.isNativePlatform()) {
+        const updateRes = await liveUpdater.checkForUpdates();
+        setLastCheckedTime(new Date());
+
+        if (updateRes && updateRes.hasUpdate) {
+          playSuccessBeep();
+          onAlert?.(
+            `ກວດພົບເວີຊັນໃໝ່ ${updateRes.version}! ລະບົບກຳລັງດາວໂຫຼດ ແລະ ຣີສະຕາດແອັບທັນທີ...`,
+            'ອັບເດດສຳເລັດ',
+            'success'
+          );
+          setTimeout(async () => {
+            await liveUpdater.applyUpdateAndReload(updateRes.bundle);
+          }, 1200);
+          return;
+        } else {
+          const info = await liveUpdater.getCurrentVersion();
+          setLiveUpdateInfo(info);
+          playSuccessBeep();
+          onAlert?.(
+            `ຣີເຟຣຊຂໍ້ມູນສຳເລັດ! ແອັບຂອງທ່ານເປັນເວີຊັນລ້າສຸດແລ້ວ (v${info.version}).`,
+            'ສຳເລັດ',
+            'success'
+          );
+        }
+      } else {
+        playSuccessBeep();
+        onAlert?.('ຣີເຟຣຊຂໍ້ມູນສິນຄ້າ ແລະ ລາຍການຂາຍສຳເລັດແລ້ວ!', 'ສຳເລັດ', 'success');
+      }
+    } catch (err) {
+      console.error('Header refresh error:', err);
+      playErrorBeep();
+      onAlert?.(`ເກີດຂໍ້ຜິດພາດໃນການຣີເຟຣຊ: ${err.message}`, 'ແຈ້ງເຕືອນ', 'warning');
+    } finally {
+      setIsHeaderRefreshing(false);
     }
   };
 
@@ -219,20 +307,24 @@ export default function SettingsView({
             </div>
           </div>
 
-          {onRefreshAll && (
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={onRefreshAll}
-                disabled={isLoading}
-                className="p-2 sm:px-3 sm:py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200/80 shadow-2xs"
-                title="ໂຫຼດຂໍ້ມູນຄືນ"
-              >
-                <ArrowClockwise size={15} weight="bold" className={isLoading ? 'animate-spin' : ''} />
-                <span className="hidden sm:inline">ຣີເຟຣຊຂໍ້ມູນ</span>
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleHeaderRefresh}
+              disabled={isLoading || isHeaderRefreshing}
+              className="p-2 sm:px-3 sm:py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200/80 shadow-2xs active:scale-95"
+              title="ໂຫຼດຂໍ້ມູນຄືນ ແລະ ກວດສອບອັບເດດເວີຊັນໃໝ່"
+            >
+              <ArrowClockwise
+                size={15}
+                weight="bold"
+                className={isLoading || isHeaderRefreshing ? 'animate-spin text-teal-600' : ''}
+              />
+              <span className="hidden sm:inline">
+                {isHeaderRefreshing ? 'ກຳລັງກວດສອບ...' : 'ຣີເຟຣຊ & ກວດອັບເດດ'}
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* 2-Column Minimal ERP Layout */}
@@ -628,39 +720,140 @@ export default function SettingsView({
             </div>
 
             {/* Card 3: Live Update OTA (Cập nhật không cần cài lại IPA) */}
-            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 sm:p-4.5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
-                    <Sparkle size={18} weight="fill" />
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 relative overflow-hidden">
+              {/* Subtle accent background glow */}
+              <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-indigo-500/10 via-purple-500/5 to-transparent rounded-bl-full pointer-events-none" />
+
+              {/* Header */}
+              <div className="flex items-start justify-between gap-3 mb-3.5 relative">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-700 text-white flex items-center justify-center shrink-0 shadow-sm shadow-indigo-500/20">
+                    <Sparkle size={20} weight="fill" />
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm sm:text-base font-black text-slate-900 tracking-tight">
                         ອັບເດດແອັບອັດຕະໂນມັດ (Live OTA)
                       </h3>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                        {liveUpdateInfo.version}
+                        {liveUpdateInfo.channel || 'production'}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500 truncate">
-                      {liveUpdateInfo.isNative
-                        ? 'ອັບເດດລະບົບທັນທີໂດຍບໍ່ຕ້ອງລົງແອັບ .ipa ໃໝ່ (Native Local Cache)'
-                        : 'ກຳລັງເປີດຜ່ານ Web Browser'}
+                    <p className="text-[11.5px] text-slate-500 mt-0.5">
+                      ອັບເດດແອັບທັນທີຜ່ານ Cloud 
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Version & Status Bento Grid */}
+              <div className="grid grid-cols-2 gap-2.5 mb-3.5 relative">
+                {/* Box 1: Current Version */}
+                <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    ເວີຊັນປັດຈຸບັນ
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span className="text-sm font-black font-mono text-slate-900">
+                      v{liveUpdateInfo.version}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 block mt-0.5">
+                    {liveUpdateInfo.isNative ? 'Local Native Cache' : 'Web Preview'}
+                  </span>
+                </div>
+
+                {/* Box 2: Cloud Sync Status */}
+                <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    ສະຖານະ Cloud
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {isCheckingUpdate ? (
+                      <>
+                        <CircleNotch size={14} className="animate-spin text-indigo-600 shrink-0" />
+                        <span className="text-xs font-bold text-indigo-700">ກຳລັງກວດສອບ...</span>
+                      </>
+                    ) : liveUpdateInfo.pendingVersion ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping shrink-0" />
+                        <span className="text-xs font-bold text-amber-700 truncate">
+                          ພ້ອມອັບ v{liveUpdateInfo.pendingVersion}!
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={14} weight="fill" className="text-emerald-600 shrink-0" />
+                        <span className="text-xs font-bold text-emerald-700">ເວີຊັນລ້າສຸດ</span>
+                      </>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-500 block mt-0.5 truncate">
+                    {lastCheckedTime ? `ກວດລ້າສຸດ: ${lastCheckedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'ກຽມພ້ອມກວດສອບ'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Download Progress Bar if downloading */}
+              {downloadProgress !== null && (
+                <div className="mb-3.5 p-3 rounded-xl bg-indigo-50/70 border border-indigo-200/80 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between text-xs font-bold text-indigo-900 mb-1.5">
+                    <span>ກຳລັງດາວໂຫຼດເວີຊັນໃໝ່...</span>
+                    <span>{downloadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-indigo-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-indigo-600 transition-all duration-300 rounded-full"
+                      style={{ width: `${downloadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100 flex-wrap relative">
+                {liveUpdateInfo.pendingVersion && (
+                  <button
+                    type="button"
+                    onClick={handleApplyPendingUpdate}
+                    className="flex-1 min-w-[200px] h-9 px-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <RocketLaunch size={15} weight="bold" />
+                    <span>ອັບເດດ & ຣີສະຕາດທັນທີ (v{liveUpdateInfo.pendingVersion})</span>
+                  </button>
+                )}
 
                 <button
                   type="button"
                   onClick={handleManualCheckUpdate}
                   disabled={isCheckingUpdate}
-                  className="h-8 px-3 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50 shrink-0"
+                  className={`h-9 px-3.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer disabled:opacity-50 ${
+                    liveUpdateInfo.pendingVersion
+                      ? 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+                      : 'flex-1 bg-indigo-600 hover:bg-indigo-700 border-indigo-600 text-white shadow-xs'
+                  }`}
                 >
-                  <DownloadSimple size={14} weight="bold" className={isCheckingUpdate ? 'animate-bounce' : ''} />
-                  <span>{isCheckingUpdate ? 'ກຳລັງກວດ...' : 'ກວດສອບອັບເດດ'}</span>
+                  {isCheckingUpdate ? (
+                    <CircleNotch size={15} className="animate-spin" />
+                  ) : (
+                    <ArrowClockwise size={15} weight="bold" />
+                  )}
+                  <span>{isCheckingUpdate ? 'ກຳລັງກວດສອບ Cloud...' : 'ກວດສອບອັບເດດ (Check Updates)'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleQuickReload}
+                  className="h-9 px-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer"
+                  title="ຣີໂຫຼດໜ້າແອັບ (Reload Webview)"
+                >
+                  <ArrowCounterClockwise size={14} weight="bold" />
+                  <span className="hidden sm:inline">ຣີໂຫຼດແອັບ</span>
                 </button>
               </div>
+
+              
             </div>
           </div>
         </div>

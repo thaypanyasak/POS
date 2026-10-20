@@ -439,7 +439,7 @@ export default function DashboardView({
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2 text-xs">
                 <CalendarBlank size={18} className="text-teal-600 font-bold" />
-                <span className="font-bold text-slate-700">ແຕ່ວັນທີ (Từ ngày):</span>
+                <span className="font-bold text-slate-700">ແຕ່ວັນທີ :</span>
                 <input
                   type="date"
                   value={customStartDate}
@@ -448,7 +448,7 @@ export default function DashboardView({
                 />
               </div>
               <div className="flex items-center gap-2 text-xs">
-                <span className="font-bold text-slate-700">ຫາວັນທີ (Đến ngày):</span>
+                <span className="font-bold text-slate-700">ຫາວັນທີ :</span>
                 <input
                   type="date"
                   value={customEndDate}

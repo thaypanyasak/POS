@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { formatKip } from '../../utils/formatters';
-import { TrendUp, TrendDown, ChartBar } from '@phosphor-icons/react';
+import { TrendUp, TrendDown, ChartBar, Lightbulb } from '@phosphor-icons/react';
 
 /**
  * DualBarComparisonChart Component:
@@ -150,8 +150,9 @@ export default function DualBarComparisonChart({
             })()}
           </>
         ) : (
-          <div className="text-xs text-slate-400 italic flex items-center gap-2">
-            <span>💡 ກົດ ຫຼື ຊີ້ໃສ່ແທ່ງກຣາຟເພື່ອເບິ່ງລາຍລະອຽດຍອດຂາຍ</span>
+          <div className="text-xs text-slate-400 italic flex items-center gap-1.5">
+            <Lightbulb size={15} weight="duotone" className="text-amber-500 shrink-0" />
+            <span>ກົດ ຫຼື ຊີ້ໃສ່ແທ່ງກຣາຟເພື່ອເບິ່ງລາຍລະອຽດຍອດຂາຍ</span>
           </div>
         )}
       </div>

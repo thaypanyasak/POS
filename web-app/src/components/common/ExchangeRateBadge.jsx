@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowsClockwise, Check, X, CurrencyCircleDollar } from '@phosphor-icons/react';
+import { ArrowsClockwise, Check, X, CurrencyCircleDollar, Lightbulb, CircleNotch } from '@phosphor-icons/react';
 import { updateExchangeRateInSupabase } from '../../services/supabase';
 
 export default function ExchangeRateBadge({
@@ -90,8 +90,11 @@ export default function ExchangeRateBadge({
             </div>
 
             {/* Note about Accounting Principle */}
-            <div className="bg-amber-50/80 p-2.5 rounded-xl border border-amber-200/70 text-[11px] text-amber-900 leading-relaxed font-medium">
-              💡 <strong>ຫຼັກການບັນຊີ:</strong> ການປ່ຽນອັດຕາແລກປ່ຽນມື້ນີ້ຈະຖືກບັນທຶກເຂົ້າໃນບິນໃໝ່. ບິນຂາຍໃນອະດີດຈະຮັກສາອັດຕາແລກປ່ຽນ Snapshot ຂອງມື້ຂາຍ, ບໍ່ມີການຄິດໄລ່ຄືນ.
+            <div className="bg-amber-50/80 p-2.5 rounded-xl border border-amber-200/70 text-[11px] text-amber-900 leading-relaxed font-medium flex items-start gap-1.5">
+              <Lightbulb size={16} weight="duotone" className="text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong>ຫຼັກການບັນຊີ:</strong> ການປ່ຽນອັດຕາແລກປ່ຽນມື້ນີ້ຈະຖືກບັນທຶກເຂົ້າໃນບິນໃໝ່. ບິນຂາຍໃນອະດີດຈະຮັກສາອັດຕາແລກປ່ຽນ Snapshot ຂອງມື້ຂາຍ, ບໍ່ມີການຄິດໄລ່ຄືນ.
+              </div>
             </div>
 
             {/* Form */}
@@ -138,7 +141,7 @@ export default function ExchangeRateBadge({
                   className="flex-1 h-10 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                 >
                   {isSaving ? (
-                    <span className="inline-block animate-spin">⏳</span>
+                    <CircleNotch size={16} weight="bold" className="animate-spin text-white" />
                   ) : (
                     <>
                       <Check size={16} weight="bold" />

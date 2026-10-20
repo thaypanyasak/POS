@@ -122,35 +122,34 @@ export default function Navbar({
             className={`border-b border-slate-200/80 flex items-center transition-all ${
               collapsed
                 ? 'py-4 px-2 justify-center'
-                : 'py-4 px-4 justify-between'
+                : 'py-3.5 px-4 justify-between'
             }`}
           >
-            <div className="flex items-center gap-3 min-w-0">
-              {/* Brand Logo: Icon tròn màu Teal bo góc mềm mại */}
+            {collapsed ? (
               <div
-                className="w-10 h-10 rounded-2xl bg-teal-600 flex items-center justify-center text-white font-black text-xl shadow-xs ring-4 ring-teal-50 shrink-0 cursor-pointer"
+                className="w-10 h-10 flex items-center justify-center shrink-0 cursor-pointer transition-transform hover:scale-105 active:scale-95"
                 onClick={() => setActiveMainTab('pos')}
                 title="MeiiShop POS"
               >
-                M
+                <img
+                  src="/logo.svg"
+                  alt="MeiiShop POS"
+                  className="w-10 h-10 object-contain drop-shadow-xs"
+                />
               </div>
-
-              {!collapsed && (
-                <div className="overflow-hidden min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <h1 className="font-extrabold text-base tracking-tight text-slate-900 truncate">
-                      MeiiShop
-                    </h1>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200/80 shrink-0">
-                      POS
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 font-medium truncate">
-                    ລະບົບຂາຍໜ້າຮ້ານ
-                  </p>
-                </div>
-              )}
-            </div>
+            ) : (
+              <div
+                className="flex items-center cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                onClick={() => setActiveMainTab('pos')}
+                title="MeiiShop POS & Retail System"
+              >
+                <img
+                  src="/logo-text.svg"
+                  alt="MeiiShop POS & Retail System"
+                  className="h-11 sm:h-12 w-auto max-w-[215px] object-contain drop-shadow-xs"
+                />
+              </div>
+            )}
           </div>
 
           {/* Navigation Items List */}

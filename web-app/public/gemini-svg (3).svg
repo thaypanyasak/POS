@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="100%" height="100%" fill="none">
+  <!-- 1. Biểu tượng Logo M (Square Bo Góc) -->
+  <rect x="8" y="10" width="60" height="60" rx="16" fill="#0D9488" />
+  <path d="M22 52V30L31 43L38 30L45 43L54 30V52" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="53" cy="22" r="3.5" fill="#34D399" />
+
+  <!-- 2. Nhãn hiệu MeiiShop (Dùng font hệ thống an toàn, căn chỉnh tọa độ chuẩn) -->
+  <text x="82" y="45" font-family="-apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Roboto, Helvetica, Arial, sans-serif" font-size="28" font-weight="800" fill="#0F172A" letter-spacing="-0.5">
+    Meii<tspan fill="#0D9488">Shop</tspan>
+  </text>
+
+  <!-- 3. Subtitle POS & RETAIL SYSTEM (Chuẩn hóa ký tự và khoảng cách) -->
+  <text x="83" y="62" font-family="-apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Roboto, Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" fill="#64748B" letter-spacing="2">
+    POS & RETAIL SYSTEM
+  </text>
+</svg>

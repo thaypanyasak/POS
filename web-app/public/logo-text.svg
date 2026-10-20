@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 285 70" width="100%" height="100%" fill="none">
+  <!-- Biểu tượng Icon (M + Store/Cart) -->
+  <rect x="4" y="7" width="56" height="56" rx="16" fill="#0D9488" />
+  
+  <!-- Chữ M cách điệu dạng túi hàng/quầy thu ngân -->
+  <path d="M19 46V26L27 36L32 26L37 36L45 26V46" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+  
+  <!-- Dấu chấm tròn thông minh (Smart Retail Accent) -->
+  <circle cx="44" cy="19" r="3.5" fill="#34D399" />
+
+  <!-- Phần Text: MeiiShop (Hạ xuống y=38) -->
+  <text x="76" y="38" font-family="'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="32" font-weight="900" fill="#0F172A" letter-spacing="-0.5">
+    Meii<tspan fill="#0D9488">Shop</tspan>
+  </text>
+
+  <!-- Phần Subtitle: POS & RETAIL SYSTEM (Hạ xuống y=59) -->
+  <text x="77" y="59" font-family="'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="800" fill="#475569" letter-spacing="2">
+    POS &amp; RETAIL SYSTEM
+  </text>
+</svg>

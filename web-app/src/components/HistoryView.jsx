@@ -16,7 +16,8 @@ import {
   Money,
   QrCode,
   Warning,
-  XCircle
+  XCircle,
+  Check
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
@@ -833,7 +834,8 @@ export default function HistoryView({
                         <span className="font-black text-rose-600">{formatKip(remainingDebt)}</span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          ✓ ຄົບແລ້ວ
+                          <Check size={11} weight="bold" />
+                          <span>ຄົບແລ້ວ</span>
                         </span>
                       )
                     ) : (

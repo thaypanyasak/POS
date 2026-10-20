@@ -1999,13 +1999,13 @@ export async function fetchDualMonthTransactions(yearMonthA, yearMonthB) {
     const [resA, resB] = await Promise.all([
       supabase
         .from('sale_transactions')
-        .select('*')
+        .select('*, sale_transaction_items(*)')
         .gte('created_at', rangeA.start)
         .lte('created_at', rangeA.end)
         .order('created_at', { ascending: true }),
       supabase
         .from('sale_transactions')
-        .select('*')
+        .select('*, sale_transaction_items(*)')
         .gte('created_at', rangeB.start)
         .lte('created_at', rangeB.end)
         .order('created_at', { ascending: true }),
@@ -2019,16 +2019,59 @@ export async function fetchDualMonthTransactions(yearMonthA, yearMonthB) {
             t.status !== 'cancelled' &&
             !t.is_cancelled
         )
-        .map((t) => ({
-          id: t.id,
-          receiptNumber: t.receipt_number,
-          createdAt: t.created_at,
-          grandTotal: Number(t.grand_total) || 0,
-          totalCost: Number(t.total_cost) || 0,
-          grossProfit: Number(t.gross_profit) || 0,
-          paymentMethod: t.payment_method,
-          paymentStatus: t.payment_status,
-        }));
+        .map((t) => {
+          let cachedMeta = null;
+          try {
+            const raw = localStorage.getItem(`meiishop_tx_meta_${t.id}`);
+            if (raw) cachedMeta = JSON.parse(raw);
+          } catch (_) {}
+
+          let items = [];
+          if (cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0) {
+            items = cachedMeta.items;
+          } else if (Array.isArray(cachedMeta) && cachedMeta.length > 0) {
+            items = cachedMeta;
+          } else if (t.sale_transaction_items && t.sale_transaction_items.length > 0) {
+            items = t.sale_transaction_items.map((i) => ({
+              id: i.id,
+              product: { id: i.product_id, name: i.product_name },
+              productId: i.product_id,
+              product_id: i.product_id,
+              productName: i.product_name,
+              unit: {
+                unitName: i.unit_name,
+                multiplier: Number(i.multiplier) || 1,
+                retailPrice: Number(i.unit_price) || 0,
+                wholesalePrice: Number(i.unit_price) || 0,
+              },
+              unitName: i.unit_name,
+              unit_name: i.unit_name,
+              multiplier: Number(i.multiplier) || 1,
+              quantity: Number(i.quantity) || 1,
+              unitPrice: Number(i.unit_price) || 0,
+              unit_price: Number(i.unit_price) || 0,
+              lineTotal: Number(i.line_total) || ((Number(i.unit_price) || 0) * (Number(i.quantity) || 1)),
+              line_total: Number(i.line_total) || ((Number(i.unit_price) || 0) * (Number(i.quantity) || 1)),
+              lineCost: Number(i.line_cost) || 0,
+              line_cost: Number(i.line_cost) || 0,
+              lineProfit: Number(i.line_profit) || 0,
+              line_profit: Number(i.line_profit) || 0,
+            }));
+          }
+
+          return {
+            id: t.id,
+            receiptNumber: t.receipt_number,
+            createdAt: t.created_at,
+            grandTotal: Number(t.grand_total) || 0,
+            totalCost: Number(t.total_cost) || 0,
+            grossProfit: Number(t.gross_profit) || 0,
+            paymentMethod: t.payment_method,
+            paymentStatus: t.payment_status,
+            sale_transaction_items: t.sale_transaction_items || [],
+            items,
+          };
+        });
 
     return {
       txsA: normalizeTxs(resA.data),
@@ -2054,7 +2097,7 @@ export async function fetchDateRangeTransactions(startDateStr, endDateStr) {
 
     const { data, error } = await supabase
       .from('sale_transactions')
-      .select('*')
+      .select('*, sale_transaction_items(*)')
       .gte('created_at', s.toISOString())
       .lte('created_at', e.toISOString())
       .order('created_at', { ascending: true });
@@ -2071,16 +2114,59 @@ export async function fetchDateRangeTransactions(startDateStr, endDateStr) {
           t.status !== 'cancelled' &&
           !t.is_cancelled
       )
-      .map((t) => ({
-        id: t.id,
-        receiptNumber: t.receipt_number,
-        createdAt: t.created_at,
-        grandTotal: Number(t.grand_total) || 0,
-        totalCost: Number(t.total_cost) || 0,
-        grossProfit: Number(t.gross_profit) || 0,
-        paymentMethod: t.payment_method,
-        paymentStatus: t.payment_status,
-      }));
+      .map((t) => {
+        let cachedMeta = null;
+        try {
+          const raw = localStorage.getItem(`meiishop_tx_meta_${t.id}`);
+          if (raw) cachedMeta = JSON.parse(raw);
+        } catch (_) {}
+
+        let items = [];
+        if (cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0) {
+          items = cachedMeta.items;
+        } else if (Array.isArray(cachedMeta) && cachedMeta.length > 0) {
+          items = cachedMeta;
+        } else if (t.sale_transaction_items && t.sale_transaction_items.length > 0) {
+          items = t.sale_transaction_items.map((i) => ({
+            id: i.id,
+            product: { id: i.product_id, name: i.product_name },
+            productId: i.product_id,
+            product_id: i.product_id,
+            productName: i.product_name,
+            unit: {
+              unitName: i.unit_name,
+              multiplier: Number(i.multiplier) || 1,
+              retailPrice: Number(i.unit_price) || 0,
+              wholesalePrice: Number(i.unit_price) || 0,
+            },
+            unitName: i.unit_name,
+            unit_name: i.unit_name,
+            multiplier: Number(i.multiplier) || 1,
+            quantity: Number(i.quantity) || 1,
+            unitPrice: Number(i.unit_price) || 0,
+            unit_price: Number(i.unit_price) || 0,
+            lineTotal: Number(i.line_total) || ((Number(i.unit_price) || 0) * (Number(i.quantity) || 1)),
+            line_total: Number(i.line_total) || ((Number(i.unit_price) || 0) * (Number(i.quantity) || 1)),
+            lineCost: Number(i.line_cost) || 0,
+            line_cost: Number(i.line_cost) || 0,
+            lineProfit: Number(i.line_profit) || 0,
+            line_profit: Number(i.line_profit) || 0,
+          }));
+        }
+
+        return {
+          id: t.id,
+          receiptNumber: t.receipt_number,
+          createdAt: t.created_at,
+          grandTotal: Number(t.grand_total) || 0,
+          totalCost: Number(t.total_cost) || 0,
+          grossProfit: Number(t.gross_profit) || 0,
+          paymentMethod: t.payment_method,
+          paymentStatus: t.payment_status,
+          sale_transaction_items: t.sale_transaction_items || [],
+          items,
+        };
+      });
   } catch (err) {
     console.error('fetchDateRangeTransactions exception:', err);
     return [];

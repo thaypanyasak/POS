@@ -21,6 +21,7 @@ import {
   Tag,
   CaretDown,
   XCircle,
+  X,
 } from '@phosphor-icons/react';
 import { formatKip, formatCompoundStock, formatStockDisplay, formatNegativeStockCompound, formatDots, getEffectiveUnitPrice, PRICE_TIERS } from '../utils/formatters';
 import PriceOverrideModal from './PriceOverrideModal';
@@ -258,7 +259,7 @@ export default function PosScreen({
   };
 
   // Reusable Edit Order Banner per DESIGN.md:
-  // ⚠️ ກຳລັງແກ້ໄຂບິນ: #[receipt_number] | ຮູບແບບຊຳລະເດີມ: [Badge Tiền mặt / Chuyển khoản / Nợ]
+  // ກຳລັງແກ້ໄຂບິນ: #[receipt_number] | ຮູບແບບຊຳລະເດີມ: [Badge Tiền mặt / Chuyển khoản / Nợ]
   const renderEditingBanner = () => {
     if (!editingOldTransaction) return null;
 
@@ -295,7 +296,7 @@ export default function PosScreen({
     return (
       <div className="bg-amber-500 text-white p-2 px-3 flex items-center justify-between gap-2 shadow-xs shrink-0 sticky top-0 z-20 border-b border-amber-600">
         <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto whitespace-nowrap scrollbar-none text-[11px] font-bold">
-          <span className="text-xs select-none shrink-0">⚠️</span>
+          <WarningCircle size={15} weight="fill" className="text-white shrink-0" />
           <span>ກຳລັງແກ້ໄຂບິນ: #{editingOldTransaction.receiptNumber || editingOldTransaction.originalReceiptNumber}</span>
           <span className="text-amber-200">|</span>
           <span className="text-amber-100">ຮູບແບບຊຳລະເດີມ:</span>
@@ -533,7 +534,7 @@ export default function PosScreen({
                       })()}
                     </div>
 
-                    {/* Bên phải: NƠI ĐẶT NÚT CHỌN GIÁ DUY NHẤT dạng [ 🏷️ {đơn_giá} ₭ ▾ ] + Icon Thùng rác */}
+                    {/* Bên phải: NƠI ĐẶT NÚT CHỌN GIÁ DUY NHẤT dạng [ {đơn_giá} ₭ ▾ ] + Icon Thùng rác */}
                     <div className="flex items-center gap-1 shrink-0">
                       {/* NÚT CHỌN GIÁ DUY NHẤT */}
                       <div className="relative">
@@ -1222,10 +1223,10 @@ export default function PosScreen({
                   <button
                     type="button"
                     onClick={() => setMobileCartOpen(false)}
-                    className="w-7 h-7 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer"
+                    className="w-7 h-7 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center cursor-pointer"
                     title="ປິດ"
                   >
-                    ✕
+                    <X size={15} weight="bold" />
                   </button>
                 </div>
               </div>
