@@ -21,6 +21,7 @@ import {
   parseThb,
   formatThbTyping,
   formatCompoundStockUnits,
+  normalizeLao,
 } from '../../utils/formatters';
 import { createPurchaseOrderInSupabase } from '../../services/supabase';
 import { queryClient } from '../../services/queryClient';
@@ -388,12 +389,12 @@ export default function PurchaseEntryModal({
 
   // Filter products for the searchable picker
   const filteredProducts = products.filter((p) => {
-    if (!productSearch.trim()) return true;
-    const q = productSearch.toLowerCase().trim();
+    const q = normalizeLao(productSearch);
+    if (!q) return true;
     return (
-      p.name?.toLowerCase().includes(q) ||
-      p.category?.toLowerCase().includes(q) ||
-      p.barcode?.toLowerCase().includes(q)
+      normalizeLao(p.name).includes(q) ||
+      normalizeLao(p.category).includes(q) ||
+      normalizeLao(p.barcode).includes(q)
     );
   });
 

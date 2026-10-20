@@ -32,6 +32,7 @@ import {
   formatCompoundStockUnits,
   getSortedUnits,
   formatStockDisplay,
+  normalizeLao,
 } from '../../utils/formatters';
 import {
   processMultiProductGRN,
@@ -190,13 +191,13 @@ export default function PurchasesView({
   const filteredOrders = useMemo(() => {
     return purchaseOrders.filter((po) => {
       if (filterStatus !== 'ALL' && po.payment_status !== filterStatus) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchId = (po.id || '').toLowerCase().includes(q);
-        const matchSupplier = (po.suppliers?.name || '').toLowerCase().includes(q);
-        const matchReceived = (po.received_by || '').toLowerCase().includes(q);
-        const matchProduct = (po.product_name || '').toLowerCase().includes(q) ||
-          (po.purchase_order_items || []).some((it) => (it.product_name || '').toLowerCase().includes(q));
+      const q = normalizeLao(searchQuery);
+      if (q) {
+        const matchId = normalizeLao(po.id).includes(q);
+        const matchSupplier = normalizeLao(po.suppliers?.name).includes(q);
+        const matchReceived = normalizeLao(po.received_by).includes(q);
+        const matchProduct = normalizeLao(po.product_name).includes(q) ||
+          (po.purchase_order_items || []).some((it) => normalizeLao(it.product_name).includes(q));
         return matchId || matchSupplier || matchReceived || matchProduct;
       }
       return true;
@@ -205,13 +206,13 @@ export default function PurchasesView({
 
   // Filter products for the searchable picker
   const filteredProducts = useMemo(() => {
-    if (!productSearch.trim()) return products.slice(0, 30);
-    const q = productSearch.toLowerCase().trim();
+    const q = normalizeLao(productSearch);
+    if (!q) return products.slice(0, 30);
     return products.filter((p) => (
-      p.name?.toLowerCase().includes(q) ||
-      p.category?.toLowerCase().includes(q) ||
-      p.barcode?.toLowerCase().includes(q) ||
-      (p.units && p.units.some((u) => u.barcode && u.barcode.toLowerCase().includes(q)))
+      normalizeLao(p.name).includes(q) ||
+      normalizeLao(p.category).includes(q) ||
+      normalizeLao(p.barcode).includes(q) ||
+      (p.units && p.units.some((u) => u.barcode && normalizeLao(u.barcode).includes(q)))
     )).slice(0, 30);
   }, [products, productSearch]);
 

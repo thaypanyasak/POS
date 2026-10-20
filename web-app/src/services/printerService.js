@@ -66,37 +66,67 @@ async function getTcpSocketPlugin() {
 
 /**
  * Send raw binary byte array over TCP Socket directly to thermal printer
+ * Enforces a strict JavaScript timeout to ensure UI never hangs if network is unreachable
  */
-export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 5 } = {}) {
+export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 3.5 } = {}) {
+  const cleanIp = String(ip || '').trim();
+  if (!cleanIp) {
+    throw new Error('ຍັງບໍ່ໄດ້ກຳນົດ IP ເຄື່ອງພິມ (Printer IP is empty)');
+  }
+
+  const targetPort = parseInt(port, 10) || 9100;
+  const timeoutMs = Math.max(1500, Math.round(timeoutSec * 1000));
+
   const TcpSocket = await getTcpSocketPlugin();
   if (!TcpSocket) {
-    throw new Error('Native TCP Socket plugin is not available on this platform.');
+    throw new Error('Native TCP Socket plugin ບໍ່ພ້ອມໃຊ້ງານໃນອຸປະກອນນີ້ (Capacitor Native only)');
   }
 
   const base64Data = uint8ArrayToBase64(uint8Bytes);
   let client = null;
 
-  try {
-    const connectRes = await TcpSocket.connect({
-      ipAddress: ip,
-      port: port || 9100,
-      timeout: timeoutSec,
+  // Strict Javascript timeout wrapper to prevent any native hanging
+  const withTimeout = (promise, ms, errorMsg) => {
+    let timer;
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(errorMsg));
+      }, ms);
     });
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      if (timer) clearTimeout(timer);
+    });
+  };
 
-    client = connectRes.client;
+  try {
+    const connectRes = await withTimeout(
+      TcpSocket.connect({
+        ipAddress: cleanIp,
+        port: targetPort,
+        timeout: Math.ceil(timeoutMs / 1000),
+      }),
+      timeoutMs,
+      `ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${cleanIp}:${targetPort} (${timeoutMs / 1000}s). ກະລຸນາກວດສອບເຄື່ອງພິມ.`
+    );
+
+    client = connectRes?.client;
     if (client === undefined || client === null) {
-      throw new Error(`Failed to obtain client handle for printer socket ${ip}:${port}`);
+      throw new Error(`Failed to obtain client handle for printer socket ${cleanIp}:${targetPort}`);
     }
 
-    await TcpSocket.send({
-      client,
-      data: base64Data,
-      timeout: timeoutSec,
-    });
+    await withTimeout(
+      TcpSocket.send({
+        client,
+        data: base64Data,
+        timeout: Math.ceil(timeoutMs / 1000),
+      }),
+      timeoutMs,
+      `ໝົດເວລາສົ່ງຂໍ້ມູນໄປຍັງເຄື່ອງພິມ ${cleanIp}:${targetPort}`
+    );
 
-    return { success: true, message: `Sent ${uint8Bytes.length} bytes to ${ip}:${port}` };
+    return { success: true, message: `Sent ${uint8Bytes.length} bytes to ${cleanIp}:${targetPort}` };
   } catch (err) {
-    console.error(`[printerService] Error sending to printer ${ip}:${port}:`, err);
+    console.error(`[printerService] Error sending to printer ${cleanIp}:${targetPort}:`, err);
     throw err;
   } finally {
     if (client !== null && client !== undefined) {
@@ -105,6 +135,22 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 5 
       } catch (_) {}
     }
   }
+}
+
+/**
+ * Test connection to printer IP & Port (sends ESC @ initialization ping)
+ */
+export async function testPrinterConnection(ip, port) {
+  const config = getPrinterConfig();
+  const targetIp = (ip || config.ip || '').trim();
+  const targetPort = parseInt(port || config.port, 10) || 9100;
+
+  if (!targetIp) {
+    throw new Error('ກະລຸນາປ້ອນ IP ເຄື່ອງພິມກ່ອນທົດສອບ.');
+  }
+
+  const initCmd = new Uint8Array(ESC_INIT);
+  return await sendRawBytesViaTcp(targetIp, targetPort, initCmd, { timeoutSec: 3 });
 }
 
 /**
@@ -336,8 +382,9 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
             images.map((img) => {
               if (img.complete) return Promise.resolve();
               return new Promise((r) => {
-                img.onload = r;
-                img.onerror = r;
+                const timer = setTimeout(r, 1000);
+                img.onload = () => { clearTimeout(timer); r(); };
+                img.onerror = () => { clearTimeout(timer); r(); };
               });
             })
           );
@@ -370,8 +417,8 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
  * 1. Native Platform (Capacitor iOS/Android) + Configured Printer IP:
  *    - Captures DOM element `#thermal-receipt-print-area` as a high-density 1-bit monochrome canvas
  *    - Generates ESC/POS raster byte stream (`GS v 0`)
- *    - Sends directly via TCP Socket to `IP:Port` (Port 9100)
- *    - Kicks drawer and cuts paper automatically without showing OS print dialog!
+ *    - Sends directly via TCP Socket to `IP:Port` (Port 9100) with strict 3.5s timeout
+ *    - If printer cannot be found or connection fails, immediately stops spinner and throws error!
  *
  * 2. Web Browser (Safari, Chrome) or Fallback:
  *    - Prints only receipt DOM in isolated single-page thermal iframe
@@ -380,32 +427,43 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
  * @param {string} [options.elementId='thermal-receipt-print-area'] DOM element ID of the receipt
  * @param {Object} [options.receipt] Receipt data object
  * @param {number} [options.paperWidth=80] Thermal paper width (80 or 58)
- * @param {boolean} [options.allowFallback=true] Fallback on socket error
+ * @param {boolean} [options.allowFallback=false] Fallback on socket error
  * @returns {Promise<{success: boolean, mode: 'socket'|'browser', message: string}>}
  */
 export async function printReceiptSmart({
   elementId = 'thermal-receipt-print-area',
   receipt = null,
   paperWidth = 80,
-  allowFallback = true,
+  allowFallback = false,
 } = {}) {
   const isNative = Capacitor.isNativePlatform();
   const config = getPrinterConfig();
   const activePaperWidth = paperWidth || config.paperWidth || 80;
 
-  // CASE 1: Native Capacitor App with valid Printer IP configured
-  if (isNative && config.ip) {
+  // CASE 1: Native Capacitor App (Thermal ESC/POS via TCP Socket)
+  if (isNative) {
+    const rawIp = (config.ip || '').trim();
+    if (!rawIp) {
+      throw new Error('ຍັງບໍ່ໄດ້ກຳນົດ IP ເຄື່ອງພິມ. ກະລຸນາໄປທີ່ໜ້າ "ຕັ້ງຄ່າ (Settings)" ເພື່ອກຳນົດ IP ເຄື່ອງພິມ.');
+    }
+
+    const targetElement = document.getElementById(elementId);
+    if (!targetElement) {
+      throw new Error(`ບໍ່ພົບ DOM Element #${elementId} ເພື່ອສັ່ງພິມ.`);
+    }
+
+    // Standard printer widths in dots: 80mm = 576 dots, 58mm = 384 dots
+    const targetWidth = activePaperWidth === 58 ? 384 : 576;
+
+    let canvasTimer;
+    const canvasTimeoutPromise = new Promise((_, reject) => {
+      canvasTimer = setTimeout(() => {
+        reject(new Error('ໝົດເວລາ Render ຮູບໃບບິນ (Canvas Timeout)'));
+      }, 4000);
+    });
+
     try {
-      const targetElement = document.getElementById(elementId);
-      if (!targetElement) {
-        throw new Error(`Receipt DOM element #${elementId} not found for rasterization.`);
-      }
-
-      // Standard printer widths in dots: 80mm = 576 dots, 58mm = 384 dots
-      const targetWidth = config.paperWidth === 58 ? 384 : 576;
-
-      // Render DOM element to high-contrast monochrome canvas
-      const canvas = await toCanvas(targetElement, {
+      const canvasPromise = toCanvas(targetElement, {
         width: targetWidth,
         pixelRatio: 1,
         backgroundColor: '#ffffff',
@@ -417,6 +475,10 @@ export async function printReceiptSmart({
         },
       });
 
+      const canvas = await Promise.race([canvasPromise, canvasTimeoutPromise]).finally(() => {
+        if (canvasTimer) clearTimeout(canvasTimer);
+      });
+
       // Convert Canvas to ESC/POS Raster Bytes
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: config.drawerKick,
@@ -424,13 +486,13 @@ export async function printReceiptSmart({
         luminanceThreshold: 185,
       });
 
-      // Transmit directly to hardware thermal printer
-      await sendRawBytesViaTcp(config.ip, config.port, escPosBytes, { timeoutSec: 6 });
+      // Transmit directly to hardware thermal printer with strict 3.5s timeout
+      await sendRawBytesViaTcp(rawIp, config.port, escPosBytes, { timeoutSec: 3.5 });
 
       return {
         success: true,
         mode: 'socket',
-        message: `ພິມສຳເລັດ! ສົ່ງຂໍ້ມູນໄປຍັງເຄື່ອງພິມ ${config.ip}:${config.port} ແລ້ວ.`,
+        message: `ພິມໃບບິນສຳເລັດ! ສົ່ງຂໍ້ມູນໄປຍັງເຄື່ອງພິມ ${rawIp}:${config.port} ຮຽບຮ້ອຍແລ້ວ.`,
       };
     } catch (err) {
       console.error('[printerService] Direct native print failed:', err);
@@ -441,21 +503,22 @@ export async function printReceiptSmart({
         return {
           success: true,
           mode: 'browser',
-          message: `ບໍ່ສາມາດເຊື່ອມຕໍ່ ${config.ip}:${config.port}. ໄດ້ປ່ຽນໄປພິມຜ່ານລະບົບ Browser ແທນ. (${err.message})`,
+          message: `ບໍ່ສາມາດເຊື່ອມຕໍ່ ${rawIp}:${config.port}. ໄດ້ປ່ຽນໄປພິມຜ່ານລະບົບ Browser ແທນ. (${err.message})`,
           error: err.message,
         };
-      } else {
-        throw err;
       }
+
+      // DO NOT HANG: Throw clear error so UI stops spinner and displays error immediately!
+      throw new Error(`ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (${rawIp}:${config.port || 9100}). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ເຊື່ອມຕໍ່ເຄືອຂ່າຍ Wi-Fi ດຽວກັນ.`);
     }
   }
 
-  // CASE 2: Web Browser (Safari, Chrome, etc.) or no IP configured
+  // CASE 2: Web Browser (Safari, Chrome, etc.)
   await printThermalElementDirect(elementId, activePaperWidth);
   return {
     success: true,
     mode: 'browser',
-    message: 'ເປີດໜ້າຕ່າງພິມຂອງລະບົບ (System Print Dialog).',
+    message: 'ເປີດໜ້າຕ່າງພິມຂອງລະບົບ (System Print Dialog) ສຳເລັດ.',
   };
 }
 
@@ -463,6 +526,7 @@ export default {
   getPrinterConfig,
   savePrinterConfig,
   sendRawBytesViaTcp,
+  testPrinterConnection,
   openCashDrawerDirect,
   printReceiptSmart,
   printThermalElementDirect,

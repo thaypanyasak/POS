@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   MagnifyingGlass,
   Plus,
@@ -20,6 +20,7 @@ import {
   Check,
   Tag,
   CaretDown,
+  XCircle,
 } from '@phosphor-icons/react';
 import { formatKip, formatCompoundStock, formatStockDisplay, formatNegativeStockCompound, formatDots, getEffectiveUnitPrice, PRICE_TIERS } from '../utils/formatters';
 import PriceOverrideModal from './PriceOverrideModal';
@@ -149,6 +150,16 @@ export default function PosScreen({
   const [scanToast, setScanToast] = useState(null);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [quotationModalOpen, setQuotationModalOpen] = useState(false);
+  const searchInputRef = useRef(null);
+
+  const handleClearSearch = () => {
+    if (setSearchQuery) {
+      setSearchQuery('');
+    }
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  };
 
   const handleScanBarcode = (barcode) => {
     if (!barcode) return;
@@ -906,20 +917,22 @@ export default function PosScreen({
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
               />
               <input
+                ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ ຫຼື ສະແກນບາໂຄດ..."
-                className="w-full h-11 pl-9 pr-20 bg-slate-100/80 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-600 focus:bg-white font-medium shadow-2xs transition-all"
+                className="w-full h-11 pl-9 pr-10 bg-slate-100/80 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-600 focus:bg-white font-medium shadow-2xs transition-all"
               />
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-xs font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-200/70 rounded-md cursor-pointer transition-colors"
+                  onClick={handleClearSearch}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full cursor-pointer transition-colors active:scale-90 flex items-center justify-center"
+                  title="ລຶບການຄົ້ນຫາ (Clear search)"
                 >
-                  ລຶບ
+                  <XCircle size={18} weight="fill" />
                 </button>
               )}
             </div>

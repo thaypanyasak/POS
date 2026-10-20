@@ -1,39 +1,37 @@
 import { useEffect, useRef } from 'react';
+import { playSuccessBeep } from '../utils/audioFeedback';
+import { Capacitor } from '@capacitor/core';
+import { Haptics, NotificationType } from '@capacitor/haptics';
 
 /**
  * Universal Hardware Barcode Scanner Listener Hook
  * 
- * Accurately detects physical barcode scanners (USB, OTG, Bluetooth HID Keyboard)
- * across Desktop Browsers, Mobile PWA, Capacitor, and WebViews without requiring
- * input focus or mouse clicks.
+ * Accurately detects physical barcode scanners (USB, OTG, Bluetooth HID Keyboard, 2.4G Wireless)
+ * across Desktop Browsers, Mobile PWA, iPad/iOS, and Android without requiring input focus or clicks.
  *
  * HEURISTICS:
- * 1. High Keystroke Speed: Hardware scanners transmit characters at lightning speed (< 50ms between keys).
- *    If delta > maxInterval (default 50ms), it's treated as normal human typing and buffer resets immediately.
- * 2. Terminator Detection: Barcode scanners send an 'Enter' key at the end of the sequence.
- * 3. Min Length: Sequence must be at least minLength characters (default: 3) to be considered a barcode.
- * 4. Input Conflict Handling: Does not disturb normal user typing in forms. If a scanner dumps characters
- *    into an active input, the hook automatically reverts the typed barcode numbers from the field.
- *
- * @param {Object} options
- * @param {Function} options.onScan - Callback invoked when a valid barcode is scanned: (barcode: string) => void
- * @param {boolean} [options.enabled=true] - Toggle the listener on/off
- * @param {number} [options.maxInterval=50] - Max allowed time (ms) between consecutive keystrokes (default: 50ms)
- * @param {number} [options.minLength=3] - Minimum length of valid barcode (default: 3)
- * @param {boolean} [options.preventDefaultOnEnter=true] - Prevent default Enter key behavior on barcode scan
- * @param {boolean} [options.cleanActiveInput=true] - Clean active input if barcode was typed into it
+ * 1. High Keystroke Speed: Scanners burst characters at superhuman speeds (< 30ms between keys).
+ *    If delta > maxInterval (default 35ms), it's treated as normal human typing and buffer resets immediately.
+ * 2. Terminator Detection: Barcode scanners finish their burst with an 'Enter' key.
+ * 3. Min Length: Sequence must be at least minLength characters (default: 3).
+ * 4. Input Conflict Handling: If a scanner types into an active input field, automatically reverts the
+ *    typed numbers from that input to prevent polluting forms.
+ * 5. Audio & Haptic Feedback: Triggers POS beep and haptic feedback immediately upon recognition.
+ * 6. Debounce Protection: Prevents duplicate reads of the exact same barcode within 800ms.
  */
 export function useHardwareBarcodeScanner({
   onScan,
   enabled = true,
-  maxInterval = 50,
+  maxInterval = 35, // Strict threshold distinguishing scanner burst from human typing
   minLength = 3,
   preventDefaultOnEnter = true,
   cleanActiveInput = true,
+  feedback = true,
 }) {
   const onScanRef = useRef(onScan);
   const bufferRef = useRef('');
   const lastKeyTimeRef = useRef(0);
+  const lastScannedBarcodeRef = useRef({ code: '', time: 0 });
   const inputSnapshotRef = useRef({ element: null, originalValue: '' });
 
   // Keep latest onScan callback without re-registering the global window listener
@@ -45,7 +43,7 @@ export function useHardwareBarcodeScanner({
     if (!enabled) return;
 
     /**
-     * Safely revert barcode characters accidentally typed into an active input/textarea
+     * Revert barcode characters accidentally dumped into an active input element
      */
     const cleanActiveInputElement = (scannedCode) => {
       try {
@@ -75,7 +73,6 @@ export function useHardwareBarcodeScanner({
         }
 
         if (cleanedValue !== currentValue) {
-          // Trigger React synthetic event update by calling native value setter
           const proto =
             activeEl instanceof HTMLTextAreaElement
               ? window.HTMLTextAreaElement.prototype
@@ -96,6 +93,16 @@ export function useHardwareBarcodeScanner({
       }
     };
 
+    const triggerFeedback = async () => {
+      if (!feedback) return;
+      playSuccessBeep();
+      if (Capacitor.isNativePlatform()) {
+        try {
+          await Haptics.notification({ type: NotificationType.Success });
+        } catch (_) {}
+      }
+    };
+
     const handleGlobalKeyDown = (e) => {
       const now = Date.now();
       const delta = now - lastKeyTimeRef.current;
@@ -112,10 +119,26 @@ export function useHardwareBarcodeScanner({
             e.stopPropagation();
           }
 
+          // Debounce duplicate reads of the exact same code within 800ms
+          const isDuplicate =
+            lastScannedBarcodeRef.current.code === currentBuffer &&
+            now - lastScannedBarcodeRef.current.time < 800;
+
+          if (isDuplicate) {
+            bufferRef.current = '';
+            inputSnapshotRef.current = { element: null, originalValue: '' };
+            return;
+          }
+
+          lastScannedBarcodeRef.current = { code: currentBuffer, time: now };
+
           // Clean active input if barcode characters were typed into it
           if (cleanActiveInput) {
             cleanActiveInputElement(currentBuffer);
           }
+
+          // Trigger sound & haptic feedback
+          triggerFeedback();
 
           // Reset buffer
           bufferRef.current = '';
@@ -135,12 +158,11 @@ export function useHardwareBarcodeScanner({
       }
 
       // 2. Inter-keystroke Speed Heuristic:
-      // If time between keystrokes exceeds threshold (> 50ms), it's human typing.
-      // Reset the buffer immediately.
+      // If time between keystrokes exceeds threshold (> 35ms), it's human typing.
       if (delta > maxInterval) {
         bufferRef.current = '';
 
-        // Snapshot current active element state at start of a potential burst
+        // Snapshot current active element state at start of potential burst
         const activeEl = document.activeElement;
         if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
           inputSnapshotRef.current = {
@@ -153,7 +175,6 @@ export function useHardwareBarcodeScanner({
       }
 
       // 3. Accumulate printable characters only
-      // Exclude modifier keys (Control, Alt, Meta, Shift, Tab, Arrows, etc.)
       if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         bufferRef.current += e.key;
       }
@@ -165,7 +186,7 @@ export function useHardwareBarcodeScanner({
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
     };
-  }, [enabled, maxInterval, minLength, preventDefaultOnEnter, cleanActiveInput]);
+  }, [enabled, maxInterval, minLength, preventDefaultOnEnter, cleanActiveInput, feedback]);
 }
 
 export default useHardwareBarcodeScanner;

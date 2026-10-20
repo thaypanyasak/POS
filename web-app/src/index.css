@@ -226,3 +226,24 @@ html, body, #root {
   }
 }
 
+/* =========================================================================
+   Native Capacitor Camera Scanner Transparency & 60FPS Optimization
+   ========================================================================= */
+body.scanner-active,
+body.barcode-scanner-active {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+body.scanner-active #root,
+body.barcode-scanner-active #root {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+body.scanner-active .scanner-hide,
+body.barcode-scanner-active .scanner-hide {
+  display: none !important;
+}
+
+

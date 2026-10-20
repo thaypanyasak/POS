@@ -42,7 +42,7 @@ import ProductFormModal from './components/ProductFormModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import ConfirmDialogModal from './components/ConfirmDialogModal';
 
-import { formatDots, parseDots, parseCurrencyInput, formatCompoundStock, getEffectiveUnitPrice, PRICE_TIERS } from './utils/formatters';
+import { formatDots, parseDots, parseCurrencyInput, formatCompoundStock, getEffectiveUnitPrice, PRICE_TIERS, normalizeLao } from './utils/formatters';
 import { useHardwareBarcodeScanner } from './hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep, playErrorBeep } from './utils/audioFeedback';
 
@@ -51,9 +51,8 @@ export default function App() {
   const [activeMainTab, setActiveMainTab] = useState(() => {
     try {
       if (typeof window !== 'undefined') {
-        const path = window.location.pathname;
         const hash = window.location.hash;
-        if (path === '/reports/sales-by-unit' || hash.includes('sales-by-unit')) {
+        if (hash.includes('sales-by-unit')) {
           return 'sales-by-unit';
         }
       }
@@ -63,32 +62,7 @@ export default function App() {
 
   const handleTabChange = (tabId) => {
     setActiveMainTab(tabId);
-    try {
-      if (typeof window !== 'undefined') {
-        if (tabId === 'sales-by-unit') {
-          window.history.pushState(null, '', '/reports/sales-by-unit');
-        } else if (window.location.pathname === '/reports/sales-by-unit') {
-          window.history.pushState(null, '', '/');
-        }
-      }
-    } catch (_) {}
   };
-
-  useEffect(() => {
-    const handlePopState = () => {
-      try {
-        if (typeof window !== 'undefined') {
-          const path = window.location.pathname;
-          const hash = window.location.hash;
-          if (path === '/reports/sales-by-unit' || hash.includes('sales-by-unit')) {
-            setActiveMainTab('sales-by-unit');
-          }
-        }
-      } catch (_) {}
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   // Products Data (Supabase Live Sync with local cache, NO mock data)
   const [products, setProducts] = useState(() => {
@@ -2067,14 +2041,14 @@ export default function App() {
   }, [categoriesList]);
 
   const filteredProducts = useMemo(() => {
+    const q = normalizeLao(searchQuery);
     return products.filter((p) => {
       const matchesCat = activeCategory === 'ທັງໝົດ' || p.category === activeCategory;
-      const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
-        p.name.toLowerCase().includes(q) ||
-        (p.barcode && p.barcode.includes(q)) ||
-        p.units.some((u) => u.unitName.toLowerCase().includes(q));
+        normalizeLao(p.name).includes(q) ||
+        (p.barcode && normalizeLao(p.barcode).includes(q)) ||
+        p.units.some((u) => normalizeLao(u.unitName).includes(q) || (u.barcode && normalizeLao(u.barcode).includes(q)));
       return matchesCat && matchesSearch;
     });
   }, [products, activeCategory, searchQuery]);
@@ -2501,6 +2475,7 @@ export default function App() {
         paperWidth={receiptPaperWidth}
         setPaperWidth={setReceiptPaperWidth}
         onCancelReceipt={handleCancelTransaction}
+        onAlert={openAlert}
       />
 
       {/* Global Beautiful Alert & Confirmation Dialog */}

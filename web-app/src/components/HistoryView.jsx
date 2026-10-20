@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   ClockCounterClockwise,
   Printer,
@@ -15,9 +15,10 @@ import {
   ArrowsClockwise,
   Money,
   QrCode,
-  Warning
+  Warning,
+  XCircle
 } from '@phosphor-icons/react';
-import { formatKip } from '../utils/formatters';
+import { formatKip, normalizeLao } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
 
 export default function HistoryView({
@@ -32,6 +33,14 @@ export default function HistoryView({
   onAlert,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef(null);
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  };
   // 3 Primary Tabs: 'cash' | 'transfer' | 'debt' + 'all' | 'cancelled'
   const [activeTab, setActiveTab] = useState('all');
   
@@ -165,16 +174,39 @@ export default function HistoryView({
       }
     }
 
-    // 3. Search query filter
-    const q = searchTerm.toLowerCase().trim();
+    // 3. Search query filter: Mã bill, tên khách hàng, hình thức thanh toán VÀ tên sản phẩm / barcode / đơn vị trong bill
+    const q = normalizeLao(searchTerm);
     if (!q) return list;
-    return list.filter(
-      (tx) =>
-        (tx.receiptNumber && tx.receiptNumber.toLowerCase().includes(q)) ||
-        (tx.customerName && tx.customerName.toLowerCase().includes(q)) ||
-        (tx.paymentMethod && tx.paymentMethod.toLowerCase().includes(q)) ||
-        (tx.status && tx.status.toLowerCase().includes(q))
-    );
+    return list.filter((tx) => {
+      // 3.1. Tìm theo thông tin chung của đơn hàng
+      const matchBasic =
+        normalizeLao(tx.receiptNumber).includes(q) ||
+        normalizeLao(tx.customerName).includes(q) ||
+        normalizeLao(tx.paymentMethod).includes(q) ||
+        normalizeLao(tx.status).includes(q) ||
+        normalizeLao(tx.debtNote).includes(q);
+
+      if (matchBasic) return true;
+
+      // 3.2. Tìm theo danh sách sản phẩm bên trong bill (items hoặc sale_transaction_items)
+      const billItems = (tx.items && tx.items.length > 0)
+        ? tx.items
+        : (tx.sale_transaction_items || []);
+
+      const matchItem = billItems.some((it) => {
+        const prodName = normalizeLao(it.productName || it.product_name || it.product?.name || '');
+        const barcode = normalizeLao(it.barcode || it.product?.barcode || '');
+        const unitName = normalizeLao(it.unitName || it.unit_name || it.unit?.unitName || '');
+
+        return (
+          prodName.includes(q) ||
+          barcode.includes(q) ||
+          unitName.includes(q)
+        );
+      });
+
+      return matchItem;
+    });
   }, [transactions, activeTab, dateFilter, startDate, endDate, searchTerm]);
 
   // Simple Customer Name / Method edit modal
@@ -425,18 +457,29 @@ export default function HistoryView({
 
         {/* Search input & Result count */}
         <div className="flex items-center gap-2">
-          <div className="relative w-full sm:w-64">
+          <div className="relative w-full sm:w-72">
             <MagnifyingGlass
               size={15}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
             />
             <input
+              ref={searchInputRef}
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="ຄົ້ນຫາເລກບິນ, ຊື່ລູກຄ້າ..."
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium"
+              placeholder="ຄົ້ນຫາເລກບິນ, ລູກຄ້າ, ສິນຄ້າ..."
+              className="w-full pl-8 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full cursor-pointer transition-colors active:scale-90 flex items-center justify-center"
+                title="ລຶບການຄົ້ນຫາ (Clear search)"
+              >
+                <XCircle size={16} weight="fill" />
+              </button>
+            )}
           </div>
           <span className="text-xs text-slate-500 whitespace-nowrap font-medium shrink-0">
             {filteredTransactions.length} ບິນ

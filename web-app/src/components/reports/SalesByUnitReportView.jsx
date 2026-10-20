@@ -16,7 +16,7 @@ import {
   Export,
   Minus
 } from '@phosphor-icons/react';
-import { formatKip, formatBaht, formatDots } from '../../utils/formatters';
+import { formatKip, formatBaht, formatDots, normalizeLao } from '../../utils/formatters';
 
 /**
  * Determine unit tier level:
@@ -247,12 +247,12 @@ export default function SalesByUnitReportView({
   const displayedProducts = useMemo(() => {
     let result = productSalesList;
 
-    const q = searchTerm.toLowerCase().trim();
+    const q = normalizeLao(searchTerm);
     if (q) {
       result = result.filter(
         (p) =>
-          (p.name && p.name.toLowerCase().includes(q)) ||
-          (p.barcode && p.barcode.toLowerCase().includes(q))
+          (p.name && normalizeLao(p.name).includes(q)) ||
+          (p.barcode && normalizeLao(p.barcode).includes(q))
       );
     }
 

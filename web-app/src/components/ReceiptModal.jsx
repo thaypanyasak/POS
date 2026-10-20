@@ -6,10 +6,13 @@ import {
   QrCode,
   Prohibit,
   CircleNotch,
+  CheckCircle,
+  WarningCircle,
 } from '@phosphor-icons/react';
 import { formatKip } from '../utils/formatters';
 import { printReceiptSmart, getPrinterConfig, savePrinterConfig } from '../services/printerService';
 import { Capacitor } from '@capacitor/core';
+import { playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
 
 export default function ReceiptModal({
   isOpen,
@@ -18,6 +21,7 @@ export default function ReceiptModal({
   paperWidth,
   setPaperWidth,
   onCancelReceipt,
+  onAlert,
 }) {
   if (!isOpen || !receipt) return null;
 
@@ -45,23 +49,28 @@ export default function ReceiptModal({
         elementId: 'thermal-receipt-print-area',
         receipt,
         paperWidth,
-        allowFallback: true,
+        allowFallback: !Capacitor.isNativePlatform(),
       });
 
-      if (res.mode === 'socket') {
+      if (res && res.success) {
         setPrintFeedback({
           type: 'success',
-          message: res.message,
+          message: res.message || 'ພິມໃບບິນສຳເລັດແລ້ວ!',
         });
+        playSuccessBeep();
         setTimeout(() => setPrintFeedback(null), 4000);
+      } else {
+        throw new Error(res?.message || 'ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມໄດ້.');
       }
     } catch (err) {
       console.error('Print error:', err);
+      const errMsg = err?.message || 'ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ເຄື່ອງພິມ.';
       setPrintFeedback({
         type: 'error',
-        message: `ເກີດຂໍ້ຜິດພາດ: ${err.message}`,
+        message: errMsg,
       });
-      setTimeout(() => setPrintFeedback(null), 5000);
+      playErrorBeep();
+      setTimeout(() => setPrintFeedback(null), 6000);
     } finally {
       setIsPrinting(false);
     }
@@ -452,8 +461,26 @@ export default function ReceiptModal({
           </div>
         </div>
 
+        {/* Print Feedback Banner directly above buttons */}
+        {printFeedback && (
+          <div
+            className={`px-3.5 py-2.5 rounded-xl text-xs font-bold border shadow-xs animate-in fade-in duration-150 flex items-center justify-center gap-2 no-print text-center ${
+              printFeedback.type === 'success'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                : 'bg-rose-50 text-rose-800 border-rose-300'
+            }`}
+          >
+            {printFeedback.type === 'success' ? (
+              <CheckCircle size={17} weight="fill" className="text-emerald-600 shrink-0" />
+            ) : (
+              <WarningCircle size={17} weight="fill" className="text-rose-600 shrink-0" />
+            )}
+            <span className="leading-snug">{printFeedback.message}</span>
+          </div>
+        )}
+
         {/* Action Buttons Toolbar */}
-        <div className="flex items-center gap-2 pt-2 no-print">
+        <div className="flex items-center gap-2 pt-1 no-print">
           {/* Cancel/Void Bill Button */}
           {isCancelled ? (
             <div className="py-2.5 px-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 select-none">
@@ -490,7 +517,7 @@ export default function ReceiptModal({
             ) : (
               <Printer size={16} />
             )}
-            <span>{isPrinting ? 'ກຳລັງພິມ...' : `ພິມໃບບິນ (${paperWidth}mm)`}</span>
+            <span>{isPrinting ? 'ກຳລັງກວດສອບ & ພິມ...' : `ພິມໃບບິນ (${paperWidth}mm)`}</span>
           </button>
         </div>
       </div>

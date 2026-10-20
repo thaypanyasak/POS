@@ -19,13 +19,15 @@ import {
   CloudSlash,
   DownloadSimple,
   Sparkle,
+  CircleNotch,
 } from '@phosphor-icons/react';
 import { Capacitor } from '@capacitor/core';
 import { updateExchangeRateInSupabase } from '../services/supabase';
 import queryClient from '../services/queryClient';
 import { formatDots } from '../utils/formatters';
-import { getPrinterConfig, savePrinterConfig, openCashDrawerDirect } from '../services/printerService';
+import { getPrinterConfig, savePrinterConfig, openCashDrawerDirect, testPrinterConnection } from '../services/printerService';
 import { liveUpdater } from '../services/liveUpdateService';
+import { playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
 
 export default function SettingsView({
   exchangeRate = 0,
@@ -105,6 +107,36 @@ export default function SettingsView({
     );
   };
 
+  const [isTestingPrinter, setIsTestingPrinter] = useState(false);
+  const [isTestingDrawer, setIsTestingDrawer] = useState(false);
+
+  const handleTestPrinter = async () => {
+    try {
+      if (!Capacitor.isNativePlatform()) {
+        onAlert?.(
+          'ການທົດສອບເຄື່ອງພິມ ESC/POS ຮອງຮັບສະເພາະເມື່ອເປີດຜ່ານ App Capacitor ທີ່ເຊື່ອມຕໍ່ IP ເຄື່ອງພິມ LAN/Wi-Fi.',
+          'ແຈ້ງເຕືອນ',
+          'info'
+        );
+        return;
+      }
+      if (!printerIp || !printerIp.trim()) {
+        onAlert?.('ກະລຸນາປ້ອນ IP ເຄື່ອງພິມກ່ອນທົດສອບ.', 'ແຈ້ງເຕືອນ', 'warning');
+        return;
+      }
+      setIsTestingPrinter(true);
+      await testPrinterConnection(printerIp.trim(), printerPort);
+      playSuccessBeep();
+      onAlert?.(`ເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${printerIp.trim()}:${printerPort} ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
+    } catch (err) {
+      console.error('Test printer error:', err);
+      playErrorBeep();
+      onAlert?.(`ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (${printerIp.trim()}:${printerPort}): ${err.message}`, 'ຂໍ້ຜິດພາດ', 'error');
+    } finally {
+      setIsTestingPrinter(false);
+    }
+  };
+
   const handleTestKickDrawer = async () => {
     try {
       if (!Capacitor.isNativePlatform()) {
@@ -115,14 +147,20 @@ export default function SettingsView({
         );
         return;
       }
+      setIsTestingDrawer(true);
       const res = await openCashDrawerDirect();
       if (res.success) {
+        playSuccessBeep();
         onAlert?.('ສົ່ງຄຳສັ່ງເປີດລິ້ນຊັກເງິນສຳເລັດແລ້ວ!', 'ສຳເລັດ', 'success');
       } else {
+        playErrorBeep();
         onAlert?.(res.message, 'ແຈ້ງເຕືອນ', 'warning');
       }
     } catch (err) {
+      playErrorBeep();
       onAlert?.(`ບໍ່ສາມາດເປີດລິ້ນຊັກ: ${err.message}`, 'ຂໍ້ຜິດພາດ', 'error');
+    } finally {
+      setIsTestingDrawer(false);
     }
   };
 
@@ -516,21 +554,43 @@ export default function SettingsView({
               </div>
 
               {/* Action Bar: Save & Kick Drawer Test */}
-              <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={handleTestKickDrawer}
-                  className="h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
-                  title="ທົດສອບຄຳສັ່ງເປີດລິ້ນຊັກເງິນ ESC/POS"
-                >
-                  <HandCoins size={14} weight="bold" />
-                  <span>ທົດສອບລິ້ນຊັກ</span>
-                </button>
+              <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTestPrinter}
+                    disabled={isTestingPrinter}
+                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 disabled:opacity-60 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                    title="ທົດສອບການເຊື່ອມຕໍ່ IP ເຄື່ອງພິມ"
+                  >
+                    {isTestingPrinter ? (
+                      <CircleNotch size={14} className="animate-spin text-teal-600" />
+                    ) : (
+                      <Printer size={14} weight="bold" />
+                    )}
+                    <span>{isTestingPrinter ? 'ກຳລັງທົດສອບ...' : 'ທົດສອບເຄື່ອງພິມ'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleTestKickDrawer}
+                    disabled={isTestingDrawer}
+                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 disabled:opacity-60 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                    title="ທົດສອບຄຳສັ່ງເປີດລິ້ນຊັກເງິນ ESC/POS"
+                  >
+                    {isTestingDrawer ? (
+                      <CircleNotch size={14} className="animate-spin text-teal-600" />
+                    ) : (
+                      <HandCoins size={14} weight="bold" />
+                    )}
+                    <span>{isTestingDrawer ? 'ກຳລັງເປີດ...' : 'ທົດສອບລິ້ນຊັກ'}</span>
+                  </button>
+                </div>
 
                 <button
                   type="button"
                   onClick={handleSavePrinterSettings}
-                  className="h-8 px-3.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                  className="h-8 px-3.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 ml-auto"
                 >
                   <FloppyDisk size={14} weight="bold" />
                   <span>ບັນທຶກຕັ້ງຄ່າ</span>

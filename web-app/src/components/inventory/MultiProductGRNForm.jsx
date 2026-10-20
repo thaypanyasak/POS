@@ -30,6 +30,7 @@ import {
   parseThb,
   formatThbTyping,
   getProductHighestStockDisplay,
+  normalizeLao,
 } from '../../utils/formatters';
 import BarcodeScannerModal from '../BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../../hooks/useHardwareBarcodeScanner';
@@ -394,15 +395,15 @@ export default function MultiProductGRNForm({
 
   // Search filtering
   const filteredProducts = useMemo(() => {
-    if (!productSearch.trim()) return products.slice(0, 30);
-    const q = productSearch.toLowerCase().trim();
+    const q = normalizeLao(productSearch);
+    if (!q) return products.slice(0, 30);
     return products
       .filter(
         (p) =>
-          p.name?.toLowerCase().includes(q) ||
-          p.category?.toLowerCase().includes(q) ||
-          p.barcode?.toLowerCase().includes(q) ||
-          (p.units && p.units.some((u) => u.barcode && u.barcode.toLowerCase() === trimmedQ(q)))
+          normalizeLao(p.name).includes(q) ||
+          normalizeLao(p.category).includes(q) ||
+          normalizeLao(p.barcode).includes(q) ||
+          (p.units && p.units.some((u) => u.barcode && normalizeLao(u.barcode) === q))
       )
       .slice(0, 30);
   }, [products, productSearch]);

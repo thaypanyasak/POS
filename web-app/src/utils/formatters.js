@@ -525,3 +525,46 @@ export const getProductHighestStockDisplay = (product) => {
   return `${rawStock} ${product.baseUnit || 'ອັນ'}`;
 };
 
+/**
+ * Normalizes Lao text for reliable, typo-tolerant search:
+ * 1. Unicode NFC normalization
+ * 2. Maps Thai lookalike vowels/letters to Lao equivalents
+ * 3. Replaces double 'ເ' (\u0ec0\u0ec0) with single 'ແ' (\u0ec1)
+ * 4. Replaces Niggahita + Aa (\u0ecd\u0eb2) with Am (\u0eb3 ຳ)
+ * 5. Reorders tone mark after vowel if typed inverted
+ * 6. Normalizes digraphs: 'ຫນ' (\u0eab\u0e99) -> 'ໜ' (\u0edc), 'ຫມ' (\u0eab\u0ea1) -> 'ໝ' (\u0edd)
+ * 7. Collapses whitespace & lowercases
+ */
+export function normalizeLao(str) {
+  if (!str) return '';
+  return String(str)
+    .normalize('NFC')
+    // Thai lookalike vowels to Lao
+    .replace(/\u0e40\u0e40/g, '\u0ec1')
+    .replace(/\u0e41/g, '\u0ec1')
+    .replace(/\u0e40/g, '\u0ec0')
+    .replace(/\u0e42/g, '\u0ec2')
+    .replace(/\u0e43/g, '\u0ec3')
+    .replace(/\u0e44/g, '\u0ec4')
+    // Lao double e (ເ + ເ) -> single ae (ແ)
+    .replace(/\u0ec0\u0ec0/g, '\u0ec1')
+    // Lao Niggahita + tone + Aa -> tone + Am
+    .replace(/\u0ecd([\u0ec8-\u0ecc]?)\u0eb2/g, '$1\u0eb3')
+    // Standardise tone after vowel if typed inverted
+    .replace(/([\u0ec8-\u0ecc])([\u0eb1\u0eb4-\u0eb9\u0ebb\u0ecd])/g, '$2$1')
+    // Digraphs
+    .replace(/\u0eab\u0e99/g, '\u0edc') // ຫນ -> ໜ
+    .replace(/\u0eab\u0ea1/g, '\u0edd') // ຫມ -> ໝ
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Checks if target string matches query with Lao normalization
+ */
+export function matchesLaoSearch(target, query) {
+  if (!query) return true;
+  if (!target) return false;
+  return normalizeLao(target).includes(normalizeLao(query));
+}

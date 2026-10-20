@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   Warehouse,
   Plus,
@@ -10,9 +10,10 @@ import {
   Barcode,
   CheckCircle,
   WarningCircle,
-  Folders
+  Folders,
+  XCircle
 } from '@phosphor-icons/react';
-import { formatKip, formatBaht, getCartonUnitInfo, formatStockDisplay, formatNegativeStockCompound } from '../utils/formatters';
+import { formatKip, formatBaht, getCartonUnitInfo, formatStockDisplay, formatNegativeStockCompound, normalizeLao } from '../utils/formatters';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
@@ -217,20 +218,28 @@ export default function ProductsView({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannedHighlightId, setScannedHighlightId] = useState(null);
   const [scanToast, setScanToast] = useState(null);
+  const searchInputRef = useRef(null);
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  };
 
   const filteredProducts = useMemo(() => {
-    const q = searchTerm.toLowerCase().trim();
+    const q = normalizeLao(searchTerm);
     if (!q) return products;
     return products.filter((p) => {
       return (
-        (p.name && p.name.toLowerCase().includes(q)) ||
-        (p.barcode && String(p.barcode).toLowerCase().includes(q)) ||
-        (p.category && p.category.toLowerCase().includes(q)) ||
+        (p.name && normalizeLao(p.name).includes(q)) ||
+        (p.barcode && normalizeLao(p.barcode).includes(q)) ||
+        (p.category && normalizeLao(p.category).includes(q)) ||
         (p.units &&
           p.units.some(
             (u) =>
-              u.unitName.toLowerCase().includes(q) ||
-              (u.barcode && String(u.barcode).toLowerCase().includes(q))
+              normalizeLao(u.unitName).includes(q) ||
+              (u.barcode && normalizeLao(u.barcode).includes(q))
           ))
       );
     });
@@ -352,14 +361,28 @@ export default function ProductsView({
       {/* 2. Search Bar & Barcode Scanner Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
         <div className="relative w-full sm:w-96">
-          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
+            ref={searchInputRef}
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ, ໝວດໝູ່ ຫຼື ສະແກນບາໂຄດ..."
-            className="w-full pl-9 pr-24 py-2.5 sm:py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium shadow-2xs min-h-[44px] sm:min-h-0"
+            className="w-full pl-9 pr-32 py-2.5 sm:py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium shadow-2xs min-h-[44px] sm:min-h-0"
           />
+
+          {/* Quick Clear 'X' Button - placed inside right corner before scanner button */}
+          {searchTerm.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="absolute right-22 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-all cursor-pointer flex items-center justify-center active:scale-90"
+              title="ລຶບການຄົ້ນຫາ (Clear search)"
+            >
+              <XCircle size={17} weight="fill" />
+            </button>
+          )}
+
           {/* Barcode / Camera Button inside Search Bar */}
           <button
             type="button"
