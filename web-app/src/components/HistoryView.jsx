@@ -204,17 +204,20 @@ export default function HistoryView({
         paddingBottom: 'max(5.5rem, calc(4.5rem + env(safe-area-inset-bottom, 0px)))',
       }}
     >
-      {/* Top Header Bar */}
-      <div className="flex items-center justify-between pb-3 sm:pb-3.5 border-b border-slate-200/80 mb-3 sm:mb-4 gap-2.5 sm:gap-3 shrink-0">
+      {/* Top Header Bar (Standardized matching GRN) */}
+      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-3 sm:mb-4 flex items-center justify-between gap-2.5 sm:gap-3 shrink-0 shadow-2xs">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0">
             <ClockCounterClockwise size={20} className="sm:w-5 sm:h-5" weight="duotone" />
           </div>
           <div className="min-w-0">
             <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span className="truncate">ປະຫວັດບິນຂາຍ & ໜີ້ສິນ</span>
+              <span className="truncate">
+                <span className="sm:hidden">ປະຫວັດບິນຂາຍ</span>
+                <span className="hidden sm:inline">ປະຫວັດບິນຂາຍ & ໜີ້ສິນ</span>
+              </span>
               <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
-                {transactions.length}
+                {transactions.length} ບິນ
               </span>
             </h2>
             <p className="text-[11.5px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block truncate">
@@ -232,7 +235,7 @@ export default function HistoryView({
             title="ໂຫຼດຂໍ້ມູນຄືນຈາກ Supabase"
           >
             <ArrowClockwise size={15} className={isLoading ? 'animate-spin' : ''} weight="bold" />
-            <span className="hidden sm:inline">ໂຫຼດຄືນ</span>
+            <span className="hidden sm:inline">ຣີເຟຣຊ</span>
           </button>
         </div>
       </div>

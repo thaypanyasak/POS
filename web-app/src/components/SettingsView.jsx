@@ -148,7 +148,10 @@ export default function SettingsView({
     try {
       const res = await liveUpdater.checkForUpdates();
       if (res) {
-        onAlert?.('ກວດພົບເວີຊັນໃໝ່ ແລະ ດາວໂຫຼດສຳເລັດ! ກະລຸນາກົດນຳໃຊ້ເພື່ອໂຫຼດລະບົບໃໝ່.', 'ອັບເດດສຳເລັດ', 'success');
+        onAlert?.('ກວດພົບເວີຊັນໃໝ່ ແລະ ດາວໂຫຼດສຳເລັດ! ລະບົບກຳລັງໂຫຼດເວີຊັນໃໝ່...', 'ອັບເດດສຳເລັດ', 'success');
+        setTimeout(async () => {
+          await liveUpdater.applyUpdate(res);
+        }, 1200);
       } else {
         onAlert?.('ແອັບຂອງທ່ານເປັນເວີຊັນລ້າສຸດແລ້ວ!', 'ຂໍ້ມູນ', 'info');
       }

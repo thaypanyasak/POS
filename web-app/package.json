@@ -11,8 +11,10 @@
     "ota:deploy": "vite build && npx @capgo/cli@latest bundle upload --channel=production --auto-bump=minor --apikey=7d88a2a7-471f-4175-be14-30353ccb8ee3"
   },
   "dependencies": {
+    "@capacitor-mlkit/barcode-scanning": "^8.2.1",
     "@capacitor/cli": "^8.5.3",
     "@capacitor/core": "^8.5.3",
+    "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.5.3",
     "@capgo/capacitor-updater": "^8.53.0",
     "@deedarb/capacitor-tcp-socket": "^8.3.2",

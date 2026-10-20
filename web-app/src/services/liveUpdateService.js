@@ -69,7 +69,18 @@ class LiveUpdateManager {
       }
 
       // Trường hợp 2: Kiểm tra tự động qua channel Capgo mặc định
-      // Nếu có cài đặt app_id và channel trong config
+      // Gọi getLatest() để lấy bundle mới nhất từ Capgo Cloud và tải về
+      const latestBundle = await CapacitorUpdater.getLatest();
+      console.log('📦 [LiveUpdate] Remote latest bundle info:', latestBundle);
+      if (latestBundle && latestBundle.url) {
+        if (onProgress) onProgress({ status: 'downloading', percent: 20 });
+        const res = await CapacitorUpdater.download({
+          url: latestBundle.url,
+          version: latestBundle.version,
+        });
+        if (onProgress) onProgress({ status: 'ready', percent: 100 });
+        return res;
+      }
       return null;
     } catch (err) {
       console.error('❌ [LiveUpdate] Update check error:', err);

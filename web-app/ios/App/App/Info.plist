@@ -64,6 +64,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>ແອັບຕ້ອງການເຂົ້າເຖິງກ້ອງຖ່າຍຮູບເພື່ອສະແກນບາໂຄດສິນຄ້າ</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 </dict>
