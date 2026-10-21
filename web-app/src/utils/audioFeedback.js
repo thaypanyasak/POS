@@ -141,7 +141,166 @@ export function playErrorBeep() {
   } catch (_) {}
 }
 
+/**
+ * Play rich, satisfying chime when adding item manually to cart
+ * Tone: Warm ascending dual-tone (1175Hz -> 1760Hz), rich bell envelope, ~130ms duration
+ * Haptic: 45ms medium tap
+ */
+export function playAddToCartBeep() {
+  try {
+    const ctx = getAudioContext();
+    if (ctx) {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle'; // Richer, warm acoustic tone
+      osc.frequency.setValueAtTime(1175, now); // D6
+      osc.frequency.exponentialRampToValueAtTime(1760, now + 0.05); // A6
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.32, now + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.14);
+    }
+  } catch (err) {
+    console.debug('[audioFeedback] playAddToCartBeep muted:', err);
+  }
+
+  try {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(45);
+    }
+  } catch (_) {}
+}
+
+/**
+ * Play bold descending tone when removing/deleting an item from cart
+ * Tone: Distinctive descending double-pop (780Hz -> 390Hz), ~150ms duration
+ * Haptic: 70ms crisp tap
+ */
+export function playRemoveFromCartBeep() {
+  try {
+    const ctx = getAudioContext();
+    if (ctx) {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(780, now);
+      osc.frequency.exponentialRampToValueAtTime(390, now + 0.12);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.28, now + 0.006);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.16);
+    }
+  } catch (err) {
+    console.debug('[audioFeedback] playRemoveFromCartBeep muted:', err);
+  }
+
+  try {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(70);
+    }
+  } catch (_) {}
+}
+
+/**
+ * Play subtle, gentle tick when increasing or decreasing quantity
+ * Tone: Soft, light, high-frequency subtle blip (2400Hz/2800Hz), ~35ms duration (non-intrusive)
+ * Haptic: 15ms micro-tap
+ */
+export function playQuantityStepBeep(delta = 1) {
+  try {
+    const ctx = getAudioContext();
+    if (ctx) {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      const baseFreq = delta >= 0 ? 2400 : 1900;
+      const targetFreq = delta >= 0 ? 2800 : 1600;
+
+      osc.frequency.setValueAtTime(baseFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(targetFreq, now + 0.025);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.003); // Soft volume
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.038);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.04);
+    }
+  } catch (err) {
+    console.debug('[audioFeedback] playQuantityStepBeep muted:', err);
+  }
+
+  try {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(15);
+    }
+  } catch (_) {}
+}
+
+/**
+ * Play gentle, smooth bubble tone when switching unit (Thùng / Pack / Lẻ)
+ * Tone: Smooth warm chirp (1400Hz -> 1650Hz), ~65ms duration
+ * Haptic: 25ms light tap
+ */
+export function playUnitChangeBeep() {
+  try {
+    const ctx = getAudioContext();
+    if (ctx) {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1350, now);
+      osc.frequency.exponentialRampToValueAtTime(1750, now + 0.045);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.065);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.07);
+    }
+  } catch (err) {
+    console.debug('[audioFeedback] playUnitChangeBeep muted:', err);
+  }
+
+  try {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(25);
+    }
+  } catch (_) {}
+}
+
 export default {
   playSuccessBeep,
   playErrorBeep,
+  playAddToCartBeep,
+  playRemoveFromCartBeep,
+  playQuantityStepBeep,
+  playUnitChangeBeep,
 };

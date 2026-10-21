@@ -22,7 +22,7 @@ import { Haptics, NotificationType } from '@capacitor/haptics';
 export function useHardwareBarcodeScanner({
   onScan,
   enabled = true,
-  maxInterval = 35, // Strict threshold distinguishing scanner burst from human typing
+  maxInterval = 30, // Strict threshold distinguishing scanner burst (<30ms between keys) from human typing
   minLength = 3,
   preventDefaultOnEnter = true,
   cleanActiveInput = true,

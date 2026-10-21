@@ -839,22 +839,22 @@ export default function ProductFormModal({
                 </div>
               </div>
 
-              {/* TIER 3: CARTON (Carton / Box / Sack - Top Tier) */}
+              {/* TIER 1: CARTON (Carton / Box / Sack - Top Tier) */}
               <div
-                className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all ${
-                  enableCarton ? 'bg-white border-amber-200/80 shadow-2xs ring-1 ring-amber-400/20' : 'bg-slate-50/70 border-slate-200 opacity-60'
+                className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all duration-200 ${
+                  enableCarton ? 'bg-white border-amber-200/60 shadow-2xs' : 'bg-slate-50/70 border-slate-200 opacity-50'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-md bg-amber-100/70 text-amber-900 border border-amber-200/50 flex items-center justify-center font-black text-[11px]">
+                    <div className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 flex items-center justify-center font-black text-[11px] shrink-0">
                       1
                     </div>
                     <div>
-                      <span className="font-extrabold text-xs text-slate-800 block">
+                      <span className="font-extrabold text-xs text-slate-800 block leading-snug">
                         ລະດັບ 1: ຂາຍຍົກແກັດ / ລັງ / ເປົາ (Carton)
                       </span>
-                      <span className="text-[9.5px] text-slate-400 hidden xs:block">
+                      <span className="text-[9.5px] text-slate-400 hidden xs:block leading-relaxed">
                         ຕົວຢ່າງ: ແກັດ, ລັງ, ເປົາ/ກະສອບ, ກ່ອງໃຫຍ່...
                       </span>
                     </div>
@@ -880,9 +880,9 @@ export default function ProductFormModal({
                           key={s}
                           type="button"
                           onClick={() => setCartonUnitName(s)}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer leading-relaxed ${
                             cartonUnitName === s
-                              ? 'bg-amber-500 text-white shadow-2xs'
+                              ? 'bg-amber-600 text-white shadow-2xs'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
                         >
@@ -1058,20 +1058,20 @@ export default function ProductFormModal({
 
               {/* TIER 2: PACK (Pack / Bundle - Middle Tier) */}
               <div
-                className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all ${
-                  enablePack ? 'bg-white border-sky-200/90 shadow-2xs ring-1 ring-sky-500/10' : 'bg-slate-50/70 border-slate-200 opacity-60'
+                className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all duration-200 ${
+                  enablePack ? 'bg-white border-indigo-200/60 shadow-2xs' : 'bg-slate-50/70 border-slate-200 opacity-50'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-md bg-sky-100 text-sky-800 flex items-center justify-center font-black text-[11px]">
+                    <div className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-700 flex items-center justify-center font-black text-[11px] shrink-0">
                       2
                     </div>
                     <div>
-                      <span className="font-extrabold text-xs text-slate-800 block">
+                      <span className="font-extrabold text-xs text-slate-800 block leading-snug">
                         ລະດັບ 2: ຂາຍແພັກ (Pack / Bundle)
                       </span>
-                      <span className="text-[9.5px] text-slate-400 hidden xs:block">
+                      <span className="text-[9.5px] text-slate-400 hidden xs:block leading-relaxed">
                         ຕົວຢ່າງ: ແພັກ, ມັດ, ແຕະ, ໂหล...
                       </span>
                     </div>
@@ -1097,9 +1097,9 @@ export default function ProductFormModal({
                           key={s}
                           type="button"
                           onClick={() => setPackUnitName(s)}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer leading-relaxed ${
                             packUnitName === s
-                              ? 'bg-sky-600 text-white shadow-2xs'
+                              ? 'bg-indigo-600 text-white shadow-2xs'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
                         >
@@ -1229,22 +1229,22 @@ export default function ProductFormModal({
                 )}
               </div>
 
-              {/* TIER 1: PIECE (Base / Smallest Unit - Bottom Tier) */}
+              {/* TIER 3: PIECE (Base / Smallest Unit - Bottom Tier) */}
               <div
-                className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all ${
-                  enablePiece ? 'bg-white border-teal-200/90 shadow-2xs ring-1 ring-teal-500/10' : 'bg-slate-50/70 border-slate-200 opacity-60'
+                className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all duration-200 ${
+                  enablePiece ? 'bg-white border-teal-200/60 shadow-2xs' : 'bg-slate-50/70 border-slate-200 opacity-50'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-md bg-teal-100 text-teal-800 flex items-center justify-center font-black text-[11px]">
+                    <div className="w-5 h-5 rounded-md bg-teal-50 text-teal-700 flex items-center justify-center font-black text-[11px] shrink-0">
                       3
                     </div>
                     <div>
-                      <span className="font-extrabold text-xs text-slate-800 block">
+                      <span className="font-extrabold text-xs text-slate-800 block leading-snug">
                         ລະດັບ 3: ຂາຍຍ່ອຍ (Base Unit / Piece)
                       </span>
-                      <span className="text-[9.5px] text-slate-400 hidden xs:block">
+                      <span className="text-[9.5px] text-slate-400 hidden xs:block leading-relaxed">
                         ຫົວໜ່ວຍຍ່ອຍສຸດ ເຊັ່ນ: ອັນ, ແກ້ວ, ຖົງ, ກະປ໋ອງ, ຕຸກ, ຊອງ...
                       </span>
                     </div>
@@ -1270,7 +1270,7 @@ export default function ProductFormModal({
                           key={s}
                           type="button"
                           onClick={() => setPieceUnitName(s)}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer leading-relaxed ${
                             pieceUnitName === s
                               ? 'bg-teal-600 text-white shadow-2xs'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'

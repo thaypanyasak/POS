@@ -9,5 +9,9 @@
       "channel": "production",
       "key": "600b29bc-c506-49b6-9356-c8798229b1fe"
     }
+  },
+  "ios": {
+    "scrollEnabled": false,
+    "contentInset": "never"
   }
 }

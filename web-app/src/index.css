@@ -54,7 +54,17 @@ html, body, #root {
   background-color: #f1f5f9;
   color: #0f172a;
   overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* GPU hardware accelerated container & touch scroll isolation */
+.touch-scroll-container {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  transform: translateZ(0);
 }
 
 /* Enforce Noto Sans Lao on all UI and bill elements */

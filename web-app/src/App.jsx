@@ -44,7 +44,14 @@ import ConfirmDialogModal from './components/ConfirmDialogModal';
 
 import { formatDots, parseDots, parseCurrencyInput, formatCompoundStock, getEffectiveUnitPrice, PRICE_TIERS, normalizeLao } from './utils/formatters';
 import { useHardwareBarcodeScanner } from './hooks/useHardwareBarcodeScanner';
-import { playSuccessBeep, playErrorBeep } from './utils/audioFeedback';
+import {
+  playSuccessBeep,
+  playErrorBeep,
+  playAddToCartBeep,
+  playRemoveFromCartBeep,
+  playQuantityStepBeep,
+  playUnitChangeBeep,
+} from './utils/audioFeedback';
 
 export default function App() {
   // Navigation Tabs: 'pos' | 'dashboard' | 'products' | 'history' | 'purchases' | 'sales-by-unit' | 'settings'
@@ -1143,7 +1150,7 @@ export default function App() {
   };
 
   // Cart operations
-  const addToCart = (product, unit, qty = 1) => {
+  const addToCart = (product, unit, qty = 1, options = {}) => {
     const existingIndex = cart.findIndex(
       (item) => item.product.id === product.id && item.unit.id === unit.id
     );
@@ -1163,6 +1170,11 @@ export default function App() {
           customPrice: null,
         },
       ]);
+    }
+
+    // Play rich, satisfying chime when added manually (unless muted by scanner)
+    if (!options?.silent) {
+      playAddToCartBeep();
     }
   };
 
@@ -1194,7 +1206,7 @@ export default function App() {
           };
         }
 
-        addToCart(matched, targetUnit, 1);
+        addToCart(matched, targetUnit, 1, { silent: true });
         playSuccessBeep();
         setActiveMainTab('pos');
       } else {
@@ -1247,6 +1259,9 @@ export default function App() {
       removeFromCart(productId, unitId);
       return;
     }
+    const currentItem = cart.find((item) => item.product.id === productId && item.unit.id === unitId);
+    const delta = currentItem ? newQty - currentItem.quantity : 1;
+
     setCart(
       cart.map((item) => {
         if (item.product.id === productId && item.unit.id === unitId) {
@@ -1262,6 +1277,8 @@ export default function App() {
         return item;
       })
     );
+    // Subtle, gentle tick sound for quantity stepping
+    playQuantityStepBeep(delta);
   };
 
   const toggleCartItemCrateDeposit = (productId, unitId, checked) => {
@@ -1297,6 +1314,8 @@ export default function App() {
 
   const removeFromCart = (productId, unitId) => {
     setCart(cart.filter((item) => !(item.product.id === productId && item.unit.id === unitId)));
+    // Bold, distinctive descending tone for item removal
+    playRemoveFromCartBeep();
   };
 
   const changeCartItemUnit = (productId, oldUnitId, newUnit) => {
@@ -1334,6 +1353,9 @@ export default function App() {
       };
       return updated;
     });
+
+    // Gentle, pleasant bubble tone for switching between carton/pack/piece
+    playUnitChangeBeep();
   };
 
   const cartSubtotal = useMemo(() => {
@@ -2199,7 +2221,7 @@ export default function App() {
       />
 
       {/* 2. MAIN VIEW AREA */}
-      <div className="flex-1 h-full h-dvh min-h-0 overflow-hidden flex flex-col min-w-0 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:!pb-0">
+      <div className="flex-1 h-full h-dvh min-h-0 overflow-hidden flex flex-col min-w-0 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:!pb-0 touch-scroll-container">
         {activeMainTab === 'pos' && (
           <PosScreen
             categories={categories}

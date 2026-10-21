@@ -193,8 +193,8 @@ export default function PosScreen({
         };
       }
 
-      // Automatically add product or increment +1 in cart
-      addToCart(matched, targetUnit, 1);
+      // Automatically add product or increment +1 in cart (barcode scan uses playSuccessBeep)
+      addToCart(matched, targetUnit, 1, { silent: true });
       playSuccessBeep();
       setScannerOpen(false);
       setSearchQuery('');

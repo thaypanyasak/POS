@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { toCanvas } from 'html-to-image';
 import { canvasToEscPosRaster, uint8ArrayToBase64, ESC_INIT, ESC_DRAWER_KICK } from './escposGenerator';
+import { TcpSocket } from '@deedarb/capacitor-tcp-socket';
 
 /**
  * Storage keys for POS printer configuration
@@ -51,34 +52,28 @@ export function savePrinterConfig(newConfig) {
 }
 
 /**
- * Lazily load Capacitor TcpSocket plugin if available on Native platform
+ * Helper to ensure TcpSocket is accessible
  */
-async function getTcpSocketPlugin() {
-  if (!Capacitor.isNativePlatform()) return null;
-  try {
-    const mod = await import('@deedarb/capacitor-tcp-socket');
-    return mod.TcpSocket || null;
-  } catch (err) {
-    console.warn('[printerService] Could not import @deedarb/capacitor-tcp-socket:', err);
-    return null;
-  }
+function getTcpSocketPlugin() {
+  return TcpSocket || null;
 }
 
 /**
  * Send raw binary byte array over TCP Socket directly to thermal printer
- * Enforces a strict JavaScript timeout to ensure UI never hangs if network is unreachable
+ * Enforces a strict JavaScript timeout (default 2.5s) to ensure UI never hangs if network/printer is unreachable
  */
-export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 3.5 } = {}) {
+export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 2.5 } = {}) {
   const cleanIp = String(ip || '').trim();
   if (!cleanIp) {
     throw new Error('ຍັງບໍ່ໄດ້ກຳນົດ IP ເຄື່ອງພິມ (Printer IP is empty)');
   }
 
   const targetPort = parseInt(port, 10) || 9100;
-  const timeoutMs = Math.max(1500, Math.round(timeoutSec * 1000));
+  const timeoutMs = Math.max(1000, Math.min(3000, Math.round((timeoutSec || 2) * 1000)));
+  const timeoutSecondsInt = Math.max(1, Math.round(timeoutMs / 1000));
 
-  const TcpSocket = await getTcpSocketPlugin();
-  if (!TcpSocket) {
+  const socketPlugin = getTcpSocketPlugin();
+  if (!socketPlugin) {
     throw new Error('Native TCP Socket plugin ບໍ່ພ້ອມໃຊ້ງານໃນອຸປະກອນນີ້ (Capacitor Native only)');
   }
 
@@ -100,25 +95,25 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 3.
 
   try {
     const connectRes = await withTimeout(
-      TcpSocket.connect({
+      socketPlugin.connect({
         ipAddress: cleanIp,
         port: targetPort,
-        timeout: Math.ceil(timeoutMs / 1000),
+        timeout: timeoutSecondsInt,
       }),
       timeoutMs,
-      `ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${cleanIp}:${targetPort} (${timeoutMs / 1000}s). ກະລຸນາກວດສອບເຄື່ອງພິມ.`
+      `ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${cleanIp}:${targetPort} (ໝົດເວລາ ${timeoutMs / 1000}s). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.`
     );
 
     client = connectRes?.client;
     if (client === undefined || client === null) {
-      throw new Error(`Failed to obtain client handle for printer socket ${cleanIp}:${targetPort}`);
+      throw new Error(`ບໍ່ສາມາດສ້າງການເຊື່ອມຕໍ່ກັບເຄື່ອງພິມ ${cleanIp}:${targetPort}`);
     }
 
     await withTimeout(
-      TcpSocket.send({
+      socketPlugin.send({
         client,
         data: base64Data,
-        timeout: Math.ceil(timeoutMs / 1000),
+        timeout: timeoutSecondsInt,
       }),
       timeoutMs,
       `ໝົດເວລາສົ່ງຂໍ້ມູນໄປຍັງເຄື່ອງພິມ ${cleanIp}:${targetPort}`
@@ -127,20 +122,82 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 3.
     return { success: true, message: `Sent ${uint8Bytes.length} bytes to ${cleanIp}:${targetPort}` };
   } catch (err) {
     console.error(`[printerService] Error sending to printer ${cleanIp}:${targetPort}:`, err);
-    throw err;
+    throw new Error(err.message || `ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${cleanIp}:${targetPort}`);
   } finally {
     if (client !== null && client !== undefined) {
       try {
-        await TcpSocket.disconnect({ client });
+        socketPlugin.disconnect({ client }).catch(() => {});
       } catch (_) {}
     }
   }
 }
 
 /**
- * Test connection to printer IP & Port (sends ESC @ initialization ping)
+ * Render a high-resolution 576px Monochrome test receipt onto an HTML5 Canvas
+ * Draws MeiiShop logo text, Lao typography, connection metrics, and alignment grid
  */
-export async function testPrinterConnection(ip, port) {
+export function createTestReceiptCanvas(ip, port) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 576; // Standard 80mm ESC/POS width
+  canvas.height = 420;
+  const ctx = canvas.getContext('2d');
+
+  // Solid crisp white background
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // High-contrast black graphics & text
+  ctx.fillStyle = '#000000';
+  ctx.textAlign = 'center';
+
+  // Store Header
+  ctx.font = 'bold 36px "Noto Sans Lao", Outfit, sans-serif';
+  ctx.fillText('MEIISHOP POS', 288, 55);
+
+  ctx.font = 'bold 24px "Noto Sans Lao", Outfit, sans-serif';
+  ctx.fillText('ໃບທົດສອບເຄື່ອງພິມ (PRINTER TEST)', 288, 95);
+
+  ctx.font = '18px "Noto Sans Lao", Outfit, sans-serif';
+  ctx.fillText('EasyPrint ES-8803WA (TCP Socket 9100)', 288, 128);
+
+  // Separator Line
+  ctx.beginPath();
+  ctx.lineWidth = 2;
+  ctx.moveTo(30, 145);
+  ctx.lineTo(546, 145);
+  ctx.stroke();
+
+  // Test Details (Left / Right aligned)
+  ctx.textAlign = 'left';
+  ctx.font = '20px "Noto Sans Lao", Outfit, sans-serif';
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('lo-LA') + ' ' + now.toLocaleTimeString();
+
+  ctx.fillText(`ວັນທີ & ເວລາ: ${dateStr}`, 40, 185);
+  ctx.fillText(`IP ເຄື່ອງພິມ: ${ip}:${port}`, 40, 220);
+  ctx.fillText(`ລະບົບຕົວໜັງສື: Noto Sans Lao ພາສາລາວ 100%`, 40, 255);
+  ctx.fillText(`ຄວາມກວ້າງເຈ້ຍ: 80mm (576 dots monochrome)`, 40, 290);
+  ctx.fillText(`ສະຖານະ: ເຊື່ອມຕໍ່ສຳເລັດ • ພ້ອມໃຊ້ງານຂາຍ`, 40, 325);
+
+  // Separator Line
+  ctx.beginPath();
+  ctx.lineWidth = 2;
+  ctx.moveTo(30, 345);
+  ctx.lineTo(546, 345);
+  ctx.stroke();
+
+  // Footer
+  ctx.textAlign = 'center';
+  ctx.font = 'italic 18px "Noto Sans Lao", Outfit, sans-serif';
+  ctx.fillText('ຂອບໃຈທີ່ເລືອກໃຊ້ລະບົບ MeiiShop Cloud POS', 288, 380);
+
+  return canvas;
+}
+
+/**
+ * Test connection to printer IP & Port (sends ESC @ initialization ping or full test print slip)
+ */
+export async function testPrinterConnection(ip, port, { printSlip = true } = {}) {
   const config = getPrinterConfig();
   const targetIp = (ip || config.ip || '').trim();
   const targetPort = parseInt(port || config.port, 10) || 9100;
@@ -149,8 +206,19 @@ export async function testPrinterConnection(ip, port) {
     throw new Error('ກະລຸນາປ້ອນ IP ເຄື່ອງພິມກ່ອນທົດສອບ.');
   }
 
+  if (printSlip) {
+    // Render 576px canvas with Lao text and convert to 1-bit monochrome raster
+    const testCanvas = createTestReceiptCanvas(targetIp, targetPort);
+    const escPosBytes = canvasToEscPosRaster(testCanvas, {
+      kickCashDrawer: config.drawerKick,
+      cutPaper: config.autoCut,
+      luminanceThreshold: 185,
+    });
+    return await sendRawBytesViaTcp(targetIp, targetPort, escPosBytes, { timeoutSec: 2.5 });
+  }
+
   const initCmd = new Uint8Array(ESC_INIT);
-  return await sendRawBytesViaTcp(targetIp, targetPort, initCmd, { timeoutSec: 3 });
+  return await sendRawBytesViaTcp(targetIp, targetPort, initCmd, { timeoutSec: 2.5 });
 }
 
 /**
@@ -459,7 +527,7 @@ export async function printReceiptSmart({
     const canvasTimeoutPromise = new Promise((_, reject) => {
       canvasTimer = setTimeout(() => {
         reject(new Error('ໝົດເວລາ Render ຮູບໃບບິນ (Canvas Timeout)'));
-      }, 4000);
+      }, 2500);
     });
 
     try {
@@ -486,8 +554,8 @@ export async function printReceiptSmart({
         luminanceThreshold: 185,
       });
 
-      // Transmit directly to hardware thermal printer with strict 3.5s timeout
-      await sendRawBytesViaTcp(rawIp, config.port, escPosBytes, { timeoutSec: 3.5 });
+      // Transmit directly to hardware thermal printer with strict 2.5s fail-fast timeout
+      await sendRawBytesViaTcp(rawIp, config.port, escPosBytes, { timeoutSec: 2.5 });
 
       return {
         success: true,
@@ -509,7 +577,7 @@ export async function printReceiptSmart({
       }
 
       // DO NOT HANG: Throw clear error so UI stops spinner and displays error immediately!
-      throw new Error(`ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (${rawIp}:${config.port || 9100}). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ເຊື່ອມຕໍ່ເຄືອຂ່າຍ Wi-Fi ດຽວກັນ.`);
+      throw new Error(err.message || `ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (${rawIp}:${config.port || 9100}). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ເຊື່ອມຕໍ່ເຄືອຂ່າຍ Wi-Fi ດຽວກັນ.`);
     }
   }
 

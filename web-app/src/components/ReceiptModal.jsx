@@ -44,13 +44,26 @@ export default function ReceiptModal({
     setIsPrinting(true);
     setPrintFeedback(null);
 
+    // Top-level safety timeout (max 4.5 seconds for complete render + print)
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error('ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (Timeout). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.')
+          ),
+        4500
+      )
+    );
+
     try {
-      const res = await printReceiptSmart({
+      const printPromise = printReceiptSmart({
         elementId: 'thermal-receipt-print-area',
         receipt,
         paperWidth,
         allowFallback: !Capacitor.isNativePlatform(),
       });
+
+      const res = await Promise.race([printPromise, timeoutPromise]);
 
       if (res && res.success) {
         setPrintFeedback({

@@ -127,7 +127,25 @@ export default function SettingsView({
         return;
       }
       setIsTestingPrinter(true);
-      await testPrinterConnection(printerIp.trim(), printerPort);
+
+      // Top-level fail-safe timeout guard (max 3 seconds)
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                `ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${printerIp.trim()}:${printerPort} (Timeout 3s). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.`
+              )
+            ),
+          3000
+        )
+      );
+
+      await Promise.race([
+        testPrinterConnection(printerIp.trim(), printerPort),
+        timeoutPromise,
+      ]);
+
       playSuccessBeep();
       onAlert?.(`ເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${printerIp.trim()}:${printerPort} ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
     } catch (err) {

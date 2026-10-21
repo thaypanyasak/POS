@@ -152,15 +152,14 @@ export default function BarcodeScannerModal({
       // Target camera: specific deviceId if discovered, or environment fallback
       const cameraTarget = chosenCameraId ? chosenCameraId : { facingMode: 'environment' };
 
-      // 2. Instantiate a fresh Html5Qrcode instance
+      // 2. Instantiate a fresh Html5Qrcode instance with targetedFormats:
+      // Strictly restricted to EAN-13, EAN-8, CODE-128, UPC-A, and QR_CODE for maximum decode speed & accuracy
       const html5QrCode = new Html5Qrcode(containerId.current, {
         formatsToSupport: [
           Html5QrcodeSupportedFormats.EAN_13,
           Html5QrcodeSupportedFormats.EAN_8,
           Html5QrcodeSupportedFormats.CODE_128,
           Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.CODE_39,
           Html5QrcodeSupportedFormats.QR_CODE,
         ],
         useBarCodeDetectorIfSupported: true,
@@ -169,16 +168,15 @@ export default function BarcodeScannerModal({
 
       scannerRef.current = html5QrCode;
 
-      // 3. Restrict scanning bounding box to the center reticle (speeds up decode 3x)
+      // 3. Ultra-wide 90-95% full-frame scanning area for effortless scanning from 20-40cm
       const config = {
         fps: 25,
         qrbox: (viewfinderWidth, viewfinderHeight) => {
-          // Standard retail horizontal barcode rectangle matching reticle UI
-          const w = Math.min(Math.floor(viewfinderWidth * 0.78), 280);
-          const h = Math.min(Math.floor(viewfinderHeight * 0.56), 200);
+          const w = Math.floor(viewfinderWidth * 0.92);
+          const h = Math.floor(viewfinderHeight * 0.75);
           return {
-            width: Math.max(180, w),
-            height: Math.max(140, h),
+            width: Math.max(220, w),
+            height: Math.max(160, h),
           };
         },
         aspectRatio: 1.0,
@@ -218,13 +216,18 @@ export default function BarcodeScannerModal({
 
       ensureVideoElementAttributes(containerId.current);
 
-      // 5. Fine-tune continuous auto focus if supported
+      // 5. Fine-tune continuous auto focus & auto-zoom (20-40cm distance) if supported
       try {
-        await html5QrCode.applyVideoConstraints({
-          advanced: [
-            { focusMode: 'continuous' }
-          ]
-        });
+        const capabilities = html5QrCode.getRunningTrackCapabilities?.() || {};
+        const constraints = {
+          advanced: [{ focusMode: 'continuous' }]
+        };
+        // If zoom is supported, apply slight optical zoom for 20-40cm reading
+        if (capabilities.zoom && capabilities.zoom.min !== undefined && capabilities.zoom.max !== undefined) {
+          const optimalZoom = Math.min(capabilities.zoom.max, Math.max(capabilities.zoom.min, 1.25));
+          constraints.advanced.push({ zoom: optimalZoom });
+        }
+        await html5QrCode.applyVideoConstraints(constraints);
       } catch (_) {}
 
       // 6. Check for flashlight / torch support
@@ -378,18 +381,18 @@ export default function BarcodeScannerModal({
             className="w-full h-full [&_video]:w-full [&_video]:h-full [&_video]:object-cover"
           />
 
-          {/* Aiming Reticle Framing Box ("Khung vuông barcode như cũ") */}
+          {/* Aiming Reticle Framing Box - Expanded Full-Frame Recognition Zone (90-95%) */}
           {!errorMsg && !isInitializing && !showManualInput && (
-            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4">
+            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-3">
               {/* Outer Shadow Mask creates dark cutout with crisp transparent center reticle */}
               <div
-                className="relative w-[78%] h-[56%] max-w-[280px] max-h-[200px] rounded-2xl border-2 border-teal-400 shadow-[0_0_0_9999px_rgba(15,23,42,0.6),0_0_24px_rgba(20,184,166,0.35)] flex items-center justify-center overflow-hidden"
+                className="relative w-[92%] h-[72%] rounded-2xl border-2 border-teal-400 shadow-[0_0_0_9999px_rgba(15,23,42,0.55),0_0_24px_rgba(20,184,166,0.35)] flex items-center justify-center overflow-hidden"
               >
                 {/* 4 High-Visibility Rounded Corner Accents */}
-                <div className="absolute top-0 left-0 w-5 h-5 border-t-3 border-l-3 border-teal-400 rounded-tl-xl" />
-                <div className="absolute top-0 right-0 w-5 h-5 border-t-3 border-r-3 border-teal-400 rounded-tr-xl" />
-                <div className="absolute bottom-0 left-0 w-5 h-5 border-b-3 border-l-3 border-teal-400 rounded-bl-xl" />
-                <div className="absolute bottom-0 right-0 w-5 h-5 border-b-3 border-r-3 border-teal-400 rounded-br-xl" />
+                <div className="absolute top-0 left-0 w-6 h-6 border-t-3 border-l-3 border-teal-400 rounded-tl-xl" />
+                <div className="absolute top-0 right-0 w-6 h-6 border-t-3 border-r-3 border-teal-400 rounded-tr-xl" />
+                <div className="absolute bottom-0 left-0 w-6 h-6 border-b-3 border-l-3 border-teal-400 rounded-bl-xl" />
+                <div className="absolute bottom-0 right-0 w-6 h-6 border-b-3 border-r-3 border-teal-400 rounded-br-xl" />
 
                 {/* Subtle Center Focus Target */}
                 <div className="w-1.5 h-1.5 rounded-full bg-teal-400/60 shadow-[0_0_6px_#2dd4bf]" />
@@ -399,9 +402,9 @@ export default function BarcodeScannerModal({
               </div>
 
               {/* Barcode Alignment Guide */}
-              <div className="mt-3.5 flex items-center gap-1.5 px-3 py-1 bg-slate-900/90 border border-white/10 rounded-full text-white/95 text-[11px] font-bold shadow-lg backdrop-blur-md">
+              <div className="mt-2.5 flex items-center gap-1.5 px-3 py-1 bg-slate-900/90 border border-white/10 rounded-full text-white/95 text-[11px] font-bold shadow-lg backdrop-blur-md">
                 <Barcode size={15} weight="bold" className="text-teal-400" />
-                <span>ຈັດບາໂຄດໃຫ້ຕົງກັບກອບສີ່ຫຼ່ຽມ</span>
+                <span>ພື້ນທີ່ສະແກນເຕັມຈໍ (ໄລຍະ 20-40cm)</span>
               </div>
             </div>
           )}
