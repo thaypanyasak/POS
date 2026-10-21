@@ -72,14 +72,29 @@ html, body, #root {
   overscroll-behavior: none;
   -webkit-overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-/* GPU hardware accelerated container & touch scroll isolation */
+/* Eliminate 300ms touch delay across all interactive elements */
+button, a, input, select, textarea, [role="button"] {
+  touch-action: manipulation;
+}
+
+/* GPU hardware accelerated container & touch scroll isolation for 60fps-120fps */
 .touch-scroll-container {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-  transform: translateZ(0);
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  will-change: scroll-position;
+}
+
+/* Shimmer animation for Skeleton Loaders */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 /* Enforce Noto Sans Lao on all UI and bill elements */

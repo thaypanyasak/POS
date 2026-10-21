@@ -46,6 +46,7 @@ import { queryClient } from '../../services/queryClient';
 import BarcodeScannerModal from '../../components/BarcodeScannerModal';
 import MultiProductGRNForm from '../../components/inventory/MultiProductGRNForm';
 import { playUnitChangeBeep, playActionClickBeep, playSuccessBeep, playErrorBeep } from '../../utils/audioFeedback';
+import { PurchasesListSkeleton } from '../../components/common/SkeletonLoaders';
 
 export default function PurchasesView({
   purchaseOrders = [],
@@ -1118,7 +1119,9 @@ export default function PurchasesView({
       {/* 1.3. MODERN GRN DATA LIST (CARDS ON MOBILE, TABLE ON DESKTOP) */}
       {/* ============================================================== */}
       <div className="flex-1 overflow-y-auto px-3 sm:px-6 pb-6">
-        {filteredOrders.length === 0 ? (
+        {isLoading && purchaseOrders.length === 0 ? (
+          <PurchasesListSkeleton count={5} />
+        ) : filteredOrders.length === 0 ? (
           <div className="h-64 flex flex-col items-center justify-center text-center p-6 bg-white rounded-3xl border border-dashed border-slate-200">
             <Package size={44} className="text-slate-300 mb-2" weight="duotone" />
             <p className="text-xs font-bold text-slate-600">ບໍ່ພົບລາຍການຮັບສິນຄ້າເຂົ້າສາງ</p>

@@ -18,6 +18,7 @@ import {
 } from '@phosphor-icons/react';
 import { formatKip, formatBaht, formatDots, normalizeLao } from '../../utils/formatters';
 import { playUnitChangeBeep, playActionClickBeep } from '../../utils/audioFeedback';
+import { SalesByUnitSkeleton } from '../common/SkeletonLoaders';
 
 /**
  * Determine unit tier level:
@@ -717,7 +718,9 @@ export default function SalesByUnitReportView({
               </thead>
 
               <tbody className="divide-y divide-[#F1F5F9]">
-                {displayedProducts.length === 0 ? (
+                {isLoading && transactions.length === 0 ? (
+                  <SalesByUnitSkeleton count={8} />
+                ) : displayedProducts.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-12 text-center">
                       <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">

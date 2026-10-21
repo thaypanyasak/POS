@@ -22,6 +22,7 @@ import {
 import { formatKip, normalizeLao } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
 import { playUnitChangeBeep, playActionClickBeep, playErrorBeep } from '../utils/audioFeedback';
+import { HistoryListSkeleton } from './common/SkeletonLoaders';
 
 export default function HistoryView({
   transactions = [],
@@ -519,9 +520,14 @@ export default function HistoryView({
         </div>
       </div>
 
-      {/* 3. MOBILE VIEW (< 768px): Touch-Optimized Cards */}
-      <div className="md:hidden flex flex-col gap-3 pb-6">
-        {filteredTransactions.map((tx) => {
+      {/* Skeleton Loading State */}
+      {isLoading && transactions.length === 0 ? (
+        <HistoryListSkeleton count={6} />
+      ) : (
+        <>
+          {/* 3. MOBILE VIEW (< 768px): Touch-Optimized Cards */}
+          <div className="md:hidden flex flex-col gap-3 pb-6">
+            {filteredTransactions.map((tx) => {
           const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
           const total = Number(tx.grandTotal) || 0;
           const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
@@ -960,13 +966,23 @@ export default function HistoryView({
           </tbody>
         </table>
 
-        {filteredTransactions.length === 0 && (
+        {!isLoading && filteredTransactions.length === 0 && (
           <div className="py-20 text-center text-slate-400">
             <Receipt size={40} className="mx-auto mb-2 opacity-50" />
             <p className="text-xs font-bold">ບໍ່ພົບລາຍການບິນຕາມເງື່ອນໄຂທີ່ເລືອກ</p>
           </div>
         )}
       </div>
+
+      {/* Mobile Empty State */}
+      {!isLoading && filteredTransactions.length === 0 && (
+        <div className="md:hidden py-16 text-center text-slate-400 bg-white rounded-2xl border border-slate-200 mb-6">
+          <Receipt size={36} className="mx-auto mb-2 opacity-50" />
+          <p className="text-xs font-bold">ບໍ່ພົບລາຍການບິນຕາມເງື່ອນໄຂທີ່ເລືອກ</p>
+        </div>
+      )}
+    </>
+  )}
 
       {/* Customer Debt Payment Modal */}
       {debtModalTx && (

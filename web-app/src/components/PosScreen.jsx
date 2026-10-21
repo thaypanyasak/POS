@@ -22,12 +22,15 @@ import {
   CaretDown,
   XCircle,
   X,
+  ArrowClockwise,
+  ArrowsClockwise,
 } from '@phosphor-icons/react';
 import { formatKip, formatCompoundStock, formatStockDisplay, formatNegativeStockCompound, formatDots, getEffectiveUnitPrice, PRICE_TIERS } from '../utils/formatters';
 import PriceOverrideModal from './PriceOverrideModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import QuotationPreviewModal from './inventory/QuotationPreviewModal';
 import ExchangeRateBadge from './common/ExchangeRateBadge';
+import { PosProductGridSkeleton } from './common/SkeletonLoaders';
 import queryClient from '../services/queryClient';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 import {
@@ -149,6 +152,8 @@ export default function PosScreen({
   onCancelEditOrder,
   exchangeRate = 0,
   setExchangeRate,
+  isLoading = false,
+  onRefreshProducts,
 }) {
   // Modal for editing line item price (familiar customer / price override)
   const [overrideModalItem, setOverrideModalItem] = useState(null);
@@ -1113,8 +1118,8 @@ export default function PosScreen({
 
         {/* Top Control Bar: Search & Category tabs */}
         <div className="p-2.5 bg-white border-b border-slate-200/80 flex flex-col gap-2 shrink-0">
-          {/* Thanh tìm kiếm nhanh kết hợp nút Quét mã vạch cao 44px, nhạy, dễ bấm */}
-          <div className="flex items-center gap-2">
+          {/* Thanh tìm kiếm nhanh kết hợp nút Quét mã vạch cao 44px, nút Tỷ giá (ẩn mobile) và nút Refresh (hiển thị mobile & tablet) */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <div className="relative flex-1 h-11">
               <MagnifyingGlass
                 size={18}
@@ -1148,218 +1153,235 @@ export default function PosScreen({
                 playActionClickBeep();
                 setScannerOpen(true);
               }}
-              className="h-11 px-3.5 rounded-xl bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white border border-teal-200 shadow-2xs flex items-center gap-1.5 font-bold text-xs sm:text-sm cursor-pointer transition-all active:scale-95 shrink-0"
+              className="h-11 px-3 sm:px-3.5 rounded-xl bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white border border-teal-200 shadow-2xs flex items-center gap-1.5 font-bold text-xs sm:text-sm cursor-pointer transition-all active:scale-95 shrink-0"
               title="ເປີດກ້ອງສະແກນບາໂຄດ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
             >
               <Barcode size={20} weight="bold" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse hidden sm:inline-block" />
               <span className="hidden sm:inline">ສະແກນ</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Hardware Scanner Ready"></span>
             </button>
 
-            {/* Pill Badge hiển thị & điều chỉnh tỷ giá THB/LAK (Point-in-Time Snapshot) */}
-            <ExchangeRateBadge
-              exchangeRate={exchangeRate}
-              onRateUpdated={setExchangeRate}
-              queryClient={queryClient}
-            />
+            {/* Nút Tỷ giá: Ẩn ở chế độ màn hình dọc điện thoại (< 768px/md:flex), giữ nguyên ở iPad / Tablet (>= 768px) */}
+            <div className="hidden md:flex items-center shrink-0">
+              <ExchangeRateBadge
+                exchangeRate={exchangeRate}
+                onRateUpdated={setExchangeRate}
+                queryClient={queryClient}
+                className="!h-11 !px-3 text-xs"
+              />
+            </div>
 
-            {/* Mobile Cart Trigger Button (< 768px) */}
+            {/* Nút Refresh Làm mới danh sách sản phẩm: Luôn có mặt để cập nhật tức thì, thay thế vị trí tỷ giá trên Mobile */}
             <button
               type="button"
               onClick={() => {
                 playActionClickBeep();
-                setMobileCartOpen(true);
+                onRefreshProducts?.();
               }}
-              className="md:hidden relative h-11 px-3 rounded-xl bg-teal-600 text-white shadow-xs flex items-center justify-center cursor-pointer active:scale-95 shrink-0"
-              title="ເປີດກະຕ່າ"
+              disabled={isLoading}
+              className={`h-11 px-3 rounded-xl border transition-all active:scale-95 shrink-0 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
+                isLoading
+                  ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                  : 'bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-700 border-slate-200 hover:border-teal-300'
+              }`}
+              title="ໂຫຼດຂໍ້ມູນສິນຄ້າຄືນໃໝ່ (Refresh Product Catalog)"
             >
-              <ShoppingCart size={18} weight="bold" />
-              {cart.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold font-mono border-2 border-white shadow-2xs">
-                  {cart.reduce((s, i) => s + (i.quantity || 1), 0)}
-                </span>
-              )}
+              <ArrowClockwise
+                size={18}
+                weight="bold"
+                className={isLoading ? 'animate-spin text-teal-600' : ''}
+              />
+              <span className="text-xs font-bold hidden sm:inline">ຣີເຟຣຊ</span>
             </button>
           </div>
 
-          {/* Thanh phân loại danh mục (Tabs) dạng pill cuộn ngang mượt mà */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {categories.map((cat) => {
-              const isActive = activeCategory === cat;
-              return (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => {
-                    playUnitChangeBeep();
-                    setActiveCategory(cat);
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer active:scale-95 ${
-                    isActive
-                      ? 'bg-teal-600 text-white shadow-xs'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  {cat}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Lưới sản phẩm (High-Density Grid: 2-3 cols mobile, 4-5-6 cols desktop) */}
-        <div className="flex-1 min-h-0 p-2.5 overflow-y-auto overscroll-contain pb-24 sm:pb-12">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-2.5 w-full">
-            {filteredProducts.map((p) => {
-              const rawStock = p.currentStockBaseUnits ?? p.current_stock_base_units;
-              const hasTrackStock = p.trackStock !== false;
-              const stockVal = hasTrackStock && rawStock !== null && rawStock !== undefined && !isNaN(rawStock) ? Number(rawStock) : null;
-              const isZeroStock = hasTrackStock && stockVal === 0;
-              const isNegativeStock = hasTrackStock && stockVal !== null && stockVal < 0;
-
-              return (
-                <div
-                  key={p.id}
-                  className="bg-white rounded-xl border border-slate-200/90 hover:border-teal-400 hover:shadow-xs transition-all duration-150 flex flex-col justify-between overflow-hidden group"
-                >
-                  {/* Top card area */}
-                  <div
-                    onClick={() => openUnitSelector(p)}
-                    className="p-2 cursor-pointer flex-1 flex flex-col"
+          {/* Category Chips Bar: Danh mục cuộn ngang mượt mà */}
+          {categories && categories.length > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 touch-pan-x">
+              {categories.map((cat) => {
+                const isSelected = activeCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      playUnitChangeBeep('pos');
+                      setActiveCategory?.(cat);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 border active:scale-95 ${
+                      isSelected
+                        ? 'bg-teal-700 text-white border-teal-700 shadow-xs font-extrabold'
+                        : 'bg-slate-100/90 hover:bg-slate-200/80 text-slate-700 border-transparent'
+                    }`}
                   >
-                    {/* Ảnh bo góc 12px với chiều cao thoáng hơn */}
-                    <div className="relative h-28 sm:h-36 w-full rounded-[10px] overflow-hidden bg-slate-100 mb-1.5 shrink-0 flex items-center justify-center">
-                      {p.imageUrl ? (
-                        <img
-                          src={p.imageUrl}
-                          alt={p.name}
-                          loading="lazy"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
-                          <Package size={36} weight="duotone" />
-                          <span className="text-[10px] text-slate-400 mt-1">ບໍ່ມີຮູບ</span>
-                        </div>
-                      )}
-                      {p.category && (
-                        <span className="absolute bottom-1 left-1 px-1.5 py-0.2 rounded bg-slate-950/70 backdrop-blur-xs text-[9px] text-white font-medium">
-                          {p.category}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Tên sản phẩm gọn gàng */}
-                    <h3
-                      className="font-bold text-xs text-slate-900 leading-snug line-clamp-1"
-                      title={p.name}
-                    >
-                      {p.name}
-                    </h3>
-
-                    {/* Hiển thị tồn kho hiện tại (Chuẩn phụ đề text-[11px] font-medium, mt-0.5 mb-1) */}
-                    <div className="flex items-center mt-0.5 mb-1 pt-1 border-t border-slate-100 text-[11px] leading-tight">
-                      {!hasTrackStock ? (
-                        <span className="text-slate-400 font-medium text-[11px]">ບໍ່ນັບສາງ</span>
-                      ) : isZeroStock ? (
-                        <span className="text-amber-600 font-medium text-[11px]" title="ສິນຄ້າໝົດສາງ (ຂາຍຕໍ່ໄດ້)">
-                          ໝົດສາງ (0)
-                        </span>
-                      ) : isNegativeStock ? (
-                        <span className="text-rose-600 font-medium text-[11px] truncate" title={`ສະຕັອກ : ${stockVal}`}>
-                          ສະຕັອກ : {stockVal}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500 font-medium text-[11px] truncate" title={`ສະຕັອກ : ${formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}`}>
-                          ສະຕັອກ : <span className="text-slate-600 font-medium">{formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Nút chọn cấp đơn vị (Thùng bên Trái -> Pack ở Giữa -> Lẻ bên Phải) cố định hàng ngang */}
-                  <div className="p-1 bg-slate-50/90 border-t border-slate-100 flex flex-row items-center w-full gap-1">
-                    {p.units && p.units.length > 0 ? (
-                      (() => {
-                        // Sắp xếp giảm dần: Cấp to nhất (Thùng / multiplier lớn nhất) ở bên trái -> Cấp nhỏ nhất ở bên phải
-                        const sortedUnits = [...p.units].sort((a, b) => {
-                          const multA = Number(a.multiplier) || (a.tier === 3 ? 100 : a.tier === 2 ? 10 : 1);
-                          const multB = Number(b.multiplier) || (b.tier === 3 ? 100 : b.tier === 2 ? 10 : 1);
-                          return multB - multA;
-                        });
-
-                        return sortedUnits.map((unit, idx) => {
-                          const isBulk =
-                            unit.tier === 3 ||
-                            unit.id?.endsWith('_carton') ||
-                            (!unit.tier && (unit.multiplier >= 12 || unit.unitName === 'ລັງ' || unit.unitName === 'ແກັດ' || unit.unitName === 'ເປົາ'));
-                          const isMiddlePack =
-                            unit.tier === 2 ||
-                            unit.id?.endsWith('_pack') ||
-                            (!unit.tier && unit.multiplier > 1 && !isBulk);
-
-                          return (
-                            <button
-                              key={unit.id || idx}
-                              type="button"
-                              onClick={() => addToCart(p, unit, 1)}
-                              className={`flex-1 min-w-0 py-1 px-0.5 rounded-lg text-center transition-all cursor-pointer active:scale-95 flex flex-col justify-center items-center shadow-2xs ${
-                                isBulk
-                                  ? 'bg-teal-600 hover:bg-teal-700 text-white'
-                                  : isMiddlePack
-                                  ? 'bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-slate-900'
-                                  : 'bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-400 text-slate-900'
-                              }`}
-                              title={`ຂາຍ 1 ${unit.unitName}`}
-                            >
-                              <span
-                                className={`text-[9.5px] font-bold block truncate max-w-full ${
-                                  isBulk
-                                    ? 'text-teal-100'
-                                    : isMiddlePack
-                                    ? 'text-sky-700'
-                                    : 'text-slate-500'
-                                }`}
-                              >
-                                {unit.unitName}
-                              </span>
-                              <span
-                                className={`text-[10.5px] font-black block font-mono leading-tight mt-0.2 ${
-                                  isBulk ? 'text-white' : 'text-slate-900'
-                                }`}
-                              >
-                                {formatKip(unit.retailPrice).replace(' ₭', '')}
-                              </span>
-                            </button>
-                          );
-                        });
-                      })()
-                    ) : (
-                      <span className="text-[11px] text-slate-400 py-1 text-center w-full">ບໍ່ມີຫົວໜ່ວຍ</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {filteredProducts.length === 0 && (
-            <div className="py-16 text-center text-slate-400">
-              <Package size={40} className="mx-auto mb-2 opacity-40 text-slate-400" />
-              <p className="text-xs font-bold text-slate-600">
-                {searchQuery || activeCategory !== 'ທັງໝົດ'
-                  ? 'ບໍ່ພົບສິນຄ້າທີ່ຄົ້ນຫາ'
-                  : 'ຍັງບໍ່ມີສິນຄ້າໃນລະບົບ (ບໍ່ມີຂໍ້ມູນ)'}
-              </p>
+                    {cat}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Mobile Floating Cart Summary Bar (< 768px) */}
-        <div className="md:hidden bg-white border-t border-slate-200 p-2 shadow-lg flex items-center justify-between gap-2 shrink-0 z-20">
+        {/* Lưới sản phẩm (High-Density Grid: 2-3 cols mobile, 4-5-6 cols desktop) */}
+        <div className="flex-1 min-h-0 p-2.5 overflow-y-auto overscroll-contain pb-16 sm:pb-12">
+          {isLoading && products.length === 0 ? (
+            <PosProductGridSkeleton count={12} />
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-2.5 w-full">
+                {filteredProducts.map((p) => {
+                  const rawStock = p.currentStockBaseUnits ?? p.current_stock_base_units;
+                  const hasTrackStock = p.trackStock !== false;
+                  const stockVal = hasTrackStock && rawStock !== null && rawStock !== undefined && !isNaN(rawStock) ? Number(rawStock) : null;
+                  const isZeroStock = hasTrackStock && stockVal === 0;
+                  const isNegativeStock = hasTrackStock && stockVal !== null && stockVal < 0;
+
+                  return (
+                    <div
+                      key={p.id}
+                      className="bg-white rounded-xl border border-slate-200/90 hover:border-teal-400 hover:shadow-xs transition-all duration-150 flex flex-col justify-between overflow-hidden group"
+                    >
+                      {/* Top card area */}
+                      <div
+                        onClick={() => openUnitSelector(p)}
+                        className="p-2 cursor-pointer flex-1 flex flex-col"
+                      >
+                        {/* Ảnh bo góc 12px với chiều cao thoáng hơn */}
+                        <div className="relative h-28 sm:h-36 w-full rounded-[10px] overflow-hidden bg-slate-100 mb-1.5 shrink-0 flex items-center justify-center">
+                          {p.imageUrl ? (
+                            <img
+                              src={p.imageUrl}
+                              alt={p.name}
+                              loading="lazy"
+                              decoding="async"
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                              <Package size={36} weight="duotone" />
+                              <span className="text-[10px] text-slate-400 mt-1">ບໍ່ມີຮູບ</span>
+                            </div>
+                          )}
+                          {p.category && (
+                            <span className="absolute bottom-1 left-1 px-1.5 py-0.2 rounded bg-slate-950/70 backdrop-blur-xs text-[9px] text-white font-medium">
+                              {p.category}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Tên sản phẩm gọn gàng */}
+                        <h3
+                          className="font-bold text-xs text-slate-900 leading-snug line-clamp-1"
+                          title={p.name}
+                        >
+                          {p.name}
+                        </h3>
+
+                        {/* Hiển thị tồn kho hiện tại (Chuẩn phụ đề text-[11px] font-medium, mt-0.5 mb-1) */}
+                        <div className="flex items-center mt-0.5 mb-1 pt-1 border-t border-slate-100 text-[11px] leading-tight">
+                          {!hasTrackStock ? (
+                            <span className="text-slate-400 font-medium text-[11px]">ບໍ່ນັບສາງ</span>
+                          ) : isZeroStock ? (
+                            <span className="text-amber-600 font-medium text-[11px]" title="ສິນຄ້າໝົດສາງ (ຂາຍຕໍ່ໄດ້)">
+                              ໝົດສາງ (0)
+                            </span>
+                          ) : isNegativeStock ? (
+                            <span className="text-rose-600 font-medium text-[11px] truncate" title={`ສະຕັອກ : ${stockVal}`}>
+                              ສະຕັອກ : {stockVal}
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 font-medium text-[11px] truncate" title={`ສະຕັອກ : ${formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}`}>
+                              ສະຕັອກ : <span className="text-slate-600 font-medium">{formatStockDisplay(p, null, p.baseUnit || 'ອັນ')}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Nút chọn cấp đơn vị (Thùng bên Trái -> Pack ở Giữa -> Lẻ bên Phải) cố định hàng ngang */}
+                      <div className="p-1 bg-slate-50/90 border-t border-slate-100 flex flex-row items-center w-full gap-1">
+                        {p.units && p.units.length > 0 ? (
+                          (() => {
+                            // Sắp xếp giảm dần: Cấp to nhất (Thùng / multiplier lớn nhất) ở bên trái -> Cấp nhỏ nhất ở bên phải
+                            const sortedUnits = [...p.units].sort((a, b) => {
+                              const multA = Number(a.multiplier) || (a.tier === 3 ? 100 : a.tier === 2 ? 10 : 1);
+                              const multB = Number(b.multiplier) || (b.tier === 3 ? 100 : b.tier === 2 ? 10 : 1);
+                              return multB - multA;
+                            });
+
+                            return sortedUnits.map((unit, idx) => {
+                              const isBulk =
+                                unit.tier === 3 ||
+                                unit.id?.endsWith('_carton') ||
+                                (!unit.tier && (unit.multiplier >= 12 || unit.unitName === 'ລັງ' || unit.unitName === 'ແກັດ' || unit.unitName === 'ເປົາ'));
+                              const isMiddlePack =
+                                unit.tier === 2 ||
+                                unit.id?.endsWith('_pack') ||
+                                (!unit.tier && unit.multiplier > 1 && !isBulk);
+
+                              return (
+                                <button
+                                  key={unit.id || idx}
+                                  type="button"
+                                  onClick={() => addToCart(p, unit, 1)}
+                                  className={`flex-1 min-w-0 py-1 px-0.5 rounded-lg text-center transition-all cursor-pointer active:scale-95 flex flex-col justify-center items-center shadow-2xs ${
+                                    isBulk
+                                      ? 'bg-teal-600 hover:bg-teal-700 text-white'
+                                      : isMiddlePack
+                                      ? 'bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-slate-900'
+                                      : 'bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-400 text-slate-900'
+                                  }`}
+                                  title={`ຂາຍ 1 ${unit.unitName}`}
+                                >
+                                  <span
+                                    className={`text-[9.5px] font-bold block truncate max-w-full ${
+                                      isBulk
+                                        ? 'text-teal-100'
+                                        : isMiddlePack
+                                        ? 'text-sky-700'
+                                        : 'text-slate-500'
+                                    }`}
+                                  >
+                                    {unit.unitName}
+                                  </span>
+                                  <span
+                                    className={`text-[10.5px] font-black block font-mono leading-tight mt-0.2 ${
+                                      isBulk ? 'text-white' : 'text-slate-900'
+                                    }`}
+                                  >
+                                    {formatKip(unit.retailPrice).replace(' ₭', '')}
+                                  </span>
+                                </button>
+                              );
+                            });
+                          })()
+                        ) : (
+                          <span className="text-[11px] text-slate-400 py-1 text-center w-full">ບໍ່ມີຫົວໜ່ວຍ</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {!isLoading && filteredProducts.length === 0 && (
+                <div className="py-16 text-center text-slate-400">
+                  <Package size={40} className="mx-auto mb-2 opacity-40 text-slate-400" />
+                  <p className="text-xs font-bold text-slate-600">
+                    {searchQuery || activeCategory !== 'ທັງໝົດ'
+                      ? 'ບໍ່ພົບສິນຄ້າທີ່ຄົ້ນຫາ'
+                      : 'ຍັງບໍ່ມີສິນຄ້າໃນລະບົບ (ບໍ່ມີຂໍ້ມູນ)'}
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Mobile Floating Cart Summary Bar (< 768px): Gắn sát mép trên của Bottom Navigation Bar, không có khoảng trắng thừa */}
+        <div className="md:hidden bg-white/95 backdrop-blur-md border-t border-slate-200/90 p-2 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] flex items-center justify-between gap-2 shrink-0 z-30 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px)+0.5rem)]">
           <button
             type="button"
             onClick={() => setMobileCartOpen(true)}

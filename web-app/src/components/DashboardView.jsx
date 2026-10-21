@@ -31,6 +31,7 @@ import Annual12MonthSalesChart from './dashboard/Annual12MonthSalesChart';
 import ExchangeRateBadge from './common/ExchangeRateBadge';
 import queryClient from '../services/queryClient';
 import { playUnitChangeBeep, playActionClickBeep } from '../utils/audioFeedback';
+import { DashboardSkeleton } from './common/SkeletonLoaders';
 
 export default function DashboardView({
   dashboardTimeframe,
@@ -41,6 +42,7 @@ export default function DashboardView({
   rawCategories = [],
   exchangeRate = 0,
   setExchangeRate,
+  isLoading = false,
 }) {
   // Custom Date Range State
   const [customStartDate, setCustomStartDate] = useState('');
@@ -476,7 +478,9 @@ export default function DashboardView({
       )}
 
       {/* 2-Month Year-over-Year Dual Period Comparison View */}
-      {dashboardTimeframe === 'compare' ? (
+      {isLoading && transactions.length === 0 ? (
+        <DashboardSkeleton />
+      ) : dashboardTimeframe === 'compare' ? (
         <MonthComparisonView fallbackTransactions={transactions} products={products} />
       ) : (
         <>

@@ -17,6 +17,7 @@ import { formatKip, formatBaht, getCartonUnitInfo, formatStockDisplay, formatNeg
 import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep, playErrorBeep, playActionClickBeep, playUnitChangeBeep } from '../utils/audioFeedback';
+import { ProductsListSkeleton } from './common/SkeletonLoaders';
 
 /**
  * Shared helper to resolve unit tiers, cost conversions, and stock counts for both Mobile Card & Desktop Table
@@ -421,9 +422,14 @@ export default function ProductsView({
         )}
       </div>
 
-      {/* 3. A: MOBILE VIEW (< 768px) - Touch-Optimized Card List */}
-      <div className="md:hidden flex flex-col gap-3 pb-24">
-        {filteredProducts.map((p) => {
+      {/* 3. Skeleton Loading State (While fetching data) */}
+      {isLoading && products.length === 0 ? (
+        <ProductsListSkeleton count={8} />
+      ) : (
+        <>
+          {/* 3. A: MOBILE VIEW (< 768px) - Touch-Optimized Card List */}
+          <div className="md:hidden flex flex-col gap-3 pb-24">
+            {filteredProducts.map((p) => {
           const info = getProductStockDetails(p, exchangeRate);
           const isHighlighted = p.id === scannedHighlightId;
 
@@ -790,9 +796,11 @@ export default function ProductsView({
           </tbody>
         </table>
       </div>
+    </>
+  )}
 
       {/* Empty State */}
-      {filteredProducts.length === 0 && (
+      {!isLoading && filteredProducts.length === 0 && (
         <div className="py-16 text-center text-slate-400 flex flex-col items-center justify-center bg-white rounded-2xl border border-slate-200 mt-2">
           <Package size={40} className="mb-2 opacity-50" />
           <p className="text-xs font-bold text-slate-600">

@@ -2268,7 +2268,11 @@ export default function App() {
       />
 
       {/* 2. MAIN VIEW AREA */}
-      <div className="flex-1 h-full h-dvh min-h-0 overflow-hidden flex flex-col min-w-0 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:!pb-0 touch-scroll-container">
+      <div className={`flex-1 h-full h-dvh min-h-0 overflow-hidden flex flex-col min-w-0 ${
+        activeMainTab === 'pos'
+          ? 'pb-0 md:!pb-0'
+          : 'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:!pb-0'
+      } touch-scroll-container`}>
         {activeMainTab === 'pos' && (
           <PosScreen
             categories={categories}
@@ -2278,6 +2282,8 @@ export default function App() {
             setSearchQuery={setSearchQuery}
             filteredProducts={filteredProducts}
             products={products}
+            isLoading={isLoadingProducts || isRefreshing}
+            onRefreshProducts={handleRefreshAllFromSupabase}
             addToCart={addToCart}
             openUnitSelector={openUnitSelector}
             cart={cart}
@@ -2311,6 +2317,7 @@ export default function App() {
             products={products}
             rawCategories={rawCategories}
             exchangeRate={exchangeRate}
+            isLoading={isLoadingProducts || isRefreshing}
           />
         )}
 
@@ -2323,7 +2330,7 @@ export default function App() {
             onDeleteProduct={handleDeleteProduct}
             onRefreshProducts={handleRefreshAllFromSupabase}
             onOpenCategoryManager={() => setCategoryManagerModalOpen(true)}
-            isLoading={isRefreshing}
+            isLoading={isLoadingProducts || isRefreshing}
           />
         )}
 
@@ -2336,7 +2343,7 @@ export default function App() {
             onUpdateTransaction={handleUpdateTransaction}
             onRefreshTransactions={handleRefreshAllFromSupabase}
             onEditOrderInPos={handleEditOrderInPos}
-            isLoading={isRefreshing}
+            isLoading={isLoadingProducts || isRefreshing}
             onAlert={openAlert}
           />
         )}
@@ -2353,7 +2360,7 @@ export default function App() {
             }}
             onOpenSupplierManager={() => setSupplierManagerModalOpen(true)}
             onRefresh={handleRefreshAllFromSupabase}
-            isLoading={isRefreshing}
+            isLoading={isLoadingProducts || isRefreshing}
             onAlert={openAlert}
           />
         )}
@@ -2364,7 +2371,7 @@ export default function App() {
             products={products}
             exchangeRate={exchangeRate}
             onRefresh={handleRefreshAllFromSupabase}
-            isLoading={isRefreshing}
+            isLoading={isLoadingProducts || isRefreshing}
           />
         )}
 
