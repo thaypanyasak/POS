@@ -1505,22 +1505,22 @@ export default function PosScreen({
           )}
         </div>
 
-        {/* Mobile Floating Cart Summary Bar (< 768px): Gắn sát mép trên của Bottom Navigation Bar, không có khoảng trắng thừa */}
-        <div className="md:hidden bg-white/95 backdrop-blur-md border-t border-slate-200/90 p-2 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] flex items-center justify-between gap-2 shrink-0 z-30 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px)+0.5rem)]">
+        {/* Mobile Floating Cart Summary Bar (< 768px): Nằm ngay phía trên Bottom Navigation Bar, không bị che khuất và khít hoàn hảo trên Native App & Browser */}
+        <div className="md:hidden bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-3 py-2.5 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] flex items-center justify-between gap-2 shrink-0 z-30 mb-[calc(3.7rem+env(safe-area-inset-bottom,0px))]">
           <button
             type="button"
             onClick={() => setMobileCartOpen(true)}
             className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer active:scale-98 transition-transform"
           >
-            <div className="relative p-1.5 rounded-lg bg-teal-50 text-teal-700 border border-teal-200 shrink-0">
-              <ShoppingCart size={18} weight="bold" />
+            <div className="relative p-2 rounded-lg bg-teal-50 text-teal-700 border border-teal-200 shrink-0">
+              <ShoppingCart size={19} weight="bold" />
               {cart.length > 0 && (
-                <span className="absolute -top-1 -right-1 px-1 py-0.2 rounded-full bg-teal-600 text-white text-[9px] font-bold font-mono leading-none shadow-xs">
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-0.5 rounded-full bg-teal-600 text-white text-[9px] font-bold font-mono flex items-center justify-center border-[1.5px] border-white shadow-xs">
                   {cart.reduce((s, i) => s + (i.quantity || 1), 0)}
                 </span>
               )}
             </div>
-            <div className="flex flex-col min-w-0">
+            <div className="flex flex-col min-w-0 justify-center">
               <span className="text-[11px] text-slate-500 font-bold truncate">
                 {customerName || 'ລູກຄ້າທົ່ວໄປ'} • {cart.length} ລາຍການ
               </span>
