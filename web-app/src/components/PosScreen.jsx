@@ -154,6 +154,11 @@ export default function PosScreen({
   setExchangeRate,
   isLoading = false,
   onRefreshProducts,
+  posOrders = [],
+  activeOrderId = 'order_1',
+  onSelectOrderTab,
+  onAddNewOrderTab,
+  onCloseOrderTab,
 }) {
   // Modal for editing line item price (familiar customer / price override)
   const [overrideModalItem, setOverrideModalItem] = useState(null);
@@ -163,6 +168,7 @@ export default function PosScreen({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanToast, setScanToast] = useState(null);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [orderMenuOpen, setOrderMenuOpen] = useState(false);
   const [quotationModalOpen, setQuotationModalOpen] = useState(false);
   const searchInputRef = useRef(null);
 
@@ -360,33 +366,10 @@ export default function PosScreen({
       {/* 1. Sticky Amber Banner when editing an old transaction */}
       {renderEditingBanner()}
 
-      {/* 2. Compact Cart Header: Title, Customer Name & Clear */}
-      <div className={`p-2 sm:p-3 border-b border-slate-100 flex flex-col gap-1.5 shrink-0 bg-slate-50/80 ${isDrawer ? 'pt-1.5' : ''}`}>
-        {!isDrawer && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <ShoppingCart size={16} className="text-teal-700" weight="bold" />
-              <span className="font-extrabold text-xs text-slate-900 uppercase tracking-wide">ກະຕ່າສິນຄ້າ</span>
-              <span className="px-1.5 py-0.2 bg-teal-100 text-teal-800 rounded-full text-[10px] font-bold font-mono">
-                {cart.length} ລາຍການ
-              </span>
-            </div>
-            {cart.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setCart([])}
-                className="text-slate-400 hover:text-rose-600 text-[11px] font-bold flex items-center gap-0.5 cursor-pointer transition-colors"
-                title="ລ້າງສິນຄ້າທັງໝົດໃນກະຕ່າ"
-              >
-                <Trash size={13} />
-                <span>ລ້າງ</span>
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Customer Name Input & Quick Chips */}
+      {/* 2. Compact Cart Header: Customer Name + Quick Chips + Order Dropdown Selector (Cuối bên phải) */}
+      <div className={`p-2 sm:p-2.5 border-b border-slate-100 flex flex-col gap-1.5 shrink-0 bg-slate-50/90 ${isDrawer ? 'pt-1.5' : ''}`}>
         <div className="flex items-center gap-1.5">
+          {/* Ô Nhập Tên Khách Hàng */}
           <div className="relative flex-1">
             <User
               size={13}
@@ -400,25 +383,144 @@ export default function PosScreen({
               className="w-full h-8 pl-7 pr-2 py-1 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-bold shadow-2xs"
             />
           </div>
-          {/* Quick chips */}
-          <div className="flex items-center gap-1 shrink-0">
-            {['ທົ່ວໄປ', 'VIP'].map((name) => (
-              <button
-                key={name}
-                type="button"
-                onClick={() => {
-                  playUnitChangeBeep();
-                  setCustomerName(name === 'ທົ່ວໄປ' ? 'ລູກຄ້າທົ່ວໄປ' : name);
-                }}
-                className={`px-2 py-1 rounded-md text-[10.5px] font-bold border transition-all cursor-pointer ${
-                  customerName === name || (name === 'ທົ່ວໄປ' && customerName === 'ລູກຄ້າທົ່ວໄປ')
-                    ? 'bg-teal-50 border-teal-400 text-teal-800 font-bold'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {name}
-              </button>
-            ))}
+
+          {/* Clear button if cart has items */}
+          {cart.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setCart([])}
+              className="text-slate-400 hover:text-rose-600 text-[11px] font-bold flex items-center gap-0.5 cursor-pointer transition-colors px-1 shrink-0"
+              title="ລ້າງສິນຄ້າທັງໝົດໃນກະຕ່າ"
+            >
+              <Trash size={13} />
+              <span>ລ້າງ</span>
+            </button>
+          )}
+
+          {/* Nút Chọn Order ở cuối bên phải */}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setOrderMenuOpen(!orderMenuOpen)}
+              className="h-8 px-2.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 select-none"
+              title="ກົດເພື່ອເລືອກ Order ຫຼື ເພີ່ມ Order ໃໝ່"
+            >
+              <Package size={14} weight="bold" />
+              <span className="font-mono">
+                {(() => {
+                  const currentOrd = posOrders.find((o) => o.id === activeOrderId);
+                  const idx = posOrders.findIndex((o) => o.id === activeOrderId);
+                  return currentOrd?.defaultLabel || `Order ${idx >= 0 ? idx + 1 : 1}`;
+                })()}
+              </span>
+              <CaretDown size={11} weight="bold" className={`transition-transform duration-200 ${orderMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Popover Dropdown danh sách các Order (neo sang phải right-0) */}
+            {orderMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setOrderMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full mt-1.5 z-50 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 min-w-[250px] max-w-[290px] w-68 flex flex-col gap-1.5 animate-in fade-in-50 zoom-in-95">
+                  {/* Header popup: Tiêu đề danh sách đơn */}
+                  <div className="px-1.5 py-1 border-b border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <span>ລາຍການ Order ({posOrders.length})</span>
+                    <span className="text-[10px] text-teal-700 font-extrabold lowercase">
+                      {posOrders.length} ກຳລັງເປີດ
+                    </span>
+                  </div>
+
+                  {/* Danh sách các Order */}
+                  <div className="flex flex-col gap-1 max-h-56 overflow-y-auto no-scrollbar py-0.5">
+                    {posOrders.map((ord, idx) => {
+                      const isActive = ord.id === activeOrderId;
+                      const summary = getOrderSummary(ord);
+
+                      return (
+                        <div
+                          key={ord.id}
+                          onClick={() => {
+                            setOrderMenuOpen(false);
+                            onSelectOrderTab?.(ord.id);
+                          }}
+                          className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-colors border ${
+                            isActive
+                              ? 'bg-teal-50 border-teal-300 text-teal-950 font-extrabold shadow-2xs'
+                              : 'bg-white hover:bg-slate-50 border-slate-100 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0 ${
+                                isActive ? 'bg-teal-600 text-white' : 'bg-slate-200 text-slate-600'
+                              }`}
+                            >
+                              {idx + 1}
+                            </span>
+                            <div className="flex flex-col min-w-0">
+                              <span className="truncate font-bold text-xs leading-tight">
+                                {ord.label || `Order ${idx + 1}`}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-normal truncate">
+                                {summary.cName}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {summary.itemCount > 0 ? (
+                              <span
+                                className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ${
+                                  isActive
+                                    ? 'bg-teal-200/80 text-teal-900'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {summary.itemCount} ສິນຄ້າ
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-300 italic">(ຫວ່າງ)</span>
+                            )}
+
+                            {posOrders.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onCloseOrderTab?.(ord.id, e);
+                                }}
+                                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-100/80 active:scale-95 transition-all ml-1 cursor-pointer shrink-0"
+                                title="ລຶບ / ປິດ Order ນີ້"
+                              >
+                                <X size={14} weight="bold" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Nút Thêm Order mới dạng BOX ở dưới cùng */}
+                  <div className="pt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderMenuOpen(false);
+                        onAddNewOrderTab?.();
+                      }}
+                      className="w-full h-9 rounded-xl bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white border border-teal-200/80 hover:border-teal-600 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 shadow-2xs"
+                      title="ເພີ່ມ Order ໃໝ່ ສຳລັບລູກຄ້າຕໍ່ໄປ"
+                    >
+                      <Plus size={14} weight="bold" />
+                      <span>+ ເພີ່ມ Order ໃໝ່ (ລູກຄ້າຕໍ່ໄປ)</span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -1104,6 +1206,29 @@ export default function PosScreen({
     </div>
   );
 
+  // Calculate order summary for each tab
+  const getOrderSummary = (ord) => {
+    const isCurrentActive = ord.id === activeOrderId;
+    const items = isCurrentActive ? cart : (ord.cart || []);
+    const itemCount = items.reduce((s, it) => s + (Number(it.quantity) || 1), 0);
+    const subtotal = items.reduce((sum, item) => {
+      const tierPrice = getEffectiveUnitPrice(item.unit, item.selectedPriceTier || 1);
+      const standardPrice = item.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
+      const price =
+        item.customPrice !== undefined && item.customPrice !== null
+          ? item.customPrice
+          : standardPrice;
+      const baseLine = price * item.quantity;
+      const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
+      const crateFee = item.noEmptyCrates
+        ? (Number(item.missingCratesCount ?? item.quantity) || 0) * feePerCrate
+        : 0;
+      return sum + baseLine + crateFee;
+    }, 0);
+    const cName = isCurrentActive ? customerName : (ord.customerName || 'ລູກຄ້າທົ່ວໄປ');
+    return { itemCount, subtotal, cName };
+  };
+
   return (
     <main className="flex-1 flex overflow-hidden w-full h-full min-h-0 font-sans relative bg-slate-100">
       {/* =========================================================================
@@ -1446,39 +1571,22 @@ export default function PosScreen({
           {/* Drawer Container */}
           <div className="relative z-10 bg-white rounded-t-3xl max-h-[90dvh] h-[90dvh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200">
             {/* Drawer Top Handle & Title */}
-            <div className="pt-2 px-4 pb-2 border-b border-slate-100 flex flex-col gap-1.5 shrink-0 bg-slate-50">
-              <div
-                className="w-10 h-1 bg-slate-300 rounded-full mx-auto cursor-pointer"
-                onClick={() => setMobileCartOpen(false)}
-              />
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShoppingCart size={18} className="text-teal-700" weight="bold" />
-                  <span className="font-extrabold text-sm text-slate-900">ກະຕ່າສິນຄ້າ</span>
-                  <span className="px-2 py-0.5 bg-teal-100 text-teal-800 rounded-full text-xs font-bold font-mono">
-                    {cart.length} ລາຍການ
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {cart.length > 0 && (
-                    <button
-                      onClick={() => setCart([])}
-                      className="text-rose-500 hover:text-rose-700 text-xs font-bold flex items-center gap-1 cursor-pointer py-1 px-2 rounded-lg hover:bg-rose-50"
-                    >
-                      <Trash size={14} />
-                      <span>ລ້າງ</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setMobileCartOpen(false)}
-                    className="w-7 h-7 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center cursor-pointer"
-                    title="ປິດ"
-                  >
-                    <X size={15} weight="bold" />
-                  </button>
-                </div>
+            <div className="pt-2 px-4 pb-2 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <ShoppingCart size={18} className="text-teal-700" weight="bold" />
+                <span className="font-extrabold text-sm text-slate-900">ກະຕ່າສິນຄ້າ</span>
+                <span className="px-2 py-0.5 bg-teal-100 text-teal-800 rounded-full text-xs font-bold font-mono">
+                  {cart.length} ລາຍການ
+                </span>
               </div>
+              <button
+                type="button"
+                onClick={() => setMobileCartOpen(false)}
+                className="w-7 h-7 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center cursor-pointer transition-colors"
+                title="ປິດ"
+              >
+                <X size={15} weight="bold" />
+              </button>
             </div>
 
             {/* Cart Body inside Drawer */}

@@ -141,10 +141,210 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('ທັງໝົດ');
 
-  // Cart & Customer Name
-  const [cart, setCart] = useState([]);
-  const [customerName, setCustomerName] = useState('ລູກຄ້າທົ່ວໄປ');
-  const [globalPriceTier, setGlobalPriceTier] = useState(1); // 1: standard (default), 2: regular customer, 3: wholesale/vip
+  // Cart & Multi-Order Management (Space cho chọn Order, đổi khách hàng 1, 2...)
+  const [posOrders, setPosOrders] = useState(() => {
+    try {
+      const saved = localStorage.getItem('meiishop_pos_active_orders_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) {}
+    return [
+      { id: 'order_1', label: 'Order 1', cart: [], customerName: 'ລູກຄ້າທົ່ວໄປ', priceTier: 1, createdAt: Date.now() },
+    ];
+  });
+  const [activeOrderId, setActiveOrderId] = useState(() => {
+    try {
+      const savedId = localStorage.getItem('meiishop_pos_active_order_id_v1');
+      if (savedId) return savedId;
+    } catch (_) {}
+    return 'order_1';
+  });
+
+  const [cart, setCart] = useState(() => {
+    try {
+      const savedOrders = localStorage.getItem('meiishop_pos_active_orders_v1');
+      const savedId = localStorage.getItem('meiishop_pos_active_order_id_v1') || 'order_1';
+      if (savedOrders) {
+        const parsed = JSON.parse(savedOrders);
+        const active = parsed.find((o) => o.id === savedId) || parsed[0];
+        if (active && Array.isArray(active.cart)) return active.cart;
+      }
+    } catch (_) {}
+    return [];
+  });
+
+  const [customerName, setCustomerName] = useState(() => {
+    try {
+      const savedOrders = localStorage.getItem('meiishop_pos_active_orders_v1');
+      const savedId = localStorage.getItem('meiishop_pos_active_order_id_v1') || 'order_1';
+      if (savedOrders) {
+        const parsed = JSON.parse(savedOrders);
+        const active = parsed.find((o) => o.id === savedId) || parsed[0];
+        if (active?.customerName) return active.customerName;
+      }
+    } catch (_) {}
+    return 'ລູກຄ້າທົ່ວໄປ';
+  });
+
+  const [globalPriceTier, setGlobalPriceTier] = useState(() => {
+    try {
+      const savedOrders = localStorage.getItem('meiishop_pos_active_orders_v1');
+      const savedId = localStorage.getItem('meiishop_pos_active_order_id_v1') || 'order_1';
+      if (savedOrders) {
+        const parsed = JSON.parse(savedOrders);
+        const active = parsed.find((o) => o.id === savedId) || parsed[0];
+        if (active?.priceTier) return active.priceTier;
+      }
+    } catch (_) {}
+    return 1;
+  }); // 1: standard (default), 2: regular customer, 3: wholesale/vip
+
+  // Synchronize current cart/customer/tier changes back to active order in posOrders & localStorage
+  useEffect(() => {
+    setPosOrders((prevOrders) => {
+      const existing = prevOrders.find((o) => o.id === activeOrderId);
+      const isDefaultCust = !customerName || customerName.trim() === '' || customerName.trim() === 'ລູກຄ້າທົ່ວໄປ';
+      const orderIndex = prevOrders.findIndex((o) => o.id === activeOrderId);
+      const defaultLabel = existing?.defaultLabel || (existing?.label?.startsWith('Order ') ? existing.label : `Order ${orderIndex >= 0 ? orderIndex + 1 : 1}`);
+      const newLabel = isDefaultCust ? defaultLabel : customerName.trim();
+
+      if (
+        existing &&
+        existing.cart === cart &&
+        existing.customerName === customerName &&
+        existing.priceTier === globalPriceTier &&
+        existing.label === newLabel
+      ) {
+        return prevOrders;
+      }
+      const updated = prevOrders.map((o) => {
+        if (o.id === activeOrderId) {
+          return {
+            ...o,
+            label: newLabel,
+            defaultLabel: o.defaultLabel || defaultLabel,
+            cart,
+            customerName,
+            priceTier: globalPriceTier,
+          };
+        }
+        return o;
+      });
+      try {
+        localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(updated));
+        localStorage.setItem('meiishop_pos_active_order_id_v1', activeOrderId);
+      } catch (_) {}
+      return updated;
+    });
+  }, [cart, customerName, globalPriceTier, activeOrderId]);
+
+  // Switch to another order tab
+  const handleSelectOrderTab = (targetOrderId) => {
+    if (targetOrderId === activeOrderId) return;
+    const targetOrder = posOrders.find((o) => o.id === targetOrderId);
+    if (!targetOrder) return;
+
+    // First save current active order data
+    const updatedOrders = posOrders.map((o) => {
+      if (o.id === activeOrderId) {
+        return {
+          ...o,
+          cart,
+          customerName,
+          priceTier: globalPriceTier,
+        };
+      }
+      return o;
+    });
+
+    setPosOrders(updatedOrders);
+    setActiveOrderId(targetOrderId);
+    setCart(targetOrder.cart || []);
+    setCustomerName(targetOrder.customerName || 'ລູກຄ້າທົ່ວໄປ');
+    setGlobalPriceTier(targetOrder.priceTier || 1);
+    try {
+      localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(updatedOrders));
+      localStorage.setItem('meiishop_pos_active_order_id_v1', targetOrderId);
+    } catch (_) {}
+    playActionClickBeep();
+  };
+
+  // Add a new order tab
+  const handleAddNewOrderTab = () => {
+    // Generate next Order label
+    const orderNumbers = posOrders
+      .map((o) => {
+        const text = o.defaultLabel || o.label || '';
+        const m = text.match(/\d+/);
+        return m ? parseInt(m[0], 10) : 0;
+      })
+      .filter((n) => n > 0);
+    const nextNum = (orderNumbers.length > 0 ? Math.max(...orderNumbers) : posOrders.length) + 1;
+    const newId = 'order_' + Date.now();
+    const defaultLabel = `Order ${nextNum}`;
+    const newOrder = {
+      id: newId,
+      label: defaultLabel,
+      defaultLabel: defaultLabel,
+      cart: [],
+      customerName: 'ລູກຄ້າທົ່ວໄປ',
+      priceTier: 1,
+      createdAt: Date.now(),
+    };
+
+    // Save current active order before switching
+    const updatedOrders = [
+      ...posOrders.map((o) => (o.id === activeOrderId ? { ...o, cart, customerName, priceTier: globalPriceTier } : o)),
+      newOrder,
+    ];
+
+    setPosOrders(updatedOrders);
+    setActiveOrderId(newId);
+    setCart([]);
+    setCustomerName('ລູກຄ້າທົ່ວໄປ');
+    setGlobalPriceTier(1);
+
+    try {
+      localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(updatedOrders));
+      localStorage.setItem('meiishop_pos_active_order_id_v1', newId);
+    } catch (_) {}
+    playSuccessBeep('pos');
+  };
+
+  // Close / Delete an order tab
+  const handleCloseOrderTab = (targetOrderId, e) => {
+    if (e) e.stopPropagation();
+    if (posOrders.length <= 1) {
+      // Just clear current order instead of deleting only tab
+      setCart([]);
+      setCustomerName('ລູກຄ້າທົ່ວໄປ');
+      setGlobalPriceTier(1);
+      return;
+    }
+
+    const remainingOrders = posOrders.filter((o) => o.id !== targetOrderId);
+    let nextActive = remainingOrders[0];
+    if (targetOrderId === activeOrderId) {
+      const closingIdx = posOrders.findIndex((o) => o.id === targetOrderId);
+      nextActive = remainingOrders[Math.max(0, closingIdx - 1)] || remainingOrders[0];
+    } else {
+      nextActive = remainingOrders.find((o) => o.id === activeOrderId) || remainingOrders[0];
+    }
+
+    setPosOrders(remainingOrders);
+    setActiveOrderId(nextActive.id);
+    setCart(nextActive.cart || []);
+    setCustomerName(nextActive.customerName || 'ລູກຄ້າທົ່ວໄປ');
+    setGlobalPriceTier(nextActive.priceTier || 1);
+
+    try {
+      localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(remainingOrders));
+      localStorage.setItem('meiishop_pos_active_order_id_v1', nextActive.id);
+    } catch (_) {}
+    playUnitChangeBeep();
+  };
 
   // Transactions History (Supabase Live Sync with cache)
   const [transactions, setTransactions] = useState(() => {
@@ -1694,7 +1894,35 @@ export default function App() {
       setSelectedReceiptForView(receipt);
       setCheckoutModalOpen(false);
       setReceiptModalOpen(true);
-      setCart([]);
+
+      // Auto-cleanup finished order in Multi-Order Tab system
+      if (posOrders.length > 1) {
+        // If multiple orders open, remove this finished order and switch to the next active one
+        const remainingOrders = posOrders.filter((o) => o.id !== activeOrderId);
+        const nextOrder = remainingOrders[0];
+        setPosOrders(remainingOrders);
+        setActiveOrderId(nextOrder.id);
+        setCart(nextOrder.cart || []);
+        setCustomerName(nextOrder.customerName || 'ລູກຄ້າທົ່ວໄປ');
+        setGlobalPriceTier(nextOrder.priceTier || 1);
+        try {
+          localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(remainingOrders));
+          localStorage.setItem('meiishop_pos_active_order_id_v1', nextOrder.id);
+        } catch (_) {}
+      } else {
+        // Only 1 order open, reset it cleanly
+        setCart([]);
+        setCustomerName('ລູກຄ້າທົ່ວໄປ');
+        setGlobalPriceTier(1);
+        const resetOrders = [
+          { id: activeOrderId, label: posOrders[0]?.label || 'Order 1', cart: [], customerName: 'ລູກຄ້າທົ່ວໄປ', priceTier: 1, createdAt: Date.now() }
+        ];
+        setPosOrders(resetOrders);
+        try {
+          localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(resetOrders));
+          localStorage.setItem('meiishop_pos_active_order_id_v1', activeOrderId);
+        } catch (_) {}
+      }
     } catch (err) {
       console.error('Checkout payment error:', err);
       openAlert('ເກີດຂໍ້ຜິດພາດໃນການຊຳລະເງິນ: ' + err.message, 'ຂໍ້ຜິດພາດ', 'error');
@@ -2305,6 +2533,11 @@ export default function App() {
             changeCartItemPriceTier={changeCartItemPriceTier}
             editingOldTransaction={editingOldTransaction}
             onCancelEditOrder={handleCancelEditingOrder}
+            posOrders={posOrders}
+            activeOrderId={activeOrderId}
+            onSelectOrderTab={handleSelectOrderTab}
+            onAddNewOrderTab={handleAddNewOrderTab}
+            onCloseOrderTab={handleCloseOrderTab}
           />
         )}
 
