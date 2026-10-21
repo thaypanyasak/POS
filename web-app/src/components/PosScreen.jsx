@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MagnifyingGlass,
   Plus,
@@ -1560,18 +1561,20 @@ export default function PosScreen({
 
       {/* =========================================================================
           MOBILE SLIDE-OVER / BOTTOM SHEET CART DRAWER (< 768px)
+          Sử dụng createPortal gắn thẳng vào document.body với z-[90]
+          để không bao giờ bị Bottom Navigation Bar (z-40) hay bất kỳ component nào che khuất!
       ========================================================================= */}
-      {mobileCartOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
+      {mobileCartOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[90] md:hidden flex flex-col justify-end">
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity"
             onClick={() => setMobileCartOpen(false)}
           />
           {/* Drawer Container */}
-          <div className="relative z-10 bg-white rounded-t-3xl max-h-[90dvh] h-[90dvh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200">
+          <div className="relative z-10 bg-white rounded-t-3xl max-h-[92dvh] h-[92dvh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200">
             {/* Drawer Top Handle & Title */}
-            <div className="pt-2 px-4 pb-2 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50">
+            <div className="pt-2.5 px-4 pb-2 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50">
               <div className="flex items-center gap-2">
                 <ShoppingCart size={18} className="text-teal-700" weight="bold" />
                 <span className="font-extrabold text-sm text-slate-900">ກະຕ່າສິນຄ້າ</span>
@@ -1592,7 +1595,8 @@ export default function PosScreen({
             {/* Cart Body inside Drawer */}
             {renderCartContent(true)}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Mobile-Style Price Override Modal */}
