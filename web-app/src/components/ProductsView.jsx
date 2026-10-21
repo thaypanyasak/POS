@@ -16,7 +16,7 @@ import {
 import { formatKip, formatBaht, getCartonUnitInfo, formatStockDisplay, formatNegativeStockCompound, normalizeLao } from '../utils/formatters';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
-import { playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
+import { playSuccessBeep, playErrorBeep, playActionClickBeep, playUnitChangeBeep } from '../utils/audioFeedback';
 
 /**
  * Shared helper to resolve unit tiers, cost conversions, and stock counts for both Mobile Card & Desktop Table
@@ -325,7 +325,10 @@ export default function ProductsView({
           {onOpenCategoryManager && (
             <button
               type="button"
-              onClick={onOpenCategoryManager}
+              onClick={() => {
+                playActionClickBeep('products');
+                onOpenCategoryManager();
+              }}
               className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
               title="ຈັດການໝວດໝູ່ສິນຄ້າ"
             >
@@ -337,7 +340,10 @@ export default function ProductsView({
           {onRefreshProducts && (
             <button
               type="button"
-              onClick={onRefreshProducts}
+              onClick={() => {
+                playUnitChangeBeep('products');
+                onRefreshProducts();
+              }}
               disabled={isLoading}
               className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
               title="ໂຫຼດຂໍ້ມູນຄືນຈາກ Supabase"
@@ -349,7 +355,10 @@ export default function ProductsView({
 
           <button
             type="button"
-            onClick={onAddNewProduct}
+            onClick={() => {
+              playActionClickBeep('products');
+              onAddNewProduct?.();
+            }}
             className="px-3 sm:px-4 py-2 sm:py-2.5 h-9 sm:h-10 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
           >
             <Plus size={16} weight="bold" />
@@ -430,15 +439,20 @@ export default function ProductsView({
               {/* Top Row: Thumbnail, Name, Category chip, Action Buttons */}
               <div className="flex items-start justify-between gap-2.5">
                 <div className="flex items-center gap-3 min-w-0">
-                  <img
-                    src={p.imageUrl}
-                    alt={p.name}
-                    className="w-12 h-12 rounded-xl object-cover bg-slate-100 border border-slate-200 shrink-0"
-                    onError={(e) => {
-                      e.currentTarget.src =
-                        'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80';
-                    }}
-                  />
+                  {p.imageUrl ? (
+                    <img
+                      src={p.imageUrl}
+                      alt={p.name}
+                      className="w-12 h-12 rounded-xl object-cover bg-slate-100 border border-slate-200 shrink-0"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center text-slate-400">
+                      <Package size={22} weight="duotone" />
+                    </div>
+                  )}
                   <div className="min-w-0">
                     <h3 className="font-extrabold text-slate-900 text-sm leading-snug line-clamp-2">
                       {p.name}
@@ -474,7 +488,10 @@ export default function ProductsView({
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
-                    onClick={() => onEditProduct(p)}
+                    onClick={() => {
+                      playActionClickBeep('products');
+                      onEditProduct(p);
+                    }}
                     className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-all active:scale-95 cursor-pointer"
                     title="ແກ້ໄຂ"
                   >
@@ -482,7 +499,10 @@ export default function ProductsView({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onDeleteProduct(p.id, p.name)}
+                    onClick={() => {
+                      playErrorBeep('products');
+                      onDeleteProduct(p.id, p.name);
+                    }}
                     className="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center transition-all active:scale-95 cursor-pointer"
                     title="ລຶບ"
                   >
@@ -597,15 +617,20 @@ export default function ProductsView({
                 >
                   {/* Image & Name */}
                   <td className="py-3 px-4 flex items-center gap-3">
-                    <img
-                      src={p.imageUrl}
-                      alt={p.name}
-                      className="w-11 h-11 rounded-xl object-cover bg-slate-100 border border-slate-200 shrink-0"
-                      onError={(e) => {
-                        e.currentTarget.src =
-                          'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80';
-                      }}
-                    />
+                    {p.imageUrl ? (
+                      <img
+                        src={p.imageUrl}
+                        alt={p.name}
+                        className="w-11 h-11 rounded-xl object-cover bg-slate-100 border border-slate-200 shrink-0"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center text-slate-400">
+                        <Package size={20} weight="duotone" />
+                      </div>
+                    )}
                     <div>
                       <div className="font-extrabold text-slate-900 text-xs">
                         {p.name}
@@ -738,14 +763,20 @@ export default function ProductsView({
                   <td className="py-3 px-4 text-center">
                     <div className="flex items-center justify-center gap-1.5">
                       <button
-                        onClick={() => onEditProduct(p)}
+                        onClick={() => {
+                          playActionClickBeep('products');
+                          onEditProduct(p);
+                        }}
                         className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs transition-colors cursor-pointer"
                         title="ແກ້ໄຂ"
                       >
                         <PencilSimple size={14} />
                       </button>
                       <button
-                        onClick={() => onDeleteProduct(p.id, p.name)}
+                        onClick={() => {
+                          playErrorBeep('products');
+                          onDeleteProduct(p.id, p.name);
+                        }}
                         className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs transition-colors cursor-pointer"
                         title="ລຶບ"
                       >

@@ -14,6 +14,7 @@ import {
   FloppyDisk,
 } from '@phosphor-icons/react';
 import { formatKip, formatDots, parseDots, getEffectiveUnitPrice } from '../utils/formatters';
+import { playModalCloseBeep, playModalConfirmBeep, playUnitChangeBeep } from '../utils/audioFeedback';
 
 export default function CheckoutModal({
   isOpen,
@@ -102,7 +103,10 @@ export default function CheckoutModal({
             )}
           </div>
           <button
-            onClick={onClose}
+            onClick={() => {
+              playModalCloseBeep();
+              onClose();
+            }}
             className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
           >
             <X size={18} />
@@ -141,11 +145,14 @@ export default function CheckoutModal({
               <div className="flex flex-col gap-1.5 pt-0.5">
                 {cart.map((item, idx) => {
                   const prodName = item.product?.name || item.productName || 'ສິນຄ້າ';
-                  const unitName = item.unit?.unitName || 'ອັນ';
+                  const rawUnitName = item.unit?.unitName || 'ອັນ';
+                  const unitName = item.isHalfCarton && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
+                  const tierPrice = getEffectiveUnitPrice(item.unit, item.selectedPriceTier || 1);
+                  const standardPrice = item.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
                   const effectivePrice =
                     item.customPrice !== undefined && item.customPrice !== null
                       ? item.customPrice
-                      : getEffectiveUnitPrice(item.unit, item.selectedPriceTier || 1);
+                      : standardPrice;
                   const baseTotal = effectivePrice * item.quantity;
                   const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
                   const missingCount = item.noEmptyCrates
@@ -205,7 +212,10 @@ export default function CheckoutModal({
             {/* 1. Cash */}
             <button
               type="button"
-              onClick={() => setPaymentMethod('cash')}
+              onClick={() => {
+                playUnitChangeBeep();
+                setPaymentMethod('cash');
+              }}
               className={`py-2 px-1 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                 paymentMethod === 'cash'
                   ? 'bg-teal-50 border-teal-500 text-teal-800 shadow-xs ring-1 ring-teal-500'
@@ -219,7 +229,10 @@ export default function CheckoutModal({
             {/* 2. Transfer / QR */}
             <button
               type="button"
-              onClick={() => setPaymentMethod('transfer')}
+              onClick={() => {
+                playUnitChangeBeep();
+                setPaymentMethod('transfer');
+              }}
               className={`py-2 px-1 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                 paymentMethod === 'transfer' || paymentMethod === 'onepay'
                   ? 'bg-blue-50 border-blue-500 text-blue-800 shadow-xs ring-1 ring-blue-500'
@@ -234,6 +247,7 @@ export default function CheckoutModal({
             <button
               type="button"
               onClick={() => {
+                playUnitChangeBeep();
                 setPaymentMethod('debt');
                 if (debtPaidKip === undefined || debtPaidKip === null) {
                   setDebtPaidKip(0);
@@ -279,7 +293,10 @@ export default function CheckoutModal({
                   <button
                     key={amt}
                     type="button"
-                    onClick={() => setTenderedKip(amt)}
+                    onClick={() => {
+                      playUnitChangeBeep();
+                      setTenderedKip(amt);
+                    }}
                     className={`py-1.5 px-0.5 rounded-lg text-[10.5px] font-bold font-mono transition-all cursor-pointer border ${
                       tenderedKip === amt
                         ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
@@ -439,14 +456,20 @@ export default function CheckoutModal({
         <div className="pt-2 border-t border-slate-100 flex justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              playModalCloseBeep();
+              onClose();
+            }}
             className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all cursor-pointer"
           >
             ຍົກເລີກ
           </button>
           <button
             type="button"
-            onClick={onConfirmPayment}
+            onClick={() => {
+              playModalConfirmBeep();
+              onConfirmPayment();
+            }}
             className={`px-5 py-2.5 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer ${
               editingOldTransaction
                 ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'

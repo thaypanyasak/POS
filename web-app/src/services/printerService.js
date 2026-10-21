@@ -311,13 +311,13 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
         <title>Receipt Print (${targetLabel})</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+Lao:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
         ${styles}
         <style id="compiled-app-styles">
           ${compiledCss}
         </style>
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Lao:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+          @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+Lao:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
 
           @font-face {
             font-family: 'Noto Sans Lao';
@@ -522,6 +522,16 @@ export async function printReceiptSmart({
 
     // Standard printer widths in dots: 80mm = 576 dots, 58mm = 384 dots
     const targetWidth = activePaperWidth === 58 ? 384 : 576;
+
+    // Ensure all web fonts ('Be Vietnam Pro', 'Noto Sans Lao') are 100% loaded before rasterizing
+    try {
+      if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+        await Promise.race([
+          document.fonts.ready,
+          new Promise((r) => setTimeout(r, 600))
+        ]);
+      }
+    } catch (_) {}
 
     let canvasTimer;
     const canvasTimeoutPromise = new Promise((_, reject) => {

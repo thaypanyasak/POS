@@ -30,6 +30,7 @@ import DynamicDailyRevenueChart from './dashboard/DynamicDailyRevenueChart';
 import Annual12MonthSalesChart from './dashboard/Annual12MonthSalesChart';
 import ExchangeRateBadge from './common/ExchangeRateBadge';
 import queryClient from '../services/queryClient';
+import { playUnitChangeBeep, playActionClickBeep } from '../utils/audioFeedback';
 
 export default function DashboardView({
   dashboardTimeframe,
@@ -301,7 +302,7 @@ export default function DashboardView({
           prodMap[pId] = {
             id: pId,
             name: it.productName || it.product?.name || productObj?.name || 'ສິນຄ້າ',
-            imageUrl: productObj?.imageUrl || productObj?.image_url || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80',
+            imageUrl: productObj?.imageUrl || productObj?.image_url || null,
             productObj,
             totalBaseUnits: 0,
             revenue: 0,
@@ -418,7 +419,10 @@ export default function DashboardView({
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setDashboardTimeframe(item.id)}
+                onClick={() => {
+                  playUnitChangeBeep('dashboard');
+                  setDashboardTimeframe(item.id);
+                }}
                 className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                   dashboardTimeframe === item.id
                     ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
@@ -817,14 +821,20 @@ export default function DashboardView({
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="relative shrink-0">
-                        <img
-                          src={item.imageUrl}
-                          alt={item.name}
-                          className="w-8 h-8 rounded-lg object-cover border border-slate-200 bg-white"
-                          onError={(e) => {
-                            e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80';
-                          }}
-                        />
+                        {item.imageUrl ? (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="w-8 h-8 rounded-lg object-cover border border-slate-200 bg-white"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center text-slate-400">
+                            <Package size={16} weight="duotone" />
+                          </div>
+                        )}
                         <span
                           className={`absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full text-[8.5px] font-black flex items-center justify-center text-white ${
                             idx === 0

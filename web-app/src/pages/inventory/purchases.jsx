@@ -45,6 +45,7 @@ import {
 import { queryClient } from '../../services/queryClient';
 import BarcodeScannerModal from '../../components/BarcodeScannerModal';
 import MultiProductGRNForm from '../../components/inventory/MultiProductGRNForm';
+import { playUnitChangeBeep, playActionClickBeep, playSuccessBeep, playErrorBeep } from '../../utils/audioFeedback';
 
 export default function PurchasesView({
   purchaseOrders = [],
@@ -679,6 +680,7 @@ export default function PurchasesView({
       const res = await processMultiProductGRN(grnPayload);
 
       if (res.success) {
+        playSuccessBeep('inventory');
         handleBackToList();
         onAlert?.(
           editingPoId
@@ -690,6 +692,7 @@ export default function PurchasesView({
         await syncAllCaches();
         await onRefresh?.();
       } else {
+        playErrorBeep('inventory');
         onAlert?.(res.error || 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກ', 'ຂໍ້ຜິດພາດ', 'error');
       }
     } finally {
@@ -930,7 +933,10 @@ export default function PurchasesView({
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             type="button"
-            onClick={onRefresh}
+            onClick={() => {
+              playUnitChangeBeep('inventory');
+              onRefresh?.();
+            }}
             disabled={isLoading}
             className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs disabled:opacity-50"
             title="ໂຫຼດຂໍ້ມູນໃໝ່"
@@ -941,7 +947,10 @@ export default function PurchasesView({
 
           <button
             type="button"
-            onClick={onOpenSupplierManager}
+            onClick={() => {
+              playActionClickBeep('inventory');
+              onOpenSupplierManager?.();
+            }}
             className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
           >
             <Truck size={15} />
@@ -951,7 +960,10 @@ export default function PurchasesView({
 
           <button
             type="button"
-            onClick={handleOpenCreateGRN}
+            onClick={() => {
+              playActionClickBeep('inventory');
+              handleOpenCreateGRN();
+            }}
             className="px-3 sm:px-4 py-2 sm:py-2.5 h-9 sm:h-10 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
           >
             <Plus size={16} weight="bold" />
@@ -1044,7 +1056,10 @@ export default function PurchasesView({
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setFilterStatus(tab.id)}
+                onClick={() => {
+                  playUnitChangeBeep('inventory');
+                  setFilterStatus(tab.id);
+                }}
                 className={`h-8 sm:h-[34px] px-2.5 sm:px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border shrink-0 ${
                   filterStatus === tab.id
                     ? tab.id === 'ALL'

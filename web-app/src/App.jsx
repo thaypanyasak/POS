@@ -51,6 +51,8 @@ import {
   playRemoveFromCartBeep,
   playQuantityStepBeep,
   playUnitChangeBeep,
+  playPriceTierBeep,
+  playActionClickBeep,
 } from './utils/audioFeedback';
 
 export default function App() {
@@ -224,12 +226,13 @@ export default function App() {
 
   // Product Form State (Simplified Purchase Cost & 3-Tier Switches)
   const [newProdName, setNewProdName] = useState('');
+  const [newProdNameVi, setNewProdNameVi] = useState('');
   const [newProdCategory, setNewProdCategory] = useState('');
   const [newProdCategoryId, setNewProdCategoryId] = useState('');
   const [newProdBarcode, setNewProdBarcode] = useState('');
-  const [newProdCostKip, setNewProdCostKip] = useState('180.000');
-  const [newProdCostBaht, setNewProdCostBaht] = useState('250');
-  const [newProdImageUrl, setNewProdImageUrl] = useState('https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80');
+  const [newProdCostKip, setNewProdCostKip] = useState('');
+  const [newProdCostBaht, setNewProdCostBaht] = useState('');
+  const [newProdImageUrl, setNewProdImageUrl] = useState('');
   const [imageFileToUpload, setImageFileToUpload] = useState(null);
   const [imageCompressionStats, setImageCompressionStats] = useState(null);
   const [isCompressingImage, setIsCompressingImage] = useState(false);
@@ -237,7 +240,7 @@ export default function App() {
   // 3-Tier Switches & Multi-Price Tiers (Price 1, 2, 3) & Tier-specific Barcodes
   const [enablePiece, setEnablePiece] = useState(true);
   const [pieceUnitName, setPieceUnitName] = useState('ອັນ');
-  const [piecePrice, setPiecePrice] = useState('10.000');
+  const [piecePrice, setPiecePrice] = useState('');
   const [piecePrice2, setPiecePrice2] = useState('');
   const [piecePrice3, setPiecePrice3] = useState('');
   const [pieceBarcode, setPieceBarcode] = useState('');
@@ -245,7 +248,7 @@ export default function App() {
   const [enablePack, setEnablePack] = useState(true);
   const [packUnitName, setPackUnitName] = useState('ແພັກ');
   const [packMultiplier, setPackMultiplier] = useState('6');
-  const [packPrice, setPackPrice] = useState('55.000');
+  const [packPrice, setPackPrice] = useState('');
   const [packPrice2, setPackPrice2] = useState('');
   const [packPrice3, setPackPrice3] = useState('');
   const [packBarcode, setPackBarcode] = useState('');
@@ -253,7 +256,7 @@ export default function App() {
   const [enableCarton, setEnableCarton] = useState(true);
   const [cartonUnitName, setCartonUnitName] = useState('ແກັດ');
   const [cartonMultiplier, setCartonMultiplier] = useState('24');
-  const [cartonPrice, setCartonPrice] = useState('210.000');
+  const [cartonPrice, setCartonPrice] = useState('');
   const [cartonPrice2, setCartonPrice2] = useState('');
   const [cartonPrice3, setCartonPrice3] = useState('');
   const [cartonBarcode, setCartonBarcode] = useState('');
@@ -264,8 +267,8 @@ export default function App() {
 
   // Stock Tracking Toggle & Initial Stock
   const [trackStock, setTrackStock] = useState(true);
-  const [stockCartons, setStockCartons] = useState('10');
-  const [stockPacks, setStockPacks] = useState('2');
+  const [stockCartons, setStockCartons] = useState('0');
+  const [stockPacks, setStockPacks] = useState('0');
   const [stockPieces, setStockPieces] = useState('0');
 
   // GRN Suppliers & Purchase Orders
@@ -573,6 +576,7 @@ export default function App() {
   const handleOpenNewProduct = () => {
     setProductToEdit(null);
     setNewProdName('');
+    setNewProdNameVi('');
     const defaultCat = categoriesList[0] || '';
     setNewProdCategory(defaultCat);
     const matchedRaw = rawCategories.find((c) => c.name === defaultCat);
@@ -592,20 +596,20 @@ export default function App() {
     setEnableCarton(true);
     setCartonUnitName('ແກັດ');
     setCartonMultiplier('24');
-    setCartonPrice('210.000');
+    setCartonPrice('');
     setCartonPrice2('');
     setCartonPrice3('');
 
     setEnablePack(true);
     setPackUnitName('ແພັກ');
     setPackMultiplier('6');
-    setPackPrice('55.000');
+    setPackPrice('');
     setPackPrice2('');
     setPackPrice3('');
 
     setEnablePiece(true);
     setPieceUnitName('ອັນ');
-    setPiecePrice('10.000');
+    setPiecePrice('');
     setPiecePrice2('');
     setPiecePrice3('');
 
@@ -627,6 +631,7 @@ export default function App() {
     // 1. Reset all form state first to prevent state leakage
     setProductToEdit(p);
     setNewProdName(p.name || '');
+    setNewProdNameVi(p.name_vi || p.nameVi || '');
     const pCat = p.category || (p.categories?.name) || 'ເຄື່ອງດື່ມ';
     setNewProdCategory(pCat);
     const pCatId = p.categoryId || p.category_id || p.categories?.id || rawCategories.find((c) => c.name === pCat)?.id || '';
@@ -1048,9 +1053,9 @@ export default function App() {
       const totalStock = trackStock ? calculatedStock : 0;
 
       let finalImageUrl =
-        newProdImageUrl ||
-        productToEdit?.imageUrl ||
-        'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80';
+        newProdImageUrl !== undefined && newProdImageUrl !== null && String(newProdImageUrl).trim() !== ''
+          ? String(newProdImageUrl).trim()
+          : (productToEdit?.imageUrl || productToEdit?.image_url || null);
 
       // If user selected a new local image, upload the compressed blob to Supabase Storage
       if (imageFileToUpload) {
@@ -1082,6 +1087,8 @@ export default function App() {
       const updatedProduct = {
         id: prodId,
         name: newProdName.trim(),
+        name_vi: newProdNameVi.trim() || null,
+        nameVi: newProdNameVi.trim() || null,
         category: newProdCategory,
         categoryId: resolvedCatId,
         barcode: primaryBarcode,
@@ -1139,6 +1146,7 @@ export default function App() {
       setImageFileToUpload(null);
       setImageCompressionStats(null);
       await queryClient.invalidateQueries({ queryKey: ['products'] });
+      playSuccessBeep('products');
       openAlert(`ບັນທຶກສິນຄ້າ "${newProdName}" ລົງຖານຂໍ້ມູນ Supabase ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
     } catch (err) {
       console.error('Save product error:', err);
@@ -1240,6 +1248,7 @@ export default function App() {
         return item;
       })
     );
+    playPriceTierBeep();
   };
 
   const setGlobalCartPriceTier = (newTier) => {
@@ -1294,6 +1303,7 @@ export default function App() {
         return it;
       })
     );
+    playUnitChangeBeep();
   };
 
   const updateMissingCrates = (productId, unitId, newCount) => {
@@ -1310,6 +1320,7 @@ export default function App() {
         return it;
       })
     );
+    playQuantityStepBeep(1);
   };
 
   const removeFromCart = (productId, unitId) => {
@@ -1345,6 +1356,7 @@ export default function App() {
       updated[oldIndex] = {
         ...oldItem,
         unit: newUnit,
+        isHalfCarton: false, // Reset half carton when switching to another unit
         selectedPriceTier: oldItem.selectedPriceTier || 1,
         customPrice: null,
         overrideReason: '',
@@ -1358,13 +1370,33 @@ export default function App() {
     playUnitChangeBeep();
   };
 
+  /**
+   * Toggle or set Half-Carton (½ ແກັດ / Nửa thùng) mode for a cart item
+   */
+  const toggleCartItemHalfCarton = (productId, unitId, isHalf) => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        if (item.product.id === productId && (item.unit.id === unitId || item.unit.unitName === unitId)) {
+          return {
+            ...item,
+            isHalfCarton: isHalf !== undefined ? Boolean(isHalf) : !item.isHalfCarton,
+            customPrice: null, // Reset manual price override to let half carton auto calculate
+          };
+        }
+        return item;
+      })
+    );
+    playUnitChangeBeep();
+  };
+
   const cartSubtotal = useMemo(() => {
     return cart.reduce((sum, item) => {
       const tierPrice = getEffectiveUnitPrice(item.unit, item.selectedPriceTier || 1);
+      const standardPrice = item.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
       const price =
         item.customPrice !== undefined && item.customPrice !== null
           ? item.customPrice
-          : tierPrice;
+          : standardPrice;
       const baseLine = price * item.quantity;
       const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
       const crateFee = item.noEmptyCrates
@@ -1488,26 +1520,34 @@ export default function App() {
 
       let totalCost = 0;
       cart.forEach((it) => {
-        totalCost += (it.product.costPerBaseUnit || 0) * (it.unit.multiplier || 1) * it.quantity;
+        const fullMult = Number(it.unit.multiplier || 1);
+        const effectiveMult = it.isHalfCarton ? fullMult / 2 : fullMult;
+        totalCost += (it.product.costPerBaseUnit || 0) * effectiveMult * it.quantity;
       });
       const grossProfit = cartSubtotal - totalCost;
 
       const receiptItems = cart.map((it) => {
         const tierPrice = getEffectiveUnitPrice(it.unit, it.selectedPriceTier || 1);
+        const standardPrice = it.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
         const effectivePrice =
           it.customPrice !== undefined && it.customPrice !== null
             ? it.customPrice
-            : tierPrice;
+            : standardPrice;
         const feePerCrate = Number(it.product?.crateDepositFee) || 30000;
         const missingCount = it.noEmptyCrates ? (Number(it.missingCratesCount ?? it.quantity) || 0) : 0;
         const crateDepositTotal = missingCount * feePerCrate;
         const baseLine = effectivePrice * it.quantity;
         const lineTotal = baseLine + crateDepositTotal;
 
+        const fullMult = Number(it.unit.multiplier || 1);
+        const effectiveMultiplier = it.isHalfCarton ? fullMult / 2 : fullMult;
+
         return {
           ...it,
           customPrice: effectivePrice,
           unitPrice: effectivePrice,
+          effectiveMultiplier,
+          isHalfCarton: Boolean(it.isHalfCarton),
           selectedPriceTier: it.selectedPriceTier || 1,
           noEmptyCrates: Boolean(it.noEmptyCrates),
           missingCratesCount: missingCount,
@@ -1614,7 +1654,9 @@ export default function App() {
           }
 
           const totalBaseUnitsSold = soldItems.reduce((sum, it) => {
-            return sum + (it.unit.multiplier || 1) * it.quantity;
+            const mult = Number(it.unit.multiplier || 1);
+            const effMult = it.isHalfCarton ? mult / 2 : mult;
+            return sum + effMult * it.quantity;
           }, 0);
 
           const currentStock = prod.currentStockBaseUnits ?? 0;
@@ -1797,11 +1839,12 @@ export default function App() {
         try {
           const itemsToRestore = (tx.items || tx.sale_transaction_items || []).map((it) => {
             const prodId = it.product?.id || it.productId || it.product_id;
-            const mult = Number(it.unit?.multiplier || it.multiplier) || 1;
+            const fullMult = Number(it.effectiveMultiplier || it.unit?.multiplier || it.multiplier) || 1;
+            const effMult = it.isHalfCarton ? fullMult / 2 : fullMult;
             const qty = Number(it.quantity) || 1;
             return {
               productId: prodId,
-              unitsToRestore: mult * qty,
+              unitsToRestore: effMult * qty,
             };
           });
 
@@ -1897,10 +1940,14 @@ export default function App() {
         setDbSavingMessage(`ກຳລັງລຶບບິນ "${tx.receiptNumber}" & ຄືນສະຕັອກໃນ Supabase...`);
 
         try {
-          const itemsToRestore = (tx.items || tx.sale_transaction_items || []).map((it) => ({
-            productId: it.product?.id || it.product_id,
-            unitsToRestore: (Number(it.unit?.multiplier || it.multiplier) || 1) * (Number(it.quantity) || 1),
-          }));
+          const itemsToRestore = (tx.items || tx.sale_transaction_items || []).map((it) => {
+            const fullMult = Number(it.effectiveMultiplier || it.unit?.multiplier || it.multiplier) || 1;
+            const effMult = it.isHalfCarton ? fullMult / 2 : fullMult;
+            return {
+              productId: it.product?.id || it.product_id,
+              unitsToRestore: effMult * (Number(it.quantity) || 1),
+            };
+          });
 
           // REAL SUPABASE DATABASE API CALL:
           const res = await deleteTransactionFromSupabase(tx.id, itemsToRestore);
@@ -2246,6 +2293,7 @@ export default function App() {
             toggleCartItemCrateDeposit={toggleCartItemCrateDeposit}
             updateMissingCrates={updateMissingCrates}
             changeCartItemUnit={changeCartItemUnit}
+            toggleCartItemHalfCarton={toggleCartItemHalfCarton}
             globalPriceTier={globalPriceTier}
             setGlobalPriceTier={setGlobalCartPriceTier}
             changeCartItemPriceTier={changeCartItemPriceTier}
@@ -2377,6 +2425,8 @@ export default function App() {
         existingProducts={products}
         newProdName={newProdName}
         setNewProdName={setNewProdName}
+        newProdNameVi={newProdNameVi}
+        setNewProdNameVi={setNewProdNameVi}
         newProdCategory={newProdCategory}
         setNewProdCategory={setNewProdCategory}
         categoriesList={categoriesList}

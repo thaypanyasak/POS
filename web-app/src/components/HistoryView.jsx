@@ -21,6 +21,7 @@ import {
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
+import { playUnitChangeBeep, playActionClickBeep, playErrorBeep } from '../utils/audioFeedback';
 
 export default function HistoryView({
   transactions = [],
@@ -278,7 +279,10 @@ export default function HistoryView({
         {/* Tab 1: ທັງໝົດ */}
         <button
           type="button"
-          onClick={() => setActiveTab('all')}
+          onClick={() => {
+            playUnitChangeBeep('history');
+            setActiveTab('all');
+          }}
           className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
             activeTab === 'all'
               ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
@@ -299,7 +303,10 @@ export default function HistoryView({
         {/* Tab 2: ເງິນສົດ */}
         <button
           type="button"
-          onClick={() => setActiveTab('cash')}
+          onClick={() => {
+            playUnitChangeBeep('history');
+            setActiveTab('cash');
+          }}
           className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
             activeTab === 'cash'
               ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
@@ -320,7 +327,10 @@ export default function HistoryView({
         {/* Tab 3: ເງິນໂອນ */}
         <button
           type="button"
-          onClick={() => setActiveTab('transfer')}
+          onClick={() => {
+            playUnitChangeBeep('history');
+            setActiveTab('transfer');
+          }}
           className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
             activeTab === 'transfer'
               ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
@@ -341,7 +351,10 @@ export default function HistoryView({
         {/* Tab 4: ຕິດໜີ້ */}
         <button
           type="button"
-          onClick={() => setActiveTab('debt')}
+          onClick={() => {
+            playUnitChangeBeep('history');
+            setActiveTab('debt');
+          }}
           className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
             activeTab === 'debt'
               ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
@@ -362,7 +375,10 @@ export default function HistoryView({
         {/* Tab 5: ຍົກເລີກແລ້ວ */}
         <button
           type="button"
-          onClick={() => setActiveTab('cancelled')}
+          onClick={() => {
+            playUnitChangeBeep('history');
+            setActiveTab('cancelled');
+          }}
           className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
             activeTab === 'cancelled'
               ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
@@ -381,7 +397,10 @@ export default function HistoryView({
           {/* First button: ທັງໝົດ (All) */}
           <button
             type="button"
-            onClick={() => setDateFilter('all')}
+            onClick={() => {
+              playUnitChangeBeep('history');
+              setDateFilter('all');
+            }}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               dateFilter === 'all'
                 ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
@@ -392,7 +411,10 @@ export default function HistoryView({
           </button>
           <button
             type="button"
-            onClick={() => setDateFilter('today')}
+            onClick={() => {
+              playUnitChangeBeep('history');
+              setDateFilter('today');
+            }}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               dateFilter === 'today'
                 ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
@@ -403,7 +425,10 @@ export default function HistoryView({
           </button>
           <button
             type="button"
-            onClick={() => setDateFilter('yesterday')}
+            onClick={() => {
+              playUnitChangeBeep('history');
+              setDateFilter('yesterday');
+            }}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               dateFilter === 'yesterday'
                 ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
@@ -414,7 +439,10 @@ export default function HistoryView({
           </button>
           <button
             type="button"
-            onClick={() => setDateFilter('7days')}
+            onClick={() => {
+              playUnitChangeBeep('history');
+              setDateFilter('7days');
+            }}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               dateFilter === '7days'
                 ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
@@ -425,7 +453,10 @@ export default function HistoryView({
           </button>
           <button
             type="button"
-            onClick={() => setDateFilter('custom')}
+            onClick={() => {
+              playUnitChangeBeep('history');
+              setDateFilter('custom');
+            }}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               dateFilter === 'custom'
                 ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
@@ -632,7 +663,10 @@ export default function HistoryView({
                 {/* View/Print Receipt */}
                 <button
                   type="button"
-                  onClick={() => onOpenReceipt(tx)}
+                  onClick={() => {
+                    playActionClickBeep('history');
+                    onOpenReceipt(tx);
+                  }}
                   className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer"
                 >
                   <Printer size={15} weight="bold" />
@@ -643,7 +677,10 @@ export default function HistoryView({
                 {!isCancelled && onEditOrderInPos && (
                   <button
                     type="button"
-                    onClick={() => onEditOrderInPos(tx)}
+                    onClick={() => {
+                      playActionClickBeep('history');
+                      onEditOrderInPos(tx);
+                    }}
                     className="py-2 px-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer"
                     title="ແກ້ໄຂບິນຜ່ານໜ້າ POS"
                   >
@@ -656,7 +693,10 @@ export default function HistoryView({
                 {!isCancelled && hasDebt && (
                   <button
                     type="button"
-                    onClick={() => setDebtModalTx(tx)}
+                    onClick={() => {
+                      playActionClickBeep('history');
+                      setDebtModalTx(tx);
+                    }}
                     className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer"
                   >
                     <HandCoins size={15} weight="bold" />
@@ -668,7 +708,10 @@ export default function HistoryView({
                 {!isCancelled ? (
                   <button
                     type="button"
-                    onClick={() => onCancelTransaction && onCancelTransaction(tx)}
+                    onClick={() => {
+                      playErrorBeep('history');
+                      onCancelTransaction && onCancelTransaction(tx);
+                    }}
                     className="p-2 rounded-xl bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 text-xs font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer ml-auto"
                     title="ຍົກເລີກບິນ"
                   >

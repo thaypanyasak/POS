@@ -454,14 +454,20 @@ function MonthDashboardColumn({
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="relative shrink-0">
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="w-8 h-8 rounded-lg object-cover border border-slate-200 bg-white"
-                      onError={(e) => {
-                        e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80';
-                      }}
-                    />
+                    {item.imageUrl ? (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="w-8 h-8 rounded-lg object-cover border border-slate-200 bg-white"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center text-slate-400">
+                        <Package size={16} weight="duotone" />
+                      </div>
+                    )}
                     <span
                       className={`absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full text-[8.5px] font-black flex items-center justify-center text-white ${
                         idx === 0
@@ -729,7 +735,7 @@ export default function MonthComparisonView({
           itemsMap[id] = {
             id,
             name,
-            imageUrl: prod?.imageUrl || prod?.image_url || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80',
+            imageUrl: prod?.imageUrl || prod?.image_url || null,
             productObj: prod,
             qty: 0,
             totalBaseUnits: 0,

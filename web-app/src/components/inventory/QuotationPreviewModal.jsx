@@ -8,6 +8,7 @@ import {
 } from '@phosphor-icons/react';
 import { formatKip, formatDots, getEffectiveUnitPrice } from '../../utils/formatters';
 import { printReceiptSmart } from '../../services/printerService';
+import { playModalCloseBeep, playModalConfirmBeep } from '../../utils/audioFeedback';
 
 export default function QuotationPreviewModal({
   isOpen,
@@ -68,7 +69,10 @@ export default function QuotationPreviewModal({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => {
+              playModalCloseBeep();
+              onClose();
+            }}
             className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
           >
             <X size={20} />
@@ -130,11 +134,14 @@ export default function QuotationPreviewModal({
             <div className="py-1 flex flex-col gap-1 border-b border-dashed border-slate-300">
               {cart.map((it, idx) => {
                 const prodName = it.product?.name || 'ສິນຄ້າ';
-                const unitName = it.unit?.unitName || 'ອັນ';
+                const rawUnitName = it.unit?.unitName || 'ອັນ';
+                const unitName = it.isHalfCarton && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
+                const tierPrice = getEffectiveUnitPrice(it.unit, it.selectedPriceTier || 1);
+                const standardPrice = it.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
                 const effectivePrice =
                   it.customPrice !== undefined && it.customPrice !== null
                     ? it.customPrice
-                    : getEffectiveUnitPrice(it.unit, it.selectedPriceTier || 1);
+                    : standardPrice;
                 const baseTotal = effectivePrice * it.quantity;
 
                 const hasMissingCrates = Boolean(it.noEmptyCrates);
@@ -226,14 +233,20 @@ export default function QuotationPreviewModal({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => {
+                playModalCloseBeep();
+                onClose();
+              }}
               className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 cursor-pointer"
             >
               ປິດ
             </button>
             <button
               type="button"
-              onClick={handleBrowserPrint}
+              onClick={() => {
+                playModalConfirmBeep();
+                handleBrowserPrint();
+              }}
               className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-xs cursor-pointer active:scale-95 transition-all flex items-center gap-1.5"
             >
               <Printer size={16} weight="bold" />

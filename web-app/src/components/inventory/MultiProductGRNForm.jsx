@@ -34,7 +34,7 @@ import {
 } from '../../utils/formatters';
 import BarcodeScannerModal from '../BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../../hooks/useHardwareBarcodeScanner';
-import { playSuccessBeep, playErrorBeep } from '../../utils/audioFeedback';
+import { playSuccessBeep, playErrorBeep, playActionClickBeep, playUnitChangeBeep } from '../../utils/audioFeedback';
 import { updateExchangeRateInSupabase, fetchExchangeRate } from '../../services/supabase';
 import queryClient from '../../services/queryClient';
 
@@ -81,7 +81,10 @@ function GrnQuantityStepper({ quantity, onUpdateQuantity, onStepQuantity, size =
       <div className="flex items-center gap-1 shrink-0">
         <button
           type="button"
-          onClick={() => onStepQuantity?.(-1)}
+          onClick={() => {
+            playUnitChangeBeep('inventory');
+            onStepQuantity?.(-1);
+          }}
           className="w-11 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-lg active:scale-95 flex items-center justify-center cursor-pointer border border-slate-200 transition-colors"
         >
           -
@@ -99,7 +102,10 @@ function GrnQuantityStepper({ quantity, onUpdateQuantity, onStepQuantity, size =
         />
         <button
           type="button"
-          onClick={() => onStepQuantity?.(1)}
+          onClick={() => {
+            playUnitChangeBeep('inventory');
+            onStepQuantity?.(1);
+          }}
           className="w-11 h-11 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-700 font-black text-lg active:scale-95 flex items-center justify-center cursor-pointer border border-teal-200 transition-colors"
         >
           +
@@ -112,7 +118,10 @@ function GrnQuantityStepper({ quantity, onUpdateQuantity, onStepQuantity, size =
     <div className="flex items-center justify-center gap-0.5">
       <button
         type="button"
-        onClick={() => onStepQuantity?.(-1)}
+        onClick={() => {
+          playUnitChangeBeep('inventory');
+          onStepQuantity?.(-1);
+        }}
         className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold active:scale-95 flex items-center justify-center cursor-pointer text-xs shrink-0 transition-colors"
       >
         -
@@ -130,7 +139,10 @@ function GrnQuantityStepper({ quantity, onUpdateQuantity, onStepQuantity, size =
       />
       <button
         type="button"
-        onClick={() => onStepQuantity?.(1)}
+        onClick={() => {
+          playUnitChangeBeep('inventory');
+          onStepQuantity?.(1);
+        }}
         className="w-7 h-7 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold active:scale-95 flex items-center justify-center cursor-pointer text-xs shrink-0 transition-colors"
       >
         +
@@ -743,6 +755,7 @@ export default function MultiProductGRNForm({
                     <div
                       key={p.id}
                       onClick={() => {
+                        playActionClickBeep('inventory');
                         onAddToCart(p);
                         setProductSearch('');
                         setIsProductDropdownOpen(false);

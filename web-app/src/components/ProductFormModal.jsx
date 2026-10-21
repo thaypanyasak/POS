@@ -36,6 +36,8 @@ export default function ProductFormModal({
   existingProducts = [],
   newProdName,
   setNewProdName,
+  newProdNameVi = '',
+  setNewProdNameVi,
   newProdCategory,
   setNewProdCategory,
   categoriesList = [],
@@ -456,8 +458,7 @@ export default function ProductFormModal({
                         className="w-full h-full object-cover"
                         onError={(e) => {
                           e.currentTarget.onerror = null;
-                          e.currentTarget.src =
-                            'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80';
+                          e.currentTarget.style.display = 'none';
                         }}
                       />
                     ) : (
@@ -556,6 +557,20 @@ export default function ProductFormModal({
                   value={newProdName}
                   onChange={(e) => setNewProdName(e.target.value)}
                   placeholder="e.g. ເຄື່ອງດື່ມ ຊາຂຽວ Oishi 500ml"
+                  className="w-full h-9 sm:h-10 px-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 focus:bg-white font-bold transition-all"
+                />
+              </div>
+
+              {/* Vietnamese Name Input (Optional for Bilingual Receipts) */}
+              <div>
+                <label className="block text-[11px] sm:text-xs font-bold text-slate-700 mb-1">
+                  Tên tiếng Việt (Tùy chọn)
+                </label>
+                <input
+                  type="text"
+                  value={newProdNameVi}
+                  onChange={(e) => setNewProdNameVi && setNewProdNameVi(e.target.value)}
+                  placeholder="e.g. Trà xanh Oishi 500ml"
                   className="w-full h-9 sm:h-10 px-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 focus:bg-white font-bold transition-all"
                 />
               </div>

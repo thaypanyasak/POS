@@ -1,4 +1,4 @@
-name: Build iOS IPA (Flutter & Web-App)
+name: Build iOS IPA (Web-App Native)
 
 on:
   push:
@@ -6,58 +6,61 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-flutter-ios:
-    name: Build Flutter IPA
-    runs-on: macos-15
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: "temurin"
-          java-version: "17"
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.29.3"
-          cache: true
-
-      - name: Get Flutter dependencies
-        run: flutter pub get
-
-      - name: Build iOS (no code signing)
-        run: |
-          flutter build ios --release --no-codesign
-          cd ios
-          xcodebuild -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath ../build/ios_derived \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            build
-
-      - name: Package unsigned IPA
-        run: |
-          mkdir -p Payload
-          cp -r build/ios_derived/Build/Products/Release-iphoneos/Runner.app Payload/
-          zip -r MeiiShop-Flutter.ipa Payload/
-          echo "IPA created: MeiiShop-Flutter.ipa"
-          ls -lh MeiiShop-Flutter.ipa
-
-      - name: Upload IPA artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MeiiShop-Flutter-IPA-unsigned
-          path: MeiiShop-Flutter.ipa
-          retention-days: 14
+  # =========================================================================
+  # TẠM TẮT BUILD FLUTTER IPA (CHỈ TẬP TRUNG BUILD WEB-APP CAPACITOR NATIVE)
+  # =========================================================================
+  # build-flutter-ios:
+  #   name: Build Flutter IPA
+  #   runs-on: macos-15
+  #
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Set up Java
+  #       uses: actions/setup-java@v4
+  #       with:
+  #         distribution: "temurin"
+  #         java-version: "17"
+  #
+  #     - name: Set up Flutter
+  #       uses: subosito/flutter-action@v2
+  #       with:
+  #         flutter-version: "3.29.3"
+  #         cache: true
+  #
+  #     - name: Get Flutter dependencies
+  #       run: flutter pub get
+  #
+  #     - name: Build iOS (no code signing)
+  #       run: |
+  #         flutter build ios --release --no-codesign
+  #         cd ios
+  #         xcodebuild -workspace Runner.xcworkspace \
+  #           -scheme Runner \
+  #           -configuration Release \
+  #           -destination 'generic/platform=iOS' \
+  #           -derivedDataPath ../build/ios_derived \
+  #           CODE_SIGNING_ALLOWED=NO \
+  #           CODE_SIGNING_REQUIRED=NO \
+  #           CODE_SIGN_IDENTITY="" \
+  #           COMPILER_INDEX_STORE_ENABLE=NO \
+  #           build
+  #
+  #     - name: Package unsigned IPA
+  #       run: |
+  #         mkdir -p Payload
+  #         cp -r build/ios_derived/Build/Products/Release-iphoneos/Runner.app Payload/
+  #         zip -r MeiiShop-Flutter.ipa Payload/
+  #         echo "IPA created: MeiiShop-Flutter.ipa"
+  #         ls -lh MeiiShop-Flutter.ipa
+  #
+  #     - name: Upload IPA artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: MeiiShop-Flutter-IPA-unsigned
+  #         path: MeiiShop-Flutter.ipa
+  #         retention-days: 14
 
   build-webapp-ios:
     name: Build Web-App IPA
@@ -79,6 +82,7 @@ jobs:
           cd web-app
           npm install
           npm run build
+          npx @capacitor/assets generate --assetPath public
           npx cap sync ios
 
       - name: Build iOS with Xcode (No Code Signing)

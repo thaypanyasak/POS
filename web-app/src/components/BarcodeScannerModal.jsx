@@ -73,7 +73,7 @@ export default function BarcodeScannerModal({
     const timer = setTimeout(() => {
       if (!isMounted) return;
       startEmbeddedScanner();
-    }, 180);
+    }, 120);
 
     return () => {
       isMounted = false;
@@ -111,6 +111,18 @@ export default function BarcodeScannerModal({
   };
 
   /**
+   * Helper to wait for container DOM element to appear
+   */
+  const waitForContainer = async (maxAttempts = 10, intervalMs = 60) => {
+    for (let i = 0; i < maxAttempts; i++) {
+      const el = document.getElementById(containerId.current);
+      if (el) return el;
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
+    }
+    return document.getElementById(containerId.current);
+  };
+
+  /**
    * Starts high-speed embedded scanner with focused reticle region
    */
   const startEmbeddedScanner = async (overrideCameraId = null) => {
@@ -123,33 +135,51 @@ export default function BarcodeScannerModal({
       await cleanupScanner();
       isOperatingRef.current = true;
 
-      const element = document.getElementById(containerId.current);
+      const element = await waitForContainer();
       if (!element) {
+        console.warn('[BarcodeScanner] Target DOM container not found');
         isOperatingRef.current = false;
         setIsInitializing(false);
         return;
       }
 
-      // 1. Enumerate and discover cameras on device/browser
+      // Step 1: Handle Camera Discovery & Permission
+      // In iOS Safari / Capacitor WebView, calling Html5Qrcode.getCameras() *before* 
+      // camera permission is granted often fails or returns empty array [].
+      // To guarantee instant launch on first click:
+      // - First request stream permission via getUserMedia or fallback directly to { facingMode: 'environment' }
       let chosenCameraId = overrideCameraId;
-      try {
-        const cameras = await Html5Qrcode.getCameras();
-        if (cameras && cameras.length > 0) {
-          setAvailableCameras(cameras);
-          if (!chosenCameraId) {
-            // Mobile/Tablet: Prefer rear/back camera
-            const backCam = cameras.find(c => /back|rear|environment|sau|หลัง/i.test(c.label));
-            // Laptop/Desktop/Unknown: Fallback to last or first available camera
-            chosenCameraId = backCam ? backCam.id : (cameras[cameras.length - 1]?.id || cameras[0].id);
+      
+      if (!chosenCameraId) {
+        // If native getUserMedia exists, warm up permission first to unlock device enumeration
+        if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+          try {
+            const tempStream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: { ideal: 'environment' } }
+            });
+            // Immediately stop temporary warmup tracks so Html5Qrcode can claim the camera
+            tempStream.getTracks().forEach(track => track.stop());
+          } catch (permErr) {
+            console.debug('[BarcodeScanner] getUserMedia warmup note:', permErr);
           }
         }
-      } catch (enumErr) {
-        console.warn('[BarcodeScanner] getCameras discovery error:', enumErr);
+
+        // Now enumerate cameras with labels unlocked
+        try {
+          const cameras = await Html5Qrcode.getCameras();
+          if (cameras && cameras.length > 0) {
+            setAvailableCameras(cameras);
+            const backCam = cameras.find(c => /back|rear|environment|sau|หลัง/i.test(c.label));
+            chosenCameraId = backCam ? backCam.id : (cameras[cameras.length - 1]?.id || cameras[0].id);
+          }
+        } catch (enumErr) {
+          console.debug('[BarcodeScanner] getCameras fallback to facingMode:', enumErr);
+        }
       }
 
       setActiveCameraId(chosenCameraId);
 
-      // Target camera: specific deviceId if discovered, or environment fallback
+      // Preferred target: specific deviceId if resolved, or direct environment constraint
       const cameraTarget = chosenCameraId ? chosenCameraId : { facingMode: 'environment' };
 
       // 2. Instantiate a fresh Html5Qrcode instance with targetedFormats:

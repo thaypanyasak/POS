@@ -17,6 +17,7 @@ import {
   Minus
 } from '@phosphor-icons/react';
 import { formatKip, formatBaht, formatDots, normalizeLao } from '../../utils/formatters';
+import { playUnitChangeBeep, playActionClickBeep } from '../../utils/audioFeedback';
 
 /**
  * Determine unit tier level:
@@ -413,7 +414,10 @@ export default function SalesByUnitReportView({
           <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl overflow-x-auto no-scrollbar shrink-0 border border-slate-200/60">
             <button
               type="button"
-              onClick={() => setTimeframe('today')}
+              onClick={() => {
+                playUnitChangeBeep('sales_report');
+                setTimeframe('today');
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 timeframe === 'today'
                   ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
@@ -424,7 +428,10 @@ export default function SalesByUnitReportView({
             </button>
             <button
               type="button"
-              onClick={() => setTimeframe('yesterday')}
+              onClick={() => {
+                playUnitChangeBeep('sales_report');
+                setTimeframe('yesterday');
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 timeframe === 'yesterday'
                   ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
@@ -435,7 +442,10 @@ export default function SalesByUnitReportView({
             </button>
             <button
               type="button"
-              onClick={() => setTimeframe('7days')}
+              onClick={() => {
+                playUnitChangeBeep('sales_report');
+                setTimeframe('7days');
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 timeframe === '7days'
                   ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
@@ -446,7 +456,10 @@ export default function SalesByUnitReportView({
             </button>
             <button
               type="button"
-              onClick={() => setTimeframe('month')}
+              onClick={() => {
+                playUnitChangeBeep('sales_report');
+                setTimeframe('month');
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 timeframe === 'month'
                   ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
@@ -457,7 +470,10 @@ export default function SalesByUnitReportView({
             </button>
             <button
               type="button"
-              onClick={() => setTimeframe('custom')}
+              onClick={() => {
+                playUnitChangeBeep('sales_report');
+                setTimeframe('custom');
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer inline-flex items-center gap-1 ${
                 timeframe === 'custom'
                   ? 'bg-white text-teal-800 shadow-2xs font-extrabold'

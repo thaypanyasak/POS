@@ -22,6 +22,8 @@ import {
   CircleNotch,
   RocketLaunch,
   ArrowCounterClockwise,
+  SpeakerHigh,
+  SpeakerSlash,
 } from '@phosphor-icons/react';
 import { Capacitor } from '@capacitor/core';
 import { updateExchangeRateInSupabase } from '../services/supabase';
@@ -29,7 +31,15 @@ import queryClient from '../services/queryClient';
 import { formatDots } from '../utils/formatters';
 import { getPrinterConfig, savePrinterConfig, openCashDrawerDirect, testPrinterConnection } from '../services/printerService';
 import { liveUpdater } from '../services/liveUpdateService';
-import { playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
+import {
+  playSuccessBeep,
+  playErrorBeep,
+  playUnitChangeBeep,
+  isSoundEnabled,
+  setSoundEnabled,
+  getSoundSections,
+  setSoundSectionEnabled,
+} from '../utils/audioFeedback';
 
 export default function SettingsView({
   exchangeRate = 0,
@@ -51,10 +61,33 @@ export default function SettingsView({
   const [isEditingRate, setIsEditingRate] = useState(false);
   const [rateInput, setRateInput] = useState(String(exchangeRate || ''));
   const [isSavingRate, setIsSavingRate] = useState(false);
+  const [soundActive, setSoundActive] = useState(() => isSoundEnabled());
+  const [soundSections, setSoundSections] = useState(() => getSoundSections());
 
   useEffect(() => {
     if (exchangeRate) setRateInput(String(exchangeRate));
   }, [exchangeRate]);
+
+  const handleToggleSound = (enabled) => {
+    setSoundEnabled(enabled);
+    setSoundActive(enabled);
+    setSoundSections(getSoundSections());
+    if (enabled) {
+      playUnitChangeBeep('system');
+      onAlert?.('ເປີດສຽງລະບົບ (Sound ON) ສຳເລັດແລ້ວ', 'ແຈ້ງເຕືອນ', 'success');
+    } else {
+      onAlert?.('ປິດສຽງລະບົບ (Sound Muted) ສຳເລັດແລ້ວ', 'ແຈ້ງເຕືອນ', 'info');
+    }
+  };
+
+  const handleToggleSectionSound = (sectionKey, enabled) => {
+    setSoundSectionEnabled(sectionKey, enabled);
+    setSoundActive(isSoundEnabled());
+    setSoundSections(getSoundSections());
+    if (enabled) {
+      playUnitChangeBeep('system');
+    }
+  };
 
   const handleSaveRate = async () => {
     const val = parseInt(rateInput, 10);
@@ -351,7 +384,7 @@ export default function SettingsView({
           {/* LEFT COLUMN: VẬN HÀNH & DỮ LIỆU GỐC                              */}
           {/* ================================================================ */}
           <div className="space-y-4 sm:space-y-5">
-            {/* Card 1: Currency & Exchange Rate */}
+            {/* Card 1: Currency & Exchange Rate (ອັດຕາຕົ້ນທຶນເງິນບາດ THB / LAK - Đưa lên trên cùng) */}
             <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 sm:p-5">
               <div className="flex items-center gap-2.5 mb-3.5">
                 <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
@@ -427,6 +460,144 @@ export default function SettingsView({
                       </button>
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+
+            {/* Card 0: Sound & Haptic Feedback Control (Bật/Tắt âm thanh hệ thống POS) */}
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 sm:p-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                    soundActive
+                      ? 'bg-teal-50 text-teal-700 border-teal-100'
+                      : 'bg-slate-100 text-slate-500 border-slate-200'
+                  }`}>
+                    {soundActive ? (
+                      <SpeakerHigh size={20} weight="bold" />
+                    ) : (
+                      <SpeakerSlash size={20} weight="bold" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5">
+                      <span>ສຽງລະບົບ & ສັ່ນ (Audio & Feedback)</span>
+                    </h2>
+                    <p className="text-[11.5px] text-slate-500 truncate">
+                      ສຽງກົດປຸ່ມ, ຍິງບາໂຄດ, ປ່ຽນລາຄາ, ເລືອກຫົວໜ່ວຍ ແລະ ຊຳລະເງິນ
+                    </p>
+                  </div>
+                </div>
+
+                <div className="shrink-0">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                    soundActive
+                      ? 'bg-teal-50 text-teal-800 border border-teal-200'
+                      : 'bg-slate-100 text-slate-600 border border-slate-200'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${soundActive ? 'bg-teal-500' : 'bg-slate-400'}`}></span>
+                    <span>{soundActive ? 'ເປີດສຽງ (ON)' : 'ປິດສຽງ (Muted)'}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Quick master toggle chips */}
+              <div className="grid grid-cols-2 gap-2 mb-3.5">
+                <button
+                  type="button"
+                  onClick={() => handleToggleSound(true)}
+                  className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between cursor-pointer transition-all ${
+                    soundActive
+                      ? 'bg-teal-50 border-teal-500 text-teal-800 ring-1 ring-teal-500 shadow-xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <SpeakerHigh size={16} weight="bold" className={soundActive ? 'text-teal-700' : 'text-slate-400'} />
+                    <span>ເປີດສຽງທັງໝົດ (Master ON)</span>
+                  </div>
+                  {soundActive && <CheckCircle size={15} weight="fill" className="text-teal-600" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleSound(false)}
+                  className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between cursor-pointer transition-all ${
+                    !soundActive
+                      ? 'bg-rose-50 border-rose-400 text-rose-800 ring-1 ring-rose-300 shadow-xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <SpeakerSlash size={16} weight="bold" className={!soundActive ? 'text-rose-600' : 'text-slate-400'} />
+                    <span>ປິດສຽງງຽບ (Master Muted)</span>
+                  </div>
+                  {!soundActive && <CheckCircle size={15} weight="fill" className="text-rose-600" />}
+                </button>
+              </div>
+
+              {/* Granular Section-by-Section Controls - 1 ROW 2 ITEMS TAP-TO-TOGGLE */}
+              <div className="pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
+                    ແຕະເພື່ອເປີດ / ປິດສຽງແຕ່ລະໂມດູນ:
+                  </span>
+                  {!soundActive && (
+                    <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-bold">
+                      Master Muted
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'cart', title: 'POS & ກະຕ່າຂາຍ' },
+                    { key: 'checkout', title: 'ຊຳລະເງິນ & ໃບບອກລາຄາ' },
+                    { key: 'scanner', title: 'ສະແກນບາໂຄດ' },
+                    { key: 'products', title: 'ຈັດການສິນຄ້າ' },
+                    { key: 'history', title: 'ປະຫວັດການຂາຍ' },
+                    { key: 'inventory', title: 'ຮັບເຄື່ອງ & ນຳເຂົ້າ' },
+                    { key: 'dashboard', title: 'ໜ້າ Dashboard' },
+                    { key: 'sales_report', title: 'ຍອດຂາຍຕາມຫົວໜ່ວຍ' },
+                    { key: 'receipt', title: 'ພິມໃບບິນ' },
+                    { key: 'sidebar', title: 'ແຖບເມນູຫຼັກ' },
+                  ].map((sec) => {
+                    const isSecEnabled = soundSections[sec.key] !== false;
+                    const isEffectivelyActive = soundActive && isSecEnabled;
+
+                    return (
+                      <button
+                        key={sec.key}
+                        type="button"
+                        onClick={() => handleToggleSectionSound(sec.key, !isSecEnabled)}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-1.5 select-none active:scale-[0.98] ${
+                          isEffectivelyActive
+                            ? 'bg-teal-50/80 border-teal-300 text-teal-900 shadow-2xs ring-1 ring-teal-400/40'
+                            : isSecEnabled
+                            ? 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                            : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <span className={`text-[11.5px] sm:text-xs font-bold block truncate ${
+                            isEffectivelyActive ? 'text-teal-950 font-black' : 'text-slate-700'
+                          }`}>
+                            {sec.title}
+                          </span>
+                        </div>
+
+                        <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-black shrink-0 tracking-tight transition-colors ${
+                          isEffectivelyActive
+                            ? 'bg-teal-600 text-white'
+                            : isSecEnabled
+                            ? 'bg-slate-200 text-slate-600'
+                            : 'bg-slate-100 text-slate-400'
+                        }`}>
+                          {isSecEnabled ? 'ON' : 'OFF'}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>

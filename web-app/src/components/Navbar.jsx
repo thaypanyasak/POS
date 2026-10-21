@@ -15,6 +15,7 @@ import {
   CloudCheck,
   CloudSlash
 } from '@phosphor-icons/react';
+import { playUnitChangeBeep } from '../utils/audioFeedback';
 
 export default function Navbar({
   activeMainTab = 'pos',
@@ -163,7 +164,10 @@ export default function Navbar({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setActiveMainTab(item.id)}
+                  onClick={() => {
+                    playUnitChangeBeep('sidebar');
+                    setActiveMainTab(item.id);
+                  }}
                   className={`relative flex items-center rounded-xl transition-all duration-150 cursor-pointer group ${
                     collapsed
                       ? 'w-12 h-12 mx-auto justify-center'
@@ -358,7 +362,10 @@ export default function Navbar({
             <button
               key={item.id}
               type="button"
-              onClick={() => setActiveMainTab(item.id)}
+              onClick={() => {
+                playUnitChangeBeep('sidebar');
+                setActiveMainTab(item.id);
+              }}
               className={`flex-1 py-1 px-0.5 rounded-xl flex flex-col items-center justify-center transition-all relative min-h-[48px] active:scale-95 cursor-pointer ${
                 isActive
                   ? 'text-teal-700'

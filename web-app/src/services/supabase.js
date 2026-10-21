@@ -12,6 +12,7 @@ export function saveProductMetaLocal(product) {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       const meta = {
+        name_vi: product.name_vi || product.nameVi || '',
         costBaht: product.costBaht,
         costKip: product.costKip,
         tierSettings: product.tierSettings,
@@ -291,14 +292,18 @@ export async function fetchProductsFromSupabase() {
       const resolvedCategoryName = p.categories?.name || p.category || 'ເຄື່ອງດື່ມ';
       const resolvedCategoryId = p.category_id || p.categories?.id || null;
 
+      const resolvedNameVi = p.name_vi || p.nameVi || localMeta?.name_vi || localMeta?.nameVi || '';
+
       return {
         id: p.id,
         name: p.name,
+        name_vi: resolvedNameVi,
+        nameVi: resolvedNameVi,
         category: resolvedCategoryName,
         categoryId: resolvedCategoryId,
         categories: p.categories || null,
         barcode: p.barcode || '',
-        imageUrl: p.image_url || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80',
+        imageUrl: p.image_url || null,
         baseUnit: resolvedBaseUnit,
         costPerBaseUnit: baseCostKip,
         costBaht: Number(costBaht) || 0,
@@ -356,6 +361,7 @@ export async function saveProductToSupabase(product) {
     const prodPayload = {
       id: product.id,
       name: product.name,
+      name_vi: product.name_vi ?? product.nameVi ?? null,
       category: product.category,
       barcode: product.barcode || null,
       image_url: product.imageUrl || null,
@@ -380,11 +386,20 @@ export async function saveProductToSupabase(product) {
 
     let { error: pErr } = await supabase.from('products').upsert(prodPayload);
 
-    // If optional columns (cost_thb, cost_lak, category_id) do not exist yet in schema cache, safely retry without them
-    if (pErr && pErr.message && (pErr.message.includes('cost_thb') || pErr.message.includes('cost_lak') || pErr.message.includes('category_id'))) {
-      delete prodPayload.cost_thb;
-      delete prodPayload.cost_lak;
-      delete prodPayload.category_id;
+    // If optional columns (name_vi, cost_thb, cost_lak, category_id) do not exist yet in schema cache, safely retry without them
+    if (pErr && pErr.message && (pErr.message.includes('name_vi') || pErr.message.includes('cost_thb') || pErr.message.includes('cost_lak') || pErr.message.includes('category_id'))) {
+      if (pErr.message.includes('name_vi')) {
+        delete prodPayload.name_vi;
+      }
+      if (pErr.message.includes('cost_thb')) {
+        delete prodPayload.cost_thb;
+      }
+      if (pErr.message.includes('cost_lak')) {
+        delete prodPayload.cost_lak;
+      }
+      if (pErr.message.includes('category_id')) {
+        delete prodPayload.category_id;
+      }
       const retryRes = await supabase.from('products').upsert(prodPayload);
       pErr = retryRes.error;
     }
@@ -689,16 +704,20 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       ) || 0;
       const qty = Number(item.quantity) || 1;
       const lineTotal = Number(item.lineTotal || (unitPrice * qty));
-      const multiplier = Number(item.unit?.multiplier) || 1;
+      const fullMult = Number(item.effectiveMultiplier ?? item.unit?.multiplier) || 1;
+      const multiplier = item.isHalfCarton ? fullMult / 2 : fullMult;
       const baseCost = Number(item.product?.costPerBaseUnit) || 0;
       const lineCost = baseCost * multiplier * qty;
       const lineProfit = lineTotal - lineCost;
+
+      const rawUnitName = item.unit?.unitName || item.unitName || 'ອັນ';
+      const unitName = item.isHalfCarton && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
 
       return {
         id: generateUUID(),
         product_id: prodId,
         product_name: item.productName || item.product?.name || 'ສິນຄ້າ',
-        unit_name: item.unit?.unitName || item.unitName || 'ອັນ',
+        unit_name: unitName,
         multiplier,
         quantity: qty,
         unit_price: unitPrice,
@@ -1911,17 +1930,21 @@ export async function updateExistingSaleTransactionInSupabase(
         ) || 0;
         const qty = Number(item.quantity) || 1;
         const lineTotal = Number(item.lineTotal || (unitPrice * qty));
-        const multiplier = Number(item.unit?.multiplier) || 1;
+        const fullMult = Number(item.effectiveMultiplier ?? item.unit?.multiplier) || 1;
+        const multiplier = item.isHalfCarton ? fullMult / 2 : fullMult;
         const baseCost = Number(item.product?.costPerBaseUnit) || 0;
         const lineCost = baseCost * multiplier * qty;
         const lineProfit = lineTotal - lineCost;
+
+        const rawUnitName = item.unit?.unitName || item.unitName || 'ອັນ';
+        const unitName = item.isHalfCarton && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
 
         return {
           id: generateUUID(),
           transaction_id: txId,
           product_id: prodId,
           product_name: item.productName || item.product?.name || 'ສິນຄ້າ',
-          unit_name: item.unit?.unitName || item.unitName || 'ອັນ',
+          unit_name: unitName,
           multiplier,
           quantity: qty,
           unit_price: unitPrice,

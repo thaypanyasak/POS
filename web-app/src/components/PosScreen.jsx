@@ -30,7 +30,13 @@ import QuotationPreviewModal from './inventory/QuotationPreviewModal';
 import ExchangeRateBadge from './common/ExchangeRateBadge';
 import queryClient from '../services/queryClient';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
-import { playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
+import {
+  playSuccessBeep,
+  playErrorBeep,
+  playPriceTierBeep,
+  playActionClickBeep,
+  playUnitChangeBeep,
+} from '../utils/audioFeedback';
 
 /**
  * Interactive Cart Quantity Stepper:
@@ -135,6 +141,7 @@ export default function PosScreen({
   toggleCartItemCrateDeposit,
   updateMissingCrates,
   changeCartItemUnit,
+  toggleCartItemHalfCarton,
   globalPriceTier = 1,
   setGlobalPriceTier,
   changeCartItemPriceTier,
@@ -146,6 +153,7 @@ export default function PosScreen({
   // Modal for editing line item price (familiar customer / price override)
   const [overrideModalItem, setOverrideModalItem] = useState(null);
   const [openPriceMenuKey, setOpenPriceMenuKey] = useState(null);
+  const [openHalfCartonMenuKey, setOpenHalfCartonMenuKey] = useState(null);
   const [customPriceInput, setCustomPriceInput] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanToast, setScanToast] = useState(null);
@@ -393,7 +401,10 @@ export default function PosScreen({
               <button
                 key={name}
                 type="button"
-                onClick={() => setCustomerName(name === 'ທົ່ວໄປ' ? 'ລູກຄ້າທົ່ວໄປ' : name)}
+                onClick={() => {
+                  playUnitChangeBeep();
+                  setCustomerName(name === 'ທົ່ວໄປ' ? 'ລູກຄ້າທົ່ວໄປ' : name);
+                }}
                 className={`px-2 py-1 rounded-md text-[10.5px] font-bold border transition-all cursor-pointer ${
                   customerName === name || (name === 'ທົ່ວໄປ' && customerName === 'ລູກຄ້າທົ່ວໄປ')
                     ? 'bg-teal-50 border-teal-400 text-teal-800 font-bold'
@@ -406,31 +417,36 @@ export default function PosScreen({
           </div>
         </div>
 
-        {/* Global Price Mode (Cách 2: Chọn nhanh mức giá cho toàn bộ đơn hàng POS) */}
-        <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-200/80">
+        {/* Global Price Mode (Chọn nhanh mức giá ລາຄາ 1-2-3 cho toàn bộ giỏ hàng ngay dưới tên khách) */}
+        <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-slate-200/90">
           <div className="flex items-center gap-1 shrink-0">
-            <SlidersHorizontal size={12} className="text-slate-500" />
-            <span className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider">
-              ຕາຕະລາງລາຄາ:
+            <SlidersHorizontal size={13} className="text-slate-500" />
+            <span className="text-[11px] font-extrabold text-slate-700 tracking-tight">
+              ລະດັບລາຄາ:
             </span>
           </div>
 
-          <div className="inline-flex items-center bg-slate-200/90 p-0.5 rounded-lg border border-slate-300 gap-0.5">
+          <div className="inline-flex items-center bg-slate-200/90 p-0.5 rounded-lg border border-slate-300 gap-1">
             {[
-              { id: 1, label: 'ລາຄາ 1', desc: 'ມາດຕະຖານ', activeClass: 'bg-teal-600 text-white shadow-2xs font-black' },
-              { id: 2, label: 'ລາຄາ 2', desc: 'ລູກຄ້າປະຈຳ', activeClass: 'bg-sky-600 text-white shadow-2xs font-black' },
-              { id: 3, label: 'ລາຄາ 3', desc: 'ຂາຍສົ່ງ/VIP', activeClass: 'bg-amber-600 text-white shadow-2xs font-black' },
+              { id: 1, label: 'ລາຄາ 1', desc: 'ມາດຕະຖານ', activeClass: 'bg-teal-600 text-white shadow-xs font-black ring-1 ring-teal-700/20' },
+              { id: 2, label: 'ລາຄາ 2', desc: 'ລູກຄ້າປະຈຳ', activeClass: 'bg-sky-600 text-white shadow-xs font-black ring-1 ring-sky-700/20' },
+              { id: 3, label: 'ລາຄາ 3', desc: 'ຂາຍສົ່ງ/VIP', activeClass: 'bg-amber-600 text-white shadow-xs font-black ring-1 ring-amber-700/20' },
             ].map((tier) => {
               const isSelected = (globalPriceTier || 1) === tier.id;
               return (
                 <button
                   key={tier.id}
                   type="button"
-                  onClick={() => setGlobalPriceTier && setGlobalPriceTier(tier.id)}
-                  className={`h-6 px-2 rounded-md text-[10.5px] transition-all cursor-pointer flex items-center justify-center ${
+                  onClick={() => {
+                    playUnitChangeBeep();
+                    if (setGlobalPriceTier) {
+                      setGlobalPriceTier(tier.id);
+                    }
+                  }}
+                  className={`h-6 px-2.5 rounded-md text-[11px] transition-all cursor-pointer flex items-center justify-center select-none active:scale-95 ${
                     isSelected
                       ? tier.activeClass
-                      : 'text-slate-600 font-bold hover:text-slate-900 hover:bg-slate-300/60'
+                      : 'text-slate-600 font-bold hover:text-slate-900 hover:bg-slate-300/70'
                   }`}
                   title={`ນຳໃຊ້ ${tier.label} (${tier.desc}) ໃຫ້ທຸກລາຍການໃນກະຕ່າ`}
                 >
@@ -448,15 +464,15 @@ export default function PosScreen({
           const itemKey = `${item.product.id}_${item.unit.id}`;
           const currentTier = item.selectedPriceTier || 1;
           const tierPrice = getEffectiveUnitPrice(item.unit, currentTier);
-          const originalPrice = tierPrice;
+          const standardPrice = item.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
           const effectivePrice =
             item.customPrice !== undefined && item.customPrice !== null
               ? item.customPrice
-              : tierPrice;
+              : standardPrice;
           const isOverridden =
             item.customPrice !== undefined &&
             item.customPrice !== null &&
-            item.customPrice !== tierPrice;
+            item.customPrice !== standardPrice;
 
           // Specialized Crate Deposit / Missing Crate Fee Logic
           const isCrateEligible =
@@ -603,6 +619,7 @@ export default function PosScreen({
                                           key={tierNum}
                                           type="button"
                                           onClick={() => {
+                                            playPriceTierBeep();
                                             if (isOverridden) {
                                               handleResetPriceOverride(item.product.id, item.unit.id);
                                             }
@@ -659,6 +676,7 @@ export default function PosScreen({
                                         const cleanVal = String(customPriceInput).replace(/\D/g, '');
                                         const parsed = parseInt(cleanVal, 10);
                                         if (parsed > 0) {
+                                          playPriceTierBeep();
                                           handleApplyPriceOverride(item.product.id, item.unit.id, parsed, 'ປັບລາຄາພິເສດ');
                                           setOpenPriceMenuKey(null);
                                         }
@@ -673,6 +691,7 @@ export default function PosScreen({
                                       const cleanVal = String(customPriceInput).replace(/\D/g, '');
                                       const parsed = parseInt(cleanVal, 10);
                                       if (parsed > 0) {
+                                        playPriceTierBeep();
                                         handleApplyPriceOverride(item.product.id, item.unit.id, parsed, 'ປັບລາຄາພິເສດ');
                                         setOpenPriceMenuKey(null);
                                       }
@@ -686,6 +705,7 @@ export default function PosScreen({
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      playPriceTierBeep();
                                       handleResetPriceOverride(item.product.id, item.unit.id);
                                       setOpenPriceMenuKey(null);
                                     }}
@@ -708,29 +728,208 @@ export default function PosScreen({
                     <div className="flex items-center min-w-0">
                       {item.product?.units && item.product.units.length > 1 ? (
                         <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-md border border-slate-200/80 gap-0.5 shrink-0">
-                          {item.product.units.map((u) => {
+                          {(() => {
+                            // Sắp xếp giảm dần: Đơn vị to nhất (Thùng) ở bên Trái -> Đơn vị tiếp theo (Pack) ở Giữa -> Đơn vị nhỏ nhất (Lẻ) ở bên Phải
+                            const sortedCartUnits = [...item.product.units].sort((a, b) => {
+                              const multA = Number(a.multiplier) || (a.tier === 3 ? 100 : a.tier === 2 ? 10 : 1);
+                              const multB = Number(b.multiplier) || (b.tier === 3 ? 100 : b.tier === 2 ? 10 : 1);
+                              return multB - multA;
+                            });
+
+                            return sortedCartUnits.map((u) => {
                             const isSelected = (u.id && u.id === item.unit.id) || u.unitName === item.unit.unitName;
+                            const isCartonUnit =
+                              u.tier === 3 ||
+                              u.id?.endsWith('_carton') ||
+                              ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'carton', 'box'].includes(String(u.unitName).trim().toLowerCase()) ||
+                              (Number(u.multiplier) >= 12 && Number(u.multiplier) === Math.max(...(item.product.units || []).map(x => Number(x.multiplier) || 1)));
+
+                            const isHalfCartonActive = isSelected && isCartonUnit && Boolean(item.isHalfCarton);
+                            const isHalfMenuOpen = openHalfCartonMenuKey === `${itemKey}_${u.id || u.unitName}`;
+
+                            const displayLabel = isSelected && isCartonUnit && isHalfCartonActive
+                              ? '½ ' + u.unitName
+                              : u.unitName;
+
                             return (
-                              <button
-                                key={u.id || u.unitName}
-                                type="button"
-                                onClick={() => changeCartItemUnit && changeCartItemUnit(item.product.id, item.unit.id, u)}
-                                className={`h-6 px-2 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center ${
-                                  isSelected
-                                    ? 'bg-teal-600 text-white shadow-2xs'
-                                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-                                }`}
-                                title={`ປ່ຽນເປັນ ${u.unitName} (${formatDots(u.retailPrice)} ₭)`}
-                              >
-                                {u.unitName}
-                              </button>
+                              <div key={u.id || u.unitName} className="relative inline-flex items-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (isSelected && isCartonUnit) {
+                                      // If already selected, toggle the dropdown popover for 1 carton vs 1/2 carton
+                                      setOpenHalfCartonMenuKey(isHalfMenuOpen ? null : `${itemKey}_${u.id || u.unitName}`);
+                                    } else {
+                                      // Switch to this unit normally
+                                      setOpenHalfCartonMenuKey(null);
+                                      if (changeCartItemUnit) {
+                                        changeCartItemUnit(item.product.id, item.unit.id, u);
+                                      }
+                                    }
+                                  }}
+                                  className={`h-6 px-2 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                                    isSelected
+                                      ? (isHalfCartonActive
+                                          ? 'bg-amber-600 text-white shadow-2xs'
+                                          : 'bg-teal-600 text-white shadow-2xs')
+                                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                                  }`}
+                                  title={
+                                    isCartonUnit && isSelected
+                                      ? 'ກົດອີກຄັ້ງເພື່ອເລືອກ 1 ແກັດ ຫຼື ½ ແກັດ (ເຄິ່ງແກັດ)'
+                                      : `ປ່ຽນເປັນ ${u.unitName} (${formatDots(u.retailPrice)} ₭)`
+                                  }
+                                >
+                                  <span>{displayLabel}</span>
+                                  {isCartonUnit && isSelected && (
+                                    <CaretDown size={9} weight="bold" className={`opacity-80 transition-transform ${isHalfMenuOpen ? 'rotate-180' : ''}`} />
+                                  )}
+                                </button>
+
+                                {/* Dropdown Menu/Popover for Carton (1 ແກັດ vs ½ ແກັດ) */}
+                                {isHalfMenuOpen && (
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-40"
+                                      onClick={() => setOpenHalfCartonMenuKey(null)}
+                                    />
+                                    <div className="absolute left-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-1 min-w-[160px] flex flex-col gap-0.5 animate-in fade-in zoom-in-95">
+                                      <div className="px-2 py-1 text-[9.5px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                                        ຂະໜາດແກັດ / Quy cách:
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (toggleCartItemHalfCarton) {
+                                            toggleCartItemHalfCarton(item.product.id, item.unit.id, false);
+                                          }
+                                          setOpenHalfCartonMenuKey(null);
+                                        }}
+                                        className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                                          !isHalfCartonActive
+                                            ? 'bg-teal-50 text-teal-900 font-bold'
+                                            : 'text-slate-700 hover:bg-slate-50 font-medium'
+                                        }`}
+                                      >
+                                        <span>1 {u.unitName} (ເຕັມ)</span>
+                                        {!isHalfCartonActive && <Check size={13} weight="bold" className="text-teal-600" />}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (toggleCartItemHalfCarton) {
+                                            toggleCartItemHalfCarton(item.product.id, item.unit.id, true);
+                                          }
+                                          setOpenHalfCartonMenuKey(null);
+                                        }}
+                                        className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                                          isHalfCartonActive
+                                            ? 'bg-amber-50 text-amber-900 font-bold'
+                                            : 'text-slate-700 hover:bg-slate-50 font-medium'
+                                        }`}
+                                      >
+                                        <span>½ {u.unitName} (ເຄິ່ງ)</span>
+                                        {isHalfCartonActive && <Check size={13} weight="bold" className="text-amber-600" />}
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
                             );
-                          })}
+                          });
+                        })()}
                         </div>
                       ) : (
-                        <span className="text-[11px] text-teal-800 font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200/60 shrink-0">
-                          {item.unit.unitName}
-                        </span>
+                        <div className="relative inline-flex items-center">
+                          {(() => {
+                            const u = item.unit;
+                            const isCartonUnit =
+                              u.tier === 3 ||
+                              u.id?.endsWith('_carton') ||
+                              ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'carton', 'box'].includes(String(u.unitName).trim().toLowerCase()) ||
+                              Number(u.multiplier) >= 12;
+
+                            const isHalfCartonActive = Boolean(item.isHalfCarton);
+                            const isHalfMenuOpen = openHalfCartonMenuKey === `${itemKey}_single`;
+
+                            const displayLabel = isCartonUnit && isHalfCartonActive
+                              ? '½ ' + u.unitName
+                              : u.unitName;
+
+                            if (!isCartonUnit) {
+                              return (
+                                <span className="text-[11px] text-teal-800 font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200/60 shrink-0">
+                                  {u.unitName}
+                                </span>
+                              );
+                            }
+
+                            return (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenHalfCartonMenuKey(isHalfMenuOpen ? null : `${itemKey}_single`)}
+                                  className={`h-6 px-2 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                                    isHalfCartonActive
+                                      ? 'bg-amber-600 text-white shadow-2xs'
+                                      : 'bg-teal-600 text-white shadow-2xs'
+                                  }`}
+                                  title="ກົດເພື່ອເລືອກ 1 ແກັດ ຫຼື ½ ແກັດ (ເຄິ່ງແກັດ)"
+                                >
+                                  <span>{displayLabel}</span>
+                                  <CaretDown size={9} weight="bold" className={`opacity-80 transition-transform ${isHalfMenuOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {isHalfMenuOpen && (
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-40"
+                                      onClick={() => setOpenHalfCartonMenuKey(null)}
+                                    />
+                                    <div className="absolute left-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-1 min-w-[160px] flex flex-col gap-0.5 animate-in fade-in zoom-in-95">
+                                      <div className="px-2 py-1 text-[9.5px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                                        ຂະໜາດແກັດ / Quy cách:
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (toggleCartItemHalfCarton) {
+                                            toggleCartItemHalfCarton(item.product.id, item.unit.id, false);
+                                          }
+                                          setOpenHalfCartonMenuKey(null);
+                                        }}
+                                        className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                                          !isHalfCartonActive
+                                            ? 'bg-teal-50 text-teal-900 font-bold'
+                                            : 'text-slate-700 hover:bg-slate-50 font-medium'
+                                        }`}
+                                      >
+                                        <span>1 {u.unitName} (ເຕັມ)</span>
+                                        {!isHalfCartonActive && <Check size={13} weight="bold" className="text-teal-600" />}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (toggleCartItemHalfCarton) {
+                                            toggleCartItemHalfCarton(item.product.id, item.unit.id, true);
+                                          }
+                                          setOpenHalfCartonMenuKey(null);
+                                        }}
+                                        className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                                          isHalfCartonActive
+                                            ? 'bg-amber-50 text-amber-900 font-bold'
+                                            : 'text-slate-700 hover:bg-slate-50 font-medium'
+                                        }`}
+                                      >
+                                        <span>½ {u.unitName} (ເຄິ່ງ)</span>
+                                        {isHalfCartonActive && <Check size={13} weight="bold" className="text-amber-600" />}
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
                       )}
                     </div>
 
@@ -862,7 +1061,10 @@ export default function PosScreen({
           {/* Nút báo giá / Treo đơn */}
           <button
             type="button"
-            onClick={() => setQuotationModalOpen(true)}
+            onClick={() => {
+              playActionClickBeep();
+              setQuotationModalOpen(true);
+            }}
             disabled={cart.length === 0}
             className={`h-9 sm:h-10 px-2 rounded-lg border text-xs sm:text-sm font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer active:scale-98 ${
               cart.length > 0
@@ -879,6 +1081,7 @@ export default function PosScreen({
           <button
             type="button"
             onClick={() => {
+              playActionClickBeep();
               if (isDrawer) setMobileCartOpen(false);
               handleOpenCheckout();
             }}
@@ -941,7 +1144,10 @@ export default function PosScreen({
             {/* Nút Quét mã vạch cao 44px */}
             <button
               type="button"
-              onClick={() => setScannerOpen(true)}
+              onClick={() => {
+                playActionClickBeep();
+                setScannerOpen(true);
+              }}
               className="h-11 px-3.5 rounded-xl bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white border border-teal-200 shadow-2xs flex items-center gap-1.5 font-bold text-xs sm:text-sm cursor-pointer transition-all active:scale-95 shrink-0"
               title="ເປີດກ້ອງສະແກນບາໂຄດ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
             >
@@ -960,7 +1166,10 @@ export default function PosScreen({
             {/* Mobile Cart Trigger Button (< 768px) */}
             <button
               type="button"
-              onClick={() => setMobileCartOpen(true)}
+              onClick={() => {
+                playActionClickBeep();
+                setMobileCartOpen(true);
+              }}
               className="md:hidden relative h-11 px-3 rounded-xl bg-teal-600 text-white shadow-xs flex items-center justify-center cursor-pointer active:scale-95 shrink-0"
               title="ເປີດກະຕ່າ"
             >
@@ -981,7 +1190,10 @@ export default function PosScreen({
                 <button
                   key={cat}
                   type="button"
-                  onClick={() => setActiveCategory(cat)}
+                  onClick={() => {
+                    playUnitChangeBeep();
+                    setActiveCategory(cat);
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer active:scale-95 ${
                     isActive
                       ? 'bg-teal-600 text-white shadow-xs'
@@ -1016,17 +1228,23 @@ export default function PosScreen({
                     className="p-2 cursor-pointer flex-1 flex flex-col"
                   >
                     {/* Ảnh bo góc 12px với chiều cao thoáng hơn */}
-                    <div className="relative h-28 sm:h-36 w-full rounded-[10px] overflow-hidden bg-slate-100 mb-1.5 shrink-0">
-                      <img
-                        src={p.imageUrl}
-                        alt={p.name}
-                        loading="lazy"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                        onError={(e) => {
-                          e.currentTarget.src =
-                            'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80';
-                        }}
-                      />
+                    <div className="relative h-28 sm:h-36 w-full rounded-[10px] overflow-hidden bg-slate-100 mb-1.5 shrink-0 flex items-center justify-center">
+                      {p.imageUrl ? (
+                        <img
+                          src={p.imageUrl}
+                          alt={p.name}
+                          loading="lazy"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                          <Package size={36} weight="duotone" />
+                          <span className="text-[10px] text-slate-400 mt-1">ບໍ່ມີຮູບ</span>
+                        </div>
+                      )}
                       {p.category && (
                         <span className="absolute bottom-1 left-1 px-1.5 py-0.2 rounded bg-slate-950/70 backdrop-blur-xs text-[9px] text-white font-medium">
                           {p.category}
@@ -1062,54 +1280,63 @@ export default function PosScreen({
                     </div>
                   </div>
 
-                  {/* Nút chọn cấp đơn vị (Thùng / Pack / Lẻ) gọn gàng, có giá tiền rõ ràng */}
-                  <div className="p-1 bg-slate-50/90 border-t border-slate-100 flex items-center gap-1">
+                  {/* Nút chọn cấp đơn vị (Thùng bên Trái -> Pack ở Giữa -> Lẻ bên Phải) cố định hàng ngang */}
+                  <div className="p-1 bg-slate-50/90 border-t border-slate-100 flex flex-row items-center w-full gap-1">
                     {p.units && p.units.length > 0 ? (
-                      p.units.map((unit, idx) => {
-                        const isBulk =
-                          unit.tier === 3 ||
-                          unit.id?.endsWith('_carton') ||
-                          (!unit.tier && (unit.multiplier >= 12 || unit.unitName === 'ລັງ' || unit.unitName === 'ແກັດ' || unit.unitName === 'ເປົາ'));
-                        const isMiddlePack =
-                          unit.tier === 2 ||
-                          unit.id?.endsWith('_pack') ||
-                          (!unit.tier && unit.multiplier > 1 && !isBulk);
+                      (() => {
+                        // Sắp xếp giảm dần: Cấp to nhất (Thùng / multiplier lớn nhất) ở bên trái -> Cấp nhỏ nhất ở bên phải
+                        const sortedUnits = [...p.units].sort((a, b) => {
+                          const multA = Number(a.multiplier) || (a.tier === 3 ? 100 : a.tier === 2 ? 10 : 1);
+                          const multB = Number(b.multiplier) || (b.tier === 3 ? 100 : b.tier === 2 ? 10 : 1);
+                          return multB - multA;
+                        });
 
-                        return (
-                          <button
-                            key={unit.id || idx}
-                            type="button"
-                            onClick={() => addToCart(p, unit, 1)}
-                            className={`flex-1 py-1 px-0.5 rounded-lg text-center transition-all cursor-pointer active:scale-95 flex flex-col justify-center items-center shadow-2xs ${
-                              isBulk
-                                ? 'bg-teal-600 hover:bg-teal-700 text-white'
-                                : isMiddlePack
-                                ? 'bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-slate-900'
-                                : 'bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-400 text-slate-900'
-                            }`}
-                            title={`ຂາຍ 1 ${unit.unitName}`}
-                          >
-                            <span
-                              className={`text-[9.5px] font-bold block truncate max-w-full ${
+                        return sortedUnits.map((unit, idx) => {
+                          const isBulk =
+                            unit.tier === 3 ||
+                            unit.id?.endsWith('_carton') ||
+                            (!unit.tier && (unit.multiplier >= 12 || unit.unitName === 'ລັງ' || unit.unitName === 'ແກັດ' || unit.unitName === 'ເປົາ'));
+                          const isMiddlePack =
+                            unit.tier === 2 ||
+                            unit.id?.endsWith('_pack') ||
+                            (!unit.tier && unit.multiplier > 1 && !isBulk);
+
+                          return (
+                            <button
+                              key={unit.id || idx}
+                              type="button"
+                              onClick={() => addToCart(p, unit, 1)}
+                              className={`flex-1 min-w-0 py-1 px-0.5 rounded-lg text-center transition-all cursor-pointer active:scale-95 flex flex-col justify-center items-center shadow-2xs ${
                                 isBulk
-                                  ? 'text-teal-100'
+                                  ? 'bg-teal-600 hover:bg-teal-700 text-white'
                                   : isMiddlePack
-                                  ? 'text-sky-700'
-                                  : 'text-slate-500'
+                                  ? 'bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-slate-900'
+                                  : 'bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-400 text-slate-900'
                               }`}
+                              title={`ຂາຍ 1 ${unit.unitName}`}
                             >
-                              {unit.unitName}
-                            </span>
-                            <span
-                              className={`text-[10.5px] font-black block font-mono leading-tight mt-0.2 ${
-                                isBulk ? 'text-white' : 'text-slate-900'
-                              }`}
-                            >
-                              {formatKip(unit.retailPrice).replace(' ₭', '')}
-                            </span>
-                          </button>
-                        );
-                      })
+                              <span
+                                className={`text-[9.5px] font-bold block truncate max-w-full ${
+                                  isBulk
+                                    ? 'text-teal-100'
+                                    : isMiddlePack
+                                    ? 'text-sky-700'
+                                    : 'text-slate-500'
+                                }`}
+                              >
+                                {unit.unitName}
+                              </span>
+                              <span
+                                className={`text-[10.5px] font-black block font-mono leading-tight mt-0.2 ${
+                                  isBulk ? 'text-white' : 'text-slate-900'
+                                }`}
+                              >
+                                {formatKip(unit.retailPrice).replace(' ₭', '')}
+                              </span>
+                            </button>
+                          );
+                        });
+                      })()
                     ) : (
                       <span className="text-[11px] text-slate-400 py-1 text-center w-full">ບໍ່ມີຫົວໜ່ວຍ</span>
                     )}
