@@ -51,17 +51,6 @@ export function savePrinterConfig(newConfig) {
   if (newConfig.drawerKick !== undefined) localStorage.setItem(PRINTER_STORAGE_KEYS.DRAWER_KICK, String(newConfig.drawerKick));
 }
 
-/**
- * Helper to ensure TcpSocket is accessible and check if native plugin is available
- */
-function getTcpSocketPlugin() {
-  if (typeof window !== 'undefined' && window.Capacitor) {
-    if (window.Capacitor.isPluginAvailable && !window.Capacitor.isPluginAvailable('TcpSocket')) {
-      return null;
-    }
-  }
-  return TcpSocket || null;
-}
 
 /**
  * Send raw binary byte array over TCP Socket directly to thermal printer
@@ -79,15 +68,14 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 2.
 
   // Feature Detection
   const isNative = Capacitor.isNativePlatform();
-  const isPluginReady = Capacitor.isPluginAvailable('TcpSocket');
-  const socketPlugin = getTcpSocketPlugin();
+  const socketPlugin = TcpSocket || (typeof window !== 'undefined' ? window.Capacitor?.Plugins?.TcpSocket : null);
 
   if (!isNative) {
     throw new Error('ການພິມຜ່ານ TCP Socket ຮອງຮັບສະເພາະແອັບ Native (iOS / iPadOS) ເທົ່ານັ້ນ.');
   }
 
-  if (!isPluginReady || !socketPlugin) {
-    throw new Error('Native TCP Socket plugin ຍັງບໍ່ທັນຖືກຕິດຕັ້ງໃນ iOS. ກະລຸນາ Build ແອັບ native ໃໝ່ຜ່ານ Xcode (Product -> Build/Run) ເພື່ອນຳໃຊ້ plugin TCP Socket.');
+  if (!socketPlugin || typeof socketPlugin.connect !== 'function') {
+    throw new Error('Native TCP Socket plugin ຍັງບໍ່ທັນຖືກຕິດຕັ້ງໃນ iOS. ກະລຸນາ Build ແອັບ native ໃໝ່ (Product -> Build/Run) ເພື່ອນຳໃຊ້ plugin TCP Socket.');
   }
 
   const base64Data = uint8ArrayToBase64(uint8Bytes);

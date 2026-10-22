@@ -34,12 +34,19 @@ let package = Package(
 `;
 
 try {
-  const dir = path.dirname(packageSwiftPath);
-  if (fs.existsSync(dir)) {
-    fs.writeFileSync(packageSwiftPath, content, 'utf8');
-    console.log('[postinstall] Successfully ensured Package.swift for @deedarb/capacitor-tcp-socket');
+  // Support running from either root or web-app directory
+  const targetDirs = [
+    path.resolve(__dirname, 'node_modules/@deedarb/capacitor-tcp-socket'),
+    path.resolve(__dirname, '../node_modules/@deedarb/capacitor-tcp-socket')
+  ];
 
-    // Ensure CAPBridgedPlugin is added to TcpSocketPlugin.swift
+  for (const dir of targetDirs) {
+  if (fs.existsSync(dir)) {
+    const pkgSwift = path.resolve(dir, 'Package.swift');
+    fs.writeFileSync(pkgSwift, content, 'utf8');
+    console.log('[postinstall] Successfully ensured Package.swift at', pkgSwift);
+
+    // Ensure CAPBridgedPlugin is added to TcpSocketPlugin.swift and methods are public
     const swiftFile = path.resolve(dir, 'ios/Plugin/TcpSocketPlugin.swift');
     if (fs.existsSync(swiftFile)) {
       let swiftContent = fs.readFileSync(swiftFile, 'utf8');
@@ -48,11 +55,21 @@ try {
           /@objc\(TcpSocketPlugin\)\s*public class TcpSocketPlugin:\s*CAPPlugin\s*\{/,
           `@objc(TcpSocketPlugin)\npublic class TcpSocketPlugin: CAPPlugin, CAPBridgedPlugin {\n    public let identifier = "TcpSocketPlugin"\n    public let jsName = "TcpSocket"\n    public let pluginMethods: [CAPPluginMethod] = [\n        CAPPluginMethod(name: "connect", returnType: CAPPluginReturnPromise),\n        CAPPluginMethod(name: "send", returnType: CAPPluginReturnPromise),\n        CAPPluginMethod(name: "read", returnType: CAPPluginReturnPromise),\n        CAPPluginMethod(name: "disconnect", returnType: CAPPluginReturnPromise),\n        CAPPluginMethod(name: "listen", returnType: CAPPluginReturnPromise),\n        CAPPluginMethod(name: "stopListening", returnType: CAPPluginReturnPromise),\n        CAPPluginMethod(name: "getLocalAddress", returnType: CAPPluginReturnPromise)\n    ]\n`
         );
-        fs.writeFileSync(swiftFile, swiftContent, 'utf8');
-        console.log('[postinstall] Successfully patched TcpSocketPlugin.swift with CAPBridgedPlugin');
       }
+      // Ensure methods are public
+      swiftContent = swiftContent.replace(/@objc func connect\(/g, '@objc public func connect(');
+      swiftContent = swiftContent.replace(/@objc func send\(/g, '@objc public func send(');
+      swiftContent = swiftContent.replace(/@objc func read\(/g, '@objc public func read(');
+      swiftContent = swiftContent.replace(/@objc func disconnect\(/g, '@objc public func disconnect(');
+      swiftContent = swiftContent.replace(/@objc func listen\(/g, '@objc public func listen(');
+      swiftContent = swiftContent.replace(/@objc func stopListening\(/g, '@objc public func stopListening(');
+      swiftContent = swiftContent.replace(/@objc func getLocalAddress\(/g, '@objc public func getLocalAddress(');
+      
+      fs.writeFileSync(swiftFile, swiftContent, 'utf8');
+      console.log('[postinstall] Successfully patched TcpSocketPlugin.swift with CAPBridgedPlugin and public methods');
     }
   }
+}
 } catch (e) {
   console.warn('[postinstall] Warning patching capacitor-tcp-socket:', e.message);
 }
