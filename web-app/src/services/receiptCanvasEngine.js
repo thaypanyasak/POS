@@ -3,19 +3,25 @@
  * ══════════════════════════════════════════════════════════════
  * Standard: 80mm K80 (Physical Width: 576 dots / 72 bytes per line)
  *
- * Engineering Upgrade for Ultra-Sharp Lao Typography (Anti-Pixelation / Anti-Bleed):
- *  1. Font Preloading: Explicitly awaits document.fonts.load() to guarantee
- *     authentic Noto Sans Lao vector glyphs (preventing thin system font fallback).
- *  2. Professional POS Font Scale:
- *     - Store Name: 36px Bold (~4.8mm)
- *     - Item Name: 23px Medium (500) (~3.2mm) — provides 16 vertical dots so
- *       Lao loops (ໍ, ່, ້, ິ, ີ, ົ, ມ, ນ, ລ, ດ) never break, pixelate, or clog.
- *     - Qty & Unit Price: 20px monospace
- *     - Line Total: 21px bold monospace
- *     - Grand Total: 28px bold label, 32px bold amount with spacious 16px padding
- *  3. Extended Signature Block: 80px handwriting room with clean dotted lines
- *     exclusively under the two signer columns.
- *  4. High-contrast Barcode with 16px buffer to prevent number collisions.
+ * Refinements:
+ *  1. Large, authoritative Header:
+ *     - Store Name: 42px Bold
+ *     - Slogan: 21px Medium
+ *     - Address: 18.5px
+ *     - Tel: 21px Bold
+ *  2. Perfectly Centered Title Banner (ໃບບິນຮັບເງິນ / RECEIPT):
+ *     - 28px Bold with symmetric 14px top & bottom internal padding.
+ *  3. Prominent Metadata:
+ *     - Cashier, Customer, Date, Payment Method scaled to 19px - 21px Bold.
+ *  4. Product List (preserved per request):
+ *     - 23px Medium with 20px - 21px prices.
+ *  5. Large & Airy Signature Area:
+ *     - 21px Bold labels, generous 100px handwriting room for authentic signing,
+ *     - Dots exclusively under the two columns.
+ *  6. Oversized High-Contrast Barcode:
+ *     - 50px height with 2.2x multiplier for instantaneous laser scanning.
+ *  7. Big, Legible Thank You & Return Policy:
+ *     - 21px Bold thank you, 18px return policy.
  */
 
 // ─── 80mm K80 Physical Constants ──────────────────────────────────────────────
@@ -26,7 +32,7 @@ export const K80 = {
   PRINTABLE_WIDTH: 544, // 560 - 16
   CENTER_X: 288,        // Symmetry center (576 / 2)
 
-  // 4-Column Grid calibrated for 23-24px typography
+  // 4-Column Grid
   COL_NAME_X: 16,       // Column 1: Item Name
   COL_NAME_MAX_W: 245,  // Max width 245px (wrap if longer)
   COL_QTY_X: 288,       // Column 2: Qty (centered at 288px)
@@ -36,37 +42,37 @@ export const K80 = {
 
 // ─── Typography (High-Res POS Scale) ──────────────────────────────────────────
 const FONTS = {
-  STORE_NAME: 'bold 36px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SLOGAN: '500 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ADDRESS: '400 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TEL: 'bold 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TITLE: 'bold 24px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_LABEL: '400 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_VAL: '500 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_BOLD: 'bold 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  COL_HEADER: 'bold 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NAME: '500 23px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_UNIT: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NUM: '500 20px monospace',
-  ITEM_TOTAL: 'bold 21px monospace',
+  STORE_NAME: 'bold 42px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SLOGAN: '500 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ADDRESS: '400 18.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TEL: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TITLE: 'bold 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_VAL: '500 19.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_BOLD: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  COL_HEADER: 'bold 20px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_NAME: '500 23px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',  // Preserved
+  ITEM_UNIT: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',  // Preserved
+  ITEM_NUM: '500 20px monospace',                                               // Preserved
+  ITEM_TOTAL: 'bold 21px monospace',                                            // Preserved
   CRATE_LABEL: '500 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   CRATE_NUM: '500 17px monospace',
   SUBTOTAL_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   SUBTOTAL_NUM: 'bold 20px monospace',
   GRAND_LABEL: 'bold 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   GRAND_NUM: 'bold 32px monospace',
-  TENDER_LABEL: '400 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TENDER_NUM: 'bold 20px monospace',
+  TENDER_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TENDER_NUM: 'bold 21px monospace',
   DEBT_LABEL: 'bold 22px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   DEBT_NUM: 'bold 24px monospace',
   QR_NAME: '500 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   QR_AMOUNT: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SIGN_LABEL: 'bold 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SIGN_LINE: '18px monospace',
-  BARCODE_NUM: 'bold 17px monospace',
-  FOOTER_BOLD: 'bold 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  FOOTER: '400 15px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  VOID_TEXT: 'bold 22px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SIGN_LABEL: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SIGN_LINE: 'bold 20px monospace',
+  BARCODE_NUM: 'bold 20px monospace',
+  FOOTER_BOLD: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  FOOTER: '500 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  VOID_TEXT: 'bold 24px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
 };
 
 // ─── Bilingual Dictionary ─────────────────────────────────────────────────────
@@ -74,8 +80,7 @@ const LABELS = {
   lo: {
     storeName: 'ຮ້ານ MeiiShop',
     storeSlogan: 'ຂາຍຍົກ - ຂາຍຍ່ອຍ ສິນຄ້າອຸປະໂພກ ບໍລິໂພກ',
-    storeAddress: 'ຖະໜົນ ໄກສອນ ພົມວິຫານ, ບ້ານ ໂພນສະຫວ່າງ',
-    storeAddressCity: 'ນະຄອນຫຼວງວຽງຈັນ',
+    storeAddress: 'ຖະໜົນ ໄກສອນ ພົມວິຫານ, ບ້ານ ໂພນສະຫວ່າງ, ນະຄອນຫຼວງວຽງຈັນ',
     storeTel: 'ໂທ: 020 5555 9999 / 021 214 555',
     receiptTitle: 'ໃບບິນຮັບເງິນ / RECEIPT',
     voidTitle: 'ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ (VOID)',
@@ -116,8 +121,7 @@ const LABELS = {
   vi: {
     storeName: 'CỬA HÀNG MEIISHOP',
     storeSlogan: 'Bán buôn - Bán lẻ Hàng tiêu dùng',
-    storeAddress: 'Đường Kaysone Phomvihane, Bản Phonsavang',
-    storeAddressCity: 'TP. Vientiane',
+    storeAddress: 'Đường Kaysone Phomvihane, Bản Phonsavang, TP. Vientiane',
     storeTel: 'ĐT: 020 5555 9999 / 021 214 555',
     receiptTitle: 'HÓA ĐƠN BÁN HÀNG',
     voidTitle: 'HÓA ĐƠN ĐÃ HỦY (VOID)',
@@ -312,47 +316,47 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 
   let y = 16; // Top margin
 
-  // 1. STORE HEADER (Prominent & Clear)
+  // 1. STORE HEADER (Prominent, Large, Authoritative)
   drawCenter(L.storeName, y, FONTS.STORE_NAME);
-  y += 44;
+  y += 50; // Increased spacing for 42px font
 
   drawCenter(L.storeSlogan, y, FONTS.SLOGAN);
-  y += 26;
+  y += 30; // Increased spacing for 21px font
 
   drawCenter(L.storeAddress, y, FONTS.ADDRESS);
-  y += 24;
+  y += 28; // Increased spacing for 18.5px font
 
   drawCenter(L.storeTel, y, FONTS.TEL);
-  y += 30;
+  y += 34; // Increased spacing for 21px bold font
 
-  // 2. RECEIPT TITLE BANNER (Framed by solid divider lines)
-  drawSolidLine(y, 2);
-  y += 10;
+  // 2. RECEIPT TITLE BANNER (Perfect Symmetric Centering with Equal Top & Bottom Padding)
+  drawSolidLine(y, 2.5);
+  y += 14; // Clean 14px top padding
   drawCenter(L.receiptTitle, y, FONTS.TITLE);
-  y += 32;
-  drawSolidLine(y, 2);
-  y += 16;
+  y += 48; // Text height (34px) + 14px bottom padding = 48px
+  drawSolidLine(y, 2.5);
+  y += 20; // Space below banner
 
   // 3. VOID BANNER (IF CANCELLED)
   if (isCancelled) {
     if (isDraw) {
       ctx.fillStyle = '#000000';
-      ctx.fillRect(K80.LEFT_MARGIN, y, K80.PRINTABLE_WIDTH, 40);
+      ctx.fillRect(K80.LEFT_MARGIN, y, K80.PRINTABLE_WIDTH, 44);
       ctx.fillStyle = '#ffffff';
-      drawCenter(L.voidTitle, y + 8, FONTS.VOID_TEXT);
+      drawCenter(L.voidTitle, y + 10, FONTS.VOID_TEXT);
       ctx.fillStyle = '#000000';
     }
-    y += 50;
+    y += 54;
   }
 
-  // 4. METADATA SECTION
+  // 4. METADATA SECTION (19px - 21px scaled typography)
   // Row 1: Cashier & Customer
   drawLeft(`${L.cashier} ${receipt.cashierName || 'Meii'}`, K80.LEFT_MARGIN, y, FONTS.META_VAL);
   const custName = (!receipt.customerName || receipt.customerName === 'ລູກຄ້າທົ່ວໄປ' || receipt.customerName === 'Khách lẻ / Khách vãng lai')
     ? L.defaultCustomer
     : receipt.customerName;
   drawRight(`${L.customer} ${custName}`, K80.RIGHT_EDGE, y, FONTS.META_BOLD);
-  y += 28;
+  y += 32;
 
   // Row 2: Date & Payment Method
   const dateStr = receipt.createdAt
@@ -367,7 +371,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     payLabel = Number(receipt.paidAmount || 0) === 0 ? L.payDebtFull : L.payDebtPartial;
   } else payLabel = L.payTransfer;
   drawRight(`${L.payment} ${payLabel}`, K80.RIGHT_EDGE, y, FONTS.META_BOLD);
-  y += 30;
+  y += 34;
 
   // 5. COLUMN HEADERS (4 Columns)
   drawDashedLine(y);
@@ -380,11 +384,11 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   }
   drawRight(L.colPrice, K80.COL_PRICE_X, y, FONTS.COL_HEADER);
   drawRight(L.colTotal, K80.COL_TOTAL_X, y, FONTS.COL_HEADER);
-  y += 28;
+  y += 30;
   drawSolidLine(y, 1.2);
   y += 12;
 
-  // 6. ITEM ROWS (23px Medium font scale — loops are wide open and sharp)
+  // 6. ITEM ROWS (Preserved 23px font scale as requested)
   const measureCtx = ctx || document.createElement('canvas').getContext('2d');
   measureCtx.textBaseline = 'top';
 
@@ -581,7 +585,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     y += 32;
   }
 
-  // 10. SIGNATURES SECTION (80px handwriting room, dots ONLY under the 2 columns)
+  // 10. SIGNATURES SECTION (21px Bold labels, generous 100px space, dots ONLY under columns)
   drawDashedLine(y);
   y += 20;
 
@@ -598,8 +602,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     ctx.fillText(rightSignLabel, sigColRightX, y);
   }
 
-  // Generous 80px space for hand signature
-  y += 80;
+  // Generous 100px space for hand signature (per user request)
+  y += 100;
 
   // Dotted lines strictly under the two columns
   if (isDraw) {
@@ -608,16 +612,15 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     ctx.fillText('........................', sigColLeftX, y);
     ctx.fillText('........................', sigColRightX, y);
   }
-  y += 32; // Breathing room below signature dots
+  y += 36; // Breathing room below signature dots before barcode
 
-  // 11. BARCODE STRIP
+  // 11. BARCODE STRIP (Oversized 50px height, 2.2x width for instantaneous laser scan)
   drawDashedLine(y);
   y += 20;
 
-  // Realistic thermal barcode stripes centered at X=288
   const barcodePattern = [2, 1, 3, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1, 2, 4, 1, 3, 1, 2, 1, 4, 2, 1, 3, 1, 2, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1, 2, 4];
-  const barcodeH = 36;
-  const barcodeMultiplier = 2.0;
+  const barcodeH = 50; // Increased from 36 to 50 for big, prominent barcode
+  const barcodeMultiplier = 2.2; // Bolder lines
   const totalBarW = barcodePattern.reduce((s, w) => s + w * barcodeMultiplier, 0);
   let barX = K80.CENTER_X - totalBarW / 2;
 
@@ -631,21 +634,21 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
       barX += bw;
     }
   }
-  y += barcodeH + 16; // 16px gap below barcode bars!
+  y += barcodeH + 18; // 18px clean gap below barcode bars!
 
-  // Receipt Number centered (Never touches barcode bars)
+  // Receipt Number (20px bold monospace, clear separation)
   drawCenter(receipt.receiptNumber || 'MEII-POS', y, FONTS.BARCODE_NUM);
-  y += 28; // Gap before footer text
+  y += 30; // 30px clean gap before footer text
 
-  // 12. FOOTER (Thank you & Return policy)
+  // 12. FOOTER (21px Bold Thank you, 18px Return Policy)
   drawCenter(L.thankYou, y, FONTS.FOOTER_BOLD);
-  y += 24;
+  y += 28;
 
   drawCenter(L.returnPolicy, y, FONTS.FOOTER);
-  y += 26;
+  y += 30;
 
-  // 13. Paper feed padding before cutter (40px)
-  y += 40;
+  // 13. Paper feed padding before cutter (44px)
+  y += 44;
 
   return Math.ceil(y);
 }
@@ -654,14 +657,15 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 export async function renderReceiptCanvas(receipt, lang = 'lo') {
   if (!receipt) throw new Error('Receipt data is missing');
 
-  // Pre-load font to ensure genuine vector Noto Sans Lao glyphs
+  // Pre-load fonts to guarantee genuine vector Noto Sans Lao glyphs
   try {
     if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
       await Promise.race([
         Promise.all([
-          document.fonts.load('bold 36px "Noto Sans Lao"'),
-          document.fonts.load('500 23px "Noto Sans Lao"'),
+          document.fonts.load('bold 42px "Noto Sans Lao"'),
           document.fonts.load('bold 28px "Noto Sans Lao"'),
+          document.fonts.load('500 23px "Noto Sans Lao"'),
+          document.fonts.load('bold 21px "Noto Sans Lao"'),
         ]),
         new Promise((resolve) => setTimeout(resolve, 500)),
       ]);
