@@ -579,10 +579,22 @@ export async function printReceiptSmart({
 
         try {
           canvas = await toCanvas(targetElement, {
-            width: PRINT_WIDTH_DOTS,  // 576px
-            pixelRatio: 1,
+            width: PRINT_WIDTH_DOTS,  // 576px logical
+            canvasWidth: 1152,        // 576 * 2: Render double resolution for maximum smoothness
+            pixelRatio: 2,             // High-DPI 2x super-sampling for ultra-crisp vector glyphs
             backgroundColor: '#ffffff',
             skipFonts: true,
+            style: {
+              width: `${PRINT_WIDTH_DOTS}px`,
+              minWidth: `${PRINT_WIDTH_DOTS}px`,
+              maxWidth: `${PRINT_WIDTH_DOTS}px`,
+              margin: '0',
+              padding: '14px 16px',
+              boxSizing: 'border-box',
+              fontFeatureSettings: '"kern" 1',
+              textRendering: 'geometricPrecision', // Prioritize crisp geometric stroke edges
+              WebkitFontSmoothing: 'antialiased',
+            },
           });
         } catch (renderErr) {
           console.error('[printerService] Canvas DOM render failed:', renderErr);

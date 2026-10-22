@@ -683,22 +683,30 @@ export async function renderReceiptCanvas(receipt, lang = 'lo') {
   // Pass 1: Measure exact height with zero discrepancy
   const exactHeight = layoutReceipt(null, receipt, lang, qrImg);
 
-  // Pass 2: Allocate 576px canvas
+  // Pass 2: Allocate 2X Super-Sampled 1152px canvas (Double Pixel Density)
+  const SCALE = 2;
   const canvas = document.createElement('canvas');
-  canvas.width = K80.CANVAS_WIDTH;  // EXACTLY 576 dots
-  canvas.height = exactHeight;
+  canvas.width = K80.CANVAS_WIDTH * SCALE;   // 576 * 2 = 1152px
+  canvas.height = exactHeight * SCALE;
 
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   // Pure white crisp background
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, K80.CANVAS_WIDTH, exactHeight);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Maximum sub-pixel geometric precision
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  // Scale 2x: All layout coordinates remain in standard 576-based logical units
+  ctx.scale(SCALE, SCALE);
 
   // High-contrast rendering
   ctx.fillStyle = '#000000';
   ctx.textBaseline = 'top';
 
-  // Execute actual drawing
+  // Execute actual drawing at double vector density
   layoutReceipt(ctx, receipt, lang, qrImg);
 
   return canvas;
