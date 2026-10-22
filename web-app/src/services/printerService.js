@@ -577,10 +577,13 @@ export async function printReceiptSmart({
           skipFonts: true, // Cực kỳ quan trọng: ngăn html-to-image chờ font từ xa khi offline!
           style: {
             margin: '0',
-            padding: '16px',
+            padding: activePaperWidth === 58 ? '4px' : '8px',
             width: `${targetWidth}px`,
             maxWidth: `${targetWidth}px`,
+            minWidth: `${targetWidth}px`,
+            boxSizing: 'border-box',
             fontFamily: "'Noto Sans Lao', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, sans-serif",
+            transform: 'none',
           },
         });
 
@@ -599,6 +602,14 @@ export async function printReceiptSmart({
             pixelRatio: 1,
             backgroundColor: '#ffffff',
             skipFonts: true,
+            style: {
+              margin: '0',
+              padding: activePaperWidth === 58 ? '4px' : '8px',
+              width: `${targetWidth}px`,
+              maxWidth: `${targetWidth}px`,
+              minWidth: `${targetWidth}px`,
+              boxSizing: 'border-box',
+            },
           });
         } catch (secondaryErr) {
           console.error('[printerService] Canvas render completely failed:', secondaryErr);
@@ -610,11 +621,12 @@ export async function printReceiptSmart({
         throw new Error('ບໍ່ສາມາດສ້າງຮູບໃບບິນ (Canvas is empty)');
       }
 
-      // Convert Canvas to ESC/POS Raster Bytes
+      // Convert Canvas to ESC/POS Raster Bytes with optimal contrast & exact full-width fit
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: config.drawerKick,
         cutPaper: config.autoCut,
-        luminanceThreshold: 185,
+        luminanceThreshold: 200, // Higher threshold captures crisp text and fine Lao tone marks without washing out
+        targetDots: targetWidth, // Guarantee exact 576 dots (80mm) or 384 dots (58mm) full-width fill
       });
 
       // Transmit directly to hardware thermal printer with strict 2.5s fail-fast timeout

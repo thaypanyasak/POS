@@ -14,7 +14,23 @@ export const ESC_FEED_LINES = (n = 3) => [0x1b, 0x64, n]; // ESC d n (Feed n lin
  * Convert Canvas image data to ESC/POS Monochrome 1-bit raster command (`GS v 0`)
  * Luminance calculation: 0.299*R + 0.587*G + 0.114*B < threshold => 1 (black dot)
  */
-export function canvasToEscPosRaster(canvas, { kickCashDrawer = true, cutPaper = true, luminanceThreshold = 180 } = {}) {
+export function canvasToEscPosRaster(sourceCanvas, { kickCashDrawer = true, cutPaper = true, luminanceThreshold = 180, targetDots = null } = {}) {
+  // If targetDots is specified and different from sourceCanvas.width, scale onto dedicated high-contrast canvas
+  let canvas = sourceCanvas;
+  if (targetDots && targetDots > 0 && sourceCanvas.width !== targetDots) {
+    const scale = targetDots / sourceCanvas.width;
+    const scaledHeight = Math.round(sourceCanvas.height * scale);
+    const scaledCanvas = document.createElement('canvas');
+    scaledCanvas.width = targetDots;
+    scaledCanvas.height = scaledHeight;
+    const sCtx = scaledCanvas.getContext('2d');
+    sCtx.imageSmoothingEnabled = false; // Nearest neighbor preserves sharp text edges
+    sCtx.fillStyle = '#ffffff';
+    sCtx.fillRect(0, 0, targetDots, scaledHeight);
+    sCtx.drawImage(sourceCanvas, 0, 0, targetDots, scaledHeight);
+    canvas = scaledCanvas;
+  }
+
   const ctx = canvas.getContext('2d');
   const width = canvas.width;
   const height = canvas.height;
@@ -60,7 +76,10 @@ export function canvasToEscPosRaster(canvas, { kickCashDrawer = true, cutPaper =
             const a = pixels[idx + 3];
 
             const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-            if (lum < luminanceThreshold && a > 50) {
+            // Black text on white background:
+            // Any pixel that is dark (lum < luminanceThreshold) and visible (a > 30) is printed.
+            // Also handle transparent pixels: default is white paper, so only non-white/dark counts.
+            if (a > 30 && lum < luminanceThreshold) {
               byteVal |= 1 << (7 - bit);
             }
           }
