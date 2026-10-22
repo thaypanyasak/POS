@@ -578,10 +578,10 @@ export async function printReceiptSmart({
         }
 
         try {
-          canvas = await toCanvas(targetElement, {
-            width: PRINT_WIDTH_DOTS,  // 576px logical
-            canvasWidth: 1152,        // 576 * 2: Render double resolution for maximum smoothness
-            pixelRatio: 2,             // High-DPI 2x super-sampling for ultra-crisp vector glyphs
+          const highResCanvas = await toCanvas(targetElement, {
+            width: PRINT_WIDTH_DOTS,  // 576px
+            canvasWidth: 1152,        // 576 * 2: Super-sampled high resolution
+            pixelRatio: 2,             // 2x pixel density for crisp vector strokes
             backgroundColor: '#ffffff',
             skipFonts: true,
             style: {
@@ -592,10 +592,26 @@ export async function printReceiptSmart({
               padding: '14px 16px',
               boxSizing: 'border-box',
               fontFeatureSettings: '"kern" 1',
-              textRendering: 'geometricPrecision', // Prioritize crisp geometric stroke edges
+              textRendering: 'geometricPrecision',
               WebkitFontSmoothing: 'antialiased',
             },
           });
+
+          // Downscale highResCanvas (1152px) to standard K80 (576px) using high-quality image smoothing
+          if (highResCanvas.width !== PRINT_WIDTH_DOTS) {
+            const scaledCanvas = document.createElement('canvas');
+            scaledCanvas.width = PRINT_WIDTH_DOTS;
+            scaledCanvas.height = Math.round(highResCanvas.height * (PRINT_WIDTH_DOTS / highResCanvas.width));
+            const sCtx = scaledCanvas.getContext('2d');
+            sCtx.imageSmoothingEnabled = true;
+            sCtx.imageSmoothingQuality = 'high';
+            sCtx.fillStyle = '#ffffff';
+            sCtx.fillRect(0, 0, scaledCanvas.width, scaledCanvas.height);
+            sCtx.drawImage(highResCanvas, 0, 0, scaledCanvas.width, scaledCanvas.height);
+            canvas = scaledCanvas;
+          } else {
+            canvas = highResCanvas;
+          }
         } catch (renderErr) {
           console.error('[printerService] Canvas DOM render failed:', renderErr);
           throw new Error('ບໍ່ສາມາດສ້າງຮູບໃບບິນ (Canvas Render Error): ' + (renderErr.message || renderErr));
@@ -612,7 +628,7 @@ export async function printReceiptSmart({
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: config.drawerKick,
         cutPaper: config.autoCut,
-        luminanceThreshold: 148, // Optimal high-res thermal threshold: prevents broken strokes & avoids ink-bleeding
+        luminanceThreshold: 185, // High-contrast threshold for thick thermal paper: deep, bold black burn
       });
 
       // Transmit directly to hardware thermal printer with strict 2.5s fail-fast timeout

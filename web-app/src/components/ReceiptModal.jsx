@@ -311,6 +311,10 @@ export default function ReceiptModal({
           id="thermal-receipt-print-area"
           style={{
             fontFamily: receiptLanguage === 'vi' ? "'Be Vietnam Pro', 'Noto Sans Lao', sans-serif" : "'Noto Sans Lao', Outfit, sans-serif",
+            WebkitTextStroke: '0.35px #000000',
+            textRendering: 'geometricPrecision',
+            fontSmooth: 'never',
+            WebkitFontSmoothing: 'antialiased',
           }}
           className={`bg-white mx-auto p-4 border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto paper-80mm w-full max-w-[380px] ${
             receiptLanguage === 'vi' ? 'font-vietnam' : 'font-lao'
@@ -319,13 +323,13 @@ export default function ReceiptModal({
           {/* Store Header */}
           <div className="text-center pb-2">
             <h2 className="text-base font-black text-slate-950 leading-normal tracking-wide pt-0.5">{L.storeName}</h2>
-            <p className="text-[11px] text-slate-700 font-bold leading-normal mt-0.5">
+            <p className="text-[11px] text-slate-900 font-extrabold leading-normal mt-0.5">
               {L.storeSlogan}
             </p>
-            <p className="text-[10.5px] text-slate-600 leading-normal">
+            <p className="text-[10.5px] text-slate-800 font-bold leading-normal">
               {L.storeAddress}
             </p>
-            <p className="text-[11px] text-slate-700 font-bold leading-normal">
+            <p className="text-[11px] text-slate-900 font-extrabold leading-normal">
               {L.storeTel}
             </p>
           </div>
@@ -399,12 +403,12 @@ export default function ReceiptModal({
             </div>
           </div>
 
-          {/* Items Table Header - 4 Columns: Name (40%), Qty (15%), Price (20%), Total (25%) */}
-          <div className="border-t border-dashed border-slate-300 pt-2 pb-1 flex items-center font-extrabold text-[10px] text-slate-800 leading-normal">
-            <span className="w-[40%] flex-1 text-left pt-0.5">{L.colName}</span>
-            <span className="w-[15%] shrink-0 text-center pt-0.5">{L.colQty}</span>
-            <span className="w-[20%] shrink-0 text-right pt-0.5">{L.colPrice}</span>
-            <span className="w-[25%] shrink-0 text-right pt-0.5">{L.colTotal}</span>
+          {/* Items Table Header - 4 Columns: Name (max 260px), Qty (55px), Price (110px), Total */}
+          <div className="border-t border-dashed border-slate-300 pt-2 pb-1 flex items-center font-black text-[10px] text-slate-900 leading-normal">
+            <span className="flex-1 max-w-[260px] text-left pt-0.5">{L.colName}</span>
+            <span className="w-[55px] shrink-0 text-center pt-0.5">{L.colQty}</span>
+            <span className="w-[110px] shrink-0 text-right pt-0.5">{L.colPrice}</span>
+            <span className="w-[115px] shrink-0 text-right pt-0.5">{L.colTotal}</span>
           </div>
           <div className="border-b border-slate-400 mb-1.5"></div>
 
@@ -441,36 +445,36 @@ export default function ReceiptModal({
                 const crateDepositTotal = Number(it.crateDepositTotal) || (hasMissingCrates ? missingCount * feePerCrate : 0);
 
                 return (
-                  <div key={i} className="receipt-item-row flex flex-col text-[10.5px] leading-normal py-0.5">
-                    {/* Main Row: 4 Columns with Product Name allowed up to 2 lines */}
+                  <div key={i} className="receipt-item-row flex flex-col text-[11px] py-1">
+                    {/* Main Row: 4 Columns with Product Name max 260px, word-break, line-height 1.45 */}
                     <div className="product-name-row flex items-start text-slate-900 overflow-visible">
-                      <span className="w-[40%] flex-1 font-semibold text-left pr-1 break-words leading-tight overflow-visible text-[10.5px]" title={`${prodName} (${unitName})`}>
-                        {prodName} <span className="font-normal text-slate-600 text-[10px]">({unitName})</span>
+                      <span className="flex-1 max-w-[260px] font-semibold text-left pr-1 break-words leading-[1.45] overflow-visible text-[10.5px]" title={`${prodName} (${unitName})`}>
+                        {prodName} <span className="font-medium text-slate-700 text-[10px]">({unitName})</span>
                       </span>
-                      <span className="w-[15%] shrink-0 text-center font-sans font-medium text-[10.5px] text-slate-800">
+                      <span className="w-[55px] shrink-0 text-center font-bold font-sans text-[11px] text-slate-900 leading-[1.45]">
                         {qty}x
                       </span>
-                      <span className="w-[20%] shrink-0 text-right font-sans font-medium text-[10.5px] tracking-tight text-slate-700">
+                      <span className="w-[110px] shrink-0 text-right font-bold font-sans text-[11px] tracking-tight text-slate-900 leading-[1.45]">
                         {formatKip(price).replace(' ₭', '')}
                       </span>
-                      <span className="w-[25%] shrink-0 text-right font-sans font-bold text-[11px] tracking-tight text-slate-950">
+                      <span className="w-[115px] shrink-0 text-right font-bold font-sans text-[11.5px] tracking-tight text-slate-950 leading-[1.45]">
                         {formatKip(baseLineTotal).replace(' ₭', '')}
                       </span>
                     </div>
 
                     {/* Crate Deposit row for bottles/beers without empty crates to exchange (+30.000 ₭/crate) */}
                     {hasMissingCrates && missingCount > 0 && (
-                      <div className="flex items-center text-[10px] text-amber-950 bg-amber-50/90 py-0.5 px-1 rounded mt-0.5 border border-amber-200 leading-normal">
-                        <span className="w-[40%] font-bold text-left truncate text-amber-900" title={L.missingCrate}>
+                      <div className="flex items-center text-[10px] text-amber-950 bg-amber-50/90 py-0.5 px-1 rounded mt-0.5 border border-amber-200 leading-[1.45]">
+                        <span className="flex-1 max-w-[260px] font-bold text-left truncate text-amber-900" title={L.missingCrate}>
                           {L.missingCrate}
                         </span>
-                        <span className="w-[15%] text-center font-sans font-medium text-amber-900">
+                        <span className="w-[55px] shrink-0 text-center font-bold font-sans text-amber-900">
                           {missingCount}x
                         </span>
-                        <span className="w-[20%] text-right font-sans font-medium text-amber-800 tracking-tight">
+                        <span className="w-[110px] shrink-0 text-right font-bold font-sans text-amber-900 tracking-tight">
                           {formatKip(feePerCrate).replace(' ₭', '')}
                         </span>
-                        <span className="w-[25%] text-right font-sans font-bold text-amber-950 tracking-tight">
+                        <span className="w-[115px] shrink-0 text-right font-extrabold font-sans text-amber-950 tracking-tight">
                           +{formatKip(crateDepositTotal).replace(' ₭', '')}
                         </span>
                       </div>
@@ -538,8 +542,8 @@ export default function ReceiptModal({
                 )}
                 <div className="border-b-2 border-slate-900 my-1.5"></div>
                 <div className="flex justify-between items-center py-4 my-0.5">
-                  <span className="font-black text-sm text-slate-900 leading-none">{L.grandTotalLabel}</span>
-                  <span className="font-black text-lg text-slate-950 font-sans tracking-tight leading-none">
+                  <span className="font-black text-xl text-slate-950 leading-none">{L.grandTotalLabel}</span>
+                  <span className="font-black text-2xl text-slate-950 font-sans tracking-tight leading-none">
                     {formatKip(finalGrandTotal)}
                   </span>
                 </div>

@@ -33,45 +33,45 @@ export const K80 = {
   CENTER_X: 288,        // Symmetry center (576 / 2)
 
   // 4-Column Grid
-  COL_NAME_X: 16,       // Column 1: Item Name
-  COL_NAME_MAX_W: 255,  // Max width 255px (wrap if longer)
-  COL_QTY_X: 288,       // Column 2: Qty (centered at 288px)
-  COL_PRICE_X: 410,     // Column 3: Unit Price (right-aligned at 410px)
-  COL_TOTAL_X: 560,     // Column 4: Line Total (right-aligned at 560px)
+  COL_NAME_X: 16,       // Column 1: Item Name (runs 16px to 276px, max 260px)
+  COL_NAME_MAX_W: 260,  // Max width 260px (wrap if longer)
+  COL_QTY_X: 305,       // Column 2: Qty (55px width, centered at 305px)
+  COL_PRICE_X: 425,     // Column 3: Unit Price (110px width, right-aligned at 425px)
+  COL_TOTAL_X: 560,     // Column 4: Line Total (115px width, right-aligned at 560px)
 };
 
 // ─── Typography (High-Res POS Scale) ──────────────────────────────────────────
 const FONTS = {
-  STORE_NAME: 'bold 42px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SLOGAN: '500 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ADDRESS: '400 18.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TEL: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  STORE_NAME: '800 42px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SLOGAN: '700 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ADDRESS: '700 18.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TEL: '800 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   TITLE: 'bold 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_VAL: '500 19.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_LABEL: '500 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_VAL: '600 19.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   META_BOLD: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  COL_HEADER: 'bold 20px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NAME: '500 20.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',  // Slightly reduced for elegant line fit
-  ITEM_UNIT: '400 17.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NUM: '500 18.5px "Outfit", "Segoe UI", -apple-system, sans-serif',          // Tight proportional figures (no wide monospace gaps)
-  ITEM_TOTAL: 'bold 19.5px "Outfit", "Segoe UI", -apple-system, sans-serif',       // Tight proportional figures
-  CRATE_LABEL: '500 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  CRATE_NUM: '500 16px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  SUBTOTAL_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SUBTOTAL_NUM: 'bold 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  GRAND_LABEL: 'bold 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  GRAND_NUM: 'bold 30px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  TENDER_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TENDER_NUM: 'bold 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  DEBT_LABEL: 'bold 22px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  DEBT_NUM: 'bold 22px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  QR_NAME: '500 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  QR_AMOUNT: 'bold 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  COL_HEADER: '800 20px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_NAME: '600 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',      // font-semibold (600)
+  ITEM_UNIT: '500 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_NUM: '700 19px "Outfit", "Segoe UI", -apple-system, sans-serif',             // font-bold (700)
+  ITEM_TOTAL: '800 20.5px "Outfit", "Segoe UI", -apple-system, sans-serif',          // font-extrabold (800)
+  CRATE_LABEL: '600 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  CRATE_NUM: '700 16.5px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  SUBTOTAL_LABEL: '500 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SUBTOTAL_NUM: '700 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  GRAND_LABEL: '900 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',    // font-black (900)
+  GRAND_NUM: '900 32px "Outfit", "Segoe UI", -apple-system, sans-serif',             // font-black (900) >= 24px
+  TENDER_LABEL: '500 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TENDER_NUM: '700 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  DEBT_LABEL: '800 22px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  DEBT_NUM: '800 22px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  QR_NAME: '600 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  QR_AMOUNT: '800 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
   SIGN_LABEL: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   SIGN_LINE: 'bold 20px monospace',
   BARCODE_NUM: 'bold 20px "Outfit", monospace',
   FOOTER_BOLD: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  FOOTER: '500 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  FOOTER: '600 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   VOID_TEXT: 'bold 24px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
 };
 
@@ -432,7 +432,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     measureCtx.font = FONTS.ITEM_NAME;
     const nameLines = wrapText(measureCtx, fullName, K80.COL_NAME_MAX_W);
 
-    // First line of row: Name, Qty, Unit Price, Line Total
+    // First line of row: Name, Qty, Unit Price, Line Total (line-height 1.45 spacing)
     drawLeft(nameLines[0], K80.COL_NAME_X, y, FONTS.ITEM_NAME);
     if (isDraw) {
       ctx.font = FONTS.ITEM_NUM;
@@ -441,12 +441,12 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     }
     drawRight(fmtNum(price), K80.COL_PRICE_X, y + 2, FONTS.ITEM_NUM);
     drawRight(fmtNum(lineTotal), K80.COL_TOTAL_X, y + 2, FONTS.ITEM_TOTAL);
-    y += 28;
+    y += 32; // Line height 1.45 for Lao vowel space
 
-    // Additional wrapped name lines
+    // Additional wrapped name lines (line-height 1.45 spacing)
     for (let li = 1; li < nameLines.length; li++) {
       drawLeft(nameLines[li], K80.COL_NAME_X, y, FONTS.ITEM_NAME);
-      y += 26;
+      y += 30;
     }
 
     // Crate deposit sub-row if applicable
