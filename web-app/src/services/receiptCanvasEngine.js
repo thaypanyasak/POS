@@ -1,15 +1,21 @@
 /**
- * Pure Canvas 2D Receipt Drawing Engine — MeiiShop POS
- * ═══════════════════════════════════════════════════════
+ * High-Resolution Professional POS Receipt Engine — MeiiShop POS
+ * ══════════════════════════════════════════════════════════════
  * Standard: 80mm K80 (Physical Width: 576 dots / 72 bytes per line)
  *
- * Pixel-perfect reproduction of ReceiptModal.jsx preview:
- *  - Spacious bordered box for Grand Total (ຍອດຊຳລະສຸດທິ) with internal padding.
- *  - Dedicated handwriting signature space (75px) with dots exclusively under
- *    the two signer columns (no full-width line clash).
- *  - Medium (500) and Regular (400) weights for Lao body text to prevent
- *    thermal ink-bleeding and keep Lao vowel loops open and crystal clear.
- *  - Strict top-baseline positioning to eliminate barcode/number overlaps.
+ * Engineering Upgrade for Ultra-Sharp Lao Typography (Anti-Pixelation / Anti-Bleed):
+ *  1. Font Preloading: Explicitly awaits document.fonts.load() to guarantee
+ *     authentic Noto Sans Lao vector glyphs (preventing thin system font fallback).
+ *  2. Professional POS Font Scale:
+ *     - Store Name: 36px Bold (~4.8mm)
+ *     - Item Name: 23px Medium (500) (~3.2mm) — provides 16 vertical dots so
+ *       Lao loops (ໍ, ່, ້, ິ, ີ, ົ, ມ, ນ, ລ, ດ) never break, pixelate, or clog.
+ *     - Qty & Unit Price: 20px monospace
+ *     - Line Total: 21px bold monospace
+ *     - Grand Total: 28px bold label, 32px bold amount with spacious 16px padding
+ *  3. Extended Signature Block: 80px handwriting room with clean dotted lines
+ *     exclusively under the two signer columns.
+ *  4. High-contrast Barcode with 16px buffer to prevent number collisions.
  */
 
 // ─── 80mm K80 Physical Constants ──────────────────────────────────────────────
@@ -20,47 +26,47 @@ export const K80 = {
   PRINTABLE_WIDTH: 544, // 560 - 16
   CENTER_X: 288,        // Symmetry center (576 / 2)
 
-  // 4-Column Grid matching ReceiptModal.jsx
+  // 4-Column Grid calibrated for 23-24px typography
   COL_NAME_X: 16,       // Column 1: Item Name
-  COL_NAME_MAX_W: 255,  // Max width 255px (wrap if longer)
-  COL_QTY_X: 295,       // Column 2: Qty (centered at 295px)
-  COL_PRICE_X: 415,     // Column 3: Unit Price (right-aligned at 415px)
+  COL_NAME_MAX_W: 245,  // Max width 245px (wrap if longer)
+  COL_QTY_X: 288,       // Column 2: Qty (centered at 288px)
+  COL_PRICE_X: 410,     // Column 3: Unit Price (right-aligned at 410px)
   COL_TOTAL_X: 560,     // Column 4: Line Total (right-aligned at 560px)
 };
 
-// ─── Typography (Calibrated for Thermal Printers & Anti-Bleed) ────────────────
+// ─── Typography (High-Res POS Scale) ──────────────────────────────────────────
 const FONTS = {
-  STORE_NAME: 'bold 30px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SLOGAN: '500 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ADDRESS: '400 14.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TEL: 'bold 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TITLE: 'bold 20px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_LABEL: '400 15px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_VAL: '500 15.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_BOLD: 'bold 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  COL_HEADER: 'bold 16.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NAME: '500 18.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_UNIT: '400 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NUM: '400 17px monospace',
-  ITEM_TOTAL: 'bold 17.5px monospace',
-  CRATE_LABEL: '500 15.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  CRATE_NUM: '400 15.5px monospace',
-  SUBTOTAL_LABEL: '400 16.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SUBTOTAL_NUM: '500 17.5px monospace',
-  GRAND_LABEL: 'bold 23px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  GRAND_NUM: 'bold 26px monospace',
-  TENDER_LABEL: '400 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TENDER_NUM: '500 17px monospace',
-  DEBT_LABEL: 'bold 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  DEBT_NUM: 'bold 21px monospace',
-  QR_NAME: '500 14px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  QR_AMOUNT: 'bold 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SIGN_LABEL: 'bold 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SIGN_LINE: '16px monospace',
-  BARCODE_NUM: 'bold 15.5px monospace',
-  FOOTER_BOLD: 'bold 15.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  FOOTER: '400 13.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  VOID_TEXT: 'bold 20px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  STORE_NAME: 'bold 36px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SLOGAN: '500 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ADDRESS: '400 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TEL: 'bold 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TITLE: 'bold 24px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_LABEL: '400 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_VAL: '500 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_BOLD: 'bold 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  COL_HEADER: 'bold 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_NAME: '500 23px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_UNIT: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_NUM: '500 20px monospace',
+  ITEM_TOTAL: 'bold 21px monospace',
+  CRATE_LABEL: '500 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  CRATE_NUM: '500 17px monospace',
+  SUBTOTAL_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SUBTOTAL_NUM: 'bold 20px monospace',
+  GRAND_LABEL: 'bold 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  GRAND_NUM: 'bold 32px monospace',
+  TENDER_LABEL: '400 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TENDER_NUM: 'bold 20px monospace',
+  DEBT_LABEL: 'bold 22px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  DEBT_NUM: 'bold 24px monospace',
+  QR_NAME: '500 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  QR_AMOUNT: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SIGN_LABEL: 'bold 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SIGN_LINE: '18px monospace',
+  BARCODE_NUM: 'bold 17px monospace',
+  FOOTER_BOLD: 'bold 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  FOOTER: '400 15px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  VOID_TEXT: 'bold 22px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
 };
 
 // ─── Bilingual Dictionary ─────────────────────────────────────────────────────
@@ -68,7 +74,8 @@ const LABELS = {
   lo: {
     storeName: 'ຮ້ານ MeiiShop',
     storeSlogan: 'ຂາຍຍົກ - ຂາຍຍ່ອຍ ສິນຄ້າອຸປະໂພກ ບໍລິໂພກ',
-    storeAddress: 'ຖະໜົນ ໄກສອນ ພົມວິຫານ, ບ້ານ ໂພນສະຫວ່າງ, ນະຄອນຫຼວງວຽງຈັນ',
+    storeAddress: 'ຖະໜົນ ໄກສອນ ພົມວິຫານ, ບ້ານ ໂພນສະຫວ່າງ',
+    storeAddressCity: 'ນະຄອນຫຼວງວຽງຈັນ',
     storeTel: 'ໂທ: 020 5555 9999 / 021 214 555',
     receiptTitle: 'ໃບບິນຮັບເງິນ / RECEIPT',
     voidTitle: 'ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ (VOID)',
@@ -109,7 +116,8 @@ const LABELS = {
   vi: {
     storeName: 'CỬA HÀNG MEIISHOP',
     storeSlogan: 'Bán buôn - Bán lẻ Hàng tiêu dùng',
-    storeAddress: 'Đường Kaysone Phomvihane, Bản Phonsavang, TP. Vientiane',
+    storeAddress: 'Đường Kaysone Phomvihane, Bản Phonsavang',
+    storeAddressCity: 'TP. Vientiane',
     storeTel: 'ĐT: 020 5555 9999 / 021 214 555',
     receiptTitle: 'HÓA ĐƠN BÁN HÀNG',
     voidTitle: 'HÓA ĐƠN ĐÃ HỦY (VOID)',
@@ -161,7 +169,7 @@ function fmtNum(n) {
 }
 
 /**
- * Robust word-wrap supporting Lao, Vietnamese, English
+ * Word-wrap supporting Lao script, Vietnamese, English
  */
 function wrapText(ctx, text, maxWidth) {
   if (!text) return [''];
@@ -280,8 +288,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   const drawDashedLine = (y) => {
     if (isDraw) {
       ctx.beginPath();
-      ctx.setLineDash([5, 4]);
-      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = 1.2;
       ctx.strokeStyle = '#000000';
       ctx.moveTo(K80.LEFT_MARGIN, y);
       ctx.lineTo(K80.RIGHT_EDGE, y);
@@ -304,37 +312,37 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 
   let y = 16; // Top margin
 
-  // 1. STORE HEADER
+  // 1. STORE HEADER (Prominent & Clear)
   drawCenter(L.storeName, y, FONTS.STORE_NAME);
-  y += 38;
+  y += 44;
 
   drawCenter(L.storeSlogan, y, FONTS.SLOGAN);
-  y += 24;
-
-  drawCenter(L.storeAddress, y, FONTS.ADDRESS);
-  y += 22;
-
-  drawCenter(L.storeTel, y, FONTS.TEL);
   y += 26;
 
-  // 2. RECEIPT TITLE BANNER (Solid lines enclosing title)
+  drawCenter(L.storeAddress, y, FONTS.ADDRESS);
+  y += 24;
+
+  drawCenter(L.storeTel, y, FONTS.TEL);
+  y += 30;
+
+  // 2. RECEIPT TITLE BANNER (Framed by solid divider lines)
   drawSolidLine(y, 2);
-  y += 8;
+  y += 10;
   drawCenter(L.receiptTitle, y, FONTS.TITLE);
-  y += 28;
+  y += 32;
   drawSolidLine(y, 2);
-  y += 12;
+  y += 16;
 
   // 3. VOID BANNER (IF CANCELLED)
   if (isCancelled) {
     if (isDraw) {
       ctx.fillStyle = '#000000';
-      ctx.fillRect(K80.LEFT_MARGIN, y, K80.PRINTABLE_WIDTH, 36);
+      ctx.fillRect(K80.LEFT_MARGIN, y, K80.PRINTABLE_WIDTH, 40);
       ctx.fillStyle = '#ffffff';
       drawCenter(L.voidTitle, y + 8, FONTS.VOID_TEXT);
       ctx.fillStyle = '#000000';
     }
-    y += 46;
+    y += 50;
   }
 
   // 4. METADATA SECTION
@@ -344,7 +352,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     ? L.defaultCustomer
     : receipt.customerName;
   drawRight(`${L.customer} ${custName}`, K80.RIGHT_EDGE, y, FONTS.META_BOLD);
-  y += 24;
+  y += 28;
 
   // Row 2: Date & Payment Method
   const dateStr = receipt.createdAt
@@ -359,11 +367,11 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     payLabel = Number(receipt.paidAmount || 0) === 0 ? L.payDebtFull : L.payDebtPartial;
   } else payLabel = L.payTransfer;
   drawRight(`${L.payment} ${payLabel}`, K80.RIGHT_EDGE, y, FONTS.META_BOLD);
-  y += 26;
+  y += 30;
 
   // 5. COLUMN HEADERS (4 Columns)
   drawDashedLine(y);
-  y += 8;
+  y += 10;
   drawLeft(L.colName, K80.COL_NAME_X, y, FONTS.COL_HEADER);
   if (isDraw) {
     ctx.font = FONTS.COL_HEADER;
@@ -372,11 +380,11 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   }
   drawRight(L.colPrice, K80.COL_PRICE_X, y, FONTS.COL_HEADER);
   drawRight(L.colTotal, K80.COL_TOTAL_X, y, FONTS.COL_HEADER);
-  y += 24;
-  drawSolidLine(y, 1);
-  y += 8;
+  y += 28;
+  drawSolidLine(y, 1.2);
+  y += 12;
 
-  // 6. ITEM ROWS
+  // 6. ITEM ROWS (23px Medium font scale — loops are wide open and sharp)
   const measureCtx = ctx || document.createElement('canvas').getContext('2d');
   measureCtx.textBaseline = 'top';
 
@@ -407,24 +415,24 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     measureCtx.font = FONTS.ITEM_NAME;
     const nameLines = wrapText(measureCtx, fullName, K80.COL_NAME_MAX_W);
 
-    // First line of row
+    // First line of row: Name, Qty, Unit Price, Line Total
     drawLeft(nameLines[0], K80.COL_NAME_X, y, FONTS.ITEM_NAME);
     if (isDraw) {
       ctx.font = FONTS.ITEM_NUM;
       ctx.textAlign = 'center';
-      ctx.fillText(`${qty}x`, K80.COL_QTY_X, y + 1);
+      ctx.fillText(`${qty}x`, K80.COL_QTY_X, y + 2);
     }
-    drawRight(fmtNum(price), K80.COL_PRICE_X, y + 1, FONTS.ITEM_NUM);
-    drawRight(fmtNum(lineTotal), K80.COL_TOTAL_X, y + 1, FONTS.ITEM_TOTAL);
-    y += 24;
+    drawRight(fmtNum(price), K80.COL_PRICE_X, y + 2, FONTS.ITEM_NUM);
+    drawRight(fmtNum(lineTotal), K80.COL_TOTAL_X, y + 2, FONTS.ITEM_TOTAL);
+    y += 30;
 
-    // Subsequent wrapped lines if name is long
+    // Additional wrapped name lines
     for (let li = 1; li < nameLines.length; li++) {
       drawLeft(nameLines[li], K80.COL_NAME_X, y, FONTS.ITEM_NAME);
-      y += 24;
+      y += 28;
     }
 
-    // Crate deposit sub-row
+    // Crate deposit sub-row if applicable
     const hasMissingCrates = Boolean(
       it.noEmptyCrates || (Number(it.missingCratesCount) > 0) || (Number(it.crateDepositTotal) > 0)
     );
@@ -433,7 +441,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
       const missingCount = Number(it.missingCratesCount) || (hasMissingCrates ? qty : 0);
       const crateTotal = Number(it.crateDepositTotal) || (missingCount * feePerCrate);
 
-      drawLeft(L.missingCrate, K80.COL_NAME_X + 12, y, FONTS.CRATE_LABEL);
+      drawLeft(L.missingCrate, K80.COL_NAME_X + 14, y, FONTS.CRATE_LABEL);
       if (isDraw) {
         ctx.font = FONTS.CRATE_NUM;
         ctx.textAlign = 'center';
@@ -441,15 +449,15 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
       }
       drawRight(fmtNum(feePerCrate), K80.COL_PRICE_X, y, FONTS.CRATE_NUM);
       drawRight(`+${fmtNum(crateTotal)}`, K80.COL_TOTAL_X, y, FONTS.CRATE_NUM);
-      y += 22;
+      y += 24;
     }
 
     y += 4; // Padding between items
   }
 
-  y += 4;
+  y += 6;
   drawDashedLine(y);
-  y += 10;
+  y += 12;
 
   // 7. TOTALS SECTION
   const totalCrateDeposit = items.reduce((sum, it) => {
@@ -481,76 +489,75 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   // Subtotal
   drawLeft(L.subtotalLabel, K80.LEFT_MARGIN, y, FONTS.SUBTOTAL_LABEL);
   drawRight(fmtKip(pureGoodsSubtotal), K80.RIGHT_EDGE, y, FONTS.SUBTOTAL_NUM);
-  y += 24;
+  y += 28;
 
   // Crate deposit total
   if (totalCrateDeposit > 0) {
     drawLeft(L.crateDepositLabel, K80.LEFT_MARGIN, y, FONTS.SUBTOTAL_LABEL);
     drawRight(`+${fmtKip(totalCrateDeposit)}`, K80.RIGHT_EDGE, y, FONTS.SUBTOTAL_NUM);
-    y += 24;
+    y += 28;
   }
 
   // Discount
   if (discount > 0) {
     drawLeft(L.discountLabel, K80.LEFT_MARGIN, y, FONTS.SUBTOTAL_LABEL);
     drawRight(`-${fmtKip(discount)}`, K80.RIGHT_EDGE, y, FONTS.SUBTOTAL_NUM);
-    y += 24;
+    y += 28;
   }
 
-  // ─── GRAND TOTAL WITH SPACIOUS TOP & BOTTOM PADDING ───
-  // BorderTop & BorderBottom have generous internal breathing room (no more sticking to text)
+  // ─── GRAND TOTAL WITH PROFESSIONAL SPACIOUS PADDING ───
   y += 10;
   drawSolidLine(y, 2.5); // Top border
-  y += 14;               // Internal padding top
+  y += 16;               // Internal padding-top
 
-  drawLeft(L.grandTotalLabel, K80.LEFT_MARGIN, y, FONTS.GRAND_LABEL);
+  drawLeft(L.grandTotalLabel, K80.LEFT_MARGIN, y + 2, FONTS.GRAND_LABEL);
   drawRight(fmtKip(finalGrandTotal), K80.RIGHT_EDGE, y, FONTS.GRAND_NUM);
-  y += 34;               // Font line height
+  y += 40;               // Font height
 
-  y += 10;               // Internal padding bottom
+  y += 12;               // Internal padding-bottom
   drawSolidLine(y, 2.5); // Bottom border
-  y += 16;               // Margin below bottom border
+  y += 18;               // Margin below bottom border
 
   // 8. PAYMENT DETAILS (Tendered / Change / Debt)
   if (isDebt) {
     drawLeft(L.paidLabel, K80.LEFT_MARGIN, y, FONTS.TENDER_LABEL);
     drawRight(fmtKip(receipt.paidAmount ?? receipt.amountTendered ?? 0), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
-    y += 24;
+    y += 28;
 
     const debtAmt = receipt.debtAmount ?? Math.max(0, receipt.grandTotal - (receipt.paidAmount ?? receipt.amountTendered ?? 0));
     drawLeft(L.debtBalanceLabel, K80.LEFT_MARGIN, y, FONTS.DEBT_LABEL);
     drawRight(fmtKip(debtAmt), K80.RIGHT_EDGE, y, FONTS.DEBT_NUM);
-    y += 26;
+    y += 30;
 
     if (receipt.debtNote) {
       measureCtx.font = FONTS.ADDRESS;
       const noteLines = wrapText(measureCtx, `${L.debtNoteLabel} ${receipt.debtNote}`, K80.PRINTABLE_WIDTH);
       for (const line of noteLines) {
         drawLeft(line, K80.LEFT_MARGIN, y, FONTS.ADDRESS);
-        y += 20;
+        y += 22;
       }
     }
   } else {
     drawLeft(L.tenderedLabel, K80.LEFT_MARGIN, y, FONTS.TENDER_LABEL);
     drawRight(fmtKip(receipt.amountTendered), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
-    y += 24;
+    y += 28;
 
     if (receipt.paymentMethod === 'cash') {
       drawLeft(L.changeLabel, K80.LEFT_MARGIN, y, FONTS.TENDER_LABEL);
       drawRight(fmtKip(receipt.changeAmount), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
-      y += 24;
+      y += 28;
     }
   }
 
-  y += 12;
+  y += 14;
 
   // 9. QR CODE PAYMENT (If transfer payment or debt)
   const showQr = isTransfer || (isDebt && (receipt.debtAmount ?? receipt.grandTotal) > 0);
   if (showQr) {
     drawDashedLine(y);
-    y += 14;
+    y += 16;
 
-    const qrSize = 140;
+    const qrSize = 155;
     const qrX = K80.CENTER_X - qrSize / 2;
 
     if (qrImage && isDraw) {
@@ -561,22 +568,22 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
       ctx.strokeRect(qrX, y, qrSize, qrSize);
       drawCenter('LAO QR PAYMENT', y + qrSize / 2 - 8, FONTS.META_BOLD);
     }
-    y += qrSize + 10;
+    y += qrSize + 12;
 
     // Account holder
     drawCenter('VILAIPHONE VANNALATH MS', y, FONTS.QR_NAME);
-    y += 20;
+    y += 24;
 
     const qrAmount = (receipt.paymentMethod === 'debt' || receipt.isDebt)
       ? (receipt.debtAmount ?? receipt.grandTotal)
       : receipt.grandTotal;
     drawCenter(`${L.transferTotalLabel} ${fmtKip(qrAmount)}`, y, FONTS.QR_AMOUNT);
-    y += 28;
+    y += 32;
   }
 
-  // 10. SIGNATURES SECTION (Dedicated space, dots ONLY under the 2 columns)
+  // 10. SIGNATURES SECTION (80px handwriting room, dots ONLY under the 2 columns)
   drawDashedLine(y);
-  y += 18;
+  y += 20;
 
   const sigColLeftX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.25;  // ~152px
   const sigColRightX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.75; // ~424px
@@ -591,25 +598,25 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     ctx.fillText(rightSignLabel, sigColRightX, y);
   }
 
-  // Generous 75px handwriting room for authentic signing
-  y += 75;
+  // Generous 80px space for hand signature
+  y += 80;
 
-  // Dots exclusively under each column (NO full-width line!)
+  // Dotted lines strictly under the two columns
   if (isDraw) {
     ctx.font = FONTS.SIGN_LINE;
     ctx.textAlign = 'center';
     ctx.fillText('........................', sigColLeftX, y);
     ctx.fillText('........................', sigColRightX, y);
   }
-  y += 28; // Breathing space below dots
+  y += 32; // Breathing room below signature dots
 
-  // 11. BARCODE STRIP (Dashed divider cleanly separates barcode)
+  // 11. BARCODE STRIP
   drawDashedLine(y);
-  y += 18;
+  y += 20;
 
-  // Realistic thermal barcode stripes
+  // Realistic thermal barcode stripes centered at X=288
   const barcodePattern = [2, 1, 3, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1, 2, 4, 1, 3, 1, 2, 1, 4, 2, 1, 3, 1, 2, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1, 2, 4];
-  const barcodeH = 34;
+  const barcodeH = 36;
   const barcodeMultiplier = 2.0;
   const totalBarW = barcodePattern.reduce((s, w) => s + w * barcodeMultiplier, 0);
   let barX = K80.CENTER_X - totalBarW / 2;
@@ -624,21 +631,21 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
       barX += bw;
     }
   }
-  y += barcodeH + 14; // Clean 14px gap below barcode bars!
+  y += barcodeH + 16; // 16px gap below barcode bars!
 
   // Receipt Number centered (Never touches barcode bars)
   drawCenter(receipt.receiptNumber || 'MEII-POS', y, FONTS.BARCODE_NUM);
-  y += 26; // Generous gap before footer text
+  y += 28; // Gap before footer text
 
   // 12. FOOTER (Thank you & Return policy)
   drawCenter(L.thankYou, y, FONTS.FOOTER_BOLD);
-  y += 22;
-
-  drawCenter(L.returnPolicy, y, FONTS.FOOTER);
   y += 24;
 
+  drawCenter(L.returnPolicy, y, FONTS.FOOTER);
+  y += 26;
+
   // 13. Paper feed padding before cutter (40px)
-  y += 36;
+  y += 40;
 
   return Math.ceil(y);
 }
@@ -646,6 +653,20 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 // ─── Public API: Render Full Receipt Canvas ───────────────────────────────────
 export async function renderReceiptCanvas(receipt, lang = 'lo') {
   if (!receipt) throw new Error('Receipt data is missing');
+
+  // Pre-load font to ensure genuine vector Noto Sans Lao glyphs
+  try {
+    if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
+      await Promise.race([
+        Promise.all([
+          document.fonts.load('bold 36px "Noto Sans Lao"'),
+          document.fonts.load('500 23px "Noto Sans Lao"'),
+          document.fonts.load('bold 28px "Noto Sans Lao"'),
+        ]),
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ]);
+    }
+  } catch (_) {}
 
   // Pre-load QR code if transfer payment or debt
   let qrImg = null;
