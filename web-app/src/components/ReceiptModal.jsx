@@ -53,7 +53,7 @@ export default function ReceiptModal({
     lo: {
       storeName: 'ຮ້ານ MeiiShop',
       storeSlogan: 'ຂາຍຍົກ - ຂາຍຍ່ອຍ ສິນຄ້າອຸປະໂພກ ບໍລິໂພກ',
-      storeAddress: 'ຖະໜົນ ໄກສອນ ພົມວິຫານ, ບ້ານ ໂພນສະຫວ່າງ, ນະຄອນຫຼວງວຽງຈັນ',
+      storeAddress: 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
       storeTel: 'ໂທ: 020 5555 9999 / 021 214 555',
       receiptTitle: 'ໃບບິນຮັບເງິນ / RECEIPT',
       voidTitle: 'ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ (VOID)',
@@ -103,7 +103,7 @@ export default function ReceiptModal({
     vi: {
       storeName: 'CỬA HÀNG MEIISHOP',
       storeSlogan: 'Bán buôn - Bán lẻ Hàng tiêu dùng',
-      storeAddress: 'Đường Kaysone Phomvihane, Bản Phonsavang, TP. Vientiane',
+      storeAddress: 'Làng Phonesavanh, TP.Pakse, Champasak',
       storeTel: 'ĐT: 020 5555 9999 / 021 214 555',
       receiptTitle: 'HÓA ĐƠN BÁN HÀNG',
       voidTitle: 'HÓA ĐƠN NÀY ĐÃ HỦY ',
@@ -330,8 +330,8 @@ export default function ReceiptModal({
             </p>
           </div>
 
-          {/* Receipt Title Banner */}
-          <div className="py-1.5 border-y-2 border-slate-900 text-center font-black text-xs my-1 flex items-center justify-center leading-none uppercase">
+          {/* Receipt Title Banner (Spacious Padding between borders) */}
+          <div className="py-3.5 my-2 border-y-2 border-slate-900 text-center font-black text-xs flex items-center justify-center leading-none uppercase">
             {L.receiptTitle}
           </div>
 
@@ -536,14 +536,14 @@ export default function ReceiptModal({
                     <span className="font-sans font-medium tracking-tight">-{formatKip(discount)}</span>
                   </div>
                 )}
-                <div className="border-b-2 border-slate-900 my-1"></div>
-                <div className="flex justify-between items-center py-2">
+                <div className="border-b-2 border-slate-900 my-1.5"></div>
+                <div className="flex justify-between items-center py-4 my-0.5">
                   <span className="font-black text-sm text-slate-900 leading-none">{L.grandTotalLabel}</span>
                   <span className="font-black text-lg text-slate-950 font-sans tracking-tight leading-none">
                     {formatKip(finalGrandTotal)}
                   </span>
                 </div>
-                <div className="border-b-2 border-slate-900 my-1"></div>
+                <div className="border-b-2 border-slate-900 my-1.5"></div>
 
                 {(receipt.paymentMethod === 'debt' || receipt.isDebt) ? (
                   <div className="bg-amber-50/80 p-2 rounded-xl border border-amber-300 flex flex-col gap-1.5 my-1 leading-normal">

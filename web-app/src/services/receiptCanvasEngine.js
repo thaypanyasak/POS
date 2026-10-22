@@ -80,7 +80,7 @@ const LABELS = {
   lo: {
     storeName: 'ຮ້ານ MeiiShop',
     storeSlogan: 'ຂາຍຍົກ - ຂາຍຍ່ອຍ ສິນຄ້າອຸປະໂພກ ບໍລິໂພກ',
-    storeAddress: 'ຖະໜົນ ໄກສອນ ພົມວິຫານ, ບ້ານ ໂພນສະຫວ່າງ, ນະຄອນຫຼວງວຽງຈັນ',
+    storeAddress: 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
     storeTel: 'ໂທ: 020 5555 9999 / 021 214 555',
     receiptTitle: 'ໃບບິນຮັບເງິນ / RECEIPT',
     voidTitle: 'ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ (VOID)',
@@ -121,7 +121,7 @@ const LABELS = {
   vi: {
     storeName: 'CỬA HÀNG MEIISHOP',
     storeSlogan: 'Bán buôn - Bán lẻ Hàng tiêu dùng',
-    storeAddress: 'Đường Kaysone Phomvihane, Bản Phonsavang, TP. Vientiane',
+    storeAddress: 'Làng Phonesavanh, TP.Pakse, Champasak',
     storeTel: 'ĐT: 020 5555 9999 / 021 214 555',
     receiptTitle: 'HÓA ĐƠN BÁN HÀNG',
     voidTitle: 'HÓA ĐƠN ĐÃ HỦY (VOID)',
@@ -329,11 +329,12 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   drawCenter(L.storeTel, y, FONTS.TEL);
   y += 34; // Increased spacing for 21px bold font
 
-  // 2. RECEIPT TITLE BANNER (Exact Middle Vertical Alignment)
+  // 2. RECEIPT TITLE BANNER (Generous padding, dead center between borders)
+  y += 6;
   const bannerTopY = y;
   drawSolidLine(bannerTopY, 2.5);
 
-  const bannerHeight = 46; // Banner height between borders
+  const bannerHeight = 64; // Spacious banner height: generous distance from text to borders
   const bannerMidY = bannerTopY + (bannerHeight / 2); // Exact middle
 
   if (isDraw) {
@@ -347,7 +348,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 
   const bannerBottomY = bannerTopY + bannerHeight;
   drawSolidLine(bannerBottomY, 2.5);
-  y = bannerBottomY + 18; // Space below banner
+  y = bannerBottomY + 22; // Space below banner
 
   // 3. VOID BANNER (IF CANCELLED)
   if (isCancelled) {
@@ -521,12 +522,12 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     y += 28;
   }
 
-  // ─── GRAND TOTAL WITH PROFESSIONAL SYMMETRIC MIDDLE ALIGNMENT ───
-  y += 10;
+  // ─── GRAND TOTAL WITH GENEROUS SPACIOUS PADDING & SYMMETRIC MIDDLE ALIGNMENT ───
+  y += 12;
   const grandBorderTopY = y;
   drawSolidLine(grandBorderTopY, 2.5); // Top border
 
-  const grandHeight = 54; // Symmetrical height between borders
+  const grandHeight = 74; // Spacious height: generous distance from text & numbers to borders
   const grandMidY = grandBorderTopY + (grandHeight / 2); // Exact middle
 
   if (isDraw) {
@@ -545,7 +546,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 
   const grandBorderBottomY = grandBorderTopY + grandHeight;
   drawSolidLine(grandBorderBottomY, 2.5); // Bottom border
-  y = grandBorderBottomY + 18;           // Margin below bottom border
+  y = grandBorderBottomY + 22;           // Margin below bottom border
 
   // 8. PAYMENT DETAILS (Tendered / Change / Debt)
   if (isDebt) {
