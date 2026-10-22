@@ -24,54 +24,54 @@
  *     - 21px Bold thank you, 18px return policy.
  */
 
-// ─── 80mm K80 Physical Constants (640 dots / 80 bytes Standard) ─────────────
+// ─── 80mm K80 Physical Constants ──────────────────────────────────────────────
 export const K80 = {
-  CANVAS_WIDTH: 640,    // Physical print dots (80 bytes * 8)
-  LEFT_MARGIN: 4,       // Left safe margin (px)
-  RIGHT_EDGE: 636,      // Right safe margin (px)
-  PRINTABLE_WIDTH: 632, // 636 - 4
-  CENTER_X: 320,        // Symmetry center (640 / 2)
+  CANVAS_WIDTH: 576,    // Physical print dots (72 bytes * 8)
+  LEFT_MARGIN: 16,      // Left safe margin
+  RIGHT_EDGE: 560,      // Right safe margin
+  PRINTABLE_WIDTH: 544, // 560 - 16
+  CENTER_X: 288,        // Symmetry center (576 / 2)
 
   // 4-Column Grid
-  COL_NAME_X: 4,        // Column 1: Item Name
-  COL_NAME_MAX_W: 320,  // Max width 320px (wrap if longer)
-  COL_QTY_X: 370,       // Column 2: Qty (centered at 370px)
-  COL_PRICE_X: 490,     // Column 3: Unit Price (right-aligned at 490px)
-  COL_TOTAL_X: 636,     // Column 4: Line Total (right-aligned at 636px)
+  COL_NAME_X: 16,       // Column 1: Item Name
+  COL_NAME_MAX_W: 255,  // Max width 255px (wrap if longer)
+  COL_QTY_X: 288,       // Column 2: Qty (centered at 288px)
+  COL_PRICE_X: 410,     // Column 3: Unit Price (right-aligned at 410px)
+  COL_TOTAL_X: 560,     // Column 4: Line Total (right-aligned at 560px)
 };
 
 // ─── Typography (High-Res POS Scale) ──────────────────────────────────────────
 const FONTS = {
   STORE_NAME: 'bold 42px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SLOGAN: '600 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ADDRESS: '700 18.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TEL: '800 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SLOGAN: '500 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ADDRESS: '400 18.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TEL: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   TITLE: 'bold 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_LABEL: '500 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_VAL: '600 19.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_VAL: '500 19.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   META_BOLD: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  COL_HEADER: '800 20px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NAME: '600 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',      // font-semibold (600)
-  ITEM_UNIT: '500 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NUM: '700 19px "Outfit", "Segoe UI", -apple-system, sans-serif',             // font-bold (700)
-  ITEM_TOTAL: '800 20.5px "Outfit", "Segoe UI", -apple-system, sans-serif',          // font-extrabold (800)
-  CRATE_LABEL: '600 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  CRATE_NUM: '700 16.5px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  SUBTOTAL_LABEL: '500 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SUBTOTAL_NUM: '700 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  GRAND_LABEL: '900 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',    // font-black (900)
-  GRAND_NUM: '900 32px "Outfit", "Segoe UI", -apple-system, sans-serif',             // font-black (900) >= 24px
-  TENDER_LABEL: '500 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TENDER_NUM: '700 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  DEBT_LABEL: '800 22px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  DEBT_NUM: '800 22px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  QR_NAME: '600 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  QR_AMOUNT: '800 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  COL_HEADER: 'bold 20px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_NAME: '500 20.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',  // Slightly reduced for elegant line fit
+  ITEM_UNIT: '400 17.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_NUM: '500 18.5px "Outfit", "Segoe UI", -apple-system, sans-serif',          // Tight proportional figures (no wide monospace gaps)
+  ITEM_TOTAL: 'bold 19.5px "Outfit", "Segoe UI", -apple-system, sans-serif',       // Tight proportional figures
+  CRATE_LABEL: '500 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  CRATE_NUM: '500 16px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  SUBTOTAL_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SUBTOTAL_NUM: 'bold 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  GRAND_LABEL: 'bold 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  GRAND_NUM: 'bold 30px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  TENDER_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TENDER_NUM: 'bold 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  DEBT_LABEL: 'bold 22px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  DEBT_NUM: 'bold 22px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  QR_NAME: '500 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  QR_AMOUNT: 'bold 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
   SIGN_LABEL: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   SIGN_LINE: 'bold 20px monospace',
   BARCODE_NUM: 'bold 20px "Outfit", monospace',
   FOOTER_BOLD: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  FOOTER: '600 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  FOOTER: '500 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   VOID_TEXT: 'bold 24px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
 };
 
@@ -615,8 +615,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   drawDashedLine(y);
   y += 20;
 
-  const sigColLeftX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.25;  // ~162px
-  const sigColRightX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.75; // ~478px
+  const sigColLeftX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.25;  // ~152px
+  const sigColRightX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.75; // ~424px
 
   const leftSignLabel = isDebt ? L.signDebtor : L.signCustomer;
   const rightSignLabel = isDebt ? L.signSeller : L.signCashier;
@@ -631,8 +631,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   // Generous 100px space for hand signature (per user request)
   y += 100;
 
-  // Dotted lines strictly under each respective column (150px wide, leaving ~166px gap in center)
-  const drawSignDottedLine = (centerX, width = 150, lineY) => {
+  // Dotted lines strictly under each respective column (140px wide, leaving ~132px gap in center)
+  const drawSignDottedLine = (centerX, width = 140, lineY) => {
     if (isDraw) {
       ctx.beginPath();
       ctx.setLineDash([3, 4]); // 3px dot, 4px space
@@ -645,8 +645,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     }
   };
 
-  drawSignDottedLine(sigColLeftX, 150, y);
-  drawSignDottedLine(sigColRightX, 150, y);
+  drawSignDottedLine(sigColLeftX, 140, y);
+  drawSignDottedLine(sigColRightX, 140, y);
   y += 36; // Breathing room below signature dots before barcode
 
   // 11. BARCODE STRIP (Oversized 50px height, 2.2x width for instantaneous laser scan)
@@ -718,10 +718,10 @@ export async function renderReceiptCanvas(receipt, lang = 'lo') {
   // Pass 1: Measure exact height with zero discrepancy
   const exactHeight = layoutReceipt(null, receipt, lang, qrImg);
 
-  // Pass 2: Allocate 2X Super-Sampled 1280px canvas (Double Pixel Density)
+  // Pass 2: Allocate 2X Super-Sampled 1152px canvas (Double Pixel Density)
   const SCALE = 2;
   const canvas = document.createElement('canvas');
-  canvas.width = K80.CANVAS_WIDTH * SCALE;   // 640 * 2 = 1280px
+  canvas.width = K80.CANVAS_WIDTH * SCALE;   // 576 * 2 = 1152px
   canvas.height = exactHeight * SCALE;
 
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -734,7 +734,7 @@ export async function renderReceiptCanvas(receipt, lang = 'lo') {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  // Scale 2x: All layout coordinates remain in standard 640-based logical units
+  // Scale 2x: All layout coordinates remain in standard 576-based logical units
   ctx.scale(SCALE, SCALE);
 
   // High-contrast rendering

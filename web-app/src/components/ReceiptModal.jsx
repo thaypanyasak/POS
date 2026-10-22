@@ -292,7 +292,7 @@ export default function ReceiptModal({
 
           {/* Right: 80mm K80 badge & Close */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className="px-2 py-1 bg-teal-600 text-white rounded text-[10.5px] font-bold shadow-2xs select-none">K80 (640 dots)</span>
+            <span className="px-2 py-1 bg-teal-600 text-white rounded text-[10.5px] font-bold shadow-2xs select-none">K80 (576 dots)</span>
             <button
               type="button"
               onClick={() => {
@@ -311,10 +311,8 @@ export default function ReceiptModal({
           id="thermal-receipt-print-area"
           style={{
             fontFamily: receiptLanguage === 'vi' ? "'Be Vietnam Pro', 'Noto Sans Lao', sans-serif" : "'Noto Sans Lao', Outfit, sans-serif",
-            padding: '14px 4px',
-            boxSizing: 'border-box',
           }}
-          className={`bg-white mx-auto border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto paper-80mm w-full max-w-[380px] ${
+          className={`bg-white mx-auto p-4 border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto paper-80mm w-full max-w-[380px] ${
             receiptLanguage === 'vi' ? 'font-vietnam' : 'font-lao'
           }`}
         >
@@ -401,12 +399,12 @@ export default function ReceiptModal({
             </div>
           </div>
 
-          {/* Items Table Header - 4 Columns: Name (max 320px), Qty (center), Price (right), Total (right edge) */}
+          {/* Items Table Header - 4 Columns: Name (40%), Qty (15%), Price (20%), Total (25%) */}
           <div className="border-t border-dashed border-slate-300 pt-2 pb-1 flex items-center font-extrabold text-[10px] text-slate-800 leading-normal">
-            <span className="flex-1 max-w-[320px] text-left pt-0.5">{L.colName}</span>
-            <span className="w-[14%] shrink-0 text-center pt-0.5">{L.colQty}</span>
-            <span className="w-[18%] shrink-0 text-right pt-0.5">{L.colPrice}</span>
-            <span className="w-[22%] shrink-0 text-right pt-0.5">{L.colTotal}</span>
+            <span className="w-[40%] flex-1 text-left pt-0.5">{L.colName}</span>
+            <span className="w-[15%] shrink-0 text-center pt-0.5">{L.colQty}</span>
+            <span className="w-[20%] shrink-0 text-right pt-0.5">{L.colPrice}</span>
+            <span className="w-[25%] shrink-0 text-right pt-0.5">{L.colTotal}</span>
           </div>
           <div className="border-b border-slate-400 mb-1.5"></div>
 
@@ -444,18 +442,18 @@ export default function ReceiptModal({
 
                 return (
                   <div key={i} className="receipt-item-row flex flex-col text-[10.5px] leading-normal py-0.5">
-                    {/* Main Row: 4 Columns with Product Name max 320px */}
+                    {/* Main Row: 4 Columns with Product Name allowed up to 2 lines */}
                     <div className="product-name-row flex items-start text-slate-900 overflow-visible">
-                      <span className="flex-1 max-w-[320px] font-semibold text-left pr-1 break-words leading-tight overflow-visible text-[10.5px]" title={`${prodName} (${unitName})`}>
+                      <span className="w-[40%] flex-1 font-semibold text-left pr-1 break-words leading-tight overflow-visible text-[10.5px]" title={`${prodName} (${unitName})`}>
                         {prodName} <span className="font-normal text-slate-600 text-[10px]">({unitName})</span>
                       </span>
-                      <span className="w-[14%] shrink-0 text-center font-sans font-medium text-[10.5px] text-slate-800">
+                      <span className="w-[15%] shrink-0 text-center font-sans font-medium text-[10.5px] text-slate-800">
                         {qty}x
                       </span>
-                      <span className="w-[18%] shrink-0 text-right font-sans font-medium text-[10.5px] tracking-tight text-slate-700">
+                      <span className="w-[20%] shrink-0 text-right font-sans font-medium text-[10.5px] tracking-tight text-slate-700">
                         {formatKip(price).replace(' ₭', '')}
                       </span>
-                      <span className="w-[22%] shrink-0 text-right font-sans font-bold text-[11px] tracking-tight text-slate-950">
+                      <span className="w-[25%] shrink-0 text-right font-sans font-bold text-[11px] tracking-tight text-slate-950">
                         {formatKip(baseLineTotal).replace(' ₭', '')}
                       </span>
                     </div>
@@ -463,16 +461,16 @@ export default function ReceiptModal({
                     {/* Crate Deposit row for bottles/beers without empty crates to exchange (+30.000 ₭/crate) */}
                     {hasMissingCrates && missingCount > 0 && (
                       <div className="flex items-center text-[10px] text-amber-950 bg-amber-50/90 py-0.5 px-1 rounded mt-0.5 border border-amber-200 leading-normal">
-                        <span className="flex-1 max-w-[320px] font-bold text-left truncate text-amber-900" title={L.missingCrate}>
+                        <span className="w-[40%] font-bold text-left truncate text-amber-900" title={L.missingCrate}>
                           {L.missingCrate}
                         </span>
-                        <span className="w-[14%] text-center font-sans font-medium text-amber-900">
+                        <span className="w-[15%] text-center font-sans font-medium text-amber-900">
                           {missingCount}x
                         </span>
-                        <span className="w-[18%] text-right font-sans font-medium text-amber-800 tracking-tight">
+                        <span className="w-[20%] text-right font-sans font-medium text-amber-800 tracking-tight">
                           {formatKip(feePerCrate).replace(' ₭', '')}
                         </span>
-                        <span className="w-[22%] text-right font-sans font-bold text-amber-950 tracking-tight">
+                        <span className="w-[25%] text-right font-sans font-bold text-amber-950 tracking-tight">
                           +{formatKip(crateDepositTotal).replace(' ₭', '')}
                         </span>
                       </div>

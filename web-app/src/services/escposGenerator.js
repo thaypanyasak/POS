@@ -1,7 +1,7 @@
 /**
  * ESC/POS Generator & Monochrome Rasterizer for Thermal Printers
  * ═══════════════════════════════════════════════════════════════
- * HARDCODED: 80mm K80 Standard (640 dots = 80 bytes/line)
+ * HARDCODED: 80mm K80 Standard (576 dots = 72 bytes/line)
  * Protocol: GS v 0 (Raster Bit Image)
  * Luminance: BT.601 (0.299R + 0.587G + 0.114B)
  *
@@ -14,30 +14,30 @@ export const ESC_DRAWER_KICK = [0x1b, 0x70, 0x00, 0x19, 0xfa]; // ESC p 0 25 250
 export const GS_CUT_PARTIAL = [0x1d, 0x56, 0x42, 0x00]; // GS V 66 0 (Partial cut with feed)
 export const ESC_FEED_LINES = (n = 3) => [0x1b, 0x64, n]; // ESC d n (Feed n lines)
 
-// ─── Hardcoded K80 Constants (640 dots / 80 bytes Standard) ──────────────────
-export const PRINT_WIDTH_DOTS = 640;    // 80mm thermal paper = 640 dots
-export const WIDTH_BYTES = 80;          // 640 / 8 = 80 bytes per line
+// ─── Hardcoded K80 Constants ─────────────────────────────────────────────────
+const PRINT_WIDTH_DOTS = 576;    // 80mm thermal paper = 576 dots
+const WIDTH_BYTES = 72;          // 576 / 8 = 72 bytes per line
 
 /**
  * Convert Canvas to ESC/POS 1-bit Monochrome Raster (GS v 0)
  *
- * CRITICAL: The input canvas MUST be exactly 640px wide.
- * If sourceCanvas.width !== 640, it will be scaled to 640px using
+ * CRITICAL: The input canvas MUST be exactly 576px wide.
+ * If sourceCanvas.width !== 576, it will be scaled to 576px using
  * nearest-neighbor interpolation (no anti-aliasing) to preserve sharp text edges.
  *
  * Algorithm:
- *   1. Ensure canvas is exactly 640px wide
+ *   1. Ensure canvas is exactly 576px wide
  *   2. Extract pixel data via getImageData
  *   3. For each pixel row, pack 8 pixels into 1 byte (MSB = leftmost pixel)
  *   4. Pixel is BLACK (bit=1) if: alpha > 128 AND luminance < threshold
  *   5. Split into chunks of max 256 lines to avoid printer buffer overflow
- *   6. Each chunk gets its own GS v 0 header (xL=80, xH=0)
+ *   6. Each chunk gets its own GS v 0 header
  *
- * @param {HTMLCanvasElement} sourceCanvas - Canvas rendered at 640px width
+ * @param {HTMLCanvasElement} sourceCanvas - Canvas rendered at 576px width
  * @param {Object} options
  * @param {boolean} [options.kickCashDrawer=true] - Send ESC p drawer kick command
  * @param {boolean} [options.cutPaper=true] - Send GS V partial cut command
- * @param {number} [options.luminanceThreshold=148] - Brightness cutoff (0-255). Lower = darker threshold.
+ * @param {number} [options.luminanceThreshold=160] - Brightness cutoff (0-255). Lower = darker threshold.
  * @returns {Uint8Array} Complete ESC/POS byte stream ready for TCP transmission
  */
 export function canvasToEscPosRaster(sourceCanvas, {
@@ -45,7 +45,7 @@ export function canvasToEscPosRaster(sourceCanvas, {
   cutPaper = true,
   luminanceThreshold = 148,
 } = {}) {
-  // ─── Step 1: Ensure exact 640px width ───────────────────────────────
+  // ─── Step 1: Ensure exact 576px width ───────────────────────────────
   let canvas = sourceCanvas;
   if (sourceCanvas.width !== PRINT_WIDTH_DOTS) {
     const scale = PRINT_WIDTH_DOTS / sourceCanvas.width;
@@ -64,7 +64,7 @@ export function canvasToEscPosRaster(sourceCanvas, {
 
   // ─── Step 2: Extract raw RGBA pixel data ────────────────────────────
   const ctx = canvas.getContext('2d');
-  const width = canvas.width;   // Always 640
+  const width = canvas.width;   // Always 576
   const height = canvas.height;
   const imgData = ctx.getImageData(0, 0, width, height);
   const pixels = imgData.data;
@@ -88,7 +88,7 @@ export function canvasToEscPosRaster(sourceCanvas, {
     const chunkHeight = Math.min(MAX_CHUNK_LINES, height - currentY);
 
     // GS v 0 header: 0x1D 0x76 0x30 0x00 xL xH yL yH
-    const xL = WIDTH_BYTES & 0xff;        // 80
+    const xL = WIDTH_BYTES & 0xff;        // 72
     const xH = (WIDTH_BYTES >> 8) & 0xff; // 0
     const yL = chunkHeight & 0xff;
     const yH = (chunkHeight >> 8) & 0xff;
