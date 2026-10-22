@@ -52,9 +52,14 @@ export function savePrinterConfig(newConfig) {
 }
 
 /**
- * Helper to ensure TcpSocket is accessible
+ * Helper to ensure TcpSocket is accessible and check if native plugin is available
  */
 function getTcpSocketPlugin() {
+  if (typeof window !== 'undefined' && window.Capacitor) {
+    if (window.Capacitor.isPluginAvailable && !window.Capacitor.isPluginAvailable('TcpSocket')) {
+      return null;
+    }
+  }
   return TcpSocket || null;
 }
 
@@ -72,9 +77,17 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 2.
   const timeoutMs = Math.max(1000, Math.min(3000, Math.round((timeoutSec || 2) * 1000)));
   const timeoutSecondsInt = Math.max(1, Math.round(timeoutMs / 1000));
 
+  // Feature Detection
+  const isNative = Capacitor.isNativePlatform();
+  const isPluginReady = Capacitor.isPluginAvailable('TcpSocket');
   const socketPlugin = getTcpSocketPlugin();
-  if (!socketPlugin) {
-    throw new Error('Native TCP Socket plugin ບໍ່ພ້ອມໃຊ້ງານໃນອຸປະກອນນີ້ (Capacitor Native only)');
+
+  if (!isNative) {
+    throw new Error('ການພິມຜ່ານ TCP Socket ຮອງຮັບສະເພາະແອັບ Native (iOS / iPadOS) ເທົ່ານັ້ນ.');
+  }
+
+  if (!isPluginReady || !socketPlugin) {
+    throw new Error('Native TCP Socket plugin ຍັງບໍ່ທັນຖືກຕິດຕັ້ງໃນ iOS. ກະລຸນາ Build ແອັບ native ໃໝ່ຜ່ານ Xcode (Product -> Build/Run) ເພື່ອນຳໃຊ້ plugin TCP Socket.');
   }
 
   const base64Data = uint8ArrayToBase64(uint8Bytes);
@@ -347,6 +360,34 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
             font-display: swap;
             src: url('${origin}/fonts/NotoSansLao-Bold.ttf') format('truetype');
           }
+          @font-face {
+            font-family: 'Be Vietnam Pro';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url('${origin}/fonts/BeVietnamPro-Regular.ttf') format('truetype');
+          }
+          @font-face {
+            font-family: 'Be Vietnam Pro';
+            font-style: normal;
+            font-weight: 500;
+            font-display: swap;
+            src: url('${origin}/fonts/BeVietnamPro-Medium.ttf') format('truetype');
+          }
+          @font-face {
+            font-family: 'Be Vietnam Pro';
+            font-style: normal;
+            font-weight: 600;
+            font-display: swap;
+            src: url('${origin}/fonts/BeVietnamPro-SemiBold.ttf') format('truetype');
+          }
+          @font-face {
+            font-family: 'Be Vietnam Pro';
+            font-style: normal;
+            font-weight: 700;
+            font-display: swap;
+            src: url('${origin}/fonts/BeVietnamPro-Bold.ttf') format('truetype');
+          }
 
           @page {
             size: auto;
@@ -523,39 +564,63 @@ export async function printReceiptSmart({
     // Standard printer widths in dots: 80mm = 576 dots, 58mm = 384 dots
     const targetWidth = activePaperWidth === 58 ? 384 : 576;
 
-    // Ensure all web fonts ('Be Vietnam Pro', 'Noto Sans Lao') are 100% loaded before rasterizing
+    // 1. Safe font readiness check: tối đa 1 giây.
+    // Khi iPad kết nối vào Wi-Fi của máy in (mạng nội bộ không có Internet),
+    // document.fonts.ready có thể bị treo hoặc chậm; race với timeout 1000ms để bỏ qua ngay!
     try {
       if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
         await Promise.race([
           document.fonts.ready,
-          new Promise((r) => setTimeout(r, 600))
+          new Promise((resolve) => setTimeout(resolve, 1000))
         ]);
       }
-    } catch (_) {}
-
-    let canvasTimer;
-    const canvasTimeoutPromise = new Promise((_, reject) => {
-      canvasTimer = setTimeout(() => {
-        reject(new Error('ໝົດເວລາ Render ຮູບໃບບິນ (Canvas Timeout)'));
-      }, 2500);
-    });
+    } catch (_) {
+      // Bỏ qua lỗi font, tiếp tục với system/local fallback font
+    }
 
     try {
-      const canvasPromise = toCanvas(targetElement, {
-        width: targetWidth,
-        pixelRatio: 1,
-        backgroundColor: '#ffffff',
-        style: {
-          margin: '0',
-          padding: '16px',
-          width: `${targetWidth}px`,
-          maxWidth: `${targetWidth}px`,
-        },
-      });
+      // Render Canvas từ element hóa đơn với skipFonts = true để html-to-image không cố fetch font online
+      let canvas = null;
+      try {
+        const renderPromise = toCanvas(targetElement, {
+          width: targetWidth,
+          pixelRatio: 1,
+          backgroundColor: '#ffffff',
+          skipFonts: true, // Cực kỳ quan trọng: ngăn html-to-image chờ font từ xa khi offline!
+          style: {
+            margin: '0',
+            padding: '16px',
+            width: `${targetWidth}px`,
+            maxWidth: `${targetWidth}px`,
+            fontFamily: "'Noto Sans Lao', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, sans-serif",
+          },
+        });
 
-      const canvas = await Promise.race([canvasPromise, canvasTimeoutPromise]).finally(() => {
-        if (canvasTimer) clearTimeout(canvasTimer);
-      });
+        // Timeout 4s dự phòng nếu thiết bị cực chậm
+        const renderTimeout = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('TIMEOUT_RENDER')), 4000);
+        });
+
+        canvas = await Promise.race([renderPromise, renderTimeout]);
+      } catch (renderErr) {
+        console.warn('[printerService] toCanvas with skipFonts failed or timed out, trying standard canvas fallback:', renderErr);
+        // Fallback: Thử lại 1 lần nữa với cài đặt tối giản nhất không chặn
+        try {
+          canvas = await toCanvas(targetElement, {
+            width: targetWidth,
+            pixelRatio: 1,
+            backgroundColor: '#ffffff',
+            skipFonts: true,
+          });
+        } catch (secondaryErr) {
+          console.error('[printerService] Canvas render completely failed:', secondaryErr);
+          throw new Error('ບໍ່ສາມາດສ້າງຮູບໃບບິນ (Canvas Render Error): ' + (secondaryErr.message || secondaryErr));
+        }
+      }
+
+      if (!canvas) {
+        throw new Error('ບໍ່ສາມາດສ້າງຮູບໃບບິນ (Canvas is empty)');
+      }
 
       // Convert Canvas to ESC/POS Raster Bytes
       const escPosBytes = canvasToEscPosRaster(canvas, {

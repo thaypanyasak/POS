@@ -33,6 +33,39 @@
   src: url('/fonts/NotoSansLao-Bold.ttf') format('truetype');
 }
 
+/* Offline Local Fonts for Be Vietnam Pro */
+@font-face {
+  font-family: 'Be Vietnam Pro';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/BeVietnamPro-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Be Vietnam Pro';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/BeVietnamPro-Medium.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Be Vietnam Pro';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/BeVietnamPro-SemiBold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Be Vietnam Pro';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/BeVietnamPro-Bold.ttf') format('truetype');
+}
+
 @theme {
   --font-sans: 'Noto Sans Lao', 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', Consolas, Monaco, monospace, 'Noto Sans Lao';

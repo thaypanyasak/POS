@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "postinstall": "node scripts/ensure-tcp-spm.cjs",
     "assets:generate": "npx @capacitor/assets generate --assetPath public",
     "cap:sync": "npm run build && npx @capacitor/assets generate --assetPath public && npx cap sync ios",
     "ota:deploy": "vite build && npx @capgo/cli@latest bundle upload --channel=production --auto-bump=minor --apikey=7d88a2a7-471f-4175-be14-30353ccb8ee3"

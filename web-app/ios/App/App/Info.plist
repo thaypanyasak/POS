@@ -66,6 +66,14 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>ແອັບຕ້ອງການເຂົ້າເຖິງກ້ອງຖ່າຍຮູບເພື່ອສະແກນບາໂຄດສິນຄ້າ</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>ແອັບ MeiiShop POS ຕ້ອງການເຂົ້າເຖິງເຄືອຂ່າຍພາຍໃນ (Local Network) ເພື່ອເຊື່ອມຕໍ່ ແລະ ສັ່ງພິມໃບບິນໄປຍັງເຄື່ອງພິມໃບບິນຄວາມຮ້ອນ (LAN/Wi-Fi Thermal Printer).</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_printer._tcp</string>
+		<string>_pdl-datastream._tcp</string>
+		<string>_http._tcp</string>
+	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 </dict>

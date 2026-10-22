@@ -14,6 +14,7 @@ let package = Package(
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.5.3"),
         .package(name: "CapacitorHaptics", path: "../../../node_modules/@capacitor/haptics"),
         .package(name: "CapgoCapacitorUpdater", path: "../../../node_modules/@capgo/capacitor-updater"),
+        .package(name: "DeedarbCapacitorTcpSocket", path: "../../../node_modules/@deedarb/capacitor-tcp-socket"),
         .package(name: "CapacitorBarcodeScanner", path: "../../../node_modules/capacitor-barcode-scanner")
     ],
     targets: [
@@ -24,6 +25,7 @@ let package = Package(
                 .product(name: "Cordova", package: "capacitor-swift-pm"),
                 .product(name: "CapacitorHaptics", package: "CapacitorHaptics"),
                 .product(name: "CapgoCapacitorUpdater", package: "CapgoCapacitorUpdater"),
+                .product(name: "DeedarbCapacitorTcpSocket", package: "DeedarbCapacitorTcpSocket"),
                 .product(name: "CapacitorBarcodeScanner", package: "CapacitorBarcodeScanner")
             ]
         )
