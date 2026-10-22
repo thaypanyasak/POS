@@ -27,7 +27,7 @@ let package = Package(
                 .product(name: "Socket", package: "BlueSocket")
             ],
             path: "ios/Plugin",
-            exclude: ["Info.plist"]
+            exclude: ["Info.plist", "TcpSocketPlugin.h", "TcpSocketPlugin.m"]
         )
     ]
 )
