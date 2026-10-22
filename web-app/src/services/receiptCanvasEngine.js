@@ -34,7 +34,7 @@ export const K80 = {
 
   // 4-Column Grid
   COL_NAME_X: 16,       // Column 1: Item Name
-  COL_NAME_MAX_W: 245,  // Max width 245px (wrap if longer)
+  COL_NAME_MAX_W: 255,  // Max width 255px (wrap if longer)
   COL_QTY_X: 288,       // Column 2: Qty (centered at 288px)
   COL_PRICE_X: 410,     // Column 3: Unit Price (right-aligned at 410px)
   COL_TOTAL_X: 560,     // Column 4: Line Total (right-aligned at 560px)
@@ -51,25 +51,25 @@ const FONTS = {
   META_VAL: '500 19.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   META_BOLD: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   COL_HEADER: 'bold 20px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NAME: '500 23px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',  // Preserved
-  ITEM_UNIT: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',  // Preserved
-  ITEM_NUM: '500 20px monospace',                                               // Preserved
-  ITEM_TOTAL: 'bold 21px monospace',                                            // Preserved
+  ITEM_NAME: '500 20.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',  // Slightly reduced for elegant line fit
+  ITEM_UNIT: '400 17.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_NUM: '500 18.5px "Outfit", "Segoe UI", -apple-system, sans-serif',          // Tight proportional figures (no wide monospace gaps)
+  ITEM_TOTAL: 'bold 19.5px "Outfit", "Segoe UI", -apple-system, sans-serif',       // Tight proportional figures
   CRATE_LABEL: '500 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  CRATE_NUM: '500 17px monospace',
+  CRATE_NUM: '500 16px "Outfit", "Segoe UI", -apple-system, sans-serif',
   SUBTOTAL_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SUBTOTAL_NUM: 'bold 20px monospace',
+  SUBTOTAL_NUM: 'bold 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
   GRAND_LABEL: 'bold 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  GRAND_NUM: 'bold 32px monospace',
+  GRAND_NUM: 'bold 30px "Outfit", "Segoe UI", -apple-system, sans-serif',
   TENDER_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TENDER_NUM: 'bold 21px monospace',
+  TENDER_NUM: 'bold 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
   DEBT_LABEL: 'bold 22px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  DEBT_NUM: 'bold 24px monospace',
+  DEBT_NUM: 'bold 22px "Outfit", "Segoe UI", -apple-system, sans-serif',
   QR_NAME: '500 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  QR_AMOUNT: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  QR_AMOUNT: 'bold 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
   SIGN_LABEL: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   SIGN_LINE: 'bold 20px monospace',
-  BARCODE_NUM: 'bold 20px monospace',
+  BARCODE_NUM: 'bold 20px "Outfit", monospace',
   FOOTER_BOLD: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   FOOTER: '500 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   VOID_TEXT: 'bold 24px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
@@ -329,13 +329,25 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   drawCenter(L.storeTel, y, FONTS.TEL);
   y += 34; // Increased spacing for 21px bold font
 
-  // 2. RECEIPT TITLE BANNER (Perfect Symmetric Centering with Equal Top & Bottom Padding)
-  drawSolidLine(y, 2.5);
-  y += 14; // Clean 14px top padding
-  drawCenter(L.receiptTitle, y, FONTS.TITLE);
-  y += 48; // Text height (34px) + 14px bottom padding = 48px
-  drawSolidLine(y, 2.5);
-  y += 20; // Space below banner
+  // 2. RECEIPT TITLE BANNER (Exact Middle Vertical Alignment)
+  const bannerTopY = y;
+  drawSolidLine(bannerTopY, 2.5);
+
+  const bannerHeight = 46; // Banner height between borders
+  const bannerMidY = bannerTopY + (bannerHeight / 2); // Exact middle
+
+  if (isDraw) {
+    ctx.textBaseline = 'middle';
+    ctx.font = FONTS.TITLE;
+    ctx.textAlign = 'center';
+    // Shift up 2.5px optically so the base characters of ໃບບິນ sit dead center between borders
+    ctx.fillText(L.receiptTitle, K80.CENTER_X, bannerMidY - 2.5);
+    ctx.textBaseline = 'top'; // Reset baseline
+  }
+
+  const bannerBottomY = bannerTopY + bannerHeight;
+  drawSolidLine(bannerBottomY, 2.5);
+  y = bannerBottomY + 18; // Space below banner
 
   // 3. VOID BANNER (IF CANCELLED)
   if (isCancelled) {
@@ -349,14 +361,14 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     y += 54;
   }
 
-  // 4. METADATA SECTION (19px - 21px scaled typography)
+  // 4. METADATA SECTION (19px - 20px scaled typography - normal weight, no excessive bold)
   // Row 1: Cashier & Customer
   drawLeft(`${L.cashier} ${receipt.cashierName || 'Meii'}`, K80.LEFT_MARGIN, y, FONTS.META_VAL);
   const custName = (!receipt.customerName || receipt.customerName === 'ລູກຄ້າທົ່ວໄປ' || receipt.customerName === 'Khách lẻ / Khách vãng lai')
     ? L.defaultCustomer
     : receipt.customerName;
-  drawRight(`${L.customer} ${custName}`, K80.RIGHT_EDGE, y, FONTS.META_BOLD);
-  y += 32;
+  drawRight(`${L.customer} ${custName}`, K80.RIGHT_EDGE, y, FONTS.META_VAL);
+  y += 30;
 
   // Row 2: Date & Payment Method
   const dateStr = receipt.createdAt
@@ -370,8 +382,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   else if (receipt.paymentMethod === 'debt') {
     payLabel = Number(receipt.paidAmount || 0) === 0 ? L.payDebtFull : L.payDebtPartial;
   } else payLabel = L.payTransfer;
-  drawRight(`${L.payment} ${payLabel}`, K80.RIGHT_EDGE, y, FONTS.META_BOLD);
-  y += 34;
+  drawRight(`${L.payment} ${payLabel}`, K80.RIGHT_EDGE, y, FONTS.META_VAL);
+  y += 32;
 
   // 5. COLUMN HEADERS (4 Columns)
   drawDashedLine(y);
@@ -428,12 +440,12 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     }
     drawRight(fmtNum(price), K80.COL_PRICE_X, y + 2, FONTS.ITEM_NUM);
     drawRight(fmtNum(lineTotal), K80.COL_TOTAL_X, y + 2, FONTS.ITEM_TOTAL);
-    y += 30;
+    y += 28;
 
     // Additional wrapped name lines
     for (let li = 1; li < nameLines.length; li++) {
       drawLeft(nameLines[li], K80.COL_NAME_X, y, FONTS.ITEM_NAME);
-      y += 28;
+      y += 26;
     }
 
     // Crate deposit sub-row if applicable
@@ -509,18 +521,31 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     y += 28;
   }
 
-  // ─── GRAND TOTAL WITH PROFESSIONAL SPACIOUS PADDING ───
+  // ─── GRAND TOTAL WITH PROFESSIONAL SYMMETRIC MIDDLE ALIGNMENT ───
   y += 10;
-  drawSolidLine(y, 2.5); // Top border
-  y += 16;               // Internal padding-top
+  const grandBorderTopY = y;
+  drawSolidLine(grandBorderTopY, 2.5); // Top border
 
-  drawLeft(L.grandTotalLabel, K80.LEFT_MARGIN, y + 2, FONTS.GRAND_LABEL);
-  drawRight(fmtKip(finalGrandTotal), K80.RIGHT_EDGE, y, FONTS.GRAND_NUM);
-  y += 40;               // Font height
+  const grandHeight = 54; // Symmetrical height between borders
+  const grandMidY = grandBorderTopY + (grandHeight / 2); // Exact middle
 
-  y += 12;               // Internal padding-bottom
-  drawSolidLine(y, 2.5); // Bottom border
-  y += 18;               // Margin below bottom border
+  if (isDraw) {
+    ctx.textBaseline = 'middle';
+    ctx.font = FONTS.GRAND_LABEL;
+    ctx.textAlign = 'left';
+    // Align Lao grand total label at middle line (-1px optical lift for Lao body alignment)
+    ctx.fillText(L.grandTotalLabel, K80.LEFT_MARGIN, grandMidY - 1);
+
+    ctx.font = FONTS.GRAND_NUM;
+    ctx.textAlign = 'right';
+    ctx.fillText(fmtKip(finalGrandTotal), K80.RIGHT_EDGE, grandMidY);
+
+    ctx.textBaseline = 'top'; // Reset baseline
+  }
+
+  const grandBorderBottomY = grandBorderTopY + grandHeight;
+  drawSolidLine(grandBorderBottomY, 2.5); // Bottom border
+  y = grandBorderBottomY + 18;           // Margin below bottom border
 
   // 8. PAYMENT DETAILS (Tendered / Change / Debt)
   if (isDebt) {

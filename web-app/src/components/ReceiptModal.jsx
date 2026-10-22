@@ -331,7 +331,7 @@ export default function ReceiptModal({
           </div>
 
           {/* Receipt Title Banner */}
-          <div className="py-0.5 border-y-2 border-slate-900 text-center font-black text-xs my-1 leading-normal uppercase">
+          <div className="py-1.5 border-y-2 border-slate-900 text-center font-black text-xs my-1 flex items-center justify-center leading-none uppercase">
             {L.receiptTitle}
           </div>
 
@@ -363,14 +363,14 @@ export default function ReceiptModal({
             {/* Row 1: Cashier/Seller (Left) + Customer (Right) */}
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-1 truncate max-w-[48%] pt-0.5">
-                <span className="text-slate-500">{L.cashier}</span>
+                <span className="text-slate-500 font-normal">{L.cashier}</span>
                 <span className="font-medium text-slate-800 truncate">
                   {receipt.cashierName || 'Meii'}
                 </span>
               </div>
               <div className="flex items-center justify-end gap-1 truncate max-w-[50%] pt-0.5">
-                <span className="text-slate-500">{L.customer}</span>
-                <span className="font-bold text-slate-900 truncate">
+                <span className="text-slate-500 font-normal">{L.customer}</span>
+                <span className="font-medium text-slate-800 truncate">
                   {(!receipt.customerName || receipt.customerName === 'ລູກຄ້າທົ່ວໄປ' || receipt.customerName === 'Khách lẻ / Khách vãng lai')
                     ? L.defaultCustomer
                     : receipt.customerName}
@@ -381,12 +381,12 @@ export default function ReceiptModal({
             {/* Row 2: Date & Time (Left) + Payment Method (Right) */}
             <div className="flex justify-between items-center pt-0.5">
               <div className="flex items-center gap-1 font-mono text-[10px] text-slate-700 pt-0.5">
-                <span className="font-sans text-slate-500">{L.date}</span>
+                <span className="font-sans text-slate-500 font-normal">{L.date}</span>
                 <span>{new Date(receipt.createdAt).toLocaleString(receiptLanguage === 'vi' ? 'vi-VN' : 'lo-LA')}</span>
               </div>
               <div className="flex items-center gap-1 text-[10.5px] pt-0.5">
-                <span className="text-slate-500">{L.payment}</span>
-                <span className={`font-bold ${receipt.paymentMethod === 'debt' ? 'text-amber-800' : 'text-teal-800'}`}>
+                <span className="text-slate-500 font-normal">{L.payment}</span>
+                <span className="font-medium text-slate-800">
                   {receipt.paymentMethod === 'cash'
                     ? L.payCash
                     : (receipt.paymentMethod === 'transfer' || receipt.paymentMethod === 'qrTransfer' || receipt.paymentMethod === 'onepay')
@@ -441,19 +441,19 @@ export default function ReceiptModal({
                 const crateDepositTotal = Number(it.crateDepositTotal) || (hasMissingCrates ? missingCount * feePerCrate : 0);
 
                 return (
-                  <div key={i} className="receipt-item-row flex flex-col text-[11px] leading-normal py-0.5">
+                  <div key={i} className="receipt-item-row flex flex-col text-[10.5px] leading-normal py-0.5">
                     {/* Main Row: 4 Columns with Product Name allowed up to 2 lines */}
                     <div className="product-name-row flex items-start text-slate-900 overflow-visible">
-                      <span className="w-[40%] flex-1 font-bold text-left pr-1 break-words leading-normal overflow-visible" title={`${prodName} (${unitName})`}>
-                        {prodName} <span className="font-medium text-slate-700">({unitName})</span>
+                      <span className="w-[40%] flex-1 font-semibold text-left pr-1 break-words leading-tight overflow-visible text-[10.5px]" title={`${prodName} (${unitName})`}>
+                        {prodName} <span className="font-normal text-slate-600 text-[10px]">({unitName})</span>
                       </span>
-                      <span className="w-[15%] shrink-0 text-center font-mono text-[10.5px] text-slate-800">
+                      <span className="w-[15%] shrink-0 text-center font-sans font-medium text-[10.5px] text-slate-800">
                         {qty}x
                       </span>
-                      <span className="w-[20%] shrink-0 text-right font-mono text-[10.5px] text-slate-700">
+                      <span className="w-[20%] shrink-0 text-right font-sans font-medium text-[10.5px] tracking-tight text-slate-700">
                         {formatKip(price).replace(' ₭', '')}
                       </span>
-                      <span className="w-[25%] shrink-0 text-right font-bold font-mono text-slate-950">
+                      <span className="w-[25%] shrink-0 text-right font-sans font-bold text-[11px] tracking-tight text-slate-950">
                         {formatKip(baseLineTotal).replace(' ₭', '')}
                       </span>
                     </div>
@@ -464,13 +464,13 @@ export default function ReceiptModal({
                         <span className="w-[40%] font-bold text-left truncate text-amber-900" title={L.missingCrate}>
                           {L.missingCrate}
                         </span>
-                        <span className="w-[15%] text-center font-mono text-amber-900">
+                        <span className="w-[15%] text-center font-sans font-medium text-amber-900">
                           {missingCount}x
                         </span>
-                        <span className="w-[20%] text-right font-mono text-amber-800">
+                        <span className="w-[20%] text-right font-sans font-medium text-amber-800 tracking-tight">
                           {formatKip(feePerCrate).replace(' ₭', '')}
                         </span>
-                        <span className="w-[25%] text-right font-black font-mono text-amber-950">
+                        <span className="w-[25%] text-right font-sans font-bold text-amber-950 tracking-tight">
                           +{formatKip(crateDepositTotal).replace(' ₭', '')}
                         </span>
                       </div>
@@ -522,24 +522,24 @@ export default function ReceiptModal({
               <div className="flex flex-col gap-1.5 py-2 text-[11px]">
                 <div className="flex justify-between text-slate-600">
                   <span>{L.subtotalLabel}</span>
-                  <span className="font-mono">{formatKip(pureGoodsSubtotal)}</span>
+                  <span className="font-sans font-medium tracking-tight">{formatKip(pureGoodsSubtotal)}</span>
                 </div>
                 {totalCrateDeposit > 0 && (
                   <div className="flex justify-between text-amber-900 font-bold bg-amber-50/80 px-1.5 py-0.5 rounded">
                     <span>{L.crateDepositLabel}</span>
-                    <span className="font-mono font-black">+{formatKip(totalCrateDeposit)}</span>
+                    <span className="font-sans font-bold tracking-tight">+{formatKip(totalCrateDeposit)}</span>
                   </div>
                 )}
                 {discount > 0 && (
                   <div className="flex justify-between text-red-600 font-bold">
                     <span>{L.discountLabel}</span>
-                    <span className="font-mono">-{formatKip(discount)}</span>
+                    <span className="font-sans font-medium tracking-tight">-{formatKip(discount)}</span>
                   </div>
                 )}
                 <div className="border-b-2 border-slate-900 my-1"></div>
-                <div className="flex justify-between items-center py-0.5">
-                  <span className="font-black text-sm text-slate-900 leading-normal pt-0.5">{L.grandTotalLabel}</span>
-                  <span className="font-black text-lg text-teal-800 font-mono tracking-tight pt-0.5">
+                <div className="flex justify-between items-center py-2">
+                  <span className="font-black text-sm text-slate-900 leading-none">{L.grandTotalLabel}</span>
+                  <span className="font-black text-lg text-slate-950 font-sans tracking-tight leading-none">
                     {formatKip(finalGrandTotal)}
                   </span>
                 </div>
