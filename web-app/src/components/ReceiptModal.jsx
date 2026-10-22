@@ -208,6 +208,7 @@ export default function ReceiptModal({
       const printPromise = printReceiptSmart({
         elementId: 'thermal-receipt-print-area',
         receipt,
+        language: receiptLanguage,
         allowFallback: !Capacitor.isNativePlatform(),
       });
 

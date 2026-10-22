@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { toCanvas } from 'html-to-image';
 import { canvasToEscPosRaster, uint8ArrayToBase64, ESC_INIT, ESC_DRAWER_KICK } from './escposGenerator';
+import { renderReceiptCanvas } from './receiptCanvasEngine';
 import { TcpSocket } from '@deedarb/capacitor-tcp-socket';
 
 // ─── K80 Hardcoded Constants ─────────────────────────────────────────────────
@@ -530,6 +531,7 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
 export async function printReceiptSmart({
   elementId = 'thermal-receipt-print-area',
   receipt = null,
+  language = 'lo',
   allowFallback = false,
 } = {}) {
   const isNative = Capacitor.isNativePlatform();
@@ -542,19 +544,12 @@ export async function printReceiptSmart({
       throw new Error('ຍັງບໍ່ໄດ້ກຳນົດ IP ເຄື່ອງພິມ. ກະລຸນາໄປທີ່ໜ້າ "ຕັ້ງຄ່າ (Settings)" ເພື່ອກຳນົດ IP ເຄື່ອງພິມ.');
     }
 
-    const targetElement = document.getElementById(elementId);
-    if (!targetElement) {
-      throw new Error(`ບໍ່ພົບ DOM Element #${elementId} ເພື່ອສັ່ງພິມ.`);
-    }
-
-    // 1. Safe font readiness check: tối đa 1 giây.
-    // Khi iPad kết nối vào Wi-Fi của máy in (mạng nội bộ không có Internet),
-    // document.fonts.ready có thể bị treo hoặc chậm; race với timeout 1000ms để bỏ qua ngay!
+    // 1. Safe font readiness check: tối đa 600ms (không treo nếu offline)
     try {
       if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
         await Promise.race([
           document.fonts.ready,
-          new Promise((resolve) => setTimeout(resolve, 1000))
+          new Promise((resolve) => setTimeout(resolve, 600))
         ]);
       }
     } catch (_) {
@@ -562,53 +557,36 @@ export async function printReceiptSmart({
     }
 
     try {
-      // Render Canvas từ element hóa đơn tại chính xác 576px width
       let canvas = null;
-      try {
-        const renderPromise = toCanvas(targetElement, {
-          width: PRINT_WIDTH_DOTS,  // Force exactly 576px
-          pixelRatio: 1,            // 1:1 pixel mapping, NO retina scaling
-          backgroundColor: '#ffffff',
-          skipFonts: true,          // Ngăn html-to-image chờ font từ xa khi offline
-          style: {
-            margin: '0',
-            padding: '12px 16px',
-            width: `${PRINT_WIDTH_DOTS}px`,
-            maxWidth: `${PRINT_WIDTH_DOTS}px`,
-            minWidth: `${PRINT_WIDTH_DOTS}px`,
-            boxSizing: 'border-box',
-            fontFamily: "'Noto Sans Lao', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, sans-serif",
-            transform: 'none',
-          },
-        });
 
-        // Timeout 4s dự phòng nếu thiết bị cực chậm
-        const renderTimeout = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('TIMEOUT_RENDER')), 4000);
-        });
+      // ─── PRIMARY ENGINE: Pure Canvas 2D Drawing (Full 576px K80) ───
+      // If receipt data object is provided, draw directly with Canvas 2D API!
+      // This guarantees 1:1 pixel mapping, NO DOM clipping, NO missing header, full width!
+      if (receipt) {
+        try {
+          canvas = await renderReceiptCanvas(receipt, language);
+        } catch (engineErr) {
+          console.warn('[printerService] Pure Canvas engine error, trying DOM fallback:', engineErr);
+        }
+      }
 
-        canvas = await Promise.race([renderPromise, renderTimeout]);
-      } catch (renderErr) {
-        console.warn('[printerService] toCanvas with skipFonts failed or timed out, trying standard canvas fallback:', renderErr);
-        // Fallback: Thử lại 1 lần nữa với cài đặt tối giản nhất không chặn
+      // ─── SECONDARY FALLBACK: DOM Capture (for Quotation or legacy elements) ───
+      if (!canvas) {
+        const targetElement = document.getElementById(elementId);
+        if (!targetElement) {
+          throw new Error(`ບໍ່ພົບ DOM Element #${elementId} ຫຼື ຂໍ້ມູນໃບບິນເພື່ອສັ່ງພິມ.`);
+        }
+
         try {
           canvas = await toCanvas(targetElement, {
-            width: PRINT_WIDTH_DOTS,
+            width: PRINT_WIDTH_DOTS,  // 576px
             pixelRatio: 1,
             backgroundColor: '#ffffff',
             skipFonts: true,
-            style: {
-              margin: '0',
-              padding: '12px 16px',
-              width: `${PRINT_WIDTH_DOTS}px`,
-              maxWidth: `${PRINT_WIDTH_DOTS}px`,
-              minWidth: `${PRINT_WIDTH_DOTS}px`,
-              boxSizing: 'border-box',
-            },
           });
-        } catch (secondaryErr) {
-          console.error('[printerService] Canvas render completely failed:', secondaryErr);
-          throw new Error('ບໍ່ສາມາດສ້າງຮູບໃບບິນ (Canvas Render Error): ' + (secondaryErr.message || secondaryErr));
+        } catch (renderErr) {
+          console.error('[printerService] Canvas DOM render failed:', renderErr);
+          throw new Error('ບໍ່ສາມາດສ້າງຮູບໃບບິນ (Canvas Render Error): ' + (renderErr.message || renderErr));
         }
       }
 
