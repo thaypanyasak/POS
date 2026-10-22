@@ -43,7 +43,7 @@ const WIDTH_BYTES = 72;          // 576 / 8 = 72 bytes per line
 export function canvasToEscPosRaster(sourceCanvas, {
   kickCashDrawer = true,
   cutPaper = true,
-  luminanceThreshold = 160,
+  luminanceThreshold = 135,
 } = {}) {
   // ─── Step 1: Ensure exact 576px width ───────────────────────────────
   let canvas = sourceCanvas;

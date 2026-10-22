@@ -594,13 +594,11 @@ export async function printReceiptSmart({
         throw new Error('ບໍ່ສາມາດສ້າງຮູບໃບບິນ (Canvas is empty)');
       }
 
-      // Convert Canvas to ESC/POS Raster Bytes
-      // Canvas should already be 576px from toCanvas, but canvasToEscPosRaster
-      // will re-scale if needed (safety net)
+      // Convert Canvas to ESC/POS Raster Bytes (GS v 0, 72 bytes/line)
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: config.drawerKick,
         cutPaper: config.autoCut,
-        luminanceThreshold: 160, // Crisp text threshold for thermal printing
+        luminanceThreshold: 135, // Balanced threshold to prevent thermal ink bleeding & keep Lao letters sharp
       });
 
       // Transmit directly to hardware thermal printer with strict 2.5s fail-fast timeout
