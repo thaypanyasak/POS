@@ -1,7 +1,7 @@
 /**
  * ESC/POS Generator & Monochrome Rasterizer for Thermal Printers
  * ═══════════════════════════════════════════════════════════════
- * HARDCODED: 80mm K80 Standard (576 dots = 72 bytes/line)
+ * HARDCODED: 80mm K80 Standard (640 dots = 80 bytes/line)
  * Protocol: GS v 0 (Raster Bit Image)
  * Luminance: BT.601 (0.299R + 0.587G + 0.114B)
  *
@@ -14,38 +14,38 @@ export const ESC_DRAWER_KICK = [0x1b, 0x70, 0x00, 0x19, 0xfa]; // ESC p 0 25 250
 export const GS_CUT_PARTIAL = [0x1d, 0x56, 0x42, 0x00]; // GS V 66 0 (Partial cut with feed)
 export const ESC_FEED_LINES = (n = 3) => [0x1b, 0x64, n]; // ESC d n (Feed n lines)
 
-// ─── Hardcoded K80 Constants ─────────────────────────────────────────────────
-const PRINT_WIDTH_DOTS = 576;    // 80mm thermal paper = 576 dots
-const WIDTH_BYTES = 72;          // 576 / 8 = 72 bytes per line
+// ─── Hardcoded K80 Constants (640 dots / 80 bytes Standard) ──────────────────
+export const PRINT_WIDTH_DOTS = 640;    // 80mm thermal paper = 640 dots
+export const WIDTH_BYTES = 80;          // 640 / 8 = 80 bytes per line
 
 /**
  * Convert Canvas to ESC/POS 1-bit Monochrome Raster (GS v 0)
  *
- * CRITICAL: The input canvas MUST be exactly 576px wide.
- * If sourceCanvas.width !== 576, it will be scaled to 576px using
+ * CRITICAL: The input canvas MUST be exactly 640px wide.
+ * If sourceCanvas.width !== 640, it will be scaled to 640px using
  * nearest-neighbor interpolation (no anti-aliasing) to preserve sharp text edges.
  *
  * Algorithm:
- *   1. Ensure canvas is exactly 576px wide
+ *   1. Ensure canvas is exactly 640px wide
  *   2. Extract pixel data via getImageData
  *   3. For each pixel row, pack 8 pixels into 1 byte (MSB = leftmost pixel)
  *   4. Pixel is BLACK (bit=1) if: alpha > 128 AND luminance < threshold
  *   5. Split into chunks of max 256 lines to avoid printer buffer overflow
- *   6. Each chunk gets its own GS v 0 header
+ *   6. Each chunk gets its own GS v 0 header (xL=80, xH=0)
  *
- * @param {HTMLCanvasElement} sourceCanvas - Canvas rendered at 576px width
+ * @param {HTMLCanvasElement} sourceCanvas - Canvas rendered at 640px width
  * @param {Object} options
  * @param {boolean} [options.kickCashDrawer=true] - Send ESC p drawer kick command
  * @param {boolean} [options.cutPaper=true] - Send GS V partial cut command
- * @param {number} [options.luminanceThreshold=160] - Brightness cutoff (0-255). Lower = darker threshold.
+ * @param {number} [options.luminanceThreshold=148] - Brightness cutoff (0-255). Lower = darker threshold.
  * @returns {Uint8Array} Complete ESC/POS byte stream ready for TCP transmission
  */
 export function canvasToEscPosRaster(sourceCanvas, {
   kickCashDrawer = true,
   cutPaper = true,
-  luminanceThreshold = 185, // Optimized high-contrast threshold for thick thermal paper (captures anti-aliasing pixels)
+  luminanceThreshold = 148,
 } = {}) {
-  // ─── Step 1: Normalize / Downscale to exactly 576 dots K80 ─────────
+  // ─── Step 1: Ensure exact 640px width ───────────────────────────────
   let canvas = sourceCanvas;
   if (sourceCanvas.width !== PRINT_WIDTH_DOTS) {
     const scale = PRINT_WIDTH_DOTS / sourceCanvas.width;
@@ -54,8 +54,8 @@ export function canvasToEscPosRaster(sourceCanvas, {
     scaledCanvas.width = PRINT_WIDTH_DOTS;
     scaledCanvas.height = scaledHeight;
     const sCtx = scaledCanvas.getContext('2d');
-    sCtx.imageSmoothingEnabled = true;
-    sCtx.imageSmoothingQuality = 'high';
+    // Nearest-neighbor: preserves crisp text edges for thermal printing
+    sCtx.imageSmoothingEnabled = false;
     sCtx.fillStyle = '#ffffff';
     sCtx.fillRect(0, 0, PRINT_WIDTH_DOTS, scaledHeight);
     sCtx.drawImage(sourceCanvas, 0, 0, PRINT_WIDTH_DOTS, scaledHeight);
@@ -64,66 +64,23 @@ export function canvasToEscPosRaster(sourceCanvas, {
 
   // ─── Step 2: Extract raw RGBA pixel data ────────────────────────────
   const ctx = canvas.getContext('2d');
-  const width = canvas.width;   // Always 576
+  const width = canvas.width;   // Always 640
   const height = canvas.height;
   const imgData = ctx.getImageData(0, 0, width, height);
   const pixels = imgData.data;
 
-  // ─── Step 3: High-Sensitivity Binary Thresholding for Thick Paper ────
-  // BT.601 luminance: 0.299R + 0.587G + 0.114B
-  // Capture anti-aliased edge pixels (a > 90 && lum < 185) so font strokes are thick & solid
-  const binaryGrid = new Uint8Array(width * height);
-  for (let y = 0; y < height; y++) {
-    const rowOffset = y * width;
-    for (let x = 0; x < width; x++) {
-      const idx = (rowOffset + x) * 4;
-      const a = pixels[idx + 3];
-      if (a > 90) {
-        const lum = 0.299 * pixels[idx] + 0.587 * pixels[idx + 1] + 0.114 * pixels[idx + 2];
-        if (lum < luminanceThreshold) {
-          binaryGrid[rowOffset + x] = 1;
-        }
-      }
-    }
-  }
-
-  // ─── Step 4: 1-Pixel Morphological Dilate & Micro-Hole Healing ───────
-  // Fills micro-voids inside Lao curves/hooks and heals broken tone mark strokes
-  const finalGrid = new Uint8Array(width * height);
-  for (let y = 0; y < height; y++) {
-    const rowOffset = y * width;
-    const prevRow = y > 0 ? (y - 1) * width : rowOffset;
-    const nextRow = y < height - 1 ? (y + 1) * width : rowOffset;
-
-    for (let x = 0; x < width; x++) {
-      if (binaryGrid[rowOffset + x] === 1) {
-        finalGrid[rowOffset + x] = 1;
-        continue;
-      }
-      // Check 4-connected neighbors for interior micro-holes
-      const left = x > 0 ? binaryGrid[rowOffset + x - 1] : 0;
-      const right = x < width - 1 ? binaryGrid[rowOffset + x + 1] : 0;
-      const top = binaryGrid[prevRow + x];
-      const bottom = binaryGrid[nextRow + x];
-
-      // Fill hole if sandwiched between dark pixels horizontally or vertically
-      if ((left === 1 && right === 1) || (top === 1 && bottom === 1)) {
-        finalGrid[rowOffset + x] = 1;
-      }
-    }
-  }
-
   const bytes = [];
 
-  // ESC @ Initialize printer
+  // ─── Step 3: ESC @ Initialize printer ───────────────────────────────
   bytes.push(...ESC_INIT);
 
-  // Cash Drawer Kick (before print)
+  // ─── Step 4: Cash Drawer Kick (before print) ────────────────────────
   if (kickCashDrawer) {
     bytes.push(...ESC_DRAWER_KICK);
   }
 
   // ─── Step 5: Convert to 1-bit bitmap, chunked GS v 0 ───────────────
+  // Max 256 lines per chunk to prevent printer buffer overflow
   const MAX_CHUNK_LINES = 256;
   let currentY = 0;
 
@@ -131,23 +88,34 @@ export function canvasToEscPosRaster(sourceCanvas, {
     const chunkHeight = Math.min(MAX_CHUNK_LINES, height - currentY);
 
     // GS v 0 header: 0x1D 0x76 0x30 0x00 xL xH yL yH
-    const xL = WIDTH_BYTES & 0xff;        // 72
+    const xL = WIDTH_BYTES & 0xff;        // 80
     const xH = (WIDTH_BYTES >> 8) & 0xff; // 0
     const yL = chunkHeight & 0xff;
     const yH = (chunkHeight >> 8) & 0xff;
 
     bytes.push(0x1d, 0x76, 0x30, 0x00, xL, xH, yL, yH);
 
-    // Rasterize scanlines
+    // Rasterize each scanline
     for (let y = currentY; y < currentY + chunkHeight; y++) {
-      const rowOffset = y * width;
       for (let byteX = 0; byteX < WIDTH_BYTES; byteX++) {
         let byteVal = 0;
-        const basePixelX = byteX * 8;
         for (let bit = 0; bit < 8; bit++) {
-          const pixelX = basePixelX + bit;
-          if (pixelX < width && finalGrid[rowOffset + pixelX] === 1) {
-            byteVal |= (0x80 >> bit);
+          const pixelX = byteX * 8 + bit;
+          if (pixelX < width) {
+            const idx = (y * width + pixelX) * 4;
+            const r = pixels[idx];
+            const g = pixels[idx + 1];
+            const b = pixels[idx + 2];
+            const a = pixels[idx + 3];
+
+            // BT.601 luminance: 0.299R + 0.587G + 0.114B
+            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+            // Pixel is BLACK (thermal burn) if:
+            //   - Visible (alpha > 128) AND dark enough (lum < threshold)
+            if (a > 128 && lum < luminanceThreshold) {
+              byteVal |= (0x80 >> bit); // MSB = leftmost pixel
+            }
           }
         }
         bytes.push(byteVal);

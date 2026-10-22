@@ -239,12 +239,12 @@ button, a, input, select, textarea, [role="button"] {
     line-height: 1.4 !important;
   }
 
-  /* Khổ K80: width 72mm !important; margin: 0 auto; */
+  /* Khổ K80: width 80mm !important; margin: 0 auto; */
   #thermal-receipt-print-area.paper-80mm,
   #thermal-receipt-print-area:not(.paper-58mm),
   #quotation-print-area {
-    width: 72mm !important;
-    max-width: 72mm !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
     margin: 0 auto !important;
   }
 

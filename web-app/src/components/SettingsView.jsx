@@ -772,7 +772,7 @@ export default function SettingsView({
                   <div className="min-w-0 pr-1">
                     <span className="font-bold text-xs block truncate">80 mm K80 (ES-8803WA)</span>
                     <span className="text-[10px] text-slate-500 block truncate">
-                      ມາດຕະຖານຕັ້ງໂຕະ (576 dots) — ລັອກໄວ້
+                      ມາດຕະຖານຕັ້ງໂຕະ (640 dots) — ລັອກໄວ້
                     </span>
                   </div>
                   <CheckCircle size={17} weight="fill" className="text-teal-600 shrink-0" />

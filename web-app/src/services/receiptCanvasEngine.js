@@ -24,26 +24,26 @@
  *     - 21px Bold thank you, 18px return policy.
  */
 
-// ─── 80mm K80 Physical Constants ──────────────────────────────────────────────
+// ─── 80mm K80 Physical Constants (640 dots / 80 bytes Standard) ─────────────
 export const K80 = {
-  CANVAS_WIDTH: 576,    // Physical print dots (72 bytes * 8)
-  LEFT_MARGIN: 16,      // Left safe margin
-  RIGHT_EDGE: 560,      // Right safe margin
-  PRINTABLE_WIDTH: 544, // 560 - 16
-  CENTER_X: 288,        // Symmetry center (576 / 2)
+  CANVAS_WIDTH: 640,    // Physical print dots (80 bytes * 8)
+  LEFT_MARGIN: 4,       // Left safe margin (px)
+  RIGHT_EDGE: 636,      // Right safe margin (px)
+  PRINTABLE_WIDTH: 632, // 636 - 4
+  CENTER_X: 320,        // Symmetry center (640 / 2)
 
   // 4-Column Grid
-  COL_NAME_X: 16,       // Column 1: Item Name (runs 16px to 276px, max 260px)
-  COL_NAME_MAX_W: 260,  // Max width 260px (wrap if longer)
-  COL_QTY_X: 305,       // Column 2: Qty (55px width, centered at 305px)
-  COL_PRICE_X: 425,     // Column 3: Unit Price (110px width, right-aligned at 425px)
-  COL_TOTAL_X: 560,     // Column 4: Line Total (115px width, right-aligned at 560px)
+  COL_NAME_X: 4,        // Column 1: Item Name
+  COL_NAME_MAX_W: 320,  // Max width 320px (wrap if longer)
+  COL_QTY_X: 370,       // Column 2: Qty (centered at 370px)
+  COL_PRICE_X: 490,     // Column 3: Unit Price (right-aligned at 490px)
+  COL_TOTAL_X: 636,     // Column 4: Line Total (right-aligned at 636px)
 };
 
 // ─── Typography (High-Res POS Scale) ──────────────────────────────────────────
 const FONTS = {
-  STORE_NAME: '800 42px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SLOGAN: '700 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  STORE_NAME: 'bold 42px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SLOGAN: '600 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   ADDRESS: '700 18.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   TEL: '800 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   TITLE: 'bold 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
@@ -432,7 +432,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     measureCtx.font = FONTS.ITEM_NAME;
     const nameLines = wrapText(measureCtx, fullName, K80.COL_NAME_MAX_W);
 
-    // First line of row: Name, Qty, Unit Price, Line Total (line-height 1.45 spacing)
+    // First line of row: Name, Qty, Unit Price, Line Total
     drawLeft(nameLines[0], K80.COL_NAME_X, y, FONTS.ITEM_NAME);
     if (isDraw) {
       ctx.font = FONTS.ITEM_NUM;
@@ -441,12 +441,12 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     }
     drawRight(fmtNum(price), K80.COL_PRICE_X, y + 2, FONTS.ITEM_NUM);
     drawRight(fmtNum(lineTotal), K80.COL_TOTAL_X, y + 2, FONTS.ITEM_TOTAL);
-    y += 32; // Line height 1.45 for Lao vowel space
+    y += 28;
 
-    // Additional wrapped name lines (line-height 1.45 spacing)
+    // Additional wrapped name lines
     for (let li = 1; li < nameLines.length; li++) {
       drawLeft(nameLines[li], K80.COL_NAME_X, y, FONTS.ITEM_NAME);
-      y += 30;
+      y += 26;
     }
 
     // Crate deposit sub-row if applicable
@@ -615,8 +615,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   drawDashedLine(y);
   y += 20;
 
-  const sigColLeftX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.25;  // ~152px
-  const sigColRightX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.75; // ~424px
+  const sigColLeftX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.25;  // ~162px
+  const sigColRightX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.75; // ~478px
 
   const leftSignLabel = isDebt ? L.signDebtor : L.signCustomer;
   const rightSignLabel = isDebt ? L.signSeller : L.signCashier;
@@ -631,8 +631,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   // Generous 100px space for hand signature (per user request)
   y += 100;
 
-  // Dotted lines strictly under each respective column (140px wide, leaving ~132px gap in center)
-  const drawSignDottedLine = (centerX, width = 140, lineY) => {
+  // Dotted lines strictly under each respective column (150px wide, leaving ~166px gap in center)
+  const drawSignDottedLine = (centerX, width = 150, lineY) => {
     if (isDraw) {
       ctx.beginPath();
       ctx.setLineDash([3, 4]); // 3px dot, 4px space
@@ -645,8 +645,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     }
   };
 
-  drawSignDottedLine(sigColLeftX, 140, y);
-  drawSignDottedLine(sigColRightX, 140, y);
+  drawSignDottedLine(sigColLeftX, 150, y);
+  drawSignDottedLine(sigColRightX, 150, y);
   y += 36; // Breathing room below signature dots before barcode
 
   // 11. BARCODE STRIP (Oversized 50px height, 2.2x width for instantaneous laser scan)
@@ -718,10 +718,10 @@ export async function renderReceiptCanvas(receipt, lang = 'lo') {
   // Pass 1: Measure exact height with zero discrepancy
   const exactHeight = layoutReceipt(null, receipt, lang, qrImg);
 
-  // Pass 2: Allocate 2X Super-Sampled 1152px canvas (Double Pixel Density)
+  // Pass 2: Allocate 2X Super-Sampled 1280px canvas (Double Pixel Density)
   const SCALE = 2;
   const canvas = document.createElement('canvas');
-  canvas.width = K80.CANVAS_WIDTH * SCALE;   // 576 * 2 = 1152px
+  canvas.width = K80.CANVAS_WIDTH * SCALE;   // 640 * 2 = 1280px
   canvas.height = exactHeight * SCALE;
 
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -734,7 +734,7 @@ export async function renderReceiptCanvas(receipt, lang = 'lo') {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  // Scale 2x: All layout coordinates remain in standard 576-based logical units
+  // Scale 2x: All layout coordinates remain in standard 640-based logical units
   ctx.scale(SCALE, SCALE);
 
   // High-contrast rendering

@@ -4,12 +4,13 @@ import { canvasToEscPosRaster, uint8ArrayToBase64, ESC_INIT, ESC_DRAWER_KICK } f
 import { renderReceiptCanvas } from './receiptCanvasEngine';
 import { TcpSocket } from '@deedarb/capacitor-tcp-socket';
 
-// ─── K80 Hardcoded Constants ─────────────────────────────────────────────────
-const PRINT_WIDTH_DOTS = 576;  // 80mm K80 = 576 thermal dots
-const LEFT_MARGIN = 16;       // Safe left margin (px)
-const RIGHT_EDGE = 560;       // Safe right edge (px)
-const PRINTABLE_WIDTH = 544;  // RIGHT_EDGE - LEFT_MARGIN
-const CENTER_X = 288;         // 576 / 2
+// ─── K80 Hardcoded Constants (640 dots / 80 bytes Standard) ──────────────────
+export const PRINT_WIDTH_DOTS = 640;  // 80mm K80 Expanded = 640 thermal dots
+export const WIDTH_BYTES = 80;        // 640 dots / 8 bits = 80 bytes/dòng
+export const LEFT_MARGIN = 4;         // Safe left margin (px)
+export const RIGHT_EDGE = 636;        // Safe right edge (px)
+export const PRINTABLE_WIDTH = 632;   // RIGHT_EDGE - LEFT_MARGIN (636 - 4)
+export const CENTER_X = 320;          // 640 / 2
 
 /**
  * Storage keys for POS printer configuration
@@ -181,7 +182,7 @@ export function createTestReceiptCanvas(ip, port) {
   ctx.fillText(`ວັນທີ & ເວລາ: ${dateStr}`, LEFT_MARGIN + 24, 185);
   ctx.fillText(`IP ເຄື່ອງພິມ: ${ip}:${port}`, LEFT_MARGIN + 24, 220);
   ctx.fillText(`ລະບົບຕົວໜັງສື: Noto Sans Lao ພາສາລາວ 100%`, LEFT_MARGIN + 24, 255);
-  ctx.fillText(`ຄວາມກວ້າງເຈ້ຍ: 80mm K80 (576 dots monochrome)`, LEFT_MARGIN + 24, 290);
+  ctx.fillText(`ຄວາມກວ້າງເຈ້ຍ: 80mm K80 (640 dots monochrome)`, LEFT_MARGIN + 24, 290);
   ctx.fillText(`ສະຖານະ: ເຊື່ອມຕໍ່ສຳເລັດ • ພ້ອມໃຊ້ງານຂາຍ`, LEFT_MARGIN + 24, 325);
 
   // Separator Line
@@ -512,11 +513,11 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
 }
 
 /**
- * Intelligent Smart Print Dispatcher — 80mm K80 ONLY (576 dots)
+ * Intelligent Smart Print Dispatcher — 80mm K80 Expanded (640 dots)
  *
  * 1. Native Platform (Capacitor iOS/Android) + Configured Printer IP:
- *    - Captures DOM element `#thermal-receipt-print-area` as a 576px-wide canvas
- *    - Generates ESC/POS raster byte stream (`GS v 0`) at exactly 576 dots
+ *    - Captures DOM element `#thermal-receipt-print-area` as a 640px-wide canvas
+ *    - Generates ESC/POS raster byte stream (`GS v 0`) at exactly 640 dots
  *    - Sends directly via TCP Socket to `IP:Port` (Port 9100) with strict 2.5s timeout
  *
  * 2. Web Browser (Safari, Chrome) or Fallback:
@@ -559,7 +560,7 @@ export async function printReceiptSmart({
     try {
       let canvas = null;
 
-      // ─── PRIMARY ENGINE: Pure Canvas 2D Drawing (Full 576px K80) ───
+      // ─── PRIMARY ENGINE: Pure Canvas 2D Drawing (Full 640px K80) ───
       // If receipt data object is provided, draw directly with Canvas 2D API!
       // This guarantees 1:1 pixel mapping, NO DOM clipping, NO missing header, full width!
       if (receipt) {
@@ -578,40 +579,22 @@ export async function printReceiptSmart({
         }
 
         try {
-          const highResCanvas = await toCanvas(targetElement, {
-            width: PRINT_WIDTH_DOTS,  // 576px
-            canvasWidth: 1152,        // 576 * 2: Super-sampled high resolution
-            pixelRatio: 2,             // 2x pixel density for crisp vector strokes
+          canvas = await toCanvas(targetElement, {
+            width: PRINT_WIDTH_DOTS,  // 640px
+            pixelRatio: 1,
             backgroundColor: '#ffffff',
             skipFonts: true,
             style: {
-              width: `${PRINT_WIDTH_DOTS}px`,
-              minWidth: `${PRINT_WIDTH_DOTS}px`,
-              maxWidth: `${PRINT_WIDTH_DOTS}px`,
+              width: '640px',
+              minWidth: '640px',
+              maxWidth: '640px',
               margin: '0',
-              padding: '14px 16px',
+              padding: '0 4px',
               boxSizing: 'border-box',
-              fontFeatureSettings: '"kern" 1',
               textRendering: 'geometricPrecision',
               WebkitFontSmoothing: 'antialiased',
             },
           });
-
-          // Downscale highResCanvas (1152px) to standard K80 (576px) using high-quality image smoothing
-          if (highResCanvas.width !== PRINT_WIDTH_DOTS) {
-            const scaledCanvas = document.createElement('canvas');
-            scaledCanvas.width = PRINT_WIDTH_DOTS;
-            scaledCanvas.height = Math.round(highResCanvas.height * (PRINT_WIDTH_DOTS / highResCanvas.width));
-            const sCtx = scaledCanvas.getContext('2d');
-            sCtx.imageSmoothingEnabled = true;
-            sCtx.imageSmoothingQuality = 'high';
-            sCtx.fillStyle = '#ffffff';
-            sCtx.fillRect(0, 0, scaledCanvas.width, scaledCanvas.height);
-            sCtx.drawImage(highResCanvas, 0, 0, scaledCanvas.width, scaledCanvas.height);
-            canvas = scaledCanvas;
-          } else {
-            canvas = highResCanvas;
-          }
         } catch (renderErr) {
           console.error('[printerService] Canvas DOM render failed:', renderErr);
           throw new Error('ບໍ່ສາມາດສ້າງຮູບໃບບິນ (Canvas Render Error): ' + (renderErr.message || renderErr));
@@ -623,12 +606,12 @@ export async function printReceiptSmart({
       }
 
       // Convert Canvas to ESC/POS Raster Bytes
-      // Canvas should already be 576px from toCanvas, but canvasToEscPosRaster
+      // Canvas should already be 640px from toCanvas, but canvasToEscPosRaster
       // will re-scale if needed (safety net)
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: config.drawerKick,
         cutPaper: config.autoCut,
-        luminanceThreshold: 185, // High-contrast threshold for thick thermal paper: deep, bold black burn
+        luminanceThreshold: 148, // Optimal high-res thermal threshold: prevents broken strokes & avoids ink-bleeding
       });
 
       // Transmit directly to hardware thermal printer with strict 2.5s fail-fast timeout
