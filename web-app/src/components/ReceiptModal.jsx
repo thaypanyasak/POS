@@ -607,22 +607,22 @@ export default function ReceiptModal({
           )}
 
           {/* Signatures Section (Customized for Debt vs Normal Cash) */}
-          <div className="border-t border-dashed border-slate-300 pt-2 pb-2 grid grid-cols-2 text-[9.5px] text-slate-600 text-center leading-normal">
+          <div className="border-t border-dashed border-slate-300 pt-3 pb-3 grid grid-cols-2 text-[10px] text-slate-700 text-center leading-normal">
             <div className="flex flex-col items-center">
-              <p className="font-bold text-slate-700 leading-normal pt-0.5">
+              <p className="font-bold text-slate-800 leading-normal pt-0.5">
                 {(receipt.paymentMethod === 'debt' || receipt.isDebt) ? L.signDebtor : L.signCustomer}
               </p>
               {/* Generous space for hand signature */}
               <div className="h-14"></div>
-              <p className="text-slate-400">................................</p>
+              <div className="w-24 border-b-2 border-dotted border-slate-400"></div>
             </div>
             <div className="flex flex-col items-center">
-              <p className="font-bold text-slate-700 leading-normal pt-0.5">
+              <p className="font-bold text-slate-800 leading-normal pt-0.5">
                 {(receipt.paymentMethod === 'debt' || receipt.isDebt) ? L.signSeller : L.signCashier}
               </p>
               {/* Generous space for hand signature */}
               <div className="h-14"></div>
-              <p className="text-slate-400">................................</p>
+              <div className="w-24 border-b-2 border-dotted border-slate-400"></div>
             </div>
           </div>
 

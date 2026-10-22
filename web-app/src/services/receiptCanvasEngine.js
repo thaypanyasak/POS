@@ -631,13 +631,22 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   // Generous 100px space for hand signature (per user request)
   y += 100;
 
-  // Dotted lines strictly under the two columns
-  if (isDraw) {
-    ctx.font = FONTS.SIGN_LINE;
-    ctx.textAlign = 'center';
-    ctx.fillText('........................', sigColLeftX, y);
-    ctx.fillText('........................', sigColRightX, y);
-  }
+  // Dotted lines strictly under each respective column (140px wide, leaving ~132px gap in center)
+  const drawSignDottedLine = (centerX, width = 140, lineY) => {
+    if (isDraw) {
+      ctx.beginPath();
+      ctx.setLineDash([3, 4]); // 3px dot, 4px space
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = '#000000';
+      ctx.moveTo(centerX - width / 2, lineY);
+      ctx.lineTo(centerX + width / 2, lineY);
+      ctx.stroke();
+      ctx.setLineDash([]); // Reset dash
+    }
+  };
+
+  drawSignDottedLine(sigColLeftX, 140, y);
+  drawSignDottedLine(sigColRightX, 140, y);
   y += 36; // Breathing room below signature dots before barcode
 
   // 11. BARCODE STRIP (Oversized 50px height, 2.2x width for instantaneous laser scan)
