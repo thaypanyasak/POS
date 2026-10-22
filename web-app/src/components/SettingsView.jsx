@@ -763,51 +763,19 @@ export default function SettingsView({
                 </div>
               </div>
 
-              {/* Paper Width Options (h-14 buttons) */}
+              {/* Paper Width — Hardcoded 80mm K80 */}
               <div className="mb-3.5">
                 <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
-                  ຂະໜາດເຈ້ຍພິມ (Paper Width)
+                  ຂະໜາດເຈ້ຍພິມ (Paper Width) — K80 ມາດຕະຖານ
                 </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => handlePaperWidthChange(80)}
-                    className={`h-14 px-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                      paperWidth === 80
-                        ? 'bg-teal-50 border-teal-500 text-teal-900 ring-1 ring-teal-500'
-                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    <div className="min-w-0 pr-1">
-                      <span className="font-bold text-xs block truncate">80 mm (ES-8803WA)</span>
-                      <span className="text-[10px] text-slate-500 block truncate">
-                        ມາດຕະຖານຕັ້ງໂຕະ (576 dots)
-                      </span>
-                    </div>
-                    {paperWidth === 80 && (
-                      <CheckCircle size={17} weight="fill" className="text-teal-600 shrink-0" />
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handlePaperWidthChange(58)}
-                    className={`h-14 px-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                      paperWidth === 58
-                        ? 'bg-teal-50 border-teal-500 text-teal-900 ring-1 ring-teal-500'
-                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    <div className="min-w-0 pr-1">
-                      <span className="font-bold text-xs block truncate">58 mm (ພົກພາ)</span>
-                      <span className="text-[10px] text-slate-500 block truncate">
-                        ເຄື່ອງພິມນ້ອຍ (384 dots)
-                      </span>
-                    </div>
-                    {paperWidth === 58 && (
-                      <CheckCircle size={17} weight="fill" className="text-teal-600 shrink-0" />
-                    )}
-                  </button>
+                <div className="h-14 px-3 rounded-xl border bg-teal-50 border-teal-500 text-teal-900 ring-1 ring-teal-500 flex items-center justify-between">
+                  <div className="min-w-0 pr-1">
+                    <span className="font-bold text-xs block truncate">80 mm K80 (ES-8803WA)</span>
+                    <span className="text-[10px] text-slate-500 block truncate">
+                      ມາດຕະຖານຕັ້ງໂຕະ (576 dots) — ລັອກໄວ້
+                    </span>
+                  </div>
+                  <CheckCircle size={17} weight="fill" className="text-teal-600 shrink-0" />
                 </div>
               </div>
 

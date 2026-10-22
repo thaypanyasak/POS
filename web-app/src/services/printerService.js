@@ -3,24 +3,29 @@ import { toCanvas } from 'html-to-image';
 import { canvasToEscPosRaster, uint8ArrayToBase64, ESC_INIT, ESC_DRAWER_KICK } from './escposGenerator';
 import { TcpSocket } from '@deedarb/capacitor-tcp-socket';
 
+// ─── K80 Hardcoded Constants ─────────────────────────────────────────────────
+const PRINT_WIDTH_DOTS = 576;  // 80mm K80 = 576 thermal dots
+const LEFT_MARGIN = 16;       // Safe left margin (px)
+const RIGHT_EDGE = 560;       // Safe right edge (px)
+const PRINTABLE_WIDTH = 544;  // RIGHT_EDGE - LEFT_MARGIN
+const CENTER_X = 288;         // 576 / 2
+
 /**
  * Storage keys for POS printer configuration
  */
 export const PRINTER_STORAGE_KEYS = {
   IP: 'pos_printer_ip',
   PORT: 'pos_printer_port',
-  PAPER_WIDTH: 'pos_paper_width',
   AUTO_CUT: 'pos_printer_auto_cut',
   DRAWER_KICK: 'pos_printer_drawer_kick',
 };
 
 /**
- * Default printer configurations
+ * Default printer configurations - 80mm K80 ONLY
  */
 export const DEFAULT_PRINTER_CONFIG = {
   ip: '192.168.1.200',
   port: 9100,
-  paperWidth: 80, // 80mm or 58mm
   autoCut: true,
   drawerKick: true,
 };
@@ -33,7 +38,6 @@ export function getPrinterConfig() {
   return {
     ip: localStorage.getItem(PRINTER_STORAGE_KEYS.IP) || DEFAULT_PRINTER_CONFIG.ip,
     port: parseInt(localStorage.getItem(PRINTER_STORAGE_KEYS.PORT), 10) || DEFAULT_PRINTER_CONFIG.port,
-    paperWidth: parseInt(localStorage.getItem(PRINTER_STORAGE_KEYS.PAPER_WIDTH), 10) || DEFAULT_PRINTER_CONFIG.paperWidth,
     autoCut: localStorage.getItem(PRINTER_STORAGE_KEYS.AUTO_CUT) !== 'false',
     drawerKick: localStorage.getItem(PRINTER_STORAGE_KEYS.DRAWER_KICK) !== 'false',
   };
@@ -46,7 +50,6 @@ export function savePrinterConfig(newConfig) {
   if (typeof window === 'undefined') return;
   if (newConfig.ip !== undefined) localStorage.setItem(PRINTER_STORAGE_KEYS.IP, String(newConfig.ip).trim());
   if (newConfig.port !== undefined) localStorage.setItem(PRINTER_STORAGE_KEYS.PORT, String(newConfig.port));
-  if (newConfig.paperWidth !== undefined) localStorage.setItem(PRINTER_STORAGE_KEYS.PAPER_WIDTH, String(newConfig.paperWidth));
   if (newConfig.autoCut !== undefined) localStorage.setItem(PRINTER_STORAGE_KEYS.AUTO_CUT, String(newConfig.autoCut));
   if (newConfig.drawerKick !== undefined) localStorage.setItem(PRINTER_STORAGE_KEYS.DRAWER_KICK, String(newConfig.drawerKick));
 }
@@ -139,7 +142,7 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 2.
  */
 export function createTestReceiptCanvas(ip, port) {
   const canvas = document.createElement('canvas');
-  canvas.width = 576; // Standard 80mm ESC/POS width
+  canvas.width = PRINT_WIDTH_DOTS; // 576
   canvas.height = 420;
   const ctx = canvas.getContext('2d');
 
@@ -153,44 +156,44 @@ export function createTestReceiptCanvas(ip, port) {
 
   // Store Header
   ctx.font = 'bold 36px "Noto Sans Lao", Outfit, sans-serif';
-  ctx.fillText('MEIISHOP POS', 288, 55);
+  ctx.fillText('MEIISHOP POS', CENTER_X, 55);
 
   ctx.font = 'bold 24px "Noto Sans Lao", Outfit, sans-serif';
-  ctx.fillText('ໃບທົດສອບເຄື່ອງພິມ (PRINTER TEST)', 288, 95);
+  ctx.fillText('ໃບທົດສອບເຄື່ອງພິມ (PRINTER TEST)', CENTER_X, 95);
 
   ctx.font = '18px "Noto Sans Lao", Outfit, sans-serif';
-  ctx.fillText('EasyPrint ES-8803WA (TCP Socket 9100)', 288, 128);
+  ctx.fillText('EasyPrint ES-8803WA (TCP Socket 9100)', CENTER_X, 128);
 
   // Separator Line
   ctx.beginPath();
   ctx.lineWidth = 2;
-  ctx.moveTo(30, 145);
-  ctx.lineTo(546, 145);
+  ctx.moveTo(LEFT_MARGIN, 145);
+  ctx.lineTo(RIGHT_EDGE, 145);
   ctx.stroke();
 
-  // Test Details (Left / Right aligned)
+  // Test Details (Left aligned)
   ctx.textAlign = 'left';
   ctx.font = '20px "Noto Sans Lao", Outfit, sans-serif';
   const now = new Date();
   const dateStr = now.toLocaleDateString('lo-LA') + ' ' + now.toLocaleTimeString();
 
-  ctx.fillText(`ວັນທີ & ເວລາ: ${dateStr}`, 40, 185);
-  ctx.fillText(`IP ເຄື່ອງພິມ: ${ip}:${port}`, 40, 220);
-  ctx.fillText(`ລະບົບຕົວໜັງສື: Noto Sans Lao ພາສາລາວ 100%`, 40, 255);
-  ctx.fillText(`ຄວາມກວ້າງເຈ້ຍ: 80mm (576 dots monochrome)`, 40, 290);
-  ctx.fillText(`ສະຖານະ: ເຊື່ອມຕໍ່ສຳເລັດ • ພ້ອມໃຊ້ງານຂາຍ`, 40, 325);
+  ctx.fillText(`ວັນທີ & ເວລາ: ${dateStr}`, LEFT_MARGIN + 24, 185);
+  ctx.fillText(`IP ເຄື່ອງພິມ: ${ip}:${port}`, LEFT_MARGIN + 24, 220);
+  ctx.fillText(`ລະບົບຕົວໜັງສື: Noto Sans Lao ພາສາລາວ 100%`, LEFT_MARGIN + 24, 255);
+  ctx.fillText(`ຄວາມກວ້າງເຈ້ຍ: 80mm K80 (576 dots monochrome)`, LEFT_MARGIN + 24, 290);
+  ctx.fillText(`ສະຖານະ: ເຊື່ອມຕໍ່ສຳເລັດ • ພ້ອມໃຊ້ງານຂາຍ`, LEFT_MARGIN + 24, 325);
 
   // Separator Line
   ctx.beginPath();
   ctx.lineWidth = 2;
-  ctx.moveTo(30, 345);
-  ctx.lineTo(546, 345);
+  ctx.moveTo(LEFT_MARGIN, 345);
+  ctx.lineTo(RIGHT_EDGE, 345);
   ctx.stroke();
 
   // Footer
   ctx.textAlign = 'center';
   ctx.font = 'italic 18px "Noto Sans Lao", Outfit, sans-serif';
-  ctx.fillText('ຂອບໃຈທີ່ເລືອກໃຊ້ລະບົບ MeiiShop Cloud POS', 288, 380);
+  ctx.fillText('ຂອບໃຈທີ່ເລືອກໃຊ້ລະບົບ MeiiShop Cloud POS', CENTER_X, 380);
 
   return canvas;
 }
@@ -213,7 +216,7 @@ export async function testPrinterConnection(ip, port, { printSlip = true } = {})
     const escPosBytes = canvasToEscPosRaster(testCanvas, {
       kickCashDrawer: config.drawerKick,
       cutPaper: config.autoCut,
-      luminanceThreshold: 185,
+      luminanceThreshold: 160,
     });
     return await sendRawBytesViaTcp(targetIp, targetPort, escPosBytes, { timeoutSec: 2.5 });
   }
@@ -237,11 +240,11 @@ export async function openCashDrawerDirect() {
 }
 
 /**
- * Isolated Iframe Print for Thermal Receipts
+ * Isolated Iframe Print for Thermal Receipts (Browser fallback)
  * Creates a dedicated hidden iframe containing ONLY the receipt HTML and fonts,
  * completely avoiding browser modal clipping, full-screen overflow, and multiple blank pages.
  */
-export async function printThermalElementDirect(elementId = 'thermal-receipt-print-area', paperWidth = 80) {
+export async function printThermalElementDirect(elementId = 'thermal-receipt-print-area') {
   const sourceEl = document.getElementById(elementId);
   if (!sourceEl) {
     window.print();
@@ -274,11 +277,10 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
   // Clone source HTML
   const contentHtml = sourceEl.outerHTML;
 
-  const is58 = Number(paperWidth) === 58;
-  const targetWidthPx = is58 ? 280 : 380;
-  const targetLabel = is58 ? '58mm' : '80mm';
+  // Fixed 80mm width only
+  const targetWidthPx = 380;
 
-  // Extract all compiled CSS rules from active document stylesheets (Tailwind utilities, flex, widths, etc.)
+  // Extract all compiled CSS rules from active document stylesheets
   let compiledCss = '';
   try {
     for (const sheet of Array.from(document.styleSheets)) {
@@ -309,7 +311,7 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
       <head>
         <meta charset="utf-8" />
         <base href="${origin}/" />
-        <title>Receipt Print (${targetLabel})</title>
+        <title>Receipt Print (80mm K80)</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+Lao:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -509,33 +511,29 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
 }
 
 /**
- * Intelligent Smart Print Dispatcher
+ * Intelligent Smart Print Dispatcher — 80mm K80 ONLY (576 dots)
  *
  * 1. Native Platform (Capacitor iOS/Android) + Configured Printer IP:
- *    - Captures DOM element `#thermal-receipt-print-area` as a high-density 1-bit monochrome canvas
- *    - Generates ESC/POS raster byte stream (`GS v 0`)
- *    - Sends directly via TCP Socket to `IP:Port` (Port 9100) with strict 3.5s timeout
- *    - If printer cannot be found or connection fails, immediately stops spinner and throws error!
+ *    - Captures DOM element `#thermal-receipt-print-area` as a 576px-wide canvas
+ *    - Generates ESC/POS raster byte stream (`GS v 0`) at exactly 576 dots
+ *    - Sends directly via TCP Socket to `IP:Port` (Port 9100) with strict 2.5s timeout
  *
  * 2. Web Browser (Safari, Chrome) or Fallback:
  *    - Prints only receipt DOM in isolated single-page thermal iframe
  *
  * @param {Object} options
  * @param {string} [options.elementId='thermal-receipt-print-area'] DOM element ID of the receipt
- * @param {Object} [options.receipt] Receipt data object
- * @param {number} [options.paperWidth=80] Thermal paper width (80 or 58)
+ * @param {Object} [options.receipt] Receipt data object (unused in raster mode but kept for API compat)
  * @param {boolean} [options.allowFallback=false] Fallback on socket error
  * @returns {Promise<{success: boolean, mode: 'socket'|'browser', message: string}>}
  */
 export async function printReceiptSmart({
   elementId = 'thermal-receipt-print-area',
   receipt = null,
-  paperWidth = 80,
   allowFallback = false,
 } = {}) {
   const isNative = Capacitor.isNativePlatform();
   const config = getPrinterConfig();
-  const activePaperWidth = paperWidth || config.paperWidth || 80;
 
   // CASE 1: Native Capacitor App (Thermal ESC/POS via TCP Socket)
   if (isNative) {
@@ -548,9 +546,6 @@ export async function printReceiptSmart({
     if (!targetElement) {
       throw new Error(`ບໍ່ພົບ DOM Element #${elementId} ເພື່ອສັ່ງພິມ.`);
     }
-
-    // Standard printer widths in dots: 80mm = 576 dots, 58mm = 384 dots
-    const targetWidth = activePaperWidth === 58 ? 384 : 576;
 
     // 1. Safe font readiness check: tối đa 1 giây.
     // Khi iPad kết nối vào Wi-Fi của máy in (mạng nội bộ không có Internet),
@@ -567,20 +562,20 @@ export async function printReceiptSmart({
     }
 
     try {
-      // Render Canvas từ element hóa đơn với skipFonts = true để html-to-image không cố fetch font online
+      // Render Canvas từ element hóa đơn tại chính xác 576px width
       let canvas = null;
       try {
         const renderPromise = toCanvas(targetElement, {
-          width: targetWidth,
-          pixelRatio: 1,
+          width: PRINT_WIDTH_DOTS,  // Force exactly 576px
+          pixelRatio: 1,            // 1:1 pixel mapping, NO retina scaling
           backgroundColor: '#ffffff',
-          skipFonts: true, // Cực kỳ quan trọng: ngăn html-to-image chờ font từ xa khi offline!
+          skipFonts: true,          // Ngăn html-to-image chờ font từ xa khi offline
           style: {
             margin: '0',
-            padding: activePaperWidth === 58 ? '4px' : '8px',
-            width: `${targetWidth}px`,
-            maxWidth: `${targetWidth}px`,
-            minWidth: `${targetWidth}px`,
+            padding: '12px 16px',
+            width: `${PRINT_WIDTH_DOTS}px`,
+            maxWidth: `${PRINT_WIDTH_DOTS}px`,
+            minWidth: `${PRINT_WIDTH_DOTS}px`,
             boxSizing: 'border-box',
             fontFamily: "'Noto Sans Lao', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, sans-serif",
             transform: 'none',
@@ -598,16 +593,16 @@ export async function printReceiptSmart({
         // Fallback: Thử lại 1 lần nữa với cài đặt tối giản nhất không chặn
         try {
           canvas = await toCanvas(targetElement, {
-            width: targetWidth,
+            width: PRINT_WIDTH_DOTS,
             pixelRatio: 1,
             backgroundColor: '#ffffff',
             skipFonts: true,
             style: {
               margin: '0',
-              padding: activePaperWidth === 58 ? '4px' : '8px',
-              width: `${targetWidth}px`,
-              maxWidth: `${targetWidth}px`,
-              minWidth: `${targetWidth}px`,
+              padding: '12px 16px',
+              width: `${PRINT_WIDTH_DOTS}px`,
+              maxWidth: `${PRINT_WIDTH_DOTS}px`,
+              minWidth: `${PRINT_WIDTH_DOTS}px`,
               boxSizing: 'border-box',
             },
           });
@@ -621,12 +616,13 @@ export async function printReceiptSmart({
         throw new Error('ບໍ່ສາມາດສ້າງຮູບໃບບິນ (Canvas is empty)');
       }
 
-      // Convert Canvas to ESC/POS Raster Bytes with optimal contrast & exact full-width fit
+      // Convert Canvas to ESC/POS Raster Bytes
+      // Canvas should already be 576px from toCanvas, but canvasToEscPosRaster
+      // will re-scale if needed (safety net)
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: config.drawerKick,
         cutPaper: config.autoCut,
-        luminanceThreshold: 200, // Higher threshold captures crisp text and fine Lao tone marks without washing out
-        targetDots: targetWidth, // Guarantee exact 576 dots (80mm) or 384 dots (58mm) full-width fill
+        luminanceThreshold: 160, // Crisp text threshold for thermal printing
       });
 
       // Transmit directly to hardware thermal printer with strict 2.5s fail-fast timeout
@@ -642,7 +638,7 @@ export async function printReceiptSmart({
 
       if (allowFallback) {
         console.warn('[printerService] Falling back to isolated browser print');
-        await printThermalElementDirect(elementId, activePaperWidth);
+        await printThermalElementDirect(elementId);
         return {
           success: true,
           mode: 'browser',
@@ -657,7 +653,7 @@ export async function printReceiptSmart({
   }
 
   // CASE 2: Web Browser (Safari, Chrome, etc.)
-  await printThermalElementDirect(elementId, activePaperWidth);
+  await printThermalElementDirect(elementId);
   return {
     success: true,
     mode: 'browser',

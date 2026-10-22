@@ -2784,8 +2784,6 @@ export default function App() {
         isOpen={receiptModalOpen}
         onClose={() => setReceiptModalOpen(false)}
         receipt={selectedReceiptForView}
-        paperWidth={receiptPaperWidth}
-        setPaperWidth={setReceiptPaperWidth}
         onCancelReceipt={handleCancelTransaction}
         onAlert={openAlert}
       />

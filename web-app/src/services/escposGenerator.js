@@ -1,70 +1,103 @@
 /**
  * ESC/POS Generator & Monochrome Rasterizer for Thermal Printers
- * Supports standard retail thermal printers (EasyPrint ES-8803WA, Xprinter, Epson, etc.)
- * Compatible with 80mm (576 dots) and 58mm (384 dots) widths.
+ * ═══════════════════════════════════════════════════════════════
+ * HARDCODED: 80mm K80 Standard (576 dots = 72 bytes/line)
+ * Protocol: GS v 0 (Raster Bit Image)
+ * Luminance: BT.601 (0.299R + 0.587G + 0.114B)
+ *
+ * Compatible with: EasyPrint ES-8803WA, Xprinter, Epson TM-series, Star TSP
  */
 
-// ESC/POS Commands
+// ─── ESC/POS Command Constants ───────────────────────────────────────────────
 export const ESC_INIT = [0x1b, 0x40]; // ESC @ (Initialize printer)
 export const ESC_DRAWER_KICK = [0x1b, 0x70, 0x00, 0x19, 0xfa]; // ESC p 0 25 250 (Kick cash drawer)
 export const GS_CUT_PARTIAL = [0x1d, 0x56, 0x42, 0x00]; // GS V 66 0 (Partial cut with feed)
 export const ESC_FEED_LINES = (n = 3) => [0x1b, 0x64, n]; // ESC d n (Feed n lines)
 
+// ─── Hardcoded K80 Constants ─────────────────────────────────────────────────
+const PRINT_WIDTH_DOTS = 576;    // 80mm thermal paper = 576 dots
+const WIDTH_BYTES = 72;          // 576 / 8 = 72 bytes per line
+
 /**
- * Convert Canvas image data to ESC/POS Monochrome 1-bit raster command (`GS v 0`)
- * Luminance calculation: 0.299*R + 0.587*G + 0.114*B < threshold => 1 (black dot)
+ * Convert Canvas to ESC/POS 1-bit Monochrome Raster (GS v 0)
+ *
+ * CRITICAL: The input canvas MUST be exactly 576px wide.
+ * If sourceCanvas.width !== 576, it will be scaled to 576px using
+ * nearest-neighbor interpolation (no anti-aliasing) to preserve sharp text edges.
+ *
+ * Algorithm:
+ *   1. Ensure canvas is exactly 576px wide
+ *   2. Extract pixel data via getImageData
+ *   3. For each pixel row, pack 8 pixels into 1 byte (MSB = leftmost pixel)
+ *   4. Pixel is BLACK (bit=1) if: alpha > 128 AND luminance < threshold
+ *   5. Split into chunks of max 256 lines to avoid printer buffer overflow
+ *   6. Each chunk gets its own GS v 0 header
+ *
+ * @param {HTMLCanvasElement} sourceCanvas - Canvas rendered at 576px width
+ * @param {Object} options
+ * @param {boolean} [options.kickCashDrawer=true] - Send ESC p drawer kick command
+ * @param {boolean} [options.cutPaper=true] - Send GS V partial cut command
+ * @param {number} [options.luminanceThreshold=160] - Brightness cutoff (0-255). Lower = darker threshold.
+ * @returns {Uint8Array} Complete ESC/POS byte stream ready for TCP transmission
  */
-export function canvasToEscPosRaster(sourceCanvas, { kickCashDrawer = true, cutPaper = true, luminanceThreshold = 180, targetDots = null } = {}) {
-  // If targetDots is specified and different from sourceCanvas.width, scale onto dedicated high-contrast canvas
+export function canvasToEscPosRaster(sourceCanvas, {
+  kickCashDrawer = true,
+  cutPaper = true,
+  luminanceThreshold = 160,
+} = {}) {
+  // ─── Step 1: Ensure exact 576px width ───────────────────────────────
   let canvas = sourceCanvas;
-  if (targetDots && targetDots > 0 && sourceCanvas.width !== targetDots) {
-    const scale = targetDots / sourceCanvas.width;
+  if (sourceCanvas.width !== PRINT_WIDTH_DOTS) {
+    const scale = PRINT_WIDTH_DOTS / sourceCanvas.width;
     const scaledHeight = Math.round(sourceCanvas.height * scale);
     const scaledCanvas = document.createElement('canvas');
-    scaledCanvas.width = targetDots;
+    scaledCanvas.width = PRINT_WIDTH_DOTS;
     scaledCanvas.height = scaledHeight;
     const sCtx = scaledCanvas.getContext('2d');
-    sCtx.imageSmoothingEnabled = false; // Nearest neighbor preserves sharp text edges
+    // Nearest-neighbor: preserves crisp text edges for thermal printing
+    sCtx.imageSmoothingEnabled = false;
     sCtx.fillStyle = '#ffffff';
-    sCtx.fillRect(0, 0, targetDots, scaledHeight);
-    sCtx.drawImage(sourceCanvas, 0, 0, targetDots, scaledHeight);
+    sCtx.fillRect(0, 0, PRINT_WIDTH_DOTS, scaledHeight);
+    sCtx.drawImage(sourceCanvas, 0, 0, PRINT_WIDTH_DOTS, scaledHeight);
     canvas = scaledCanvas;
   }
 
+  // ─── Step 2: Extract raw RGBA pixel data ────────────────────────────
   const ctx = canvas.getContext('2d');
-  const width = canvas.width;
+  const width = canvas.width;   // Always 576
   const height = canvas.height;
   const imgData = ctx.getImageData(0, 0, width, height);
   const pixels = imgData.data;
 
-  const widthBytes = Math.ceil(width / 8);
   const bytes = [];
 
-  // 1. Initialize printer
+  // ─── Step 3: ESC @ Initialize printer ───────────────────────────────
   bytes.push(...ESC_INIT);
 
-  // 2. Open Cash Drawer if requested
+  // ─── Step 4: Cash Drawer Kick (before print) ────────────────────────
   if (kickCashDrawer) {
     bytes.push(...ESC_DRAWER_KICK);
   }
 
-  // Split large receipts into chunks (max 512 lines) to avoid printer buffer overflow
-  const maxChunkLines = 512;
+  // ─── Step 5: Convert to 1-bit bitmap, chunked GS v 0 ───────────────
+  // Max 256 lines per chunk to prevent printer buffer overflow
+  const MAX_CHUNK_LINES = 256;
   let currentY = 0;
 
   while (currentY < height) {
-    const chunkHeight = Math.min(maxChunkLines, height - currentY);
+    const chunkHeight = Math.min(MAX_CHUNK_LINES, height - currentY);
 
-    const xL = widthBytes % 256;
-    const xH = Math.floor(widthBytes / 256);
-    const yL = chunkHeight % 256;
-    const yH = Math.floor(chunkHeight / 256);
+    // GS v 0 header: 0x1D 0x76 0x30 0x00 xL xH yL yH
+    const xL = WIDTH_BYTES & 0xff;        // 72
+    const xH = (WIDTH_BYTES >> 8) & 0xff; // 0
+    const yL = chunkHeight & 0xff;
+    const yH = (chunkHeight >> 8) & 0xff;
 
-    // GS v 0 0 xL xH yL yH
     bytes.push(0x1d, 0x76, 0x30, 0x00, xL, xH, yL, yH);
 
+    // Rasterize each scanline
     for (let y = currentY; y < currentY + chunkHeight; y++) {
-      for (let byteX = 0; byteX < widthBytes; byteX++) {
+      for (let byteX = 0; byteX < WIDTH_BYTES; byteX++) {
         let byteVal = 0;
         for (let bit = 0; bit < 8; bit++) {
           const pixelX = byteX * 8 + bit;
@@ -75,12 +108,13 @@ export function canvasToEscPosRaster(sourceCanvas, { kickCashDrawer = true, cutP
             const b = pixels[idx + 2];
             const a = pixels[idx + 3];
 
+            // BT.601 luminance: 0.299R + 0.587G + 0.114B
             const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-            // Black text on white background:
-            // Any pixel that is dark (lum < luminanceThreshold) and visible (a > 30) is printed.
-            // Also handle transparent pixels: default is white paper, so only non-white/dark counts.
-            if (a > 30 && lum < luminanceThreshold) {
-              byteVal |= 1 << (7 - bit);
+
+            // Pixel is BLACK (thermal burn) if:
+            //   - Visible (alpha > 128) AND dark enough (lum < threshold)
+            if (a > 128 && lum < luminanceThreshold) {
+              byteVal |= (0x80 >> bit); // MSB = leftmost pixel
             }
           }
         }
@@ -91,12 +125,11 @@ export function canvasToEscPosRaster(sourceCanvas, { kickCashDrawer = true, cutP
     currentY += chunkHeight;
   }
 
-  // 3. Feed 4 lines so bill clears the print head cutter
-  bytes.push(...ESC_FEED_LINES(4));
+  // ─── Step 6: Feed paper past cutter & cut ───────────────────────────
+  bytes.push(...ESC_FEED_LINES(3)); // Feed 3 lines to clear print head
 
-  // 4. Cut paper
   if (cutPaper) {
-    bytes.push(...GS_CUT_PARTIAL);
+    bytes.push(...GS_CUT_PARTIAL); // GS V 66 0 (Partial cut)
   }
 
   return new Uint8Array(bytes);
@@ -104,8 +137,9 @@ export function canvasToEscPosRaster(sourceCanvas, { kickCashDrawer = true, cutP
 
 /**
  * Fallback Text-only ESC/POS builder (for standard ASCII / Latin / numbers)
+ * Only used when canvas rendering is unavailable
  */
-export function buildTextEscPosReceipt(receipt, { paperWidth = 80, kickCashDrawer = true, cutPaper = true } = {}) {
+export function buildTextEscPosReceipt(receipt, { kickCashDrawer = true, cutPaper = true } = {}) {
   const bytes = [];
   bytes.push(...ESC_INIT);
   if (kickCashDrawer) bytes.push(...ESC_DRAWER_KICK);
@@ -131,11 +165,12 @@ export function buildTextEscPosReceipt(receipt, { paperWidth = 80, kickCashDrawe
 
 /**
  * Convert Uint8Array to Base64 string for Capacitor plugin transfer
+ * Processes in 8KB chunks to avoid call stack size limits
  */
 export function uint8ArrayToBase64(uint8) {
   let binary = '';
   const len = uint8.byteLength;
-  const chunkSize = 8192; // Process in chunks to avoid call stack limits
+  const chunkSize = 8192;
   for (let i = 0; i < len; i += chunkSize) {
     const chunk = uint8.subarray(i, Math.min(i + chunkSize, len));
     binary += String.fromCharCode.apply(null, chunk);

@@ -10,7 +10,7 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react';
 import { formatKip } from '../utils/formatters';
-import { printReceiptSmart, getPrinterConfig, savePrinterConfig } from '../services/printerService';
+import { printReceiptSmart, getPrinterConfig } from '../services/printerService';
 import { Capacitor } from '@capacitor/core';
 import {
   playSuccessBeep,
@@ -24,11 +24,11 @@ export default function ReceiptModal({
   isOpen,
   onClose,
   receipt,
-  paperWidth,
-  setPaperWidth,
   onCancelReceipt,
   onAlert,
 }) {
+  // K80 80mm hardcoded — no 58mm support
+  const paperWidth = 80;
   if (!isOpen || !receipt) return null;
 
   const isCancelled = receipt.status === 'cancelled' || receipt.isCancelled;
@@ -97,7 +97,7 @@ export default function ReceiptModal({
       btnCancel: 'ຍົກເລີກບິນ',
       btnCancelled: 'ບິນນີ້ຍົກເລີກແລ້ວ',
       btnClose: 'ປິດໜ້າຕ່າງ',
-      btnPrint: (width) => `ພິມໃບບິນ (${width}mm)`,
+      btnPrint: 'ພິມໃບບິນ (80mm)',
       btnPrintProgress: 'ກຳລັງກວດສອບ & ພິມ...',
     },
     vi: {
@@ -147,7 +147,7 @@ export default function ReceiptModal({
       btnCancel: 'Hủy hóa đơn',
       btnCancelled: 'Hóa đơn đã hủy',
       btnClose: 'Đóng cửa sổ',
-      btnPrint: (width) => `In hóa đơn (${width}mm)`,
+      btnPrint: 'In hóa đơn (80mm)',
       btnPrintProgress: 'Đang chuẩn bị & in...',
     },
   };
@@ -208,7 +208,6 @@ export default function ReceiptModal({
       const printPromise = printReceiptSmart({
         elementId: 'thermal-receipt-print-area',
         receipt,
-        paperWidth,
         allowFallback: !Capacitor.isNativePlatform(),
       });
 
@@ -254,7 +253,7 @@ export default function ReceiptModal({
           </div>
         )}
 
-        {/* Top Toolbar: Language Selector (Lao / Vietnamese), 80mm vs 58mm Paper Toggle & Close */}
+        {/* Top Toolbar: Language Selector (Lao / Vietnamese) & Close — 80mm K80 hardcoded */}
         <div className="flex items-center justify-between gap-1.5 pb-2 border-b border-slate-200 bg-white p-2.5 rounded-2xl no-print">
           {/* Left: Language Toggle */}
           <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0">
@@ -290,36 +289,9 @@ export default function ReceiptModal({
             </button>
           </div>
 
-          {/* Right: Paper Width (80mm / 58mm) & Close */}
+          {/* Right: 80mm K80 badge & Close */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-              <button
-                type="button"
-                onClick={() => {
-                  playUnitChangeBeep('receipt');
-                  setPaperWidth(80);
-                  savePrinterConfig({ paperWidth: 80 });
-                }}
-                className={`px-2 py-1 rounded text-[10.5px] font-bold transition-all cursor-pointer ${
-                  paperWidth === 80 ? 'bg-teal-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                80mm
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  playUnitChangeBeep('receipt');
-                  setPaperWidth(58);
-                  savePrinterConfig({ paperWidth: 58 });
-                }}
-                className={`px-2 py-1 rounded text-[10.5px] font-bold transition-all cursor-pointer ${
-                  paperWidth === 58 ? 'bg-teal-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                58mm
-              </button>
-            </div>
+            <span className="px-2 py-1 bg-teal-600 text-white rounded text-[10.5px] font-bold shadow-2xs select-none">K80 (576 dots)</span>
             <button
               type="button"
               onClick={() => {
@@ -339,10 +311,8 @@ export default function ReceiptModal({
           style={{
             fontFamily: receiptLanguage === 'vi' ? "'Be Vietnam Pro', 'Noto Sans Lao', sans-serif" : "'Noto Sans Lao', Outfit, sans-serif",
           }}
-          className={`bg-white mx-auto p-4 border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto ${
+          className={`bg-white mx-auto p-4 border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto paper-80mm w-full max-w-[380px] ${
             receiptLanguage === 'vi' ? 'font-vietnam' : 'font-lao'
-          } ${
-            paperWidth === 80 ? 'paper-80mm w-full max-w-[380px]' : 'paper-58mm w-full max-w-[280px]'
           }`}
         >
           {/* Store Header */}
@@ -740,7 +710,7 @@ export default function ReceiptModal({
             ) : (
               <Printer size={16} />
             )}
-            <span>{isPrinting ? L.btnPrintProgress : L.btnPrint(paperWidth)}</span>
+            <span>{isPrinting ? L.btnPrintProgress : L.btnPrint}</span>
           </button>
         </div>
       </div>
