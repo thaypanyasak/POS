@@ -10,7 +10,7 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react';
 import { formatKip } from '../utils/formatters';
-import { printReceiptSmart, getPrinterConfig } from '../services/printerService';
+import { printReceiptSmart, printViaNativeSpooler, getPrinterConfig } from '../services/printerService';
 import { Capacitor } from '@capacitor/core';
 import {
   playSuccessBeep,
@@ -45,8 +45,20 @@ export default function ReceiptModal({
   // Bilingual Receipt Language: 'lo' (default) | 'vi'
   const [receiptLanguage, setReceiptLanguage] = useState('lo');
 
+  // Print Method: 'spooler' (AirPrint / OS Spooler - Nét Vector) | 'socket' (In nhanh qua TCP Socket)
+  const [printMethod, setPrintMethod] = useState(() => {
+    return getPrinterConfig().printMethod || 'spooler';
+  });
+
   const [isPrinting, setIsPrinting] = useState(false);
   const [printFeedback, setPrintFeedback] = useState(null);
+
+  const handleSelectPrintMethod = (method) => {
+    setPrintMethod(method);
+    try {
+      localStorage.setItem('pos_print_method', method);
+    } catch (_) {}
+  };
 
   // Comprehensive Bilingual Receipt Dictionary (Lao / Vietnamese)
   const LABELS = {
@@ -98,6 +110,10 @@ export default function ReceiptModal({
       btnCancelled: 'ບິນນີ້ຍົກເລີກແລ້ວ',
       btnClose: 'ປິດໜ້າຕ່າງ',
       btnPrint: 'ພິມໃບບິນ (80mm)',
+      btnPrintSpooler: 'ພິມລະບົບ (AirPrint)',
+      btnPrintSocket: 'ພິມດ່ວນ (Socket K80)',
+      btnSpoolerBadge: 'AirPrint / Vector',
+      btnSocketBadge: 'Socket K80',
       btnPrintProgress: 'ກຳລັງກວດສອບ & ພິມ...',
     },
     vi: {
@@ -148,6 +164,10 @@ export default function ReceiptModal({
       btnCancelled: 'Hóa đơn đã hủy',
       btnClose: 'Đóng cửa sổ',
       btnPrint: 'In hóa đơn (80mm)',
+      btnPrintSpooler: 'In qua AirPrint / Spooler',
+      btnPrintSocket: 'In nhanh (Socket K80)',
+      btnSpoolerBadge: 'AirPrint / Vector',
+      btnSocketBadge: 'Socket K80',
       btnPrintProgress: 'Đang chuẩn bị & in...',
     },
   };
@@ -188,31 +208,40 @@ export default function ReceiptModal({
 
   const L = LABELS[receiptLanguage] || LABELS.lo;
 
-  const handlePrint = async () => {
+  const handlePrint = async (overrideMethod = null) => {
     if (isPrinting) return;
     setIsPrinting(true);
     setPrintFeedback(null);
 
-    // Top-level safety timeout (max 4.5 seconds for complete render + print)
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(
-        () =>
-          reject(
-            new Error('ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (Timeout). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.')
-          ),
-        4500
-      )
-    );
+    const activeMethod = overrideMethod || printMethod;
 
     try {
-      const printPromise = printReceiptSmart({
-        elementId: 'thermal-receipt-print-area',
-        receipt,
-        language: receiptLanguage,
-        allowFallback: !Capacitor.isNativePlatform(),
-      });
+      let res;
+      if (activeMethod === 'spooler') {
+        // Native Print Spooler (AirPrint / OS Dialog) — Vector-sharp typography
+        res = await printViaNativeSpooler('thermal-receipt-print-area');
+      } else {
+        // Socket Print (Port 9100) — Direct ESC/POS with timeout
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error('ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (Timeout). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.')
+              ),
+            4500
+          )
+        );
 
-      const res = await Promise.race([printPromise, timeoutPromise]);
+        const printPromise = printReceiptSmart({
+          elementId: 'thermal-receipt-print-area',
+          receipt,
+          language: receiptLanguage,
+          allowFallback: true,
+          method: 'socket',
+        });
+
+        res = await Promise.race([printPromise, timeoutPromise]);
+      }
 
       if (res && res.success) {
         setPrintFeedback({
@@ -226,6 +255,24 @@ export default function ReceiptModal({
       }
     } catch (err) {
       console.error('Print error:', err);
+
+      // Auto fallback to spooler if socket failed
+      if (activeMethod === 'socket') {
+        try {
+          console.warn('Socket print failed, attempting fallback to native spooler...');
+          const fallbackRes = await printViaNativeSpooler('thermal-receipt-print-area');
+          if (fallbackRes && fallbackRes.success) {
+            setPrintFeedback({
+              type: 'success',
+              message: 'ບໍ່ສາມາດເຊື່ອມຕໍ່ Socket, ໄດ້ປ່ຽນໄປພິມຜ່ານ AirPrint / Print Spooler ແທນ.',
+            });
+            playSuccessBeep();
+            setTimeout(() => setPrintFeedback(null), 4000);
+            return;
+          }
+        } catch (_) {}
+      }
+
       const errMsg = err?.message || 'ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ເຄື່ອງພິມ.';
       setPrintFeedback({
         type: 'error',
@@ -254,8 +301,8 @@ export default function ReceiptModal({
           </div>
         )}
 
-        {/* Top Toolbar: Language Selector (Lao / Vietnamese) & Close — 80mm K80 hardcoded */}
-        <div className="flex items-center justify-between gap-1.5 pb-2 border-b border-slate-200 bg-white p-2.5 rounded-2xl no-print">
+        {/* Top Toolbar: Language Selector & Print Mode Selector & Close — 80mm K80 hardcoded */}
+        <div className="flex flex-wrap items-center justify-between gap-1.5 pb-2 border-b border-slate-200 bg-white p-2.5 rounded-2xl no-print">
           {/* Left: Language Toggle */}
           <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0">
             <button
@@ -290,8 +337,42 @@ export default function ReceiptModal({
             </button>
           </div>
 
+          {/* Center: Print Method Selector (AirPrint/Spooler vs Direct Socket) */}
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                playUnitChangeBeep('receipt');
+                handleSelectPrintMethod('spooler');
+              }}
+              className={`px-2 py-1 rounded text-[10.5px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                printMethod === 'spooler'
+                  ? 'bg-indigo-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="ພິມຜ່ານລະບົບ AirPrint / Print Spooler (ຕົວໜັງສືຄົມຊັດ Vector)"
+            >
+              <span>🖨️ {L.btnSpoolerBadge}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playUnitChangeBeep('receipt');
+                handleSelectPrintMethod('socket');
+              }}
+              className={`px-2 py-1 rounded text-[10.5px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                printMethod === 'socket'
+                  ? 'bg-indigo-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="ພິມດ່ວນອັດຕະໂນມັດຜ່ານ TCP Socket (Port 9100)"
+            >
+              <span>⚡ {L.btnSocketBadge}</span>
+            </button>
+          </div>
+
           {/* Right: 80mm K80 badge & Close */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
             <span className="px-2 py-1 bg-teal-600 text-white rounded text-[10.5px] font-bold shadow-2xs select-none">K80 (576 dots)</span>
             <button
               type="button"
@@ -693,10 +774,27 @@ export default function ReceiptModal({
               playModalCloseBeep('receipt');
               onClose();
             }}
-            className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-white text-slate-700 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
+            className="py-2.5 px-3 rounded-xl text-xs font-bold bg-white text-slate-700 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
           >
             {L.btnClose}
           </button>
+
+          {/* Quick-action to trigger alternative mode with 1 click */}
+          <button
+            type="button"
+            onClick={() => {
+              playModalConfirmBeep('receipt');
+              const altMethod = printMethod === 'spooler' ? 'socket' : 'spooler';
+              handlePrint(altMethod);
+            }}
+            disabled={isPrinting}
+            className="py-2.5 px-2.5 rounded-xl text-xs font-bold bg-slate-200 hover:bg-slate-300 text-slate-800 border border-slate-300 transition-all cursor-pointer flex items-center gap-1 shrink-0"
+            title={printMethod === 'spooler' ? L.btnPrintSocket : L.btnPrintSpooler}
+          >
+            <span>{printMethod === 'spooler' ? '⚡ Socket' : '🖨️ AirPrint'}</span>
+          </button>
+
+          {/* Primary Print Button */}
           <button
             type="button"
             onClick={() => {
@@ -711,7 +809,13 @@ export default function ReceiptModal({
             ) : (
               <Printer size={16} />
             )}
-            <span>{isPrinting ? L.btnPrintProgress : L.btnPrint}</span>
+            <span>
+              {isPrinting
+                ? L.btnPrintProgress
+                : printMethod === 'spooler'
+                ? L.btnPrintSpooler
+                : L.btnPrintSocket}
+            </span>
           </button>
         </div>
       </div>

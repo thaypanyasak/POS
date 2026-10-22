@@ -3,6 +3,7 @@ import { toCanvas } from 'html-to-image';
 import { canvasToEscPosRaster, uint8ArrayToBase64, ESC_INIT, ESC_DRAWER_KICK } from './escposGenerator';
 import { renderReceiptCanvas } from './receiptCanvasEngine';
 import { TcpSocket } from '@deedarb/capacitor-tcp-socket';
+import { Printer } from '@capgo/capacitor-printer';
 
 // ─── K80 Hardcoded Constants ─────────────────────────────────────────────────
 const PRINT_WIDTH_DOTS = 576;  // 80mm K80 = 576 thermal dots
@@ -19,6 +20,7 @@ export const PRINTER_STORAGE_KEYS = {
   PORT: 'pos_printer_port',
   AUTO_CUT: 'pos_printer_auto_cut',
   DRAWER_KICK: 'pos_printer_drawer_kick',
+  PRINT_METHOD: 'pos_print_method', // 'spooler' (AirPrint / Vector) | 'socket' (Direct TCP Socket)
 };
 
 /**
@@ -29,6 +31,7 @@ export const DEFAULT_PRINTER_CONFIG = {
   port: 9100,
   autoCut: true,
   drawerKick: true,
+  printMethod: 'spooler', // Default to Native Print Spooler for vector-sharp text
 };
 
 /**
@@ -41,6 +44,7 @@ export function getPrinterConfig() {
     port: parseInt(localStorage.getItem(PRINTER_STORAGE_KEYS.PORT), 10) || DEFAULT_PRINTER_CONFIG.port,
     autoCut: localStorage.getItem(PRINTER_STORAGE_KEYS.AUTO_CUT) !== 'false',
     drawerKick: localStorage.getItem(PRINTER_STORAGE_KEYS.DRAWER_KICK) !== 'false',
+    printMethod: localStorage.getItem(PRINTER_STORAGE_KEYS.PRINT_METHOD) || DEFAULT_PRINTER_CONFIG.printMethod,
   };
 }
 
@@ -53,6 +57,7 @@ export function savePrinterConfig(newConfig) {
   if (newConfig.port !== undefined) localStorage.setItem(PRINTER_STORAGE_KEYS.PORT, String(newConfig.port));
   if (newConfig.autoCut !== undefined) localStorage.setItem(PRINTER_STORAGE_KEYS.AUTO_CUT, String(newConfig.autoCut));
   if (newConfig.drawerKick !== undefined) localStorage.setItem(PRINTER_STORAGE_KEYS.DRAWER_KICK, String(newConfig.drawerKick));
+  if (newConfig.printMethod !== undefined) localStorage.setItem(PRINTER_STORAGE_KEYS.PRINT_METHOD, String(newConfig.printMethod));
 }
 
 
@@ -512,36 +517,257 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
 }
 
 /**
+ * Print receipt via OS Native Print Spooler (AirPrint on iOS / Android Print Spooler / Web Print)
+ * Delivers absolute vector typography for Lao (Noto Sans Lao) & Vietnamese (Be Vietnam Pro) without bitmap grain.
+ *
+ * @param {string} [elementId='thermal-receipt-print-area'] DOM element ID of the receipt
+ * @returns {Promise<{success: boolean, mode: 'spooler'|'fallback', message: string}>}
+ */
+export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-area') {
+  if (typeof document === 'undefined') {
+    throw new Error('printViaNativeSpooler can only run in a browser/DOM environment.');
+  }
+
+  const targetElement = document.getElementById(elementId);
+  if (!targetElement) {
+    throw new Error(`ບໍ່ພົບ DOM Element #${elementId} ເພື່ອສັ່ງພິມ.`);
+  }
+
+  // 1. Trích xuất HTML từ phần tử
+  const contentHtml = targetElement.innerHTML;
+
+  // 2. Gom toàn bộ các thẻ <style> và <link rel="stylesheet"> hiện tại của trang
+  const origin = window.location.origin;
+  const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+    .map((el) => el.outerHTML)
+    .join('\n');
+
+  let compiledCss = '';
+  try {
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        const rules = sheet.cssRules || sheet.rules;
+        if (rules) {
+          for (const rule of Array.from(rules)) {
+            compiledCss += rule.cssText + '\n';
+          }
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  // 3. Bọc nội dung vào một document HTML chuẩn in nhiệt K80
+  const htmlDocument = `<!DOCTYPE html>
+<html lang="lo">
+  <head>
+    <meta charset="utf-8" />
+    <base href="${origin}/" />
+    <title>Receipt_MeiiShop</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+Lao:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    ${styles}
+    <style id="compiled-app-styles">
+      ${compiledCss}
+    </style>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+Lao:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+      @font-face {
+        font-family: 'Noto Sans Lao';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('${origin}/fonts/NotoSansLao-Regular.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'Noto Sans Lao';
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url('${origin}/fonts/NotoSansLao-Medium.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'Noto Sans Lao';
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+        src: url('${origin}/fonts/NotoSansLao-SemiBold.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'Noto Sans Lao';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('${origin}/fonts/NotoSansLao-Bold.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'Be Vietnam Pro';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('${origin}/fonts/BeVietnamPro-Regular.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'Be Vietnam Pro';
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url('${origin}/fonts/BeVietnamPro-Medium.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'Be Vietnam Pro';
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+        src: url('${origin}/fonts/BeVietnamPro-SemiBold.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'Be Vietnam Pro';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('${origin}/fonts/BeVietnamPro-Bold.ttf') format('truetype');
+      }
+
+      @page {
+        size: 80mm auto;
+        margin: 0;
+      }
+
+      *, *::before, *::after {
+        box-sizing: border-box !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      /* Ép chiều rộng vùng in: width: 72mm; margin: 0 auto; box-sizing: border-box; */
+      .thermal-receipt-spooler-wrapper,
+      #thermal-receipt-print-area,
+      #quotation-print-area {
+        width: 72mm !important;
+        max-width: 72mm !important;
+        min-width: 72mm !important;
+        margin: 0 auto !important;
+        padding: 0 4px !important;
+        box-sizing: border-box !important;
+        box-shadow: none !important;
+        border: none !important;
+        background: #ffffff !important;
+        overflow: visible !important;
+      }
+
+      .receipt-item-row {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+
+      img, svg, canvas {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    </style>
+  </head>
+  <body class="font-sans antialiased">
+    <div class="thermal-receipt-spooler-wrapper">
+      ${contentHtml}
+    </div>
+  </body>
+</html>`;
+
+  // 4. Gọi Printer plugin (AirPrint trên iOS / Android Print Spooler)
+  try {
+    if (typeof Printer !== 'undefined') {
+      if (typeof Printer.printHtml === 'function') {
+        await Printer.printHtml({
+          html: htmlDocument,
+          content: htmlDocument,
+          name: 'Receipt_MeiiShop',
+          orientation: 'portrait',
+        });
+      } else if (typeof Printer.print === 'function') {
+        await Printer.print({
+          content: htmlDocument,
+          html: htmlDocument,
+          name: 'Receipt_MeiiShop',
+          orientation: 'portrait',
+        });
+      } else {
+        await printThermalElementDirect(elementId);
+      }
+    } else {
+      await printThermalElementDirect(elementId);
+    }
+
+    return {
+      success: true,
+      mode: 'spooler',
+      message: 'ສົ່ງໃບບິນໄປຍັງລະບົບພິມ (AirPrint / Print Spooler) ສຳເລັດ!',
+    };
+  } catch (printErr) {
+    console.warn('[printerService] Printer plugin error, falling back to browser print:', printErr);
+    await printThermalElementDirect(elementId);
+    return {
+      success: true,
+      mode: 'fallback',
+      message: 'ເປີດໜ້າຕ່າງພິມລະບົບສຳເລັດ.',
+    };
+  }
+}
+
+/**
  * Intelligent Smart Print Dispatcher — 80mm K80 ONLY (576 dots)
  *
- * 1. Native Platform (Capacitor iOS/Android) + Configured Printer IP:
- *    - Captures DOM element `#thermal-receipt-print-area` as a 576px-wide canvas
- *    - Generates ESC/POS raster byte stream (`GS v 0`) at exactly 576 dots
- *    - Sends directly via TCP Socket to `IP:Port` (Port 9100) with strict 2.5s timeout
+ * Supports 2 Modes:
+ * 1. 'spooler': Native OS Print Spooler (AirPrint / Android Print / Web Print)
+ *    - Vector-sharp typography, perfect font curves for Lao & Vietnamese like Microsoft Word
  *
- * 2. Web Browser (Safari, Chrome) or Fallback:
- *    - Prints only receipt DOM in isolated single-page thermal iframe
+ * 2. 'socket': Direct ESC/POS RAW TCP Socket (Port 9100)
+ *    - Silent background printing directly to EasyPrint ES-8803WA without dialogs
  *
  * @param {Object} options
  * @param {string} [options.elementId='thermal-receipt-print-area'] DOM element ID of the receipt
- * @param {Object} [options.receipt] Receipt data object (unused in raster mode but kept for API compat)
+ * @param {Object} [options.receipt] Receipt data object
+ * @param {string} [options.language='lo'] Bilingual language ('lo'|'vi')
  * @param {boolean} [options.allowFallback=false] Fallback on socket error
- * @returns {Promise<{success: boolean, mode: 'socket'|'browser', message: string}>}
+ * @param {string|null} [options.method=null] Force print mode ('spooler' | 'socket')
+ * @returns {Promise<{success: boolean, mode: string, message: string}>}
  */
 export async function printReceiptSmart({
   elementId = 'thermal-receipt-print-area',
   receipt = null,
   language = 'lo',
   allowFallback = false,
+  method = null,
 } = {}) {
   const isNative = Capacitor.isNativePlatform();
   const config = getPrinterConfig();
+  const activeMethod = method || config.printMethod;
 
-  // CASE 1: Native Capacitor App (Thermal ESC/POS via TCP Socket)
+  // MODE 1: Print via Native Spooler (AirPrint / Android Print Spooler)
+  if (activeMethod === 'spooler') {
+    return await printViaNativeSpooler(elementId);
+  }
+
+  // MODE 2: Native Capacitor App (Thermal ESC/POS via TCP Socket)
   if (isNative) {
     const rawIp = (config.ip || '').trim();
     if (!rawIp) {
-      throw new Error('ຍັງບໍ່ໄດ້ກຳນົດ IP ເຄື່ອງພິມ. ກະລຸນາໄປທີ່ໜ້າ "ຕັ້ງຄ່າ (Settings)" ເພື່ອກຳນົດ IP ເຄື່ອງພິມ.');
+      // If no printer IP is configured yet, route directly to system print spooler
+      return await printViaNativeSpooler(elementId);
     }
 
     // 1. Safe font readiness check: tối đa 600ms (không treo nếu offline)
@@ -615,14 +841,8 @@ export async function printReceiptSmart({
       console.error('[printerService] Direct native print failed:', err);
 
       if (allowFallback) {
-        console.warn('[printerService] Falling back to isolated browser print');
-        await printThermalElementDirect(elementId);
-        return {
-          success: true,
-          mode: 'browser',
-          message: `ບໍ່ສາມາດເຊື່ອມຕໍ່ ${rawIp}:${config.port}. ໄດ້ປ່ຽນໄປພິມຜ່ານລະບົບ Browser ແທນ. (${err.message})`,
-          error: err.message,
-        };
+        console.warn('[printerService] Falling back to native spooler print');
+        return await printViaNativeSpooler(elementId);
       }
 
       // DO NOT HANG: Throw clear error so UI stops spinner and displays error immediately!
@@ -631,12 +851,7 @@ export async function printReceiptSmart({
   }
 
   // CASE 2: Web Browser (Safari, Chrome, etc.)
-  await printThermalElementDirect(elementId);
-  return {
-    success: true,
-    mode: 'browser',
-    message: 'ເປີດໜ້າຕ່າງພິມຂອງລະບົບ (System Print Dialog) ສຳເລັດ.',
-  };
+  return await printViaNativeSpooler(elementId);
 }
 
 export default {
@@ -646,6 +861,7 @@ export default {
   testPrinterConnection,
   openCashDrawerDirect,
   printReceiptSmart,
+  printViaNativeSpooler,
   printThermalElementDirect,
   PRINTER_STORAGE_KEYS,
   DEFAULT_PRINTER_CONFIG,

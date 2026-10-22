@@ -110,11 +110,12 @@ export default function SettingsView({
     }
   };
 
-  // Printer Settings State (LAN / Wi-Fi IP, Port, Paper Width)
+  // Printer Settings State (LAN / Wi-Fi IP, Port, Paper Width, Print Method)
   const [printerIp, setPrinterIp] = useState(() => getPrinterConfig().ip);
   const [printerPort, setPrinterPort] = useState(() => getPrinterConfig().port);
   const [printerAutoCut, setPrinterAutoCut] = useState(() => getPrinterConfig().autoCut);
   const [printerDrawerKick, setPrinterDrawerKick] = useState(() => getPrinterConfig().drawerKick);
+  const [printerMethod, setPrinterMethod] = useState(() => getPrinterConfig().printMethod || 'spooler');
 
   const [localPaperWidth, setLocalPaperWidth] = useState(() => getPrinterConfig().paperWidth || receiptPaperWidth);
   const paperWidth = setReceiptPaperWidth ? receiptPaperWidth : localPaperWidth;
@@ -134,9 +135,10 @@ export default function SettingsView({
       paperWidth,
       autoCut: printerAutoCut,
       drawerKick: printerDrawerKick,
+      printMethod: printerMethod,
     });
     onAlert?.(
-      `ບັນທຶກການຕັ້ງຄ່າເຄື່ອງພິມ ${printerIp.trim()}:${printerPort} (${paperWidth}mm) ສຳເລັດ!`,
+      `ບັນທຶກການຕັ້ງຄ່າເຄື່ອງພິມ ${printerIp.trim()}:${printerPort} (${paperWidth}mm - ${printerMethod === 'spooler' ? 'AirPrint Spooler' : 'Direct Socket'}) ສຳເລັດ!`,
       'ສຳເລັດ',
       'success'
     );
@@ -776,6 +778,50 @@ export default function SettingsView({
                     </span>
                   </div>
                   <CheckCircle size={17} weight="fill" className="text-teal-600 shrink-0" />
+                </div>
+              </div>
+
+              {/* Print Engine Mode: Native Spooler (Vector) vs Direct Socket */}
+              <div className="mb-3.5">
+                <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
+                  ຮູບແບບການພິມເລີ່ມຕົ້ນ (Default Print Mode)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPrinterMethod('spooler')}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      printerMethod === 'spooler'
+                        ? 'bg-indigo-50 border-indigo-500 text-indigo-950 ring-1 ring-indigo-500 shadow-2xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold block">🖨️ AirPrint / Spooler</span>
+                      {printerMethod === 'spooler' && <CheckCircle size={15} weight="fill" className="text-indigo-600" />}
+                    </div>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">
+                      ຕົວໜັງສື Vector ຄົມຊັດ ຄື Word
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPrinterMethod('socket')}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      printerMethod === 'socket'
+                        ? 'bg-teal-50 border-teal-500 text-teal-950 ring-1 ring-teal-500 shadow-2xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold block">⚡ Direct Socket</span>
+                      {printerMethod === 'socket' && <CheckCircle size={15} weight="fill" className="text-teal-600" />}
+                    </div>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">
+                      ພິມງຽບໆ Port 9100
+                    </span>
+                  </button>
                 </div>
               </div>
 
