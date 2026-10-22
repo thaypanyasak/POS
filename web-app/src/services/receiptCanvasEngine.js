@@ -1,12 +1,15 @@
 /**
  * Pure Canvas 2D Receipt Drawing Engine — MeiiShop POS
  * ═══════════════════════════════════════════════════════
- * Refactored for Premium Visual Balance & Thermal Best Practices:
- *  - Mirrors the clean typography & breathing space of ReceiptModal preview.
- *  - Uses Medium (500) and Regular (400) weights for Lao body text to prevent
- *    ink bleeding (bết mực/quá đậm) and keep Lao vowel loops open and legible.
- *  - Strict top-baseline positioning to eliminate barcode/number collisions.
- *  - Physical Width: 576 dots K80 (72 bytes/line) full-width print.
+ * Standard: 80mm K80 (Physical Width: 576 dots / 72 bytes per line)
+ *
+ * Pixel-perfect reproduction of ReceiptModal.jsx preview:
+ *  - Spacious bordered box for Grand Total (ຍອດຊຳລະສຸດທິ) with internal padding.
+ *  - Dedicated handwriting signature space (75px) with dots exclusively under
+ *    the two signer columns (no full-width line clash).
+ *  - Medium (500) and Regular (400) weights for Lao body text to prevent
+ *    thermal ink-bleeding and keep Lao vowel loops open and crystal clear.
+ *  - Strict top-baseline positioning to eliminate barcode/number overlaps.
  */
 
 // ─── 80mm K80 Physical Constants ──────────────────────────────────────────────
@@ -17,7 +20,7 @@ export const K80 = {
   PRINTABLE_WIDTH: 544, // 560 - 16
   CENTER_X: 288,        // Symmetry center (576 / 2)
 
-  // 4-Column Grid with generous breathing space
+  // 4-Column Grid matching ReceiptModal.jsx
   COL_NAME_X: 16,       // Column 1: Item Name
   COL_NAME_MAX_W: 255,  // Max width 255px (wrap if longer)
   COL_QTY_X: 295,       // Column 2: Qty (centered at 295px)
@@ -25,10 +28,7 @@ export const K80 = {
   COL_TOTAL_X: 560,     // Column 4: Line Total (right-aligned at 560px)
 };
 
-// ─── Typography (Calibrated for Thermal Printers) ──────────────────────────────
-// In thermal printing, 'bold' on small fonts causes loops in Lao script (ໍ, ່, ້, ິ, ີ, ົ)
-// to fuse into solid ink blobs. We use weight 500/400 for text, reserving bold only
-// for Store Name, Section Headers, and Grand Total.
+// ─── Typography (Calibrated for Thermal Printers & Anti-Bleed) ────────────────
 const FONTS = {
   STORE_NAME: 'bold 30px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   SLOGAN: '500 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
@@ -55,8 +55,8 @@ const FONTS = {
   DEBT_NUM: 'bold 21px monospace',
   QR_NAME: '500 14px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   QR_AMOUNT: 'bold 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SIGN_LABEL: '500 15.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SIGN_LINE: '15px monospace',
+  SIGN_LABEL: 'bold 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SIGN_LINE: '16px monospace',
   BARCODE_NUM: 'bold 15.5px monospace',
   FOOTER_BOLD: 'bold 15.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   FOOTER: '400 13.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
@@ -97,9 +97,9 @@ const LABELS = {
     tenderedLabel: 'ຮັບເງິນມາ (Tendered):',
     changeLabel: 'ເງິນທອນ (Change):',
     transferTotalLabel: 'ຍອດໂອນ:',
-    signDebtor: 'ຜູ້ຄ້າງຊຳລະ (Debtor)',
+    signDebtor: 'ລາຍເຊັນຜູ້ຄ້າງຊຳລະ (Debtor)',
     signCustomer: 'ຜູ້ຮັບເຄື່ອງ (Customer)',
-    signSeller: 'ຜູ້ຂາຍ (Seller)',
+    signSeller: 'ລາຍເຊັນຜູ້ຂາຍ (Seller)',
     signCashier: 'ພະນັກງານຂາຍ (Cashier)',
     thankYou: 'ຂໍຂອບໃຈລູກຄ້າທີ່ມາອຸດໜູນ! ໂອກາດໜ້າເຊີນໃໝ່ເດີ',
     returnPolicy: 'ສິນຄ້າຊື້ແລ້ວ ບໍ່ຮັບປ່ຽນ ຫຼື ຄືນເງິນ • ກະລຸນາກວດສອບເງິນທອນ',
@@ -138,7 +138,7 @@ const LABELS = {
     tenderedLabel: 'Tiền khách đưa (Tendered):',
     changeLabel: 'Tiền thừa thối lại (Change):',
     transferTotalLabel: 'Số tiền chuyển khoản:',
-    signDebtor: 'Người nợ (Debtor)',
+    signDebtor: 'Chữ ký người nợ (Debtor)',
     signCustomer: 'Người nhận hàng (Customer)',
     signSeller: 'Người bán hàng (Seller)',
     signCashier: 'Nhân viên thu ngân (Cashier)',
@@ -161,7 +161,7 @@ function fmtNum(n) {
 }
 
 /**
- * Robust word-wrap supporting Lao, Vietnamese, English without overflow
+ * Robust word-wrap supporting Lao, Vietnamese, English
  */
 function wrapText(ctx, text, maxWidth) {
   if (!text) return [''];
@@ -240,10 +240,6 @@ function preloadImage(src, timeoutMs = 800) {
 }
 
 // ─── Drawing / Measuring Routine (Strict Top Baseline) ────────────────────────
-/**
- * Uses ctx.textBaseline = 'top' everywhere.
- * Every Y coordinate is the TOP of the text, so elements CANNOT overlap.
- */
 function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   const L = LABELS[lang] || LABELS.lo;
   const items = receipt.items?.length > 0 ? receipt.items
@@ -308,7 +304,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 
   let y = 16; // Top margin
 
-  // 1. STORE HEADER (Clean & elegant)
+  // 1. STORE HEADER
   drawCenter(L.storeName, y, FONTS.STORE_NAME);
   y += 38;
 
@@ -380,7 +376,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   drawSolidLine(y, 1);
   y += 8;
 
-  // 6. ITEM ROWS (Medium weight text for clear, open Lao loops)
+  // 6. ITEM ROWS
   const measureCtx = ctx || document.createElement('canvas').getContext('2d');
   measureCtx.textBaseline = 'top';
 
@@ -501,15 +497,19 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     y += 24;
   }
 
-  // GRAND TOTAL (Bordered block with prominent typography)
-  y += 4;
-  drawSolidLine(y, 2.5);
+  // ─── GRAND TOTAL WITH SPACIOUS TOP & BOTTOM PADDING ───
+  // BorderTop & BorderBottom have generous internal breathing room (no more sticking to text)
   y += 10;
-  drawLeft(L.grandTotalLabel, K80.LEFT_MARGIN, y + 2, FONTS.GRAND_LABEL);
+  drawSolidLine(y, 2.5); // Top border
+  y += 14;               // Internal padding top
+
+  drawLeft(L.grandTotalLabel, K80.LEFT_MARGIN, y, FONTS.GRAND_LABEL);
   drawRight(fmtKip(finalGrandTotal), K80.RIGHT_EDGE, y, FONTS.GRAND_NUM);
-  y += 34;
-  drawSolidLine(y, 2.5);
-  y += 12;
+  y += 34;               // Font line height
+
+  y += 10;               // Internal padding bottom
+  drawSolidLine(y, 2.5); // Bottom border
+  y += 16;               // Margin below bottom border
 
   // 8. PAYMENT DETAILS (Tendered / Change / Debt)
   if (isDebt) {
@@ -542,7 +542,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     }
   }
 
-  y += 8;
+  y += 12;
 
   // 9. QR CODE PAYMENT (If transfer payment or debt)
   const showQr = isTransfer || (isDebt && (receipt.debtAmount ?? receipt.grandTotal) > 0);
@@ -574,32 +574,38 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     y += 28;
   }
 
-  // 10. SIGNATURES SECTION
+  // 10. SIGNATURES SECTION (Dedicated space, dots ONLY under the 2 columns)
   drawDashedLine(y);
-  y += 14;
+  y += 18;
 
   const sigColLeftX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.25;  // ~152px
   const sigColRightX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.75; // ~424px
 
+  const leftSignLabel = isDebt ? L.signDebtor : L.signCustomer;
+  const rightSignLabel = isDebt ? L.signSeller : L.signCashier;
+
   if (isDraw) {
     ctx.font = FONTS.SIGN_LABEL;
     ctx.textAlign = 'center';
-    ctx.fillText(isDebt ? L.signDebtor : L.signCustomer, sigColLeftX, y);
-    ctx.fillText(isDebt ? L.signSeller : L.signCashier, sigColRightX, y);
+    ctx.fillText(leftSignLabel, sigColLeftX, y);
+    ctx.fillText(rightSignLabel, sigColRightX, y);
   }
-  y += 50; // Signature handwriting room
 
+  // Generous 75px handwriting room for authentic signing
+  y += 75;
+
+  // Dots exclusively under each column (NO full-width line!)
   if (isDraw) {
     ctx.font = FONTS.SIGN_LINE;
     ctx.textAlign = 'center';
-    ctx.fillText('...........................', sigColLeftX, y);
-    ctx.fillText('...........................', sigColRightX, y);
+    ctx.fillText('........................', sigColLeftX, y);
+    ctx.fillText('........................', sigColRightX, y);
   }
-  y += 24;
+  y += 28; // Breathing space below dots
 
-  // 11. BARCODE STRIP (With generous gaps to prevent overlap)
+  // 11. BARCODE STRIP (Dashed divider cleanly separates barcode)
   drawDashedLine(y);
-  y += 16;
+  y += 18;
 
   // Realistic thermal barcode stripes
   const barcodePattern = [2, 1, 3, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1, 2, 4, 1, 3, 1, 2, 1, 4, 2, 1, 3, 1, 2, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1, 2, 4];
@@ -618,9 +624,9 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
       barX += bw;
     }
   }
-  y += barcodeH + 12; // Generous 12px gap between barcode bars and receipt number!
+  y += barcodeH + 14; // Clean 14px gap below barcode bars!
 
-  // Receipt Number (Never touches barcode bars)
+  // Receipt Number centered (Never touches barcode bars)
   drawCenter(receipt.receiptNumber || 'MEII-POS', y, FONTS.BARCODE_NUM);
   y += 26; // Generous gap before footer text
 
