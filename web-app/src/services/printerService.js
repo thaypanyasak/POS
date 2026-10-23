@@ -1,6 +1,5 @@
 import { Capacitor } from '@capacitor/core';
 import { Printer } from '@capgo/capacitor-printer';
-import { ThermalPrinter } from '../plugins/thermalPrinter';
 import {
   getPrinterConfig,
   savePrinterConfig,
@@ -8,7 +7,17 @@ import {
   DEFAULT_PRINTER_CONFIG,
   PRINTER_STORAGE_KEY,
 } from './printerConfigService';
-import { ESC_INIT, ESC_DRAWER_KICK, uint8ArrayToBase64 } from './escposGenerator';
+import {
+  ESC_INIT,
+  ESC_HEAT_DENSITY,
+  ESC_DRAWER_KICK,
+  GS_CUT_PARTIAL,
+  ESC_FEED_LINES,
+  canvasToEscPosRaster,
+  uint8ArrayToBase64,
+} from './escposGenerator';
+import { renderReceiptCanvas } from './receiptCanvasEngine';
+import { ensurePhetsarathLoaded, PHETSARATH_CSS } from '../utils/phetsarathFont';
 import { TcpSocket } from '@deedarb/capacitor-tcp-socket';
 
 // Re-export printer configuration APIs for seamless backward compatibility
@@ -21,10 +30,10 @@ export {
 };
 
 // ─── K80 Constants ───────────────────────────────────────────────────────────
-const PRINT_WIDTH_DOTS = 576; // 80mm K80 = 576 thermal dots
+export const PRINT_WIDTH_DOTS = 576; // 80mm K80 = 576 thermal dots
 
 /**
- * Format any receipt object into the standardized JSON structure for ThermalPrinterPlugin
+ * Format any receipt object into the standardized structure
  */
 export function formatReceiptForNative(receipt, language = 'lo') {
   if (!receipt) {
@@ -117,25 +126,26 @@ export function formatReceiptForNative(receipt, language = 'lo') {
 }
 
 /**
- * Intelligent Smart Print Dispatcher — Native CoreGraphics & ESC/POS Raw Socket
+ * Intelligent Smart Print Dispatcher — Pure Canvas 2D (Phetsarath OT) & Direct RAW TCP Socket
+ * Works 100% inside OTA bundle without needing Xcode rebuild.
  */
 export async function printReceiptSmart({
   elementId = 'thermal-receipt-print-area',
   receipt = null,
   language = 'lo',
-  allowFallback = true,
+  allowFallback = false,
   method = null,
 } = {}) {
   const isNative = Capacitor.isNativePlatform();
   const config = getPrinterConfig();
-  const activeMethod = method || config.printMethod;
+  const activeMethod = method || config.printMethod || 'socket';
 
   // MODE 1: Print via OS Native Spooler (AirPrint / OS Dialog)
   if (activeMethod === 'spooler') {
     return await printViaNativeSpooler(elementId);
   }
 
-  // MODE 2: Native Capacitor App (Apple CoreGraphics 100% Vector Typography + RAW TCP Socket)
+  // MODE 2: Native Capacitor App (Direct ESC/POS over TCP Socket to Port 9100)
   if (isNative) {
     const rawIp = (config.printer_ip || config.ip || '').trim();
     const rawPort = parseInt(config.printer_port || config.port, 10) || 9100;
@@ -149,23 +159,30 @@ export async function printReceiptSmart({
     }
 
     try {
-      // 1. Format structured data
-      const receiptPayload = formatReceiptForNative(receipt, language);
+      // 1. Ensure Phetsarath font is loaded in browser/webview memory
+      await ensurePhetsarathLoaded();
 
-      // 2. Execute Apple CoreGraphics & NWConnection Socket Native Plugin
-      const res = await ThermalPrinter.printReceipt({
-        ip: rawIp,
-        port: rawPort,
-        data: receiptPayload,
+      // 2. Render receipt to 2X high-density Canvas using Phetsarath OT
+      const canvas = await renderReceiptCanvas(receipt, language);
+
+      // 3. Convert Canvas to 1-bit ESC/POS raster bytes using Floyd-Steinberg dithering + ESC 7 thermal heat commands
+      const escPosBytes = canvasToEscPosRaster(canvas, {
+        kickCashDrawer: config.drawerKick,
+        cutPaper: config.autoCut,
+        luminanceThreshold: 145,
+        useDithering: true,
       });
+
+      // 4. Send binary stream over TCP Socket directly to thermal printer
+      await sendRawBytesViaTcp(rawIp, rawPort, escPosBytes, { timeoutSec: 4.5 });
 
       return {
         success: true,
         mode: 'socket',
-        message: res?.message || `ພິມໃບບິນສຳເລັດ! ສົ່ງຂໍ້ມູນໄປຍັງເຄື່ອງພິມ ${rawIp}:${rawPort} ຮຽບຮ້ອຍແລ້ວ.`,
+        message: `ພິມໃບບິນສຳເລັດ! ສົ່ງຂໍ້ມູນໄປຍັງເຄື່ອງພິມ ${rawIp}:${rawPort} ຮຽບຮ້ອຍແລ້ວ.`,
       };
     } catch (err) {
-      console.error('[printerService] Native CoreGraphics ESC/POS print failed:', err);
+      console.error('[printerService] Direct ESC/POS Socket print failed:', err);
 
       if (allowFallback) {
         console.warn('[printerService] Falling back to native spooler print on socket error');
@@ -181,7 +198,7 @@ export async function printReceiptSmart({
 }
 
 /**
- * Test connection to printer IP & Port (Calls native CoreGraphics test print)
+ * Test connection to printer IP & Port (Prints test receipt slip via TCP Socket)
  */
 export async function testPrinterConnection(ip, port, { printSlip = true } = {}) {
   const config = getPrinterConfig();
@@ -193,7 +210,52 @@ export async function testPrinterConnection(ip, port, { printSlip = true } = {})
   }
 
   if (Capacitor.isNativePlatform()) {
-    return await ThermalPrinter.testPrint({ ip: targetIp, port: targetPort });
+    if (printSlip) {
+      await ensurePhetsarathLoaded();
+
+      const testReceipt = {
+        receiptNumber: 'TEST-K80',
+        createdAt: new Date().toISOString(),
+        cashierName: 'MeiiShop POS',
+        customerName: 'ທົດສອບເຄື່ອງພິມ (Test Print)',
+        paymentMethod: 'cash',
+        items: [
+          {
+            name: 'ທົດສອບຟອນລາວ Phetsarath OT',
+            quantity: 1,
+            unit: 'ຊຸດ',
+            unit_price: 10000,
+            total_price: 10000,
+          },
+          {
+            name: 'ຕົວຢ່າງ: ກຂຄງຈສຊຍດຕຖທນບປຜຝພຟມຢຣລວຫອຮ',
+            quantity: 1,
+            unit: 'ແຖວ',
+            unit_price: 0,
+            total_price: 0,
+          },
+        ],
+        subtotal: 10000,
+        discount: 0,
+        grandTotal: 10000,
+        amountTendered: 10000,
+        changeAmount: 0,
+      };
+
+      const canvas = await renderReceiptCanvas(testReceipt, 'lo');
+      const escPosBytes = canvasToEscPosRaster(canvas, {
+        kickCashDrawer: false,
+        cutPaper: true,
+        useDithering: true,
+      });
+
+      await sendRawBytesViaTcp(targetIp, targetPort, escPosBytes, { timeoutSec: 4.0 });
+    }
+
+    return {
+      success: true,
+      message: `ທົດສອບເຄື່ອງພິມ ${targetIp}:${targetPort} ສຳເລັດ! ພິມໃບທົດສອບຮຽບຮ້ອຍແລ້ວ.`,
+    };
   }
 
   // Web Browser fallback
@@ -213,7 +275,7 @@ export async function openCashDrawerDirect() {
     const rawPort = parseInt(config.printer_port || config.port, 10) || 9100;
     if (rawIp) {
       const drawerCmd = new Uint8Array([...ESC_INIT, ...ESC_DRAWER_KICK]);
-      return await sendRawBytesViaTcp(rawIp, rawPort, drawerCmd, { timeoutSec: 2.5 });
+      return await sendRawBytesViaTcp(rawIp, rawPort, drawerCmd, { timeoutSec: 3.0 });
     }
   }
   return { success: false, message: 'Cash drawer can only be kicked on Native platform with configured IP.' };
@@ -222,15 +284,15 @@ export async function openCashDrawerDirect() {
 /**
  * Send raw binary byte array over TCP Socket directly to thermal printer
  */
-export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 2.5 } = {}) {
+export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 4.0 } = {}) {
   const cleanIp = String(ip || '').trim();
   if (!cleanIp) {
     throw new Error('ຍັງບໍ່ໄດ້ກຳນົດ IP ເຄື່ອງພິມ (Printer IP is empty)');
   }
 
   const targetPort = parseInt(port, 10) || 9100;
-  const timeoutMs = Math.max(1000, Math.min(3000, Math.round((timeoutSec || 2) * 1000)));
-  const timeoutSecondsInt = Math.max(1, Math.round(timeoutMs / 1000));
+  const timeoutMs = Math.max(1500, Math.min(8000, Math.round((timeoutSec || 4) * 1000)));
+  const timeoutSecondsInt = Math.max(2, Math.round(timeoutMs / 1000));
 
   const isNative = Capacitor.isNativePlatform();
   const socketPlugin = TcpSocket || (typeof window !== 'undefined' ? window.Capacitor?.Plugins?.TcpSocket : null);
@@ -317,11 +379,8 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
     <base href="${origin}/" />
     <title>Receipt_MeiiShop</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+Lao:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Phetsarath:wght@400;700&display=swap" rel="stylesheet">
-    ${styles}
     <style>
+      ${PHETSARATH_CSS}
       @page {
         size: 80mm auto;
         margin: 0;
@@ -336,6 +395,7 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
         padding: 0 !important;
         background: #ffffff !important;
         color: #000000 !important;
+        font-family: 'Phetsarath', 'Noto Sans Lao', 'Outfit', sans-serif !important;
         width: 100% !important;
         height: auto !important;
         overflow: visible !important;
@@ -343,18 +403,19 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
       .thermal-receipt-spooler-wrapper,
       #thermal-receipt-print-area,
       #quotation-print-area {
-        width: 72mm !important;
-        max-width: 72mm !important;
-        min-width: 72mm !important;
+        width: 100% !important;
+        max-width: 80mm !important;
         margin: 0 auto !important;
-        padding: 0 4px !important;
+        padding: 4px !important;
         box-sizing: border-box !important;
         box-shadow: none !important;
         border: none !important;
         background: #ffffff !important;
         overflow: visible !important;
+        font-family: 'Phetsarath', 'Noto Sans Lao', 'Outfit', sans-serif !important;
       }
     </style>
+    ${styles}
   </head>
   <body class="font-sans antialiased">
     <div class="thermal-receipt-spooler-wrapper">
@@ -443,65 +504,53 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
         <meta charset="utf-8" />
         <base href="${origin}/" />
         <title>Receipt Print (80mm K80)</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+Lao:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Phetsarath:wght@400;700&display=swap" rel="stylesheet">
         <style>
+          ${PHETSARATH_CSS}
           @page { size: auto; margin: 0mm; }
-          *, *::before, *::after { box-sizing: border-box !important; }
+          *, *::before, *::after {
+            box-sizing: border-box !important;
+            font-family: 'Phetsarath', 'Noto Sans Lao', 'Outfit', sans-serif !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           html, body {
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
             color: #000000 !important;
+            font-family: 'Phetsarath', 'Noto Sans Lao', 'Outfit', sans-serif !important;
             width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
           }
-          #thermal-receipt-print-area, #quotation-print-area {
-            display: block !important;
-            width: 380px !important;
-            max-width: 100% !important;
+          #thermal-receipt-print-area,
+          #quotation-print-area {
+            width: 100% !important;
+            max-width: 80mm !important;
             margin: 0 auto !important;
-            padding: 12px 14px !important;
+            padding: 4px !important;
+            border: none !important;
+            box-shadow: none !important;
+            font-family: 'Phetsarath', 'Noto Sans Lao', 'Outfit', sans-serif !important;
           }
         </style>
       </head>
-      <body class="font-sans antialiased">
+      <body>
         ${contentHtml}
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.focus();
+              window.print();
+            }, 300);
+          };
+        </script>
       </body>
     </html>
   `);
   doc.close();
 
-  return new Promise((resolve) => {
-    const doPrint = async () => {
-      try {
-        if (doc.fonts) await doc.fonts.ready;
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } catch (e) {
-        window.print();
-      } finally {
-        resolve();
-      }
-    };
-    if (iframe.contentWindow) {
-      setTimeout(doPrint, 100);
-    } else {
-      iframe.onload = doPrint;
-    }
-  });
+  setTimeout(() => {
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+  }, 3000);
 }
-
-export default {
-  getPrinterConfig,
-  savePrinterConfig,
-  fetchPrinterConfigFromDb,
-  sendRawBytesViaTcp,
-  testPrinterConnection,
-  openCashDrawerDirect,
-  printReceiptSmart,
-  printViaNativeSpooler,
-  printThermalElementDirect,
-  formatReceiptForNative,
-  DEFAULT_PRINTER_CONFIG,
-};

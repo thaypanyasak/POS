@@ -9,6 +9,7 @@ export const DEFAULT_PRINTER_CONFIG = {
   paper_width: 72,
   auto_cut: true,
   drawer_kick: false,
+  print_method: 'socket',
 };
 
 /**
@@ -20,6 +21,7 @@ function normalizeConfig(raw) {
   const paperWidth = parseInt(raw?.paper_width ?? raw?.paperWidth, 10) || 72;
   const autoCut = (raw?.auto_cut ?? raw?.autoCut) !== false;
   const drawerKick = Boolean(raw?.drawer_kick ?? raw?.drawerKick);
+  const printMethod = raw?.print_method ?? raw?.printMethod ?? 'socket';
 
   return {
     id: raw?.id || 'default_printer',
@@ -28,12 +30,14 @@ function normalizeConfig(raw) {
     paper_width: paperWidth,
     auto_cut: autoCut,
     drawer_kick: drawerKick,
+    print_method: printMethod,
     // Aliases for seamless compatibility
     get ip() { return this.printer_ip; },
     get port() { return this.printer_port; },
     get autoCut() { return this.auto_cut; },
     get drawerKick() { return this.drawer_kick; },
     get paperWidth() { return this.paper_width; },
+    get printMethod() { return this.print_method; },
   };
 }
 

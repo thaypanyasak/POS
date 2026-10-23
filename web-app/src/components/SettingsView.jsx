@@ -182,16 +182,16 @@ export default function SettingsView({
         printer_port: cleanPort,
       });
 
-      // Call Native CoreGraphics test print with timeout protection
+      // Call TCP test print with timeout protection
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(
           () =>
             reject(
               new Error(
-                `ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${cleanIp}:${cleanPort} (Timeout 3.5s). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.`
+                `ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${cleanIp}:${cleanPort} (Timeout 6s). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.`
               )
             ),
-          3500
+          6000
         )
       );
 

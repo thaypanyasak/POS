@@ -40,39 +40,41 @@ export const K80 = {
   COL_TOTAL_X: 560,     // Column 4: Line Total (right-aligned at 560px)
 };
 
+import { ensurePhetsarathLoaded } from '../utils/phetsarathFont';
+
 // ─── Typography (High-Res POS Scale) ──────────────────────────────────────────
 const FONTS = {
-  STORE_NAME: 'bold 42px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SLOGAN: '500 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ADDRESS: '400 18.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TEL: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TITLE: 'bold 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_VAL: '500 19.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_BOLD: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  COL_HEADER: 'bold 20px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NAME: '500 20.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',  // Slightly reduced for elegant line fit
-  ITEM_UNIT: '400 17.5px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NUM: '500 18.5px "Outfit", "Segoe UI", -apple-system, sans-serif',          // Tight proportional figures (no wide monospace gaps)
-  ITEM_TOTAL: 'bold 19.5px "Outfit", "Segoe UI", -apple-system, sans-serif',       // Tight proportional figures
-  CRATE_LABEL: '500 17px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  CRATE_NUM: '500 16px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  SUBTOTAL_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SUBTOTAL_NUM: 'bold 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  GRAND_LABEL: 'bold 28px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  GRAND_NUM: 'bold 30px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  TENDER_LABEL: '400 19px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TENDER_NUM: 'bold 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  DEBT_LABEL: 'bold 22px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  DEBT_NUM: 'bold 22px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  QR_NAME: '500 16px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  QR_AMOUNT: 'bold 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  SIGN_LABEL: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  STORE_NAME: 'bold 42px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SLOGAN: 'bold 22px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ADDRESS: '600 19px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TEL: 'bold 22px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TITLE: 'bold 28px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_LABEL: '600 19px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_VAL: 'bold 20px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  META_BOLD: 'bold 22px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  COL_HEADER: 'bold 21px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_NAME: 'bold 21px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_UNIT: '600 18px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  ITEM_NUM: 'bold 19px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  ITEM_TOTAL: 'bold 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  CRATE_LABEL: '600 18px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  CRATE_NUM: 'bold 17px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  SUBTOTAL_LABEL: '600 20px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  SUBTOTAL_NUM: 'bold 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  GRAND_LABEL: 'bold 30px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  GRAND_NUM: 'bold 32px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  TENDER_LABEL: '600 20px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  TENDER_NUM: 'bold 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  DEBT_LABEL: 'bold 24px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  DEBT_NUM: 'bold 24px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  QR_NAME: '600 17px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  QR_AMOUNT: 'bold 22px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  SIGN_LABEL: 'bold 22px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
   SIGN_LINE: 'bold 20px monospace',
   BARCODE_NUM: 'bold 20px "Outfit", monospace',
-  FOOTER_BOLD: 'bold 21px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  FOOTER: '500 18px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  VOID_TEXT: 'bold 24px "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  FOOTER_BOLD: 'bold 22px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  FOOTER: '600 19px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  VOID_TEXT: 'bold 26px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
 };
 
 // ─── Bilingual Dictionary ─────────────────────────────────────────────────────
@@ -692,17 +694,19 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 export async function renderReceiptCanvas(receipt, lang = 'lo') {
   if (!receipt) throw new Error('Receipt data is missing');
 
-  // Pre-load fonts to guarantee genuine vector Noto Sans Lao glyphs
+  // Pre-load embedded Phetsarath OT & Noto Sans Lao fonts
   try {
+    await ensurePhetsarathLoaded();
     if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
       await Promise.race([
         Promise.all([
+          document.fonts.load('bold 42px "Phetsarath"'),
+          document.fonts.load('bold 28px "Phetsarath"'),
+          document.fonts.load('bold 21px "Phetsarath"'),
+          document.fonts.load('600 19px "Phetsarath"'),
           document.fonts.load('bold 42px "Noto Sans Lao"'),
-          document.fonts.load('bold 28px "Noto Sans Lao"'),
-          document.fonts.load('500 23px "Noto Sans Lao"'),
-          document.fonts.load('bold 21px "Noto Sans Lao"'),
         ]),
-        new Promise((resolve) => setTimeout(resolve, 500)),
+        new Promise((resolve) => setTimeout(resolve, 600)),
       ]);
     }
   } catch (_) {}

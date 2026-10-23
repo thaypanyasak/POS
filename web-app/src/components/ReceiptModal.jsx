@@ -221,14 +221,14 @@ export default function ReceiptModal({
         // Native Print Spooler (AirPrint / OS Dialog) — Vector-sharp typography
         res = await printViaNativeSpooler('thermal-receipt-print-area');
       } else {
-        // Socket Print (Port 9100) — Direct ESC/POS with timeout
+        // Socket Print (Port 9100) — Direct ESC/POS with timeout protection
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(
             () =>
               reject(
-                new Error('ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (Timeout). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.')
+                new Error('ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (Timeout 8s). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.')
               ),
-            4500
+            8000
           )
         );
 
@@ -236,7 +236,7 @@ export default function ReceiptModal({
           elementId: 'thermal-receipt-print-area',
           receipt,
           language: receiptLanguage,
-          allowFallback: true,
+          allowFallback: false,
           method: 'socket',
         });
 
@@ -255,23 +255,6 @@ export default function ReceiptModal({
       }
     } catch (err) {
       console.error('Print error:', err);
-
-      // Auto fallback to spooler if socket failed
-      if (activeMethod === 'socket') {
-        try {
-          console.warn('Socket print failed, attempting fallback to native spooler...');
-          const fallbackRes = await printViaNativeSpooler('thermal-receipt-print-area');
-          if (fallbackRes && fallbackRes.success) {
-            setPrintFeedback({
-              type: 'success',
-              message: 'ບໍ່ສາມາດເຊື່ອມຕໍ່ Socket, ໄດ້ປ່ຽນໄປພິມຜ່ານ AirPrint / Print Spooler ແທນ.',
-            });
-            playSuccessBeep();
-            setTimeout(() => setPrintFeedback(null), 4000);
-            return;
-          }
-        } catch (_) {}
-      }
 
       const errMsg = err?.message || 'ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ເຄື່ອງພິມ.';
       setPrintFeedback({
@@ -391,7 +374,7 @@ export default function ReceiptModal({
         <div
           id="thermal-receipt-print-area"
           style={{
-            fontFamily: receiptLanguage === 'vi' ? "'Be Vietnam Pro', 'Noto Sans Lao', sans-serif" : "'Noto Sans Lao', Outfit, sans-serif",
+            fontFamily: receiptLanguage === 'vi' ? "'Be Vietnam Pro', 'Phetsarath', 'Noto Sans Lao', sans-serif" : "'Phetsarath', 'Noto Sans Lao', Outfit, sans-serif",
           }}
           className={`bg-white mx-auto p-4 border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto paper-80mm w-full max-w-[380px] ${
             receiptLanguage === 'vi' ? 'font-vietnam' : 'font-lao'
