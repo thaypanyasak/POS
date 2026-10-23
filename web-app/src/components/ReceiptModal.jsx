@@ -63,10 +63,10 @@ export default function ReceiptModal({
   // Comprehensive Bilingual Receipt Dictionary (Lao / Vietnamese)
   const LABELS = {
     lo: {
-      storeName: 'ຮ້ານ MeiiShop',
-      storeSlogan: 'ຂາຍຍົກ - ຂາຍຍ່ອຍ ສິນຄ້າອຸປະໂພກ ບໍລິໂພກ',
+      storeName: 'ຮ້ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)',
+      storeSlogan: '',
       storeAddress: 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
-      storeTel: 'ໂທ: 020 5555 9999 / 021 214 555',
+      storeTel: '020 56468780 / 02052228432',
       receiptTitle: 'ໃບບິນຮັບເງິນ / RECEIPT',
       voidTitle: 'ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ (VOID)',
       voidDesc: 'ສິນຄ້າຖືກສົ່ງຄືນເຂົ້າສາງແລ້ວ',
@@ -101,8 +101,14 @@ export default function ReceiptModal({
       signCustomer: 'ຜູ້ຮັບເຄື່ອງ (Customer)',
       signSeller: 'ລາຍເຊັນຜູ້ຂາຍ (Seller)',
       signCashier: 'ພະນັກງານຂາຍ (Cashier)',
-      thankYou: 'ຂໍຂອບໃຈລູກຄ້າທີ່ມາອຸດໜູນ! ໂອກາດໜ້າເຊີນໃໝ່ເດີ',
-      returnPolicy: 'ສິນຄ້າຊື້ແລ້ວ ບໍ່ຮັບປ່ຽນ ຫຼື ຄືນເງິນ • ກະລຸນາກວດສອບເງິນທອນ',
+      thankYou: [
+        'ຂໍຂອບໃຈລູກຄ້າທີ່ມາອຸດໜູນຮ້ານເຮົາ',
+        'ຫວັງວ່າຈະໄດ້ຕ້ອນຮັບທ່ານອີກຄັ້ງໃນໂອກາດໜ້າ',
+      ],
+      returnPolicy: [
+        'ກະລຸນາກວດສອບສິນຄ້າໃຫ້ຄົບຖ້ວນ ກ່ອນອອກຈາກຮ້ານ',
+        'ສິນຄ້າສາມາດປ່ຽນ ຫຼື ຄືນໄດ້ພາຍໃນ 7 ວັນ ຕາມເງື່ອນໄຂຂອງຮ້ານ',
+      ],
       loadingItems: '(ກຳລັງໂຫຼດລາຍການສິນຄ້າ...)',
       defaultItemName: 'ສິນຄ້າ',
       defaultUnitName: 'ອັນ',
@@ -117,10 +123,10 @@ export default function ReceiptModal({
       btnPrintProgress: 'ກຳລັງກວດສອບ & ພິມ...',
     },
     vi: {
-      storeName: 'CỬA HÀNG MEIISHOP',
-      storeSlogan: 'Bán buôn - Bán lẻ Hàng tiêu dùng',
+      storeName: 'CỬA HÀNG SOMSAK (BÁN BIA)',
+      storeSlogan: '',
       storeAddress: 'Làng Phonesavanh, TP.Pakse, Champasak',
-      storeTel: 'ĐT: 020 5555 9999 / 021 214 555',
+      storeTel: '020 56468780 / 02052228432',
       receiptTitle: 'HÓA ĐƠN BÁN HÀNG',
       voidTitle: 'HÓA ĐƠN NÀY ĐÃ HỦY ',
       voidDesc: 'Hàng hóa đã được hoàn lại vào kho',
@@ -152,11 +158,17 @@ export default function ReceiptModal({
       changeLabel: 'Tiền thừa thối lại (Change):',
       transferTotalLabel: 'Số tiền chuyển khoản:',
       signDebtor: 'Chữ ký người nợ (Debtor)',
-      signCustomer: 'Người nhận hàng (Customer)',
-      signSeller: 'Người bán hàng (Seller)',
+      signCustomer: 'Người nhận hàng',
+      signSeller: 'Người bán hàng',
       signCashier: 'Nhân viên thu ngân (Cashier)',
-      thankYou: 'ຂໍຂອບໃຈລູກຄ້າທີ່ມາອຸດໜູນ! ໂອກາດໜ້າເຊີນໃໝ່ເດີ',
-      returnPolicy: 'ສິນຄ້າຊື້ແລ້ວ ບໍ່ຮັບປ່ຽນ ຫຼື ຄືນເງິນ • ກະລຸນາກວດສອບເງິນທອນ',
+      thankYou: [
+        'Cảm ơn quý khách đã ủng hộ cửa hàng chúng tôi',
+        'Rất mong được đón tiếp quý khách lần sau',
+      ],
+      returnPolicy: [
+        'Vui lòng kiểm tra kỹ hàng hóa trước khi rời cửa hàng',
+        'Hàng có thể đổi hoặc trả trong vòng 7 ngày theo quy định',
+      ],
       loadingItems: '(Đang tải danh sách hàng...)',
       defaultItemName: 'Sản phẩm',
       defaultUnitName: 'Cái',
@@ -269,8 +281,8 @@ export default function ReceiptModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 print:static print:inset-auto print:p-0 print:bg-transparent print:backdrop-blur-none print:block">
-      <div className="bg-slate-100 rounded-3xl max-w-md w-full p-4 shadow-2xl flex flex-col gap-3 animate-in zoom-in-95 duration-200 max-h-[95vh] overflow-y-auto relative print:static print:max-h-none print:h-auto print:overflow-visible print:p-0 print:shadow-none print:border-none print:bg-white print:w-full print:max-w-none">
+    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 print:static print:inset-auto print:p-0 print:bg-transparent print:backdrop-blur-none print:block">
+      <div className="bg-slate-100 rounded-3xl max-w-lg w-full p-2.5 sm:p-4 shadow-2xl flex flex-col gap-3 animate-in zoom-in-95 duration-200 max-h-[95vh] overflow-y-auto relative print:static print:max-h-none print:h-auto print:overflow-visible print:p-0 print:shadow-none print:border-none print:bg-white print:w-full print:max-w-none">
         {/* Print Feedback Toast inside modal */}
         {printFeedback && (
           <div
@@ -374,28 +386,30 @@ export default function ReceiptModal({
         <div
           id="thermal-receipt-print-area"
           style={{
-            fontFamily: receiptLanguage === 'vi' ? "'Be Vietnam Pro', 'Phetsarath', 'Noto Sans Lao', sans-serif" : "'Phetsarath', 'Noto Sans Lao', Outfit, sans-serif",
+            fontFamily: receiptLanguage === 'vi' ? "'Be Vietnam Pro', 'Saysettha OT', 'Saysettha', sans-serif" : "'Saysettha OT', 'Saysettha', sans-serif",
           }}
-          className={`bg-white mx-auto p-4 border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto paper-80mm w-full max-w-[380px] ${
-            receiptLanguage === 'vi' ? 'font-vietnam' : 'font-lao'
+          className={`bg-white mx-auto px-2.5 py-3.5 border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto paper-80mm w-full max-w-full font-receipt-saysettha ${
+            receiptLanguage === 'vi' ? 'font-vietnam' : ''
           }`}
         >
           {/* Store Header */}
           <div className="text-center pb-2">
-            <h2 className="text-base font-black text-slate-950 leading-normal tracking-wide pt-0.5">{L.storeName}</h2>
-            <p className="text-[11px] text-slate-700 font-bold leading-normal mt-0.5">
-              {L.storeSlogan}
-            </p>
-            <p className="text-[10.5px] text-slate-600 leading-normal">
+            <h2 className="text-lg font-black text-slate-950 leading-normal tracking-wide pt-0.5">{L.storeName}</h2>
+            {L.storeSlogan && (
+              <p className="text-xs text-slate-700 font-bold leading-normal mt-0.5">
+                {L.storeSlogan}
+              </p>
+            )}
+            <p className="text-xs text-slate-700 font-medium leading-normal">
               {L.storeAddress}
             </p>
-            <p className="text-[11px] text-slate-700 font-bold leading-normal">
+            <p className="text-xs text-slate-900 font-bold leading-normal">
               {L.storeTel}
             </p>
           </div>
 
           {/* Receipt Title Banner (Spacious Padding between borders) */}
-          <div className="py-3.5 my-2 border-y-2 border-slate-900 text-center font-black text-xs flex items-center justify-center leading-none uppercase">
+          <div className="py-3.5 my-2 border-y-2 border-slate-900 text-center font-black text-sm flex items-center justify-center leading-none uppercase">
             {L.receiptTitle}
           </div>
 
@@ -406,14 +420,14 @@ export default function ReceiptModal({
                 <Prohibit size={18} weight="bold" />
                 <span>{L.voidTitle}</span>
               </div>
-              <p className="text-[9.5px] font-medium opacity-95 mt-0.5 leading-normal">
+              <p className="text-[10px] font-medium opacity-95 mt-0.5 leading-normal">
                 {receipt.cancelledAt ? `${L.date} ${new Date(receipt.cancelledAt).toLocaleString(receiptLanguage === 'vi' ? 'vi-VN' : 'lo-LA')}` : ''} • {L.voidDesc}
               </p>
             </div>
           )}
 
           {/* Metadata Info */}
-          <div className="flex flex-col gap-1 text-[10.5px] text-slate-700 pb-2 leading-normal">
+          <div className="flex flex-col gap-1.5 text-xs text-slate-800 pb-2 leading-normal">
             {isCancelled && (
               <div className="flex justify-between items-center bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
                 <span className="font-bold text-rose-800">{L.status}</span>
@@ -463,14 +477,14 @@ export default function ReceiptModal({
             </div>
           </div>
 
-          {/* Items Table Header - 4 Columns: Name (40%), Qty (15%), Price (20%), Total (25%) */}
-          <div className="border-t border-dashed border-slate-300 pt-2 pb-1 flex items-center font-extrabold text-[10px] text-slate-800 leading-normal">
-            <span className="w-[40%] flex-1 text-left pt-0.5">{L.colName}</span>
-            <span className="w-[15%] shrink-0 text-center pt-0.5">{L.colQty}</span>
+          {/* Items Table Header - 4 Columns: Name (44%), Qty (14%), Price (20%), Total (22%) */}
+          <div className="border-t border-dashed border-slate-300 pt-2 pb-1.5 flex items-center font-black text-xs text-slate-900 leading-normal">
+            <span className="w-[44%] flex-1 text-left pt-0.5">{L.colName}</span>
+            <span className="w-[14%] shrink-0 text-center pt-0.5">{L.colQty}</span>
             <span className="w-[20%] shrink-0 text-right pt-0.5">{L.colPrice}</span>
-            <span className="w-[25%] shrink-0 text-right pt-0.5">{L.colTotal}</span>
+            <span className="w-[22%] shrink-0 text-right pt-0.5">{L.colTotal}</span>
           </div>
-          <div className="border-b border-slate-400 mb-1.5"></div>
+          <div className="border-b-2 border-slate-400 mb-1.5"></div>
 
           {/* Item Rows - Single Line 4-Column Layout */}
           <div className="flex flex-col gap-1 pb-2 border-b border-dashed border-slate-300">
@@ -505,19 +519,19 @@ export default function ReceiptModal({
                 const crateDepositTotal = Number(it.crateDepositTotal) || (hasMissingCrates ? missingCount * feePerCrate : 0);
 
                 return (
-                  <div key={i} className="receipt-item-row flex flex-col text-[10.5px] leading-normal py-0.5">
+                  <div key={i} className="receipt-item-row flex flex-col text-xs leading-normal py-0.5">
                     {/* Main Row: 4 Columns with Product Name allowed up to 2 lines */}
                     <div className="product-name-row flex items-start text-slate-900 overflow-visible">
-                      <span className="w-[40%] flex-1 font-semibold text-left pr-1 break-words leading-tight overflow-visible text-[10.5px]" title={`${prodName} (${unitName})`}>
-                        {prodName} <span className="font-normal text-slate-600 text-[10px]">({unitName})</span>
+                      <span className="w-[44%] flex-1 font-bold text-left pr-1 break-words leading-tight overflow-visible text-xs" title={`${prodName} (${unitName})`}>
+                        {prodName} <span className="font-medium text-slate-600 text-[11px]">({unitName})</span>
                       </span>
-                      <span className="w-[15%] shrink-0 text-center font-sans font-medium text-[10.5px] text-slate-800">
+                      <span className="w-[14%] shrink-0 text-center font-sans font-bold text-xs text-slate-800">
                         {qty}x
                       </span>
-                      <span className="w-[20%] shrink-0 text-right font-sans font-medium text-[10.5px] tracking-tight text-slate-700">
+                      <span className="w-[20%] shrink-0 text-right font-sans font-medium text-xs tracking-tight text-slate-700">
                         {formatKip(price).replace(' ₭', '')}
                       </span>
-                      <span className="w-[25%] shrink-0 text-right font-sans font-bold text-[11px] tracking-tight text-slate-950">
+                      <span className="w-[22%] shrink-0 text-right font-sans font-black text-xs tracking-tight text-slate-950">
                         {formatKip(baseLineTotal).replace(' ₭', '')}
                       </span>
                     </div>
@@ -525,16 +539,16 @@ export default function ReceiptModal({
                     {/* Crate Deposit row for bottles/beers without empty crates to exchange (+30.000 ₭/crate) */}
                     {hasMissingCrates && missingCount > 0 && (
                       <div className="flex items-center text-[10px] text-amber-950 bg-amber-50/90 py-0.5 px-1 rounded mt-0.5 border border-amber-200 leading-normal">
-                        <span className="w-[40%] font-bold text-left truncate text-amber-900" title={L.missingCrate}>
+                        <span className="w-[44%] font-bold text-left truncate text-amber-900" title={L.missingCrate}>
                           {L.missingCrate}
                         </span>
-                        <span className="w-[15%] text-center font-sans font-medium text-amber-900">
+                        <span className="w-[14%] text-center font-sans font-medium text-amber-900">
                           {missingCount}x
                         </span>
                         <span className="w-[20%] text-right font-sans font-medium text-amber-800 tracking-tight">
                           {formatKip(feePerCrate).replace(' ₭', '')}
                         </span>
-                        <span className="w-[25%] text-right font-sans font-bold text-amber-950 tracking-tight">
+                        <span className="w-[22%] text-right font-sans font-bold text-amber-950 tracking-tight">
                           +{formatKip(crateDepositTotal).replace(' ₭', '')}
                         </span>
                       </div>
@@ -678,7 +692,7 @@ export default function ReceiptModal({
               </p>
               {/* Generous space for hand signature */}
               <div className="h-14"></div>
-              <div className="w-24 border-b-2 border-dotted border-slate-400"></div>
+              <div className="w-32 sm:w-36 border-b-2 border-dotted border-slate-400"></div>
             </div>
             <div className="flex flex-col items-center">
               <p className="font-bold text-slate-800 leading-normal pt-0.5">
@@ -686,7 +700,7 @@ export default function ReceiptModal({
               </p>
               {/* Generous space for hand signature */}
               <div className="h-14"></div>
-              <div className="w-24 border-b-2 border-dotted border-slate-400"></div>
+              <div className="w-32 sm:w-36 border-b-2 border-dotted border-slate-400"></div>
             </div>
           </div>
 
@@ -704,12 +718,20 @@ export default function ReceiptModal({
             <span className="text-[9.5px] text-slate-600 font-mono tracking-widest block font-bold pt-0.5">
               {receipt.receiptNumber}
             </span>
-            <p className="text-[10px] text-slate-700 mt-1 font-bold leading-normal pt-0.5 font-lao">
-              {L.thankYou}
-            </p>
-            <p className="text-[9px] text-slate-500 mt-0.5 leading-normal font-lao">
-              {L.returnPolicy}
-            </p>
+            <div className="mt-2.5 space-y-1">
+              {(Array.isArray(L.thankYou) ? L.thankYou : [L.thankYou]).map((tLine, idx) => (
+                <p key={`ty-${idx}`} className="text-xs text-slate-900 font-bold leading-normal pt-0.5">
+                  {tLine}
+                </p>
+              ))}
+              <div className="pt-1 space-y-0.5">
+                {(Array.isArray(L.returnPolicy) ? L.returnPolicy : [L.returnPolicy]).map((pLine, idx) => (
+                  <p key={`pol-${idx}`} className="text-[11px] text-slate-700 font-medium leading-normal">
+                    {pLine}
+                  </p>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 

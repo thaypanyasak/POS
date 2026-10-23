@@ -17,7 +17,7 @@ import {
   uint8ArrayToBase64,
 } from './escposGenerator';
 import { renderReceiptCanvas } from './receiptCanvasEngine';
-import { ensurePhetsarathLoaded, PHETSARATH_CSS } from '../utils/phetsarathFont';
+import { ensureSaysetthaLoaded, SAYSETTHA_CSS } from '../utils/saysetthaFont';
 import { TcpSocket } from '@deedarb/capacitor-tcp-socket';
 
 // Re-export printer configuration APIs for seamless backward compatibility
@@ -38,10 +38,10 @@ export const PRINT_WIDTH_DOTS = 576; // 80mm K80 = 576 thermal dots
 export function formatReceiptForNative(receipt, language = 'lo') {
   if (!receipt) {
     return {
-      storeName: 'ຮ້ານ MeiiShop',
-      storeSlogan: language === 'vi' ? 'Bán buôn - Bán lẻ Hàng tiêu dùng' : 'ຂາຍຍົກ - ຂາຍຍ່ອຍ ສິນຄ້າອຸປະໂພກ ບໍລິໂພກ',
-      storeAddress: 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
-      storeTel: 'ໂທ: 020 5555 9999 / 021 214 555',
+      storeName: language === 'vi' ? 'CỬA HÀNG SOMSAK (BÁN BIA)' : 'ຮ້ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)',
+      storeSlogan: '',
+      storeAddress: language === 'vi' ? 'Làng Phonesavanh, TP.Pakse, Champasak' : 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
+      storeTel: '020 56468780 / 02052228432',
       receiptNumber: 'MEII-POS',
       items: [],
       subtotal: 0,
@@ -104,10 +104,10 @@ export function formatReceiptForNative(receipt, language = 'lo') {
   return {
     receiptNumber: receipt.receiptNumber || receipt.id || 'MEII-POS',
     createdAt: dateStr,
-    storeName: 'ຮ້ານ MeiiShop',
-    storeSlogan: language === 'vi' ? 'Bán buôn - Bán lẻ Hàng tiêu dùng' : 'ຂາຍຍົກ - ຂາຍຍ່ອຍ ສິນຄ້າອຸປະໂພກ ບໍລິໂພກ',
-    storeAddress: 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
-    storeTel: 'ໂທ: 020 5555 9999 / 021 214 555',
+    storeName: language === 'vi' ? 'CỬA HÀNG SOMSAK (BÁN BIA)' : 'ຮ້ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)',
+    storeSlogan: '',
+    storeAddress: language === 'vi' ? 'Làng Phonesavanh, TP.Pakse, Champasak' : 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
+    storeTel: '020 56468780 / 02052228432',
     cashierName: receipt.cashierName || 'Meii',
     customerName: receipt.customerName || (language === 'vi' ? 'Khách lẻ' : 'ລູກຄ້າທົ່ວໄປ'),
     paymentMethod: receipt.paymentMethod || 'cash',
@@ -159,10 +159,10 @@ export async function printReceiptSmart({
     }
 
     try {
-      // 1. Ensure Phetsarath font is loaded in browser/webview memory
-      await ensurePhetsarathLoaded();
+      // 1. Ensure Saysettha font is loaded in browser/webview memory
+      await ensureSaysetthaLoaded();
 
-      // 2. Render receipt to 2X high-density Canvas using Phetsarath OT
+      // 2. Render receipt to 2X high-density Canvas using Saysettha OT
       const canvas = await renderReceiptCanvas(receipt, language);
 
       // 3. Convert Canvas to 1-bit ESC/POS raster bytes using Floyd-Steinberg dithering + ESC 7 thermal heat commands
@@ -211,7 +211,7 @@ export async function testPrinterConnection(ip, port, { printSlip = true } = {})
 
   if (Capacitor.isNativePlatform()) {
     if (printSlip) {
-      await ensurePhetsarathLoaded();
+      await ensureSaysetthaLoaded();
 
       const testReceipt = {
         receiptNumber: 'TEST-K80',
@@ -380,7 +380,7 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
     <title>Receipt_MeiiShop</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
-      ${PHETSARATH_CSS}
+      ${SAYSETTHA_CSS}
       @page {
         size: 80mm auto;
         margin: 0;
@@ -395,10 +395,19 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
         padding: 0 !important;
         background: #ffffff !important;
         color: #000000 !important;
-        font-family: 'Phetsarath', 'Noto Sans Lao', 'Outfit', sans-serif !important;
+        font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
         width: 100% !important;
         height: auto !important;
         overflow: visible !important;
+      }
+      .thermal-receipt-spooler-wrapper,
+      .thermal-receipt-spooler-wrapper *,
+      #thermal-receipt-print-area,
+      #thermal-receipt-print-area *,
+      #quotation-print-area,
+      #quotation-print-area * {
+        box-sizing: border-box !important;
+        font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
       }
       .thermal-receipt-spooler-wrapper,
       #thermal-receipt-print-area,
@@ -406,13 +415,11 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
         width: 100% !important;
         max-width: 80mm !important;
         margin: 0 auto !important;
-        padding: 4px !important;
-        box-sizing: border-box !important;
+        padding: 0 !important;
         box-shadow: none !important;
         border: none !important;
         background: #ffffff !important;
         overflow: visible !important;
-        font-family: 'Phetsarath', 'Noto Sans Lao', 'Outfit', sans-serif !important;
       }
     </style>
     ${styles}
@@ -518,20 +525,26 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
             padding: 0 !important;
             background: #ffffff !important;
             color: #000000 !important;
-            font-family: 'Phetsarath', 'Noto Sans Lao', 'Outfit', sans-serif !important;
+            font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
             width: 100% !important;
             height: auto !important;
             overflow: visible !important;
+          }
+          #thermal-receipt-print-area,
+          #thermal-receipt-print-area *,
+          #quotation-print-area,
+          #quotation-print-area * {
+            box-sizing: border-box !important;
+            font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
           }
           #thermal-receipt-print-area,
           #quotation-print-area {
             width: 100% !important;
             max-width: 80mm !important;
             margin: 0 auto !important;
-            padding: 4px !important;
+            padding: 0 !important;
             border: none !important;
             box-shadow: none !important;
-            font-family: 'Phetsarath', 'Noto Sans Lao', 'Outfit', sans-serif !important;
           }
         </style>
       </head>

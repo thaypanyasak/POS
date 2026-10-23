@@ -1,7 +1,40 @@
 @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+Lao:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=Phetsarath:wght@400;700&display=swap');
 @import "tailwindcss";
 
-/* Offline Local Fonts for Phetsarath (Traditional Rounded Loops) */
+/* Offline Local Fonts for Saysettha OT */
+@font-face {
+  font-family: 'Saysettha OT';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/saysettha_ot.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Saysettha OT';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/saysettha_ot.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Saysettha';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/saysettha_ot.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Saysettha';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/saysettha_ot.ttf') format('truetype');
+}
+
+/* Offline Local Fonts for Phetsarath */
 @font-face {
   font-family: 'Phetsarath';
   font-style: normal;
@@ -84,26 +117,21 @@
 }
 
 @theme {
-  --font-sans: 'Phetsarath', 'Noto Sans Lao', 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans: 'Noto Sans Lao', 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', Consolas, Monaco, monospace, 'Noto Sans Lao';
 }
 
 :root {
-  --font-lao: 'Phetsarath', 'Noto Sans Lao', 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-vietnam: 'Be Vietnam Pro', 'Phetsarath', 'Noto Sans Lao', sans-serif;
+  --font-lao: 'Noto Sans Lao', 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-vietnam: 'Be Vietnam Pro', 'Noto Sans Lao', sans-serif;
 }
 
 .font-vietnam {
-  font-family: 'Be Vietnam Pro', 'Phetsarath', 'Noto Sans Lao', sans-serif !important;
+  font-family: 'Be Vietnam Pro', 'Noto Sans Lao', sans-serif !important;
 }
 
-.font-vietnam *:not(.font-lao):not(.font-lao *) {
-  font-family: 'Be Vietnam Pro', 'Phetsarath', 'Noto Sans Lao', sans-serif !important;
-}
-
-.font-lao,
-.font-lao * {
-  font-family: 'Phetsarath', 'Noto Sans Lao', 'Outfit', sans-serif !important;
+.font-lao {
+  font-family: 'Noto Sans Lao', 'Outfit', sans-serif !important;
 }
 
 html, body, #root {
@@ -147,9 +175,23 @@ button, a, input, select, textarea, [role="button"] {
   }
 }
 
-/* Enforce Noto Sans Lao on all UI and bill elements */
+/* Enforce Noto Sans Lao on all UI elements */
 *, *::before, *::after, body, button, input, select, textarea, div, span, p, h1, h2, h3, h4, h5, h6, table, td, th {
   font-family: 'Noto Sans Lao', 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+/* Thermal Receipt Printing & Preview strictly uses Saysettha OT */
+#thermal-receipt-print-area,
+#thermal-receipt-print-area *,
+#quotation-print-area,
+#quotation-print-area *,
+.thermal-receipt-spooler-wrapper,
+.thermal-receipt-spooler-wrapper *,
+.font-receipt-saysettha,
+.font-receipt-saysettha *,
+.font-receipt-phetsarath,
+.font-receipt-phetsarath * {
+  font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
 }
 
 .font-mono {
@@ -256,13 +298,23 @@ button, a, input, select, textarea, [role="button"] {
     line-height: 1.4 !important;
   }
 
-  /* Khổ K80: width 72mm !important; margin: 0 auto; */
+  #thermal-receipt-print-area,
+  #thermal-receipt-print-area *,
+  #quotation-print-area,
+  #quotation-print-area *,
+  .thermal-receipt-spooler-wrapper,
+  .thermal-receipt-spooler-wrapper * {
+    font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
+  }
+
+  /* Khổ K80: width 80mm !important; margin: 0; padding: 0; */
   #thermal-receipt-print-area.paper-80mm,
   #thermal-receipt-print-area:not(.paper-58mm),
   #quotation-print-area {
-    width: 72mm !important;
-    max-width: 72mm !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
     margin: 0 auto !important;
+    padding: 0 !important;
   }
 
   /* Khổ K58: width 48mm !important; margin: 0 auto; */

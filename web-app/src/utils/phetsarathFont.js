@@ -12,6 +12,34 @@ export const PHETSARATH_CSS = `
 @font-face {
   font-family: 'Phetsarath';
   font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(data:font/truetype;charset=utf-8;base64,${PHETSARATH_BOLD_B64}) format('truetype');
+}
+@font-face {
+  font-family: 'Phetsarath';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(data:font/truetype;charset=utf-8;base64,${PHETSARATH_BOLD_B64}) format('truetype');
+}
+@font-face {
+  font-family: 'Phetsarath OT';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(data:font/truetype;charset=utf-8;base64,${PHETSARATH_REGULAR_B64}) format('truetype');
+}
+@font-face {
+  font-family: 'Phetsarath OT';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(data:font/truetype;charset=utf-8;base64,${PHETSARATH_BOLD_B64}) format('truetype');
+}
+@font-face {
+  font-family: 'Phetsarath OT';
+  font-style: normal;
   font-weight: 700;
   font-display: swap;
   src: url(data:font/truetype;charset=utf-8;base64,${PHETSARATH_BOLD_B64}) format('truetype');
@@ -38,9 +66,23 @@ export async function ensurePhetsarathLoaded() {
         `url(data:font/truetype;charset=utf-8;base64,${PHETSARATH_BOLD_B64})`,
         { weight: '700', style: 'normal' }
       );
-      const [r, b] = await Promise.all([regFace.load(), boldFace.load()]);
-      document.fonts.add(r);
-      document.fonts.add(b);
+      const regFaceOT = new FontFace(
+        'Phetsarath OT',
+        `url(data:font/truetype;charset=utf-8;base64,${PHETSARATH_REGULAR_B64})`,
+        { weight: '400', style: 'normal' }
+      );
+      const boldFaceOT = new FontFace(
+        'Phetsarath OT',
+        `url(data:font/truetype;charset=utf-8;base64,${PHETSARATH_BOLD_B64})`,
+        { weight: '700', style: 'normal' }
+      );
+      const faces = await Promise.all([
+        regFace.load(),
+        boldFace.load(),
+        regFaceOT.load(),
+        boldFaceOT.load(),
+      ]);
+      faces.forEach((f) => document.fonts.add(f));
       await document.fonts.ready;
     }
   } catch (err) {

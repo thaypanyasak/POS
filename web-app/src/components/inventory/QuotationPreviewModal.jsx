@@ -86,14 +86,14 @@ export default function QuotationPreviewModal({
           <div
             ref={printRef}
             id="quotation-print-area"
-            className="bg-white border border-slate-300 rounded-2xl p-4 sm:p-5 shadow-xs font-sans text-slate-900 max-w-[360px] mx-auto text-xs leading-normal select-none"
+            className="bg-white border border-slate-300 rounded-2xl px-2.5 py-3.5 sm:px-3 shadow-xs font-sans text-slate-900 w-full max-w-full mx-auto text-xs leading-normal select-none"
             style={{
-              fontFamily: '"Noto Sans Lao", system-ui, -apple-system, sans-serif',
+              fontFamily: '"Saysettha OT", "Saysettha", sans-serif',
             }}
           >
             {/* Store Branding */}
             <div className="text-center pb-2 border-b-2 border-slate-900 leading-normal">
-              <h2 className="text-lg font-black tracking-tight uppercase leading-normal pt-0.5">ຮ້ານ Meiishop</h2>
+              <h2 className="text-base font-black tracking-tight leading-normal pt-0.5">ຮ້ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)</h2>
               <div className="text-xs font-black tracking-wider uppercase mt-0.5 text-slate-800 leading-normal pt-0.5">
                 ໃບບອກລາຄາ / QUOTATION
               </div>

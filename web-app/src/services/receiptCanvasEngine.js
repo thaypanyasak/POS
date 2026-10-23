@@ -27,63 +27,63 @@
 // ─── 80mm K80 Physical Constants ──────────────────────────────────────────────
 export const K80 = {
   CANVAS_WIDTH: 576,    // Physical print dots (72 bytes * 8)
-  LEFT_MARGIN: 16,      // Left safe margin
-  RIGHT_EDGE: 560,      // Right safe margin
-  PRINTABLE_WIDTH: 544, // 560 - 16
+  LEFT_MARGIN: 2,       // Edge-to-edge left (0.25mm safe tolerance to use 100% width)
+  RIGHT_EDGE: 574,      // Edge-to-edge right (576 - 2 = 574 dots)
+  PRINTABLE_WIDTH: 572, // 574 - 2 = 572 (Full utilization of 576 dots)
   CENTER_X: 288,        // Symmetry center (576 / 2)
 
-  // 4-Column Grid
-  COL_NAME_X: 16,       // Column 1: Item Name
-  COL_NAME_MAX_W: 255,  // Max width 255px (wrap if longer)
-  COL_QTY_X: 288,       // Column 2: Qty (centered at 288px)
-  COL_PRICE_X: 410,     // Column 3: Unit Price (right-aligned at 410px)
-  COL_TOTAL_X: 560,     // Column 4: Line Total (right-aligned at 560px)
+  // 4-Column Grid (Spread across full 576 dots)
+  COL_NAME_X: 2,        // Column 1: Item Name (starts right at left edge)
+  COL_NAME_MAX_W: 280,  // Max width 280px (wrap if longer)
+  COL_QTY_X: 310,       // Column 2: Qty (centered at 310px)
+  COL_PRICE_X: 435,     // Column 3: Unit Price (right-aligned at 435px)
+  COL_TOTAL_X: 574,     // Column 4: Line Total (right-aligned at 574px)
 };
 
-import { ensurePhetsarathLoaded } from '../utils/phetsarathFont';
+import { ensureSaysetthaLoaded } from '../utils/saysetthaFont';
 
-// ─── Typography (High-Res POS Scale) ──────────────────────────────────────────
+// ─── Typography (High-Res POS Scale — Large & Bold for Maximum Thermal Clarity) ──
 const FONTS = {
-  STORE_NAME: 'bold 42px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SLOGAN: 'bold 22px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ADDRESS: '600 19px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TEL: 'bold 22px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TITLE: 'bold 28px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_LABEL: '600 19px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_VAL: 'bold 20px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  META_BOLD: 'bold 22px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  COL_HEADER: 'bold 21px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NAME: 'bold 21px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_UNIT: '600 18px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  ITEM_NUM: 'bold 19px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  ITEM_TOTAL: 'bold 20px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  CRATE_LABEL: '600 18px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  CRATE_NUM: 'bold 17px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  SUBTOTAL_LABEL: '600 20px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SUBTOTAL_NUM: 'bold 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  GRAND_LABEL: 'bold 30px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  GRAND_NUM: 'bold 32px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  TENDER_LABEL: '600 20px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  TENDER_NUM: 'bold 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  DEBT_LABEL: 'bold 24px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  DEBT_NUM: 'bold 24px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  QR_NAME: '600 17px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  QR_AMOUNT: 'bold 22px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  SIGN_LABEL: 'bold 22px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  SIGN_LINE: 'bold 20px monospace',
-  BARCODE_NUM: 'bold 20px "Outfit", monospace',
-  FOOTER_BOLD: 'bold 22px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  FOOTER: '600 19px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
-  VOID_TEXT: 'bold 26px "Phetsarath", "Noto Sans Lao", "Be Vietnam Pro", Outfit, sans-serif',
+  STORE_NAME: 'bold 44px "Saysettha OT", "Saysettha", sans-serif',
+  SLOGAN: 'bold 26px "Saysettha OT", "Saysettha", sans-serif',
+  ADDRESS: 'bold 23px "Saysettha OT", "Saysettha", sans-serif',
+  TEL: 'bold 26px "Saysettha OT", "Saysettha", sans-serif',
+  TITLE: 'bold 32px "Saysettha OT", "Saysettha", sans-serif',
+  META_LABEL: 'bold 23px "Saysettha OT", "Saysettha", sans-serif',
+  META_VAL: 'bold 24px "Saysettha OT", "Saysettha", sans-serif',
+  META_BOLD: 'bold 26px "Saysettha OT", "Saysettha", sans-serif',
+  COL_HEADER: 'bold 24px "Saysettha OT", "Saysettha", sans-serif',
+  ITEM_NAME: 'bold 25px "Saysettha OT", "Saysettha", sans-serif',
+  ITEM_UNIT: 'bold 22px "Saysettha OT", "Saysettha", sans-serif',
+  ITEM_NUM: 'bold 23px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  ITEM_TOTAL: 'bold 24px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  CRATE_LABEL: 'bold 22px "Saysettha OT", "Saysettha", sans-serif',
+  CRATE_NUM: 'bold 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  SUBTOTAL_LABEL: 'bold 24px "Saysettha OT", "Saysettha", sans-serif',
+  SUBTOTAL_NUM: 'bold 25px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  GRAND_LABEL: 'bold 34px "Saysettha OT", "Saysettha", sans-serif',
+  GRAND_NUM: 'bold 38px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  TENDER_LABEL: 'bold 24px "Saysettha OT", "Saysettha", sans-serif',
+  TENDER_NUM: 'bold 25px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  DEBT_LABEL: 'bold 28px "Saysettha OT", "Saysettha", sans-serif',
+  DEBT_NUM: 'bold 30px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  QR_NAME: 'bold 21px "Saysettha OT", "Saysettha", sans-serif',
+  QR_AMOUNT: 'bold 26px "Outfit", "Segoe UI", -apple-system, sans-serif',
+  SIGN_LABEL: 'bold 25px "Saysettha OT", "Saysettha", sans-serif',
+  SIGN_LINE: 'bold 22px monospace',
+  BARCODE_NUM: 'bold 24px "Outfit", monospace',
+  FOOTER_BOLD: 'bold 25px "Saysettha OT", "Saysettha", sans-serif',
+  FOOTER: 'bold 22px "Saysettha OT", "Saysettha", sans-serif',
+  VOID_TEXT: 'bold 30px "Saysettha OT", "Saysettha", sans-serif',
 };
 
 // ─── Bilingual Dictionary ─────────────────────────────────────────────────────
 const LABELS = {
   lo: {
-    storeName: 'ຮ້ານ MeiiShop',
-    storeSlogan: 'ຂາຍຍົກ - ຂາຍຍ່ອຍ ສິນຄ້າອຸປະໂພກ ບໍລິໂພກ',
+    storeName: 'ຮ້ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)',
+    storeSlogan: '',
     storeAddress: 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
-    storeTel: 'ໂທ: 020 5555 9999 / 021 214 555',
+    storeTel: '020 56468780 / 02052228432',
     receiptTitle: 'ໃບບິນຮັບເງິນ / RECEIPT',
     voidTitle: 'ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ (VOID)',
     cashier: 'ຜູ້ຂາຍ:',
@@ -115,16 +115,22 @@ const LABELS = {
     signCustomer: 'ຜູ້ຮັບເຄື່ອງ (Customer)',
     signSeller: 'ລາຍເຊັນຜູ້ຂາຍ (Seller)',
     signCashier: 'ພະນັກງານຂາຍ (Cashier)',
-    thankYou: 'ຂໍຂອບໃຈລູກຄ້າທີ່ມາອຸດໜູນ! ໂອກາດໜ້າເຊີນໃໝ່ເດີ',
-    returnPolicy: 'ສິນຄ້າຊື້ແລ້ວ ບໍ່ຮັບປ່ຽນ ຫຼື ຄືນເງິນ • ກະລຸນາກວດສອບເງິນທອນ',
+    thankYou: [
+      'ຂໍຂອບໃຈລູກຄ້າທີ່ມາອຸດໜູນຮ້ານເຮົາ',
+      'ຫວັງວ່າຈະໄດ້ຕ້ອນຮັບທ່ານອີກຄັ້ງໃນໂອກາດໜ້າ',
+    ],
+    returnPolicy: [
+      'ກະລຸນາກວດສອບສິນຄ້າໃຫ້ຄົບຖ້ວນ ກ່ອນອອກຈາກຮ້ານ',
+      'ສິນຄ້າສາມາດປ່ຽນ ຫຼື ຄືນໄດ້ພາຍໃນ 7 ວັນ ຕາມເງື່ອນໄຂຂອງຮ້ານ',
+    ],
     defaultItemName: 'ສິນຄ້າ',
     defaultUnitName: 'ອັນ',
   },
   vi: {
-    storeName: 'CỬA HÀNG MEIISHOP',
-    storeSlogan: 'Bán buôn - Bán lẻ Hàng tiêu dùng',
+    storeName: 'CỬA HÀNG SOMSAK (BÁN BIA)',
+    storeSlogan: '',
     storeAddress: 'Làng Phonesavanh, TP.Pakse, Champasak',
-    storeTel: 'ĐT: 020 5555 9999 / 021 214 555',
+    storeTel: '020 56468780 / 02052228432',
     receiptTitle: 'HÓA ĐƠN BÁN HÀNG',
     voidTitle: 'HÓA ĐƠN ĐÃ HỦY (VOID)',
     cashier: 'Thu ngân:',
@@ -156,8 +162,14 @@ const LABELS = {
     signCustomer: 'Người nhận hàng (Customer)',
     signSeller: 'Người bán hàng (Seller)',
     signCashier: 'Nhân viên thu ngân (Cashier)',
-    thankYou: 'ຂໍຂອບໃຈລູກຄ້າທີ່ມາອຸດໜູນ! ໂອກາດໜ້າເຊີນໃໝ່ເດີ',
-    returnPolicy: 'Hàng mua rồi miễn đổi hoặc trả lại tiền • Vui lòng kiểm tra tiền thừa',
+    thankYou: [
+      'Cảm ơn quý khách đã ủng hộ cửa hàng chúng tôi',
+      'Rất mong được đón tiếp quý khách lần sau',
+    ],
+    returnPolicy: [
+      'Vui lòng kiểm tra kỹ hàng hóa trước khi rời cửa hàng',
+      'Hàng có thể đổi hoặc trả trong vòng 7 ngày theo quy định',
+    ],
     defaultItemName: 'Sản phẩm',
     defaultUnitName: 'Cái',
   },
@@ -267,6 +279,11 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     ctx.textBaseline = 'top';
   }
 
+  const measureCtx = ctx || (typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null);
+  if (measureCtx) {
+    measureCtx.textBaseline = 'top';
+  }
+
   const drawCenter = (text, y, font) => {
     if (isDraw) {
       ctx.font = font;
@@ -297,8 +314,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
       ctx.setLineDash([6, 4]);
       ctx.lineWidth = 1.2;
       ctx.strokeStyle = '#000000';
-      ctx.moveTo(K80.LEFT_MARGIN, y);
-      ctx.lineTo(K80.RIGHT_EDGE, y);
+      ctx.moveTo(0, y);
+      ctx.lineTo(K80.CANVAS_WIDTH, y);
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -310,8 +327,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
       ctx.setLineDash([]);
       ctx.lineWidth = width;
       ctx.strokeStyle = '#000000';
-      ctx.moveTo(K80.LEFT_MARGIN, y);
-      ctx.lineTo(K80.RIGHT_EDGE, y);
+      ctx.moveTo(0, y);
+      ctx.lineTo(K80.CANVAS_WIDTH, y);
       ctx.stroke();
     }
   };
@@ -319,38 +336,56 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   let y = 16; // Top margin
 
   // 1. STORE HEADER (Prominent, Large, Authoritative)
-  drawCenter(L.storeName, y, FONTS.STORE_NAME);
-  y += 50; // Increased spacing for 42px font
+  if (L.storeName) {
+    if (measureCtx) measureCtx.font = FONTS.STORE_NAME;
+    const storeLines = measureCtx ? wrapText(measureCtx, L.storeName, K80.PRINTABLE_WIDTH) : [L.storeName];
+    for (const sLine of storeLines) {
+      drawCenter(sLine, y, FONTS.STORE_NAME);
+      y += 52;
+    }
+    y += 2;
+  }
 
-  drawCenter(L.storeSlogan, y, FONTS.SLOGAN);
-  y += 30; // Increased spacing for 21px font
+  if (L.storeSlogan) {
+    drawCenter(L.storeSlogan, y, FONTS.SLOGAN);
+    y += 34;
+  }
 
-  drawCenter(L.storeAddress, y, FONTS.ADDRESS);
-  y += 28; // Increased spacing for 18.5px font
+  if (L.storeAddress) {
+    if (measureCtx) measureCtx.font = FONTS.ADDRESS;
+    const addrLines = measureCtx ? wrapText(measureCtx, L.storeAddress, K80.PRINTABLE_WIDTH) : [L.storeAddress];
+    for (const aLine of addrLines) {
+      drawCenter(aLine, y, FONTS.ADDRESS);
+      y += 30;
+    }
+    y += 4;
+  }
 
-  drawCenter(L.storeTel, y, FONTS.TEL);
-  y += 34; // Increased spacing for 21px bold font
+  if (L.storeTel) {
+    drawCenter(L.storeTel, y, FONTS.TEL);
+    y += 38;
+  }
 
   // 2. RECEIPT TITLE BANNER (Generous padding, dead center between borders)
   y += 6;
   const bannerTopY = y;
   drawSolidLine(bannerTopY, 2.5);
 
-  const bannerHeight = 64; // Spacious banner height: generous distance from text to borders
+  const bannerHeight = 72; // Spacious banner height for 32px font
   const bannerMidY = bannerTopY + (bannerHeight / 2); // Exact middle
 
   if (isDraw) {
     ctx.textBaseline = 'middle';
     ctx.font = FONTS.TITLE;
     ctx.textAlign = 'center';
-    // Shift up 2.5px optically so the base characters of ໃບບິນ sit dead center between borders
+    // Shift up 2.5px optically so the base characters sit dead center between borders
     ctx.fillText(L.receiptTitle, K80.CENTER_X, bannerMidY - 2.5);
     ctx.textBaseline = 'top'; // Reset baseline
   }
 
   const bannerBottomY = bannerTopY + bannerHeight;
   drawSolidLine(bannerBottomY, 2.5);
-  y = bannerBottomY + 22; // Space below banner
+  y = bannerBottomY + 24; // Space below banner
 
   // 3. VOID BANNER (IF CANCELLED)
   if (isCancelled) {
@@ -364,14 +399,14 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     y += 54;
   }
 
-  // 4. METADATA SECTION (19px - 20px scaled typography - normal weight, no excessive bold)
+  // 4. METADATA SECTION (Clear, Bolder, High-Contrast Typography)
   // Row 1: Cashier & Customer
   drawLeft(`${L.cashier} ${receipt.cashierName || 'Meii'}`, K80.LEFT_MARGIN, y, FONTS.META_VAL);
   const custName = (!receipt.customerName || receipt.customerName === 'ລູກຄ້າທົ່ວໄປ' || receipt.customerName === 'Khách lẻ / Khách vãng lai')
     ? L.defaultCustomer
     : receipt.customerName;
   drawRight(`${L.customer} ${custName}`, K80.RIGHT_EDGE, y, FONTS.META_VAL);
-  y += 30;
+  y += 34;
 
   // Row 2: Date & Payment Method
   const dateStr = receipt.createdAt
@@ -386,11 +421,11 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     payLabel = Number(receipt.paidAmount || 0) === 0 ? L.payDebtFull : L.payDebtPartial;
   } else payLabel = L.payTransfer;
   drawRight(`${L.payment} ${payLabel}`, K80.RIGHT_EDGE, y, FONTS.META_VAL);
-  y += 32;
+  y += 36;
 
   // 5. COLUMN HEADERS (4 Columns)
   drawDashedLine(y);
-  y += 10;
+  y += 12;
   drawLeft(L.colName, K80.COL_NAME_X, y, FONTS.COL_HEADER);
   if (isDraw) {
     ctx.font = FONTS.COL_HEADER;
@@ -399,13 +434,14 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   }
   drawRight(L.colPrice, K80.COL_PRICE_X, y, FONTS.COL_HEADER);
   drawRight(L.colTotal, K80.COL_TOTAL_X, y, FONTS.COL_HEADER);
-  y += 30;
-  drawSolidLine(y, 1.2);
-  y += 12;
+  y += 34;
+  drawSolidLine(y, 1.4);
+  y += 14;
 
   // 6. ITEM ROWS (Preserved 23px font scale as requested)
-  const measureCtx = ctx || document.createElement('canvas').getContext('2d');
-  measureCtx.textBaseline = 'top';
+  if (measureCtx) {
+    measureCtx.textBaseline = 'top';
+  }
 
   for (const it of items) {
     const rawNameVi = it.product?.name_vi || it.product?.nameVi || it.name_vi || it.nameVi;
@@ -443,12 +479,12 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     }
     drawRight(fmtNum(price), K80.COL_PRICE_X, y + 2, FONTS.ITEM_NUM);
     drawRight(fmtNum(lineTotal), K80.COL_TOTAL_X, y + 2, FONTS.ITEM_TOTAL);
-    y += 28;
+    y += 34;
 
     // Additional wrapped name lines
     for (let li = 1; li < nameLines.length; li++) {
       drawLeft(nameLines[li], K80.COL_NAME_X, y, FONTS.ITEM_NAME);
-      y += 26;
+      y += 30;
     }
 
     // Crate deposit sub-row if applicable
@@ -468,15 +504,15 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
       }
       drawRight(fmtNum(feePerCrate), K80.COL_PRICE_X, y, FONTS.CRATE_NUM);
       drawRight(`+${fmtNum(crateTotal)}`, K80.COL_TOTAL_X, y, FONTS.CRATE_NUM);
-      y += 24;
+      y += 28;
     }
 
-    y += 4; // Padding between items
+    y += 6; // Padding between items
   }
 
-  y += 6;
+  y += 8;
   drawDashedLine(y);
-  y += 12;
+  y += 14;
 
   // 7. TOTALS SECTION
   const totalCrateDeposit = items.reduce((sum, it) => {
@@ -508,28 +544,28 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   // Subtotal
   drawLeft(L.subtotalLabel, K80.LEFT_MARGIN, y, FONTS.SUBTOTAL_LABEL);
   drawRight(fmtKip(pureGoodsSubtotal), K80.RIGHT_EDGE, y, FONTS.SUBTOTAL_NUM);
-  y += 28;
+  y += 34;
 
   // Crate deposit total
   if (totalCrateDeposit > 0) {
     drawLeft(L.crateDepositLabel, K80.LEFT_MARGIN, y, FONTS.SUBTOTAL_LABEL);
     drawRight(`+${fmtKip(totalCrateDeposit)}`, K80.RIGHT_EDGE, y, FONTS.SUBTOTAL_NUM);
-    y += 28;
+    y += 34;
   }
 
   // Discount
   if (discount > 0) {
     drawLeft(L.discountLabel, K80.LEFT_MARGIN, y, FONTS.SUBTOTAL_LABEL);
     drawRight(`-${fmtKip(discount)}`, K80.RIGHT_EDGE, y, FONTS.SUBTOTAL_NUM);
-    y += 28;
+    y += 34;
   }
 
   // ─── GRAND TOTAL WITH GENEROUS SPACIOUS PADDING & SYMMETRIC MIDDLE ALIGNMENT ───
-  y += 12;
+  y += 14;
   const grandBorderTopY = y;
   drawSolidLine(grandBorderTopY, 2.5); // Top border
 
-  const grandHeight = 74; // Spacious height: generous distance from text & numbers to borders
+  const grandHeight = 84; // Spacious height for 34px - 38px font
   const grandMidY = grandBorderTopY + (grandHeight / 2); // Exact middle
 
   if (isDraw) {
@@ -548,7 +584,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 
   const grandBorderBottomY = grandBorderTopY + grandHeight;
   drawSolidLine(grandBorderBottomY, 2.5); // Bottom border
-  y = grandBorderBottomY + 22;           // Margin below bottom border
+  y = grandBorderBottomY + 24;           // Margin below bottom border
 
   // 8. PAYMENT DETAILS (Tendered / Change / Debt)
   if (isDebt) {
@@ -633,8 +669,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   // Generous 100px space for hand signature (per user request)
   y += 100;
 
-  // Dotted lines strictly under each respective column (140px wide, leaving ~132px gap in center)
-  const drawSignDottedLine = (centerX, width = 140, lineY) => {
+  // Dotted lines strictly under each respective column (180px wide to fill column width)
+  const drawSignDottedLine = (centerX, width = 180, lineY) => {
     if (isDraw) {
       ctx.beginPath();
       ctx.setLineDash([3, 4]); // 3px dot, 4px space
@@ -647,8 +683,8 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     }
   };
 
-  drawSignDottedLine(sigColLeftX, 140, y);
-  drawSignDottedLine(sigColRightX, 140, y);
+  drawSignDottedLine(sigColLeftX, 180, y);
+  drawSignDottedLine(sigColRightX, 180, y);
   y += 36; // Breathing room below signature dots before barcode
 
   // 11. BARCODE STRIP (Oversized 50px height, 2.2x width for instantaneous laser scan)
@@ -677,12 +713,24 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   drawCenter(receipt.receiptNumber || 'MEII-POS', y, FONTS.BARCODE_NUM);
   y += 30; // 30px clean gap before footer text
 
-  // 12. FOOTER (21px Bold Thank you, 18px Return Policy)
-  drawCenter(L.thankYou, y, FONTS.FOOTER_BOLD);
-  y += 28;
+  // 12. FOOTER (Multi-line Thank You & Inspection / Return Policy)
+  const thankYouLines = Array.isArray(L.thankYou) ? L.thankYou : [L.thankYou];
+  for (const tLine of thankYouLines) {
+    if (tLine) {
+      drawCenter(tLine, y, FONTS.FOOTER_BOLD);
+      y += 34;
+    }
+  }
+  y += 4;
 
-  drawCenter(L.returnPolicy, y, FONTS.FOOTER);
-  y += 30;
+  const policyLines = Array.isArray(L.returnPolicy) ? L.returnPolicy : [L.returnPolicy];
+  for (const pLine of policyLines) {
+    if (pLine) {
+      drawCenter(pLine, y, FONTS.FOOTER);
+      y += 30;
+    }
+  }
+  y += 20;
 
   // 13. Paper feed padding before cutter (44px)
   y += 44;
@@ -694,19 +742,19 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 export async function renderReceiptCanvas(receipt, lang = 'lo') {
   if (!receipt) throw new Error('Receipt data is missing');
 
-  // Pre-load embedded Phetsarath OT & Noto Sans Lao fonts
+  // Pre-load embedded Saysettha OT fonts exclusively
   try {
-    await ensurePhetsarathLoaded();
+    await ensureSaysetthaLoaded();
     if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
       await Promise.race([
         Promise.all([
-          document.fonts.load('bold 42px "Phetsarath"'),
-          document.fonts.load('bold 28px "Phetsarath"'),
-          document.fonts.load('bold 21px "Phetsarath"'),
-          document.fonts.load('600 19px "Phetsarath"'),
-          document.fonts.load('bold 42px "Noto Sans Lao"'),
+          document.fonts.load('bold 44px "Saysettha OT"'),
+          document.fonts.load('bold 32px "Saysettha OT"'),
+          document.fonts.load('bold 25px "Saysettha OT"'),
+          document.fonts.load('bold 24px "Saysettha OT"'),
+          document.fonts.load('bold 22px "Saysettha OT"'),
         ]),
-        new Promise((resolve) => setTimeout(resolve, 600)),
+        new Promise((resolve) => setTimeout(resolve, 500)),
       ]);
     }
   } catch (_) {}

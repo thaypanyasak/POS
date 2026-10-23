@@ -159,10 +159,10 @@ public class ThermalPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
         let regularFontName = "HelveticaNeue"
 
         // 1. Store Header
-        let storeName = (data["storeName"] as? String) ?? "ຮ້ານ MeiiShop"
-        let slogan = (data["storeSlogan"] as? String) ?? (isVi ? "Bán buôn - Bán lẻ Hàng tiêu dùng" : "ຂາຍຍົກ - ຂາຍຍ່ອຍ ສິນຄ້າອຸປະໂພກ ບໍລິໂພກ")
+        let storeName = (data["storeName"] as? String) ?? "ຮ້ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)"
+        let slogan = (data["storeSlogan"] as? String) ?? ""
         let address = (data["storeAddress"] as? String) ?? "ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ"
-        let tel = (data["storeTel"] as? String) ?? "ໂທ: 020 5555 9999 / 021 214 555"
+        let tel = (data["storeTel"] as? String) ?? "020 56468780 / 02052228432"
 
         drawCenteredText(storeName, y: &currentY, font: UIFont.boldSystemFont(ofSize: 34), width: width)
         currentY += 4
