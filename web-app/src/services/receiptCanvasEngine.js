@@ -268,25 +268,34 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   }
 
   const drawCenter = (text, y, font) => {
-    if (isDraw) {
+    if (isDraw && text) {
       ctx.font = font;
       ctx.textAlign = 'center';
+      ctx.lineWidth = 0.6;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText(text, K80.CENTER_X, y);
       ctx.fillText(text, K80.CENTER_X, y);
     }
   };
 
   const drawLeft = (text, x, y, font) => {
-    if (isDraw) {
+    if (isDraw && text) {
       ctx.font = font;
       ctx.textAlign = 'left';
+      ctx.lineWidth = 0.6;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText(text, x, y);
       ctx.fillText(text, x, y);
     }
   };
 
   const drawRight = (text, x, y, font) => {
-    if (isDraw) {
+    if (isDraw && text) {
       ctx.font = font;
       ctx.textAlign = 'right';
+      ctx.lineWidth = 0.6;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText(text, x, y);
       ctx.fillText(text, x, y);
     }
   };
@@ -343,7 +352,10 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     ctx.textBaseline = 'middle';
     ctx.font = FONTS.TITLE;
     ctx.textAlign = 'center';
+    ctx.lineWidth = 0.6;
+    ctx.strokeStyle = '#000000';
     // Shift up 2.5px optically so the base characters of ໃບບິນ sit dead center between borders
+    ctx.strokeText(L.receiptTitle, K80.CENTER_X, bannerMidY - 2.5);
     ctx.fillText(L.receiptTitle, K80.CENTER_X, bannerMidY - 2.5);
     ctx.textBaseline = 'top'; // Reset baseline
   }
@@ -439,6 +451,9 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     if (isDraw) {
       ctx.font = FONTS.ITEM_NUM;
       ctx.textAlign = 'center';
+      ctx.lineWidth = 0.6;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText(`${qty}x`, K80.COL_QTY_X, y + 2);
       ctx.fillText(`${qty}x`, K80.COL_QTY_X, y + 2);
     }
     drawRight(fmtNum(price), K80.COL_PRICE_X, y + 2, FONTS.ITEM_NUM);
@@ -464,6 +479,9 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
       if (isDraw) {
         ctx.font = FONTS.CRATE_NUM;
         ctx.textAlign = 'center';
+        ctx.lineWidth = 0.6;
+        ctx.strokeStyle = '#000000';
+        ctx.strokeText(`${missingCount}x`, K80.COL_QTY_X, y);
         ctx.fillText(`${missingCount}x`, K80.COL_QTY_X, y);
       }
       drawRight(fmtNum(feePerCrate), K80.COL_PRICE_X, y, FONTS.CRATE_NUM);
@@ -536,11 +554,15 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     ctx.textBaseline = 'middle';
     ctx.font = FONTS.GRAND_LABEL;
     ctx.textAlign = 'left';
+    ctx.lineWidth = 0.6;
+    ctx.strokeStyle = '#000000';
     // Align Lao grand total label at middle line (-1px optical lift for Lao body alignment)
+    ctx.strokeText(L.grandTotalLabel, K80.LEFT_MARGIN, grandMidY - 1);
     ctx.fillText(L.grandTotalLabel, K80.LEFT_MARGIN, grandMidY - 1);
 
     ctx.font = FONTS.GRAND_NUM;
     ctx.textAlign = 'right';
+    ctx.strokeText(fmtKip(finalGrandTotal), K80.RIGHT_EDGE, grandMidY);
     ctx.fillText(fmtKip(finalGrandTotal), K80.RIGHT_EDGE, grandMidY);
 
     ctx.textBaseline = 'top'; // Reset baseline
