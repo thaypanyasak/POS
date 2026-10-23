@@ -165,12 +165,12 @@ export async function printReceiptSmart({
       // 2. Render receipt to 2X high-density Canvas using Phetsarath OT
       const canvas = await renderReceiptCanvas(receipt, language);
 
-      // 3. Convert Canvas to 1-bit ESC/POS raster bytes using High-Sensitivity Threshold + Morphological Micro-Hole Healing
+      // 3. Convert Canvas to 1-bit ESC/POS raster bytes using Floyd-Steinberg dithering + ESC 7 thermal heat commands
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: config.drawerKick,
         cutPaper: config.autoCut,
-        luminanceThreshold: 188,
-        morphologicalHealing: true,
+        luminanceThreshold: 145,
+        useDithering: true,
       });
 
       // 4. Send binary stream over TCP Socket directly to thermal printer
@@ -246,8 +246,7 @@ export async function testPrinterConnection(ip, port, { printSlip = true } = {})
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: false,
         cutPaper: true,
-        luminanceThreshold: 188,
-        morphologicalHealing: true,
+        useDithering: true,
       });
 
       await sendRawBytesViaTcp(targetIp, targetPort, escPosBytes, { timeoutSec: 4.0 });

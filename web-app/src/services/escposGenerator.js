@@ -2,37 +2,13 @@
  * ESC/POS Generator & High-Precision Monochrome Rasterizer for Thermal Printers
  * ══════════════════════════════════════════════════════════════════════════════
  * Standard: 80mm K80 (576 dots = 72 bytes/line)
- * Optimization:
- *   1. Hardware Thermal Heating Enhancement (ESC 7: 2500µs burn time, 500µs line interval)
- *   2. Reduced Motor Speed (ESC s 1, GS ( K fn 50: speed 1 for high precision & detail)
- *   3. Maximum Thermal Density (GS ( K fn 49: 130% density, DC2 # 31)
- *   4. High-Sensitivity Binary Thresholding (Captures full anti-aliased font contours)
- *   5. 8-Neighbor Morphological Micro-Hole Healing (Eliminates white specks & voids)
- *
+ * Algorithm: Floyd-Steinberg Error Diffusion Dithering + BT.601 Grayscale Luminance
  * Compatible with: EasyPrint ES-8803WA, Xprinter, Epson TM series, Star TSP
  */
 
 // ─── ESC/POS Command Constants ───────────────────────────────────────────────
 export const ESC_INIT = [0x1b, 0x40]; // ESC @ (Initialize printer)
-
-// 1. ESC s n: Select printing speed (1 = lowest speed / highest thermal exposure / maximum detail)
-export const ESC_SPEED_SLOW = [0x1b, 0x73, 0x01];
-
-// 2. GS ( K fn 50: Select print speed (1 = slowest speed)
-export const GS_SPEED_SLOW = [0x1d, 0x28, 0x4b, 0x02, 0x00, 0x32, 0x01];
-
-// 3. GS ( K fn 49: Select print density (8 = 130% darkest density)
-export const GS_DENSITY_MAX = [0x1d, 0x28, 0x4b, 0x02, 0x00, 0x31, 0x08];
-
-// 4. DC2 # n: Thermal head density (0x1F = 31 = max saturation)
-export const DC2_DENSITY_MAX = [0x12, 0x23, 0x1f];
-
-// 5. ESC 7 n1 n2 n3: Set print heating parameters
-// n1 = max heating dots: 20 (160 dots simultaneously, thick thermal coverage)
-// n2 = heating time: 250 (2500 µs - extra long burn duration, making ink pitch-black)
-// n3 = heating interval: 50 (500 µs pause between lines, physically slowing paper feed for sharp detail)
-export const ESC_HEAT_DENSITY = [0x1b, 0x37, 20, 250, 50];
-
+export const ESC_HEAT_DENSITY = [0x1b, 0x37, 0x07, 0xff, 0x0a]; // ESC 7 (Max thermal heating for pitch-black print)
 export const ESC_DRAWER_KICK = [0x1b, 0x70, 0x00, 0x19, 0xfa]; // ESC p 0 25 250 (Kick cash drawer)
 export const GS_CUT_PARTIAL = [0x1d, 0x56, 0x42, 0x00]; // GS V 66 0 (Partial cut with feed)
 export const ESC_FEED_LINES = (n = 3) => [0x1b, 0x64, n]; // ESC d n (Feed n lines)
@@ -43,23 +19,23 @@ export const WIDTH_BYTES = 72;       // 576 / 8 = 72 bytes per line
 
 /**
  * Convert Canvas to ESC/POS 1-bit Monochrome Raster (GS v 0)
- * Uses High-Sensitivity Contour Capture + 8-Neighbor Morphological Healing
- * to produce solid, pitch-black typography without any faded white dots or voids.
+ * Uses Floyd-Steinberg Error Diffusion Dithering to preserve fine rounded loops,
+ * tone marks, and smooth anti-aliased curves of Lao (Phetsarath OT) and Vietnamese.
  *
  * @param {HTMLCanvasElement} sourceCanvas - Canvas rendered at 576px or higher
  * @param {Object} options
  * @param {boolean} [options.kickCashDrawer=true] - Send ESC p drawer kick command
  * @param {boolean} [options.cutPaper=true] - Send GS V partial cut command
- * @param {number} [options.luminanceThreshold=188] - Brightness cutoff (captures anti-aliasing pixels)
- * @param {boolean} [options.morphologicalHealing=true] - Heal micro-holes inside character loops
+ * @param {number} [options.luminanceThreshold=145] - Brightness cutoff (default 145)
+ * @param {boolean} [options.useDithering=true] - Floyd-Steinberg dithering flag
  * @param {number} [options.feedLines=4] - Lines to feed before cut
  * @returns {Uint8Array} Complete ESC/POS byte stream ready for TCP transmission
  */
 export function canvasToEscPosRaster(sourceCanvas, {
   kickCashDrawer = true,
   cutPaper = true,
-  luminanceThreshold = 188,
-  morphologicalHealing = true,
+  luminanceThreshold = 145,
+  useDithering = true,
   feedLines = 4,
 } = {}) {
   if (!sourceCanvas) {
@@ -90,65 +66,58 @@ export function canvasToEscPosRaster(sourceCanvas, {
   const imgData = ctx.getImageData(0, 0, width, height);
   const pixels = imgData.data;
 
-  // ─── Step 3: High-Sensitivity Binary Thresholding ───────────────────
-  // Text anti-aliasing produces pixels with luminance between 140 and 200.
-  // By using threshold 188, we capture all anti-aliased edges as solid black,
-  // completely eliminating white/faded gaps inside Lao letter loops and tone marks.
-  const binaryGrid = new Uint8Array(width * height);
-  for (let y = 0; y < height; y++) {
-    const rowOffset = y * width;
-    for (let x = 0; x < width; x++) {
-      const idx = (rowOffset + x) * 4;
-      const alpha = pixels[idx + 3];
-      if (alpha > 50) {
-        // ITU-R BT.601 luminance calculation
-        const lum = 0.299 * pixels[idx] + 0.587 * pixels[idx + 1] + 0.114 * pixels[idx + 2];
-        if (lum < luminanceThreshold) {
-          binaryGrid[rowOffset + x] = 1; // Black thermal dot
-        }
-      }
+  // ─── Step 3: Convert to Grayscale Float32Array ───────────────────────
+  const gray = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const idx = i * 4;
+    const alpha = pixels[idx + 3];
+    if (alpha < 128) {
+      gray[i] = 255.0; // Transparent background is treated as white
+    } else {
+      const r = pixels[idx];
+      const g = pixels[idx + 1];
+      const b = pixels[idx + 2];
+      // ITU-R BT.601 standard luminance calculation
+      gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
     }
   }
 
-  // ─── Step 4: 8-Neighbor Morphological Micro-Hole Healing ────────────
-  // Fills microscopic voids inside character loops and tone mark stems.
-  const finalGrid = new Uint8Array(width * height);
-  if (morphologicalHealing) {
+  // ─── Step 4: Floyd-Steinberg Dithering to Binary Array ───────────────
+  // 1 = Black dot (burn thermal element), 0 = White (no burn)
+  const binary = new Uint8Array(width * height);
+
+  if (useDithering) {
     for (let y = 0; y < height; y++) {
-      const rowOffset = y * width;
-      const prevRow = y > 0 ? (y - 1) * width : rowOffset;
-      const nextRow = y < height - 1 ? (y + 1) * width : rowOffset;
-
       for (let x = 0; x < width; x++) {
-        if (binaryGrid[rowOffset + x] === 1) {
-          finalGrid[rowOffset + x] = 1;
-          continue;
+        const idx = y * width + x;
+        const oldVal = gray[idx];
+        const newVal = oldVal < luminanceThreshold ? 0.0 : 255.0;
+        binary[idx] = newVal === 0.0 ? 1 : 0;
+        const err = oldVal - newVal;
+
+        // Distribute error to neighboring pixels
+        // (x+1, y)   += err * 7/16
+        // (x-1, y+1) += err * 3/16
+        // (x,   y+1) += err * 5/16
+        // (x+1, y+1) += err * 1/16
+        if (x + 1 < width) {
+          gray[idx + 1] += (err * 7) / 16;
         }
-
-        // Check horizontal & vertical sandwich
-        const left = x > 0 ? binaryGrid[rowOffset + x - 1] : 0;
-        const right = x < width - 1 ? binaryGrid[rowOffset + x + 1] : 0;
-        const top = binaryGrid[prevRow + x];
-        const bottom = binaryGrid[nextRow + x];
-
-        if ((left === 1 && right === 1) || (top === 1 && bottom === 1)) {
-          finalGrid[rowOffset + x] = 1;
-          continue;
-        }
-
-        // Check diagonal sandwich for curved Lao glyphs
-        const topLeft = x > 0 ? binaryGrid[prevRow + x - 1] : 0;
-        const bottomRight = x < width - 1 ? binaryGrid[nextRow + x + 1] : 0;
-        const topRight = x < width - 1 ? binaryGrid[prevRow + x + 1] : 0;
-        const bottomLeft = x > 0 ? binaryGrid[nextRow + x - 1] : 0;
-
-        if ((topLeft === 1 && bottomRight === 1) || (topRight === 1 && bottomLeft === 1)) {
-          finalGrid[rowOffset + x] = 1;
+        if (y + 1 < height) {
+          if (x > 0) {
+            gray[(y + 1) * width + (x - 1)] += (err * 3) / 16;
+          }
+          gray[(y + 1) * width + x] += (err * 5) / 16;
+          if (x + 1 < width) {
+            gray[(y + 1) * width + (x + 1)] += (err * 1) / 16;
+          }
         }
       }
     }
   } else {
-    finalGrid.set(binaryGrid);
+    for (let i = 0; i < width * height; i++) {
+      binary[i] = gray[i] < luminanceThreshold ? 1 : 0;
+    }
   }
 
   // ─── Step 5: Assemble ESC/POS Commands ──────────────────────────────
@@ -157,15 +126,7 @@ export function canvasToEscPosRaster(sourceCanvas, {
   // ESC @: Initialize printer
   bytes.push(...ESC_INIT);
 
-  // Apply speed reduction commands (allows heating head longer exposure per dot)
-  bytes.push(...ESC_SPEED_SLOW);
-  bytes.push(...GS_SPEED_SLOW);
-
-  // Apply maximum thermal density commands (deep pitch-black saturation)
-  bytes.push(...GS_DENSITY_MAX);
-  bytes.push(...DC2_DENSITY_MAX);
-
-  // ESC 7: Set physical heating parameters (2500µs heating duration, 500µs line delay)
+  // ESC 7: Set thermal heating parameters for high contrast & dark black dots
   bytes.push(...ESC_HEAT_DENSITY);
 
   // ESC p: Kick cash drawer if enabled
@@ -174,8 +135,8 @@ export function canvasToEscPosRaster(sourceCanvas, {
   }
 
   // ─── Step 6: Chunked GS v 0 Raster Bit Image ────────────────────────
-  // Chunks of 128 lines provide smooth, steady motor movement without jitter
-  const MAX_CHUNK_LINES = 128;
+  // Max 256 lines per chunk to avoid printer buffer overflow
+  const MAX_CHUNK_LINES = 256;
   let currentY = 0;
 
   while (currentY < height) {
@@ -190,14 +151,14 @@ export function canvasToEscPosRaster(sourceCanvas, {
     bytes.push(0x1d, 0x76, 0x30, 0x00, xL, xH, yL, yH);
 
     for (let y = currentY; y < currentY + chunkHeight; y++) {
-      const rowOffset = y * width;
       for (let byteX = 0; byteX < WIDTH_BYTES; byteX++) {
         let byteVal = 0;
-        const basePixelX = byteX * 8;
         for (let bit = 0; bit < 8; bit++) {
-          const pixelX = basePixelX + bit;
-          if (pixelX < width && finalGrid[rowOffset + pixelX] === 1) {
-            byteVal |= (0x80 >> bit); // MSB = leftmost pixel
+          const pixelX = byteX * 8 + bit;
+          if (pixelX < width) {
+            if (binary[y * width + pixelX] === 1) {
+              byteVal |= (0x80 >> bit); // MSB = leftmost pixel
+            }
           }
         }
         bytes.push(byteVal);
