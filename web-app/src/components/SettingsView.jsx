@@ -29,7 +29,7 @@ import { Capacitor } from '@capacitor/core';
 import { updateExchangeRateInSupabase } from '../services/supabase';
 import queryClient from '../services/queryClient';
 import { formatDots } from '../utils/formatters';
-import { getPrinterConfig, savePrinterConfig, openCashDrawerDirect, testPrinterConnection } from '../services/printerService';
+import { getPrinterConfig, savePrinterConfig, fetchPrinterConfigFromDb, openCashDrawerDirect, testPrinterConnection } from '../services/printerService';
 import { liveUpdater } from '../services/liveUpdateService';
 import {
   playSuccessBeep,
@@ -111,11 +111,23 @@ export default function SettingsView({
   };
 
   // Printer Settings State (LAN / Wi-Fi IP, Port, Paper Width, Print Method)
-  const [printerIp, setPrinterIp] = useState(() => getPrinterConfig().ip);
-  const [printerPort, setPrinterPort] = useState(() => getPrinterConfig().port);
+  const [printerIp, setPrinterIp] = useState(() => getPrinterConfig().printer_ip || getPrinterConfig().ip || '');
+  const [printerPort, setPrinterPort] = useState(() => getPrinterConfig().printer_port || getPrinterConfig().port || 9100);
   const [printerAutoCut, setPrinterAutoCut] = useState(() => getPrinterConfig().autoCut);
   const [printerDrawerKick, setPrinterDrawerKick] = useState(() => getPrinterConfig().drawerKick);
-  const [printerMethod, setPrinterMethod] = useState(() => getPrinterConfig().printMethod || 'spooler');
+  const [printerMethod, setPrinterMethod] = useState(() => getPrinterConfig().printMethod || 'socket');
+
+  // Load shared printer config from Supabase on mount
+  useEffect(() => {
+    fetchPrinterConfigFromDb().then((cfg) => {
+      if (cfg) {
+        if (cfg.printer_ip) setPrinterIp(cfg.printer_ip);
+        if (cfg.printer_port) setPrinterPort(cfg.printer_port);
+        if (cfg.auto_cut !== undefined) setPrinterAutoCut(cfg.auto_cut);
+        if (cfg.drawer_kick !== undefined) setPrinterDrawerKick(cfg.drawer_kick);
+      }
+    }).catch(() => {});
+  }, []);
 
   const [localPaperWidth, setLocalPaperWidth] = useState(() => getPrinterConfig().paperWidth || receiptPaperWidth);
   const paperWidth = setReceiptPaperWidth ? receiptPaperWidth : localPaperWidth;
@@ -125,20 +137,25 @@ export default function SettingsView({
       setReceiptPaperWidth(val);
     }
     setLocalPaperWidth(val);
-    savePrinterConfig({ paperWidth: val });
+    savePrinterConfig({ paper_width: val });
   };
 
-  const handleSavePrinterSettings = () => {
-    savePrinterConfig({
-      ip: printerIp.trim(),
-      port: parseInt(printerPort, 10) || 9100,
-      paperWidth,
-      autoCut: printerAutoCut,
-      drawerKick: printerDrawerKick,
+  const handleSavePrinterSettings = async () => {
+    const cleanIp = printerIp.trim();
+    const cleanPort = parseInt(printerPort, 10) || 9100;
+
+    await savePrinterConfig({
+      printer_ip: cleanIp,
+      printer_port: cleanPort,
+      paper_width: paperWidth,
+      auto_cut: printerAutoCut,
+      drawer_kick: printerDrawerKick,
       printMethod: printerMethod,
     });
+
+    playSuccessBeep();
     onAlert?.(
-      `ບັນທຶກການຕັ້ງຄ່າເຄື່ອງພິມ ${printerIp.trim()}:${printerPort} (${paperWidth}mm - ${printerMethod === 'spooler' ? 'AirPrint Spooler' : 'Direct Socket'}) ສຳເລັດ!`,
+      `ບັນທຶກການຕັ້ງຄ່າເຄື່ອງພິມ ${cleanIp || '---'}:${cleanPort} ສຳເລັດ (ແບ່ງປັນກັບທຸກອຸປະກອນຜ່ານ Cloud)!`,
       'ສຳເລັດ',
       'success'
     );
@@ -148,45 +165,47 @@ export default function SettingsView({
   const [isTestingDrawer, setIsTestingDrawer] = useState(false);
 
   const handleTestPrinter = async () => {
+    const cleanIp = printerIp.trim();
+    const cleanPort = parseInt(printerPort, 10) || 9100;
+
+    if (!cleanIp) {
+      onAlert?.('ກະລຸນາປ້ອນ IP ເຄື່ອງພິມກ່ອນທົດສອບ.', 'ແຈ້ງເຕືອນ', 'warning');
+      return;
+    }
+
     try {
-      if (!Capacitor.isNativePlatform()) {
-        onAlert?.(
-          'ການທົດສອບເຄື່ອງພິມ ESC/POS ຮອງຮັບສະເພາະເມື່ອເປີດຜ່ານ App Capacitor ທີ່ເຊື່ອມຕໍ່ IP ເຄື່ອງພິມ LAN/Wi-Fi.',
-          'ແຈ້ງເຕືອນ',
-          'info'
-        );
-        return;
-      }
-      if (!printerIp || !printerIp.trim()) {
-        onAlert?.('ກະລຸນາປ້ອນ IP ເຄື່ອງພິມກ່ອນທົດສອບ.', 'ແຈ້ງເຕືອນ', 'warning');
-        return;
-      }
       setIsTestingPrinter(true);
 
-      // Top-level fail-safe timeout guard (max 3 seconds)
+      // Auto save first to ensure current inputs are stored
+      await savePrinterConfig({
+        printer_ip: cleanIp,
+        printer_port: cleanPort,
+      });
+
+      // Call Native CoreGraphics test print with timeout protection
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(
           () =>
             reject(
               new Error(
-                `ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${printerIp.trim()}:${printerPort} (Timeout 3s). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.`
+                `ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${cleanIp}:${cleanPort} (Timeout 3.5s). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.`
               )
             ),
-          3000
+          3500
         )
       );
 
-      await Promise.race([
-        testPrinterConnection(printerIp.trim(), printerPort),
+      const res = await Promise.race([
+        testPrinterConnection(cleanIp, cleanPort),
         timeoutPromise,
       ]);
 
       playSuccessBeep();
-      onAlert?.(`ເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ ${printerIp.trim()}:${printerPort} ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
+      onAlert?.(res?.message || `ທົດສອບເຄື່ອງພິມ ${cleanIp}:${cleanPort} ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
     } catch (err) {
       console.error('Test printer error:', err);
       playErrorBeep();
-      onAlert?.(`ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (${printerIp.trim()}:${printerPort}): ${err.message}`, 'ຂໍ້ຜິດພາດ', 'error');
+      onAlert?.(`ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (${cleanIp}:${cleanPort}): ${err.message}`, 'ຂໍ້ຜິດພາດ', 'error');
     } finally {
       setIsTestingPrinter(false);
     }
@@ -746,7 +765,7 @@ export default function SettingsView({
                     type="text"
                     value={printerIp}
                     onChange={(e) => setPrinterIp(e.target.value)}
-                    placeholder="192.168.1.200"
+                    placeholder="192.168.1.xxx"
                     className="w-full h-9 px-3 font-mono font-bold text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 focus:bg-white transition-all shadow-2xs"
                   />
                 </div>
