@@ -303,9 +303,11 @@ public class ThermalPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
         let change = (data["changeAmount"] as? Double) ?? Double((data["changeAmount"] as? Int) ?? 0)
         let debt = (data["debtAmount"] as? Double) ?? Double((data["debtAmount"] as? Int) ?? 0)
 
+        let effectiveSubtotal = max(subtotal, (subtotal + crateDeposit))
+
         drawTwoColumns(
             leftText: isVi ? "Tổng tiền hàng:" : "ລວມເງິນສິນຄ້າ:",
-            rightText: "\(formatCurrency(subtotal)) ₭",
+            rightText: "\(formatCurrency(effectiveSubtotal)) ₭",
             y: &currentY,
             left: leftMargin,
             right: rightEdge,
@@ -317,18 +319,6 @@ public class ThermalPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
             drawTwoColumns(
                 leftText: isVi ? "Giảm giá:" : "ສ່ວນຫຼຸດ:",
                 rightText: "-\(formatCurrency(discount)) ₭",
-                y: &currentY,
-                left: leftMargin,
-                right: rightEdge,
-                font: UIFont.systemFont(ofSize: 17, weight: .medium)
-            )
-            currentY += 4
-        }
-
-        if crateDeposit > 0 {
-            drawTwoColumns(
-                leftText: isVi ? "Tiền cọc vỏ két:" : "ຄ່າມັດຈຳລັງ:",
-                rightText: "+\(formatCurrency(crateDeposit)) ₭",
                 y: &currentY,
                 left: leftMargin,
                 right: rightEdge,
@@ -616,13 +606,7 @@ public class ThermalPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
 
         // 1. ESC @ (Initialize printer)
         data.append(contentsOf: [0x1B, 0x40])
-
-        // 2. Hardware Thermal Heating Enhancement & Speed Decrease for ES-8803WA
-        // Slow down speed so heavy thermal paper absorbs heat deeply
-        data.append(contentsOf: [0x1F, 0x1B, 0x1F, 0x02])
-        // Boost heat density (ESC 7 7 255 10)
-        data.append(contentsOf: [0x1B, 0x37, 0x07, 0xFF, 0x0A])
-
+        
         let width = image.width // 576
         let height = image.height
         let bytesPerLine = width / 8 // 72 bytes
@@ -633,7 +617,8 @@ public class ThermalPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
             return data
         }
 
-        let maxChunkLines = 256
+        // Max 64 lines per chunk to prevent yL = 0 parser bug on thermal microcontrollers
+        let maxChunkLines = 64
         var currentY = 0
 
         while currentY < height {

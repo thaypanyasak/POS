@@ -18,6 +18,7 @@ import {
 } from './escposGenerator';
 import { renderReceiptCanvas } from './receiptCanvasEngine';
 import { ensureSaysetthaLoaded, SAYSETTHA_CSS } from '../utils/saysetthaFont';
+import { ensureTahomaLoaded } from '../utils/tahomaFont';
 import { TcpSocket } from '@deedarb/capacitor-tcp-socket';
 
 // Re-export printer configuration APIs for seamless backward compatibility
@@ -38,7 +39,7 @@ export const PRINT_WIDTH_DOTS = 576; // 80mm K80 = 576 thermal dots
 export function formatReceiptForNative(receipt, language = 'lo') {
   if (!receipt) {
     return {
-      storeName: language === 'vi' ? 'CỬA HÀNG SOMSAK (BÁN BIA)' : 'ຮ້ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)',
+      storeName: language === 'vi' ? 'CỬA HÀNG SOMSAK' : 'ຮ້ານ ສົມສັກ',
       storeSlogan: '',
       storeAddress: language === 'vi' ? 'Làng Phonesavanh, TP.Pakse, Champasak' : 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
       storeTel: '020 56468780 / 02052228432',
@@ -57,9 +58,58 @@ export function formatReceiptForNative(receipt, language = 'lo') {
         : []);
 
   const formattedItems = rawItems.map((item) => {
-    const name = language === 'vi'
-      ? (item.name_vi || item.nameVi || item.name || item.product_name_vi || item.productName || item.product_name || 'Sản phẩm')
-      : (item.name || item.productName || item.product_name || item.name_vi || 'ສິນຄ້າ');
+    let name;
+    const rawLao = item.product?.name || item.productName || item.product_name || item.name || 'ສິນຄ້າ';
+    if (language === 'vi') {
+      const directVi =
+        item.name_vi ||
+        item.nameVi ||
+        item.product_name_vi ||
+        item.productNameVi ||
+        item.name_vietnam ||
+        item.name_vn ||
+        item.product?.name_vi ||
+        item.product?.nameVi ||
+        item.product?.name_vietnam ||
+        item.product?.name_vn;
+
+      if (directVi && String(directVi).trim()) {
+        name = String(directVi).trim();
+      } else {
+        const prodId = item.product?.id || item.productId || item.product_id || item.id;
+        // Check receipt.products if available
+        if (receipt?.products && Array.isArray(receipt.products)) {
+          const match = receipt.products.find(
+            (p) => (prodId && p.id === prodId) || (rawLao && p.name && p.name.trim() === rawLao.trim())
+          );
+          const matchVi = match?.name_vi || match?.nameVi || match?.name_vietnam || match?.name_vn;
+          if (matchVi && String(matchVi).trim()) {
+            name = String(matchVi).trim();
+          }
+        }
+        // Fallback to localStorage cache
+        if (!name) {
+          try {
+            const raw = typeof window !== 'undefined' ? localStorage.getItem('meiishop_products_v5') : null;
+            if (raw) {
+              const pool = JSON.parse(raw);
+              if (Array.isArray(pool)) {
+                const match = pool.find(
+                  (p) => (prodId && p.id === prodId) || (rawLao && p.name && p.name.trim() === rawLao.trim())
+                );
+                const matchVi = match?.name_vi || match?.nameVi || match?.name_vietnam || match?.name_vn;
+                if (matchVi && String(matchVi).trim()) {
+                  name = String(matchVi).trim();
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      }
+      if (!name) name = rawLao;
+    } else {
+      name = rawLao;
+    }
 
     const qty = Number(item.quantity ?? item.qty ?? 1);
     const price = Number(item.unit_price ?? item.price ?? 0);
@@ -104,11 +154,11 @@ export function formatReceiptForNative(receipt, language = 'lo') {
   return {
     receiptNumber: receipt.receiptNumber || receipt.id || 'MEII-POS',
     createdAt: dateStr,
-    storeName: language === 'vi' ? 'CỬA HÀNG SOMSAK (BÁN BIA)' : 'ຮ້ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)',
+    storeName: language === 'vi' ? 'CỬA HÀNG SOMSAK' : 'ຮ້ານ ສົມສັກ',
     storeSlogan: '',
     storeAddress: language === 'vi' ? 'Làng Phonesavanh, TP.Pakse, Champasak' : 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
     storeTel: '020 56468780 / 02052228432',
-    cashierName: receipt.cashierName || 'Meii',
+    cashierName: (!receipt.cashierName || receipt.cashierName.includes('\u0ec4\u0ea1\u0ec9\u0e84\u0eb3') || receipt.cashierName.includes('Meii')) ? 'Meii' : receipt.cashierName,
     customerName: receipt.customerName || (language === 'vi' ? 'Khách lẻ' : 'ລູກຄ້າທົ່ວໄປ'),
     paymentMethod: receipt.paymentMethod || 'cash',
     items: formattedItems,
@@ -121,6 +171,7 @@ export function formatReceiptForNative(receipt, language = 'lo') {
     debtAmount: debt,
     qrCodeData: receipt.qrCodeData || `https://laoqrcode.meii/${receipt.receiptNumber || 'POS'}`,
     isCancelled: Boolean(receipt.status === 'cancelled' || receipt.isCancelled),
+    isQuotation: Boolean(receipt.isQuotation),
     language,
   };
 }
@@ -135,14 +186,30 @@ export async function printReceiptSmart({
   language = 'lo',
   allowFallback = false,
   method = null,
+  products = null,
 } = {}) {
   const isNative = Capacitor.isNativePlatform();
   const config = getPrinterConfig();
   const activeMethod = method || config.printMethod || 'socket';
 
+  // Attach products pool if available for canvas engine lookup
+  if (receipt && !receipt.products) {
+    if (products && Array.isArray(products) && products.length > 0) {
+      receipt.products = products;
+    } else {
+      try {
+        const raw = typeof window !== 'undefined' ? localStorage.getItem('meiishop_products_v5') : null;
+        if (raw) {
+          const pool = JSON.parse(raw);
+          if (Array.isArray(pool)) receipt.products = pool;
+        }
+      } catch (_) {}
+    }
+  }
+
   // MODE 1: Print via OS Native Spooler (AirPrint / OS Dialog)
   if (activeMethod === 'spooler') {
-    return await printViaNativeSpooler(elementId);
+    return await printViaNativeSpooler(elementId, language);
   }
 
   // MODE 2: Native Capacitor App (Direct ESC/POS over TCP Socket to Port 9100)
@@ -153,24 +220,44 @@ export async function printReceiptSmart({
     if (!rawIp) {
       if (allowFallback) {
         console.warn('[printerService] No printer IP set, falling back to Native Spooler print');
-        return await printViaNativeSpooler(elementId);
+        return await printViaNativeSpooler(elementId, language);
       }
       throw new Error('ຍັງບໍ່ໄດ້ກຳນົດ IP ເຄື່ອງພິມ. ກະລຸນາຕັ້ງຄ່າ IP ໃນໜ້າການຕັ້ງຄ່າກ່ອນ.');
     }
 
     try {
-      // 1. Ensure Saysettha font is loaded in browser/webview memory
-      await ensureSaysetthaLoaded();
+      // 1. Ensure appropriate font is loaded in browser/webview memory
+      if (language === 'vi') {
+        await ensureTahomaLoaded();
+        await ensureSaysetthaLoaded();
+        if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
+          try {
+            await Promise.race([
+              Promise.all([
+                document.fonts.load('bold 38px "Tahoma"'),
+                document.fonts.load('bold 28px "Tahoma"'),
+                document.fonts.load('bold 24px "Tahoma"'),
+                document.fonts.load('22px "Tahoma"'),
+                document.fonts.load('23px "Saysettha OT"'),
+              ]),
+              new Promise((r) => setTimeout(r, 400)),
+            ]);
+          } catch (_) {}
+        }
+      } else {
+        await ensureSaysetthaLoaded();
+      }
 
-      // 2. Render receipt to 2X high-density Canvas using Saysettha OT
+      // 2. Render receipt to 1:1 Canvas
       const canvas = await renderReceiptCanvas(receipt, language);
 
-      // 3. Convert Canvas to 1-bit ESC/POS raster bytes using Floyd-Steinberg dithering + ESC 7 thermal heat commands
+      // 3. Convert Canvas to 1-bit ESC/POS raster bytes (threshold 205 for solid, continuous black strokes without white specks)
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: config.drawerKick,
         cutPaper: config.autoCut,
-        luminanceThreshold: 145,
-        useDithering: true,
+        luminanceThreshold: 205,
+        useDithering: false,
+        feedLines: 2,
       });
 
       // 4. Send binary stream over TCP Socket directly to thermal printer
@@ -186,7 +273,7 @@ export async function printReceiptSmart({
 
       if (allowFallback) {
         console.warn('[printerService] Falling back to native spooler print on socket error');
-        return await printViaNativeSpooler(elementId);
+        return await printViaNativeSpooler(elementId, language);
       }
 
       throw new Error(err.message || `ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (${rawIp}:${rawPort}). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ເຊື່ອມຕໍ່ເຄືອຂ່າຍ Wi-Fi ດຽວກັນ.`);
@@ -194,7 +281,7 @@ export async function printReceiptSmart({
   }
 
   // CASE 3: Web Browser fallback
-  return await printViaNativeSpooler(elementId);
+  return await printViaNativeSpooler(elementId, language);
 }
 
 /**
@@ -218,10 +305,10 @@ export async function testPrinterConnection(ip, port, { printSlip = true } = {})
         createdAt: new Date().toISOString(),
         cashierName: 'MeiiShop POS',
         customerName: 'ທົດສອບເຄື່ອງພິມ (Test Print)',
-        paymentMethod: 'cash',
+        paymentMethod: 'transfer',
         items: [
           {
-            name: 'ທົດສອບຟອນລາວ Phetsarath OT',
+            name: 'ທົດສອບເຄື່ອງພິມ K80 (Saysettha OT)',
             quantity: 1,
             unit: 'ຊຸດ',
             unit_price: 10000,
@@ -246,7 +333,7 @@ export async function testPrinterConnection(ip, port, { printSlip = true } = {})
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: false,
         cutPaper: true,
-        useDithering: true,
+        useDithering: false,
       });
 
       await sendRawBytesViaTcp(targetIp, targetPort, escPosBytes, { timeoutSec: 4.0 });
@@ -340,6 +427,9 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 4.
       `ໝົດເວລາສົ່ງຂໍ້ມູນໄປຍັງເຄື່ອງພິມ ${cleanIp}:${targetPort}`
     );
 
+    // Give thermal printer Wi-Fi buffer sufficient time to receive all raster chunks before disconnecting
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
     return { success: true, message: `Sent ${uint8Bytes.length} bytes to ${cleanIp}:${targetPort}` };
   } catch (err) {
     console.error(`[printerService] Error sending to printer ${cleanIp}:${targetPort}:`, err);
@@ -356,7 +446,7 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 4.
 /**
  * Print receipt via OS Native Print Spooler (AirPrint on iOS / Android Print Spooler / Web Print)
  */
-export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-area') {
+export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-area', language = 'lo') {
   if (typeof document === 'undefined') {
     throw new Error('printViaNativeSpooler can only run in a browser/DOM environment.');
   }
@@ -366,6 +456,12 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
     throw new Error(`ບໍ່ພົບ DOM Element #${elementId} ເພື່ອສັ່ງພິມ.`);
   }
 
+  // Detect language if element has .font-vietnam class or language is 'vi'
+  const isVi = language === 'vi' || targetElement.classList.contains('font-vietnam');
+  const targetFontFamily = isVi
+    ? "'Tahoma', 'Saysettha OT', 'Saysettha', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif !important"
+    : "'Saysettha OT', 'Saysettha', sans-serif !important";
+
   const contentHtml = targetElement.innerHTML;
   const origin = window.location.origin;
   const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
@@ -373,7 +469,7 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
     .join('\n');
 
   const htmlDocument = `<!DOCTYPE html>
-<html lang="lo">
+<html lang="${isVi ? 'vi' : 'lo'}">
   <head>
     <meta charset="utf-8" />
     <base href="${origin}/" />
@@ -381,6 +477,18 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
       ${SAYSETTHA_CSS}
+      @font-face {
+        font-family: 'Tahoma';
+        font-style: normal;
+        font-weight: 400;
+        src: url('/fonts/tahoma.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'Tahoma';
+        font-style: normal;
+        font-weight: 700;
+        src: url('/fonts/tahomabd.ttf') format('truetype');
+      }
       @page {
         size: 80mm auto;
         margin: 0;
@@ -395,7 +503,7 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
         padding: 0 !important;
         background: #ffffff !important;
         color: #000000 !important;
-        font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
+        font-family: ${targetFontFamily};
         width: 100% !important;
         height: auto !important;
         overflow: visible !important;
@@ -407,7 +515,7 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
       #quotation-print-area,
       #quotation-print-area * {
         box-sizing: border-box !important;
-        font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
+        font-family: ${targetFontFamily};
       }
       .thermal-receipt-spooler-wrapper,
       #thermal-receipt-print-area,
@@ -424,8 +532,8 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
     </style>
     ${styles}
   </head>
-  <body class="font-sans antialiased">
-    <div class="thermal-receipt-spooler-wrapper">
+  <body class="font-sans antialiased ${isVi ? 'font-vietnam' : 'font-lao'}">
+    <div class="thermal-receipt-spooler-wrapper ${isVi ? 'font-vietnam' : ''}">
       ${contentHtml}
     </div>
   </body>
@@ -448,10 +556,10 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
           orientation: 'portrait',
         });
       } else {
-        await printThermalElementDirect(elementId);
+        await printThermalElementDirect(elementId, language);
       }
     } else {
-      await printThermalElementDirect(elementId);
+      await printThermalElementDirect(elementId, language);
     }
 
     return {
@@ -461,7 +569,7 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
     };
   } catch (printErr) {
     console.warn('[printerService] Printer plugin error, falling back to browser print:', printErr);
-    await printThermalElementDirect(elementId);
+    await printThermalElementDirect(elementId, language);
     return {
       success: true,
       mode: 'fallback',
@@ -473,12 +581,17 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
 /**
  * Isolated Iframe Print for Thermal Receipts (Browser fallback)
  */
-export async function printThermalElementDirect(elementId = 'thermal-receipt-print-area') {
+export async function printThermalElementDirect(elementId = 'thermal-receipt-print-area', language = 'lo') {
   const sourceEl = document.getElementById(elementId);
   if (!sourceEl) {
     window.print();
     return;
   }
+
+  const isVi = language === 'vi' || sourceEl.classList?.contains('font-vietnam');
+  const targetFontFamily = isVi
+    ? "'Tahoma', 'Saysettha OT', 'Saysettha', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif !important"
+    : "'Saysettha OT', 'Saysettha', sans-serif !important";
 
   const oldIframe = document.getElementById('thermal-print-iframe');
   if (oldIframe) oldIframe.remove();
@@ -506,17 +619,29 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
   doc.open();
   doc.write(`
     <!DOCTYPE html>
-    <html lang="lo">
+    <html lang="${isVi ? 'vi' : 'lo'}">
       <head>
         <meta charset="utf-8" />
         <base href="${origin}/" />
         <title>Receipt Print (80mm K80)</title>
         <style>
-          ${PHETSARATH_CSS}
+          ${SAYSETTHA_CSS}
+          @font-face {
+            font-family: 'Tahoma';
+            font-style: normal;
+            font-weight: 400;
+            src: url('/fonts/tahoma.ttf') format('truetype');
+          }
+          @font-face {
+            font-family: 'Tahoma';
+            font-style: normal;
+            font-weight: 700;
+            src: url('/fonts/tahomabd.ttf') format('truetype');
+          }
           @page { size: auto; margin: 0mm; }
           *, *::before, *::after {
             box-sizing: border-box !important;
-            font-family: 'Phetsarath', 'Noto Sans Lao', 'Outfit', sans-serif !important;
+            font-family: ${targetFontFamily};
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -525,7 +650,7 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
             padding: 0 !important;
             background: #ffffff !important;
             color: #000000 !important;
-            font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
+            font-family: ${targetFontFamily};
             width: 100% !important;
             height: auto !important;
             overflow: visible !important;
@@ -535,7 +660,7 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
           #quotation-print-area,
           #quotation-print-area * {
             box-sizing: border-box !important;
-            font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
+            font-family: ${targetFontFamily};
           }
           #thermal-receipt-print-area,
           #quotation-print-area {
@@ -548,7 +673,7 @@ export async function printThermalElementDirect(elementId = 'thermal-receipt-pri
           }
         </style>
       </head>
-      <body>
+      <body class="${isVi ? 'font-vietnam' : 'font-lao'}">
         ${contentHtml}
         <script>
           window.onload = function() {

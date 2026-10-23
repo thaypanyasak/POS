@@ -41,52 +41,69 @@ export const K80 = {
 };
 
 import { ensureSaysetthaLoaded } from '../utils/saysetthaFont';
+import { ensureTahomaLoaded } from '../utils/tahomaFont';
 
 // ─── Typography (High-Res POS Scale — Large & Bold for Maximum Thermal Clarity) ──
-const FONTS = {
-  STORE_NAME: 'bold 44px "Saysettha OT", "Saysettha", sans-serif',
-  SLOGAN: 'bold 26px "Saysettha OT", "Saysettha", sans-serif',
-  ADDRESS: 'bold 23px "Saysettha OT", "Saysettha", sans-serif',
-  TEL: 'bold 26px "Saysettha OT", "Saysettha", sans-serif',
-  TITLE: 'bold 32px "Saysettha OT", "Saysettha", sans-serif',
-  META_LABEL: 'bold 23px "Saysettha OT", "Saysettha", sans-serif',
-  META_VAL: 'bold 24px "Saysettha OT", "Saysettha", sans-serif',
-  META_BOLD: 'bold 26px "Saysettha OT", "Saysettha", sans-serif',
-  COL_HEADER: 'bold 24px "Saysettha OT", "Saysettha", sans-serif',
-  ITEM_NAME: 'bold 25px "Saysettha OT", "Saysettha", sans-serif',
-  ITEM_UNIT: 'bold 22px "Saysettha OT", "Saysettha", sans-serif',
-  ITEM_NUM: 'bold 23px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  ITEM_TOTAL: 'bold 24px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  CRATE_LABEL: 'bold 22px "Saysettha OT", "Saysettha", sans-serif',
-  CRATE_NUM: 'bold 21px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  SUBTOTAL_LABEL: 'bold 24px "Saysettha OT", "Saysettha", sans-serif',
-  SUBTOTAL_NUM: 'bold 25px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  GRAND_LABEL: 'bold 34px "Saysettha OT", "Saysettha", sans-serif',
-  GRAND_NUM: 'bold 38px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  TENDER_LABEL: 'bold 24px "Saysettha OT", "Saysettha", sans-serif',
-  TENDER_NUM: 'bold 25px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  DEBT_LABEL: 'bold 28px "Saysettha OT", "Saysettha", sans-serif',
-  DEBT_NUM: 'bold 30px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  QR_NAME: 'bold 21px "Saysettha OT", "Saysettha", sans-serif',
-  QR_AMOUNT: 'bold 26px "Outfit", "Segoe UI", -apple-system, sans-serif',
-  SIGN_LABEL: 'bold 25px "Saysettha OT", "Saysettha", sans-serif',
-  SIGN_LINE: 'bold 22px monospace',
-  BARCODE_NUM: 'bold 24px "Outfit", monospace',
-  FOOTER_BOLD: 'bold 25px "Saysettha OT", "Saysettha", sans-serif',
-  FOOTER: 'bold 22px "Saysettha OT", "Saysettha", sans-serif',
-  VOID_TEXT: 'bold 30px "Saysettha OT", "Saysettha", sans-serif',
-};
+export function getFonts(lang = 'lo') {
+  const isVi = lang === 'vi';
+  // Vietnamese bills use Tahoma with Saysettha OT fallback for un-translated Lao product names;
+  // Lao bills stay 100% untouched on Saysettha OT.
+  const textFont = isVi
+    ? '"Tahoma", "Saysettha OT", "Saysettha", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif'
+    : '"Saysettha OT", "Saysettha", sans-serif';
+  const numFont = isVi
+    ? '"Tahoma", "Outfit", -apple-system, sans-serif'
+    : '"Outfit", "Segoe UI", -apple-system, sans-serif';
+
+  return {
+    STORE_NAME: isVi ? `bold 38px ${textFont}` : `bold 44px ${textFont}`,
+    SLOGAN: isVi ? `bold 24px ${textFont}` : `bold 26px ${textFont}`,
+    ADDRESS: isVi ? `bold 21px ${textFont}` : `bold 23px ${textFont}`,
+    TEL: isVi ? `bold 24px ${textFont}` : `bold 26px ${textFont}`,
+    TITLE: isVi ? `bold 28px ${textFont}` : `bold 32px ${textFont}`,
+    META_LABEL: isVi ? `bold 21px ${textFont}` : `bold 23px ${textFont}`,
+    META_VAL: isVi ? `bold 22px ${textFont}` : `bold 24px ${textFont}`,
+    META_BOLD: isVi ? `bold 24px ${textFont}` : `bold 26px ${textFont}`,
+    COL_HEADER: isVi ? `bold 22px ${textFont}` : `bold 24px ${textFont}`,
+    COL_HEADER_REGULAR: isVi ? `22px ${textFont}` : `24px ${textFont}`,
+    ITEM_NAME: isVi ? `bold 23px ${textFont}` : `bold 25px ${textFont}`,
+    ITEM_UNIT: isVi ? `bold 20px ${textFont}` : `bold 22px ${textFont}`,
+    ITEM_NUM: isVi ? `21px ${numFont}` : `23px ${numFont}`,
+    ITEM_TOTAL: isVi ? `bold 22px ${numFont}` : `bold 24px ${numFont}`,
+    CRATE_LABEL: isVi ? `bold 20px ${textFont}` : `bold 22px ${textFont}`,
+    CRATE_NUM: isVi ? `20px ${numFont}` : `21px ${numFont}`,
+    SUBTOTAL_LABEL: isVi ? `bold 22px ${textFont}` : `bold 24px ${textFont}`,
+    SUBTOTAL_NUM: isVi ? `bold 23px ${numFont}` : `bold 25px ${numFont}`,
+    GRAND_LABEL: isVi ? `bold 28px ${textFont}` : `bold 32px ${textFont}`,
+    GRAND_NUM: isVi ? `bold 34px ${numFont}` : `bold 38px ${numFont}`,
+    TENDER_LABEL: isVi ? `bold 22px ${textFont}` : `bold 24px ${textFont}`,
+    TENDER_NUM: isVi ? `bold 23px ${numFont}` : `bold 25px ${numFont}`,
+    DEBT_LABEL: isVi ? `bold 26px ${textFont}` : `bold 28px ${textFont}`,
+    DEBT_NUM: isVi ? `bold 28px ${numFont}` : `bold 30px ${numFont}`,
+    QR_NAME: isVi ? `bold 22px ${textFont}` : `bold 24px ${textFont}`,
+    QR_AMOUNT_LABEL: isVi ? `bold 24px ${textFont}` : `bold 26px ${textFont}`,
+    QR_AMOUNT_NUM: isVi ? `bold 24px ${numFont}` : `bold 26px ${numFont}`,
+    SIGN_LABEL: isVi ? `bold 23px ${textFont}` : `bold 25px ${textFont}`,
+    SIGN_LINE: 'bold 22px monospace',
+    BARCODE_NUM: isVi ? `bold 22px ${numFont}` : `bold 24px ${numFont}`,
+    FOOTER_BOLD: isVi ? `bold 23px ${textFont}` : `bold 25px ${textFont}`,
+    FOOTER: isVi ? `bold 20px ${textFont}` : `bold 22px ${textFont}`,
+    VOID_TEXT: isVi ? `bold 26px ${textFont}` : `bold 30px ${textFont}`,
+  };
+}
+
+export const FONTS = getFonts('lo');
 
 // ─── Bilingual Dictionary ─────────────────────────────────────────────────────
 const LABELS = {
   lo: {
-    storeName: 'ຮ້ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)',
+    storeName: 'ຮ້ານ ສົມສັກ',
     storeSlogan: '',
     storeAddress: 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
     storeTel: '020 56468780 / 02052228432',
     receiptTitle: 'ໃບບິນຮັບເງິນ / RECEIPT',
     voidTitle: 'ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ (VOID)',
-    cashier: 'ຜູ້ຂາຍ:',
+    cashier: 'ຜູ້ຂາຍ :',
     customer: 'ລູກຄ້າ:',
     defaultCustomer: 'ລູກຄ້າທົ່ວໄປ',
     date: 'ວັນທີ:',
@@ -111,10 +128,10 @@ const LABELS = {
     tenderedLabel: 'ຮັບເງິນມາ (Tendered):',
     changeLabel: 'ເງິນທອນ (Change):',
     transferTotalLabel: 'ຍອດໂອນ:',
-    signDebtor: 'ລາຍເຊັນຜູ້ຄ້າງຊຳລະ (Debtor)',
-    signCustomer: 'ຜູ້ຮັບເຄື່ອງ (Customer)',
-    signSeller: 'ລາຍເຊັນຜູ້ຂາຍ (Seller)',
-    signCashier: 'ພະນັກງານຂາຍ (Cashier)',
+    signDebtor: 'ລາຍເຊັນຜູ້ຄ້າງຊຳລະ',
+    signCustomer: 'ຜູ້ຮັບເຄື່ອງ',
+    signSeller: 'ລາຍເຊັນຜູ້ຂາຍ',
+    signCashier: 'ພະນັກງານຂາຍ',
     thankYou: [
       'ຂໍຂອບໃຈລູກຄ້າທີ່ມາອຸດໜູນຮ້ານເຮົາ',
       'ຫວັງວ່າຈະໄດ້ຕ້ອນຮັບທ່ານອີກຄັ້ງໃນໂອກາດໜ້າ',
@@ -123,17 +140,27 @@ const LABELS = {
       'ກະລຸນາກວດສອບສິນຄ້າໃຫ້ຄົບຖ້ວນ ກ່ອນອອກຈາກຮ້ານ',
       'ສິນຄ້າສາມາດປ່ຽນ ຫຼື ຄືນໄດ້ພາຍໃນ 7 ວັນ ຕາມເງື່ອນໄຂຂອງຮ້ານ',
     ],
+    quotationTitle: 'ໃບບອກລາຄາ / QUOTATION',
+    quotationWarning: '*** ໃບນີ້ບໍ່ແມ່ນໃບບິນຮັບເງິນ / NOT A RECEIPT ***',
+    quotationNotice: 'ໃບສະເໜີລາຄາຊົ່ວຄາວ',
+    quotationTerms: [
+      '• ໃບສະເໜີລາຄານີ້ມີກຳນົດ 3 ວັນ ນັບຈາກວັນທີອອກໃບ.',
+      '• ລາຄານີ້ອາດມີການປ່ຽນແປງຕາມສະພາບຕະຫຼາດຕົວຈິງ.',
+      '• ຂໍຂອບໃຈລູກຄ້າທີ່ໃຫ້ຄວາມສົນໃຈສິນຄ້າຮ້ານເຮົາ!',
+    ],
+    signQuotationCustomer: 'ລູກຄ້າ (Customer)',
+    signQuotationStaff: 'ພະນັກງານອອກໃບ (Staff)',
     defaultItemName: 'ສິນຄ້າ',
     defaultUnitName: 'ອັນ',
   },
   vi: {
-    storeName: 'CỬA HÀNG SOMSAK (BÁN BIA)',
+    storeName: 'CỬA HÀNG SOMSAK',
     storeSlogan: '',
     storeAddress: 'Làng Phonesavanh, TP.Pakse, Champasak',
     storeTel: '020 56468780 / 02052228432',
     receiptTitle: 'HÓA ĐƠN BÁN HÀNG',
     voidTitle: 'HÓA ĐƠN ĐÃ HỦY (VOID)',
-    cashier: 'Thu ngân:',
+    cashier: 'Thu ngân :',
     customer: 'Khách hàng:',
     defaultCustomer: 'Khách lẻ',
     date: 'Ngày in:',
@@ -158,10 +185,10 @@ const LABELS = {
     tenderedLabel: 'Tiền khách đưa (Tendered):',
     changeLabel: 'Tiền thừa thối lại (Change):',
     transferTotalLabel: 'Số tiền chuyển khoản:',
-    signDebtor: 'Chữ ký người nợ (Debtor)',
-    signCustomer: 'Người nhận hàng (Customer)',
-    signSeller: 'Người bán hàng (Seller)',
-    signCashier: 'Nhân viên thu ngân (Cashier)',
+    signDebtor: 'Chữ ký người nợ',
+    signCustomer: 'Người nhận hàng',
+    signSeller: 'Người bán hàng',
+    signCashier: 'Nhân viên thu ngân',
     thankYou: [
       'Cảm ơn quý khách đã ủng hộ cửa hàng chúng tôi',
       'Rất mong được đón tiếp quý khách lần sau',
@@ -170,6 +197,16 @@ const LABELS = {
       'Vui lòng kiểm tra kỹ hàng hóa trước khi rời cửa hàng',
       'Hàng có thể đổi hoặc trả trong vòng 7 ngày theo quy định',
     ],
+    quotationTitle: 'BẢNG BÁO GIÁ / QUOTATION',
+    quotationWarning: '*** ĐÂY LÀ BÁO GIÁ - KHÔNG PHẢI HÓA ĐƠN ***',
+    quotationNotice: 'Báo giá tạm tính',
+    quotationTerms: [
+      '• Báo giá có hiệu lực trong vòng 3 ngày kể từ ngày lập.',
+      '• Giá có thể thay đổi theo biến động thực tế của thị trường.',
+      '• Cảm ơn quý khách đã quan tâm đến cửa hàng chúng tôi!',
+    ],
+    signQuotationCustomer: 'Khách hàng (Customer)',
+    signQuotationStaff: 'Nhân viên báo giá (Staff)',
     defaultItemName: 'Sản phẩm',
     defaultUnitName: 'Cái',
   },
@@ -246,7 +283,7 @@ function translateUnit(unitStr, lang, isHalf = false) {
   return unitStr;
 }
 
-function preloadImage(src, timeoutMs = 800) {
+function preloadImage(src, timeoutMs = 3000) {
   return new Promise((resolve) => {
     if (!src) return resolve(null);
     const img = new Image();
@@ -265,18 +302,153 @@ function preloadImage(src, timeoutMs = 800) {
   });
 }
 
+// Global cached QR image for instant receipts without re-fetching
+let cachedQrImage = null;
+let qrImageLoadingPromise = null;
+
+export async function loadShopQrImage() {
+  if (cachedQrImage && cachedQrImage.complete && cachedQrImage.naturalWidth > 0) {
+    return cachedQrImage;
+  }
+  if (qrImageLoadingPromise) {
+    return qrImageLoadingPromise;
+  }
+  qrImageLoadingPromise = (async () => {
+    const paths = ['/qr.jpg', 'qr.jpg', './qr.jpg'];
+    for (const p of paths) {
+      try {
+        const img = await preloadImage(p, 3000);
+        if (img && img.naturalWidth > 0) {
+          cachedQrImage = img;
+          return img;
+        }
+      } catch (_) {}
+    }
+    return null;
+  })();
+  const result = await qrImageLoadingPromise;
+  qrImageLoadingPromise = null;
+  return result;
+}
+
+// ─── Standard Code 128-B Barcode Generator (GS1 / ISO/IEC 15417) ──────────────
+// Encodes full alphanumeric invoice ID (e.g. INV-853773) with uniform bar height
+const CODE128_PATTERNS = [
+  '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213', // 0-9
+  '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132', // 10-19
+  '221231', '213212', '223112', '312131', '311222', '321122', '321221', '312212', '322112', '322211', // 20-29
+  '212123', '212321', '232121', '111323', '131123', '131321', '112313', '132113', '132311', '211313', // 30-39
+  '231113', '231311', '112133', '112331', '132131', '113123', '113321', '133121', '313121', '211331', // 40-49
+  '231131', '213113', '213311', '213131', '311123', '311321', '331121', '312113', '312311', '332111', // 50-59
+  '314111', '221411', '431111', '111224', '111422', '121124', '121421', '141122', '141221', '112214', // 60-69
+  '112412', '122114', '122411', '142112', '142211', '241211', '221114', '413111', '241112', '134111', // 70-79
+  '111242', '121142', '121241', '114212', '124112', '124211', '411212', '421112', '421211', '212141', // 80-89
+  '214121', '412121', '111143', '111341', '131141', '114113', '114311', '411113', '411311', '113141', // 90-99
+  '114131', '311141', '411131', '211412', '211214', '211232', '2331112', // 100-106 (104=Start B, 106=Stop)
+];
+
+export function generateBarcode128(text) {
+  const str = String(text || 'MEII-POS').trim();
+  let checkSum = 104; // Start B code
+  const codes = [104];
+
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i) - 32; // Map ASCII 32..126
+    const validCode = (code >= 0 && code <= 95) ? code : 0;
+    codes.push(validCode);
+    checkSum += validCode * (i + 1);
+  }
+
+  codes.push(checkSum % 103);
+  codes.push(106); // Stop symbol
+
+  let bits = '';
+  for (const c of codes) {
+    const pattern = CODE128_PATTERNS[c] || CODE128_PATTERNS[0];
+    for (let p = 0; p < pattern.length; p++) {
+      const count = Number(pattern[p]);
+      const bit = (p % 2 === 0) ? '1' : '0';
+      bits += bit.repeat(count);
+    }
+  }
+
+  return { text: str, bits, totalModules: bits.length };
+}
+
+export function generateUpca(rawCode) {
+  return generateBarcode128(rawCode);
+}
+
 // ─── Drawing / Measuring Routine (Strict Top Baseline) ────────────────────────
-function layoutReceipt(ctx, receipt, lang, qrImage = null) {
+function resolveCanvasItemName(it, lang, receipt, defaultItemName = 'ສິນຄ້າ') {
+  const rawLao = it.product?.name || it.productName || it.product_name || it.name || defaultItemName;
+  if (lang !== 'vi') return rawLao;
+
+  // 1. Check direct fields on item and item.product
+  const directVi =
+    it.name_vi ||
+    it.nameVi ||
+    it.product_name_vi ||
+    it.productNameVi ||
+    it.name_vietnam ||
+    it.name_vn ||
+    it.product?.name_vi ||
+    it.product?.nameVi ||
+    it.product?.name_vietnam ||
+    it.product?.name_vn;
+
+  if (directVi && String(directVi).trim()) {
+    return String(directVi).trim();
+  }
+
+  // 2. Look up in receipt.products if attached
+  const prodId = it.product?.id || it.productId || it.product_id || it.id;
+  if (receipt?.products && Array.isArray(receipt.products)) {
+    const match = receipt.products.find(
+      (p) => (prodId && p.id === prodId) || (rawLao && p.name && p.name.trim() === rawLao.trim())
+    );
+    const matchVi = match?.name_vi || match?.nameVi || match?.name_vietnam || match?.name_vn;
+    if (matchVi && String(matchVi).trim()) {
+      return String(matchVi).trim();
+    }
+  }
+
+  // 3. Fallback: Look up in localStorage products cache
+  try {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('meiishop_products_v5') : null;
+    if (saved) {
+      const pool = JSON.parse(saved);
+      if (Array.isArray(pool)) {
+        const match = pool.find(
+          (p) => (prodId && p.id === prodId) || (rawLao && p.name && p.name.trim() === rawLao.trim())
+        );
+        const matchVi = match?.name_vi || match?.nameVi || match?.name_vietnam || match?.name_vn;
+        if (matchVi && String(matchVi).trim()) {
+          return String(matchVi).trim();
+        }
+      }
+    }
+  } catch (_) {}
+
+  return rawLao;
+}
+
+function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null) {
   const L = LABELS[lang] || LABELS.lo;
+  const FONTS = getFonts(lang);
   const items = receipt.items?.length > 0 ? receipt.items
     : (receipt.sale_transaction_items?.length > 0 ? receipt.sale_transaction_items : []);
-  const isCancelled = receipt.status === 'cancelled' || receipt.isCancelled;
-  const isDebt = receipt.paymentMethod === 'debt' || receipt.isDebt;
-  const isTransfer = receipt.paymentMethod !== 'cash';
+  const isQuotation = Boolean(receipt.isQuotation);
+  const isCancelled = !isQuotation && (receipt.status === 'cancelled' || receipt.isCancelled);
+  const pm = String(receipt.paymentMethod || receipt.payment_method || 'cash').toLowerCase();
+  const isDebt = !isQuotation && (pm === 'debt' || Boolean(receipt.isDebt));
+  const isCash = !isQuotation && (pm === 'cash');
+  const isTransfer = !isQuotation && (pm === 'transfer' || pm === 'onepay' || pm === 'qrtransfer' || pm === 'qr' || (!isCash && !isDebt));
 
   const isDraw = Boolean(ctx);
   if (isDraw) {
     ctx.textBaseline = 'top';
+    ctx.fillStyle = '#000000';
   }
 
   const measureCtx = ctx || (typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null);
@@ -286,6 +458,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 
   const drawCenter = (text, y, font) => {
     if (isDraw) {
+      ctx.fillStyle = '#000000';
       ctx.font = font;
       ctx.textAlign = 'center';
       ctx.fillText(text, K80.CENTER_X, y);
@@ -294,6 +467,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 
   const drawLeft = (text, x, y, font) => {
     if (isDraw) {
+      ctx.fillStyle = '#000000';
       ctx.font = font;
       ctx.textAlign = 'left';
       ctx.fillText(text, x, y);
@@ -302,6 +476,7 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 
   const drawRight = (text, x, y, font) => {
     if (isDraw) {
+      ctx.fillStyle = '#000000';
       ctx.font = font;
       ctx.textAlign = 'right';
       ctx.fillText(text, x, y);
@@ -374,18 +549,27 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   const bannerHeight = 72; // Spacious banner height for 32px font
   const bannerMidY = bannerTopY + (bannerHeight / 2); // Exact middle
 
+  const titleText = isQuotation ? L.quotationTitle : L.receiptTitle;
+
   if (isDraw) {
     ctx.textBaseline = 'middle';
     ctx.font = FONTS.TITLE;
     ctx.textAlign = 'center';
     // Shift up 2.5px optically so the base characters sit dead center between borders
-    ctx.fillText(L.receiptTitle, K80.CENTER_X, bannerMidY - 2.5);
+    ctx.fillText(titleText, K80.CENTER_X, bannerMidY - 2.5);
     ctx.textBaseline = 'top'; // Reset baseline
   }
 
   const bannerBottomY = bannerTopY + bannerHeight;
   drawSolidLine(bannerBottomY, 2.5);
-  y = bannerBottomY + 24; // Space below banner
+  y = bannerBottomY + 14;
+
+  if (isQuotation) {
+    drawCenter(L.quotationWarning, y, FONTS.FOOTER_BOLD);
+    y += 34;
+  } else {
+    y += 10;
+  }
 
   // 3. VOID BANNER (IF CANCELLED)
   if (isCancelled) {
@@ -401,58 +585,49 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 
   // 4. METADATA SECTION (Clear, Bolder, High-Contrast Typography)
   // Row 1: Cashier & Customer
-  drawLeft(`${L.cashier} ${receipt.cashierName || 'Meii'}`, K80.LEFT_MARGIN, y, FONTS.META_VAL);
+  const cashierDisp = (!receipt.cashierName || receipt.cashierName.includes('\u0ec4\u0ea1\u0ec9\u0e84\u0eb3') || receipt.cashierName.includes('Meii')) ? 'Meii' : receipt.cashierName;
+  drawLeft(`${L.cashier} ${cashierDisp}`, K80.LEFT_MARGIN, y, FONTS.META_VAL);
   const custName = (!receipt.customerName || receipt.customerName === 'ລູກຄ້າທົ່ວໄປ' || receipt.customerName === 'Khách lẻ / Khách vãng lai')
     ? L.defaultCustomer
     : receipt.customerName;
   drawRight(`${L.customer} ${custName}`, K80.RIGHT_EDGE, y, FONTS.META_VAL);
   y += 34;
 
-  // Row 2: Date & Payment Method
+  // Row 2: Date & Payment Method (Payment omitted for Quotation)
   const dateStr = receipt.createdAt
     ? new Date(receipt.createdAt).toLocaleString(lang === 'vi' ? 'vi-VN' : 'lo-LA')
     : new Date().toLocaleString();
   drawLeft(`${L.date} ${dateStr}`, K80.LEFT_MARGIN, y, FONTS.META_LABEL);
 
-  let payLabel = L.payCash;
-  if (receipt.paymentMethod === 'cash') payLabel = L.payCash;
-  else if (['transfer', 'qrTransfer', 'onepay'].includes(receipt.paymentMethod)) payLabel = L.payQr;
-  else if (receipt.paymentMethod === 'debt') {
-    payLabel = Number(receipt.paidAmount || 0) === 0 ? L.payDebtFull : L.payDebtPartial;
-  } else payLabel = L.payTransfer;
-  drawRight(`${L.payment} ${payLabel}`, K80.RIGHT_EDGE, y, FONTS.META_VAL);
+  if (!isQuotation) {
+    let payLabel = L.payCash;
+    if (receipt.paymentMethod === 'cash') payLabel = L.payCash;
+    else if (['transfer', 'qrTransfer', 'onepay'].includes(receipt.paymentMethod)) payLabel = L.payQr;
+    else if (receipt.paymentMethod === 'debt') {
+      payLabel = Number(receipt.paidAmount || 0) === 0 ? L.payDebtFull : L.payDebtPartial;
+    } else payLabel = L.payTransfer;
+    drawRight(`${L.payment} ${payLabel}`, K80.RIGHT_EDGE, y, FONTS.META_VAL);
+  }
   y += 36;
 
   // 5. COLUMN HEADERS (4 Columns)
+  // 5. ITEMS SECTION (Modern 2-Line Non-Bordered Layout: Name on line 1, Qty x Price & Total on line 2)
   drawDashedLine(y);
-  y += 12;
-  drawLeft(L.colName, K80.COL_NAME_X, y, FONTS.COL_HEADER);
-  if (isDraw) {
-    ctx.font = FONTS.COL_HEADER;
-    ctx.textAlign = 'center';
-    ctx.fillText(L.colQty, K80.COL_QTY_X, y);
-  }
-  drawRight(L.colPrice, K80.COL_PRICE_X, y, FONTS.COL_HEADER);
-  drawRight(L.colTotal, K80.COL_TOTAL_X, y, FONTS.COL_HEADER);
-  y += 34;
-  drawSolidLine(y, 1.4);
   y += 14;
 
-  // 6. ITEM ROWS (Preserved 23px font scale as requested)
   if (measureCtx) {
     measureCtx.textBaseline = 'top';
   }
 
-  for (const it of items) {
-    const rawNameVi = it.product?.name_vi || it.product?.nameVi || it.name_vi || it.nameVi;
-    const rawNameLao = it.product?.name || it.productName || it.product_name || L.defaultItemName;
-    const prodName = (lang === 'vi' && rawNameVi && String(rawNameVi).trim())
-      ? String(rawNameVi).trim()
-      : rawNameLao;
+  const indentX = K80.LEFT_MARGIN + 16; // Indented ~16px (2-3 characters)
+
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const prodName = resolveCanvasItemName(it, lang, receipt, L.defaultItemName);
 
     const rawUnit = it.unit?.unitName || it.unitName || it.unit_name || L.defaultUnitName;
     const unitName = translateUnit(rawUnit, lang, Boolean(it.isHalfCarton));
-    const fullName = `${prodName} (${unitName})`;
+    const fullName = `${i + 1}. ${prodName} (${unitName})`;
 
     const price = Number(
       it.customPrice ??
@@ -467,61 +642,50 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
     const qty = it.quantity || 1;
     const lineTotal = price * qty;
 
+    // Line 1: Number + Full Product Name + (Unit) across full printable width
     measureCtx.font = FONTS.ITEM_NAME;
-    const nameLines = wrapText(measureCtx, fullName, K80.COL_NAME_MAX_W);
-
-    // First line of row: Name, Qty, Unit Price, Line Total
-    drawLeft(nameLines[0], K80.COL_NAME_X, y, FONTS.ITEM_NAME);
-    if (isDraw) {
-      ctx.font = FONTS.ITEM_NUM;
-      ctx.textAlign = 'center';
-      ctx.fillText(`${qty}x`, K80.COL_QTY_X, y + 2);
+    const nameLines = wrapText(measureCtx, fullName, K80.PRINTABLE_WIDTH);
+    for (const nLine of nameLines) {
+      drawLeft(nLine, K80.LEFT_MARGIN, y, FONTS.ITEM_NAME);
+      y += 28; // Compact line-height (1.2)
     }
-    drawRight(fmtNum(price), K80.COL_PRICE_X, y + 2, FONTS.ITEM_NUM);
-    drawRight(fmtNum(lineTotal), K80.COL_TOTAL_X, y + 2, FONTS.ITEM_TOTAL);
-    y += 34;
 
-    // Additional wrapped name lines
-    for (let li = 1; li < nameLines.length; li++) {
-      drawLeft(nameLines[li], K80.COL_NAME_X, y, FONTS.ITEM_NAME);
-      y += 30;
-    }
+    // Line 2: Indented "Qty x Price" on Left, "Line Total" on Right
+    const qtyPriceStr = `${qty} x ${fmtNum(price)}`;
+    const totalStr = fmtNum(lineTotal);
+    drawLeft(qtyPriceStr, indentX, y, FONTS.ITEM_NUM);
+    drawRight(totalStr, K80.RIGHT_EDGE, y, FONTS.ITEM_TOTAL);
+    y += 28;
 
     // Crate deposit sub-row if applicable
+    const feePerCrate = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
+    const rawLineTotal = Number(it.lineTotal || it.line_total) || 0;
+    const diffTotal = (rawLineTotal > lineTotal) ? (rawLineTotal - lineTotal) : 0;
+    const explicitCrateTotal = Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * feePerCrate) : 0);
+    const crateTotal = explicitCrateTotal > 0 ? explicitCrateTotal : diffTotal;
+    const missingCount = Number(it.missingCratesCount) || (crateTotal > 0 ? Math.round(crateTotal / feePerCrate) : (it.noEmptyCrates ? qty : 0));
     const hasMissingCrates = Boolean(
-      it.noEmptyCrates || (Number(it.missingCratesCount) > 0) || (Number(it.crateDepositTotal) > 0)
+      crateTotal > 0 || it.noEmptyCrates || (Number(it.missingCratesCount) > 0)
     );
-    if (hasMissingCrates) {
-      const feePerCrate = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
-      const missingCount = Number(it.missingCratesCount) || (hasMissingCrates ? qty : 0);
-      const crateTotal = Number(it.crateDepositTotal) || (missingCount * feePerCrate);
 
-      drawLeft(L.missingCrate, K80.COL_NAME_X + 14, y, FONTS.CRATE_LABEL);
-      if (isDraw) {
-        ctx.font = FONTS.CRATE_NUM;
-        ctx.textAlign = 'center';
-        ctx.fillText(`${missingCount}x`, K80.COL_QTY_X, y);
-      }
-      drawRight(fmtNum(feePerCrate), K80.COL_PRICE_X, y, FONTS.CRATE_NUM);
-      drawRight(`+${fmtNum(crateTotal)}`, K80.COL_TOTAL_X, y, FONTS.CRATE_NUM);
-      y += 28;
+    if (hasMissingCrates && missingCount > 0) {
+      const crateStr = `${L.missingCrate}: ${missingCount} x ${fmtNum(feePerCrate)}`;
+      drawLeft(crateStr, indentX, y, FONTS.CRATE_LABEL);
+      drawRight(`+${fmtNum(crateTotal)}`, K80.RIGHT_EDGE, y, FONTS.CRATE_NUM);
+      y += 26;
     }
 
-    y += 6; // Padding between items
+    y += 20; // Clear, comfortable separation between distinct product items
   }
 
-  y += 8;
+  y += 4;
   drawDashedLine(y);
   y += 14;
 
   // 7. TOTALS SECTION
-  const totalCrateDeposit = items.reduce((sum, it) => {
-    const fee = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
-    const count = Number(it.missingCratesCount) || (it.noEmptyCrates ? it.quantity : 0);
-    return sum + (Number(it.crateDepositTotal) || (it.noEmptyCrates ? count * fee : 0));
-  }, 0);
-
-  const goodsSubtotal = items.reduce((sum, it) => {
+  const calculatedTotal = items.reduce((sum, it) => {
+    const rawLTotal = Number(it.lineTotal || it.line_total);
+    if (rawLTotal > 0) return sum + rawLTotal;
     const price = Number(
       it.customPrice ??
       it.effectivePrice ??
@@ -532,26 +696,20 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
         ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
         : (it.unit?.retailPrice ?? 0))
     ) || 0;
-    return sum + (price * (it.quantity || 1));
+    const qty = Number(it.quantity) || 1;
+    const fee = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
+    const explicit = Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * fee) : 0);
+    return sum + (price * qty) + explicit;
   }, 0);
 
-  const pureGoodsSubtotal = goodsSubtotal > 0 ? goodsSubtotal : Math.max(0, (receipt.subtotal || 0) - totalCrateDeposit);
-  const discount = Number(receipt.discountTotal) || 0;
-  const finalGrandTotal = receipt.grandTotal
-    ? Math.max(receipt.grandTotal, pureGoodsSubtotal + totalCrateDeposit - discount)
-    : (pureGoodsSubtotal + totalCrateDeposit - discount);
+  const subtotal = Number(receipt.subtotal) || calculatedTotal;
+  const discount = Number(receipt.discountTotal || receipt.discount) || 0;
+  const finalGrandTotal = Number(receipt.grandTotal) || (subtotal - discount);
 
-  // Subtotal
+  // Subtotal (includes crate deposit as requested)
   drawLeft(L.subtotalLabel, K80.LEFT_MARGIN, y, FONTS.SUBTOTAL_LABEL);
-  drawRight(fmtKip(pureGoodsSubtotal), K80.RIGHT_EDGE, y, FONTS.SUBTOTAL_NUM);
+  drawRight(fmtKip(subtotal), K80.RIGHT_EDGE, y, FONTS.SUBTOTAL_NUM);
   y += 34;
-
-  // Crate deposit total
-  if (totalCrateDeposit > 0) {
-    drawLeft(L.crateDepositLabel, K80.LEFT_MARGIN, y, FONTS.SUBTOTAL_LABEL);
-    drawRight(`+${fmtKip(totalCrateDeposit)}`, K80.RIGHT_EDGE, y, FONTS.SUBTOTAL_NUM);
-    y += 34;
-  }
 
   // Discount
   if (discount > 0) {
@@ -586,132 +744,154 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   drawSolidLine(grandBorderBottomY, 2.5); // Bottom border
   y = grandBorderBottomY + 24;           // Margin below bottom border
 
-  // 8. PAYMENT DETAILS (Tendered / Change / Debt)
-  if (isDebt) {
-    drawLeft(L.paidLabel, K80.LEFT_MARGIN, y, FONTS.TENDER_LABEL);
-    drawRight(fmtKip(receipt.paidAmount ?? receipt.amountTendered ?? 0), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
-    y += 28;
+  // 8. PAYMENT DETAILS (Tendered / Change / Debt - Omitted for Quotation)
+  if (!isQuotation) {
+    if (isDebt) {
+      const paidAmt = Number(receipt.paidAmount) || Number(receipt.amountTendered || receipt.amount_tendered) || 0;
+      drawLeft(L.paidLabel, K80.LEFT_MARGIN, y, FONTS.TENDER_LABEL);
+      drawRight(fmtKip(paidAmt), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
+      y += 38; // Increased from 28 to 38 for comfortable, clear separation!
 
-    const debtAmt = receipt.debtAmount ?? Math.max(0, receipt.grandTotal - (receipt.paidAmount ?? receipt.amountTendered ?? 0));
-    drawLeft(L.debtBalanceLabel, K80.LEFT_MARGIN, y, FONTS.DEBT_LABEL);
-    drawRight(fmtKip(debtAmt), K80.RIGHT_EDGE, y, FONTS.DEBT_NUM);
-    y += 30;
+      const debtAmt = (receipt.debtAmount !== undefined && receipt.debtAmount !== null && Number(receipt.debtAmount) > 0)
+        ? Number(receipt.debtAmount)
+        : (receipt.remainingDebt !== undefined && receipt.remainingDebt !== null && Number(receipt.remainingDebt) > 0)
+        ? Number(receipt.remainingDebt)
+        : Math.max(0, finalGrandTotal - paidAmt);
+      drawLeft(L.debtBalanceLabel, K80.LEFT_MARGIN, y, FONTS.DEBT_LABEL);
+      drawRight(fmtKip(debtAmt), K80.RIGHT_EDGE, y, FONTS.DEBT_NUM);
+      y += 40; // Increased from 30 to 40 for spacious height of 28px/30px font!
 
-    if (receipt.debtNote) {
-      measureCtx.font = FONTS.ADDRESS;
-      const noteLines = wrapText(measureCtx, `${L.debtNoteLabel} ${receipt.debtNote}`, K80.PRINTABLE_WIDTH);
-      for (const line of noteLines) {
-        drawLeft(line, K80.LEFT_MARGIN, y, FONTS.ADDRESS);
-        y += 22;
+      if (receipt.debtNote) {
+        measureCtx.font = FONTS.ADDRESS;
+        const noteLines = wrapText(measureCtx, `${L.debtNoteLabel} ${receipt.debtNote}`, K80.PRINTABLE_WIDTH);
+        for (const line of noteLines) {
+          drawLeft(line, K80.LEFT_MARGIN, y, FONTS.ADDRESS);
+          y += 24;
+        }
+      }
+    } else {
+      drawLeft(L.tenderedLabel, K80.LEFT_MARGIN, y, FONTS.TENDER_LABEL);
+      drawRight(fmtKip(receipt.amountTendered), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
+      y += 34;
+
+      if (receipt.paymentMethod === 'cash') {
+        drawLeft(L.changeLabel, K80.LEFT_MARGIN, y, FONTS.TENDER_LABEL);
+        drawRight(fmtKip(receipt.changeAmount), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
+        y += 34;
       }
     }
-  } else {
-    drawLeft(L.tenderedLabel, K80.LEFT_MARGIN, y, FONTS.TENDER_LABEL);
-    drawRight(fmtKip(receipt.amountTendered), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
-    y += 28;
-
-    if (receipt.paymentMethod === 'cash') {
-      drawLeft(L.changeLabel, K80.LEFT_MARGIN, y, FONTS.TENDER_LABEL);
-      drawRight(fmtKip(receipt.changeAmount), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
-      y += 28;
-    }
+    y += 14;
   }
 
-  y += 14;
-
-  // 9. QR CODE PAYMENT (If transfer payment or debt)
-  const showQr = isTransfer || (isDebt && (receipt.debtAmount ?? receipt.grandTotal) > 0);
+  // 9. QR CODE PAYMENT (If transfer payment or debt - Omitted for Quotation)
+  const showQr = !isQuotation && (isTransfer || (isDebt && (receipt.debtAmount ?? receipt.grandTotal) > 0));
   if (showQr) {
     drawDashedLine(y);
-    y += 16;
+    y += 18;
 
-    const qrSize = 155;
-    const qrX = K80.CENTER_X - qrSize / 2;
+    // Generous 260px size (~33mm wide) for instant mobile camera recognition
+    const qrSize = 260;
+    const qrX = Math.round(K80.CENTER_X - qrSize / 2);
 
     if (qrImage && isDraw) {
       try {
+        // Pure white quiet zone box around QR code
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(qrX - 12, y - 8, qrSize + 24, qrSize + 16);
+        // Disable smoothing so QR module edges stay crisp and don't blur into gray bleed
+        const prevSmoothing = ctx.imageSmoothingEnabled;
+        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(qrImage, qrX, y, qrSize, qrSize);
+        ctx.imageSmoothingEnabled = prevSmoothing;
       } catch (_) {}
+      ctx.fillStyle = '#000000'; // Explicitly restore solid black after QR white box
     } else if (isDraw) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(qrX, y, qrSize, qrSize);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
       ctx.strokeRect(qrX, y, qrSize, qrSize);
+      ctx.fillStyle = '#000000'; // Explicitly restore solid black after QR white box
       drawCenter('LAO QR PAYMENT', y + qrSize / 2 - 8, FONTS.META_BOLD);
     }
-    y += qrSize + 12;
+    y += qrSize + 16;
 
-    // Account holder
-    drawCenter('VILAIPHONE VANNALATH MS', y, FONTS.QR_NAME);
-    y += 24;
-
-    const qrAmount = (receipt.paymentMethod === 'debt' || receipt.isDebt)
-      ? (receipt.debtAmount ?? receipt.grandTotal)
-      : receipt.grandTotal;
-    drawCenter(`${L.transferTotalLabel} ${fmtKip(qrAmount)}`, y, FONTS.QR_AMOUNT);
-    y += 32;
+    // Account holder name under QR Code
+    drawCenter('ທ່ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)', y, FONTS.QR_NAME);
+    y += 36;
   }
 
-  // 10. SIGNATURES SECTION (21px Bold labels, generous 100px space, dots ONLY under columns)
-  drawDashedLine(y);
-  y += 20;
+  // 10. SIGNATURES SECTION (Only for real sales / debts; omitted for quotation per user request)
+  if (!isQuotation) {
+    drawDashedLine(y);
+    y += 20;
 
-  const sigColLeftX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.25;  // ~152px
-  const sigColRightX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.75; // ~424px
+    const sigColLeftX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.25;  // ~152px
+    const sigColRightX = K80.LEFT_MARGIN + K80.PRINTABLE_WIDTH * 0.75; // ~424px
 
-  const leftSignLabel = isDebt ? L.signDebtor : L.signCustomer;
-  const rightSignLabel = isDebt ? L.signSeller : L.signCashier;
+    const leftSignLabel = isDebt ? L.signDebtor : L.signCustomer;
+    const rightSignLabel = isDebt ? L.signSeller : L.signCashier;
 
-  if (isDraw) {
-    ctx.font = FONTS.SIGN_LABEL;
-    ctx.textAlign = 'center';
-    ctx.fillText(leftSignLabel, sigColLeftX, y);
-    ctx.fillText(rightSignLabel, sigColRightX, y);
-  }
-
-  // Generous 100px space for hand signature (per user request)
-  y += 100;
-
-  // Dotted lines strictly under each respective column (180px wide to fill column width)
-  const drawSignDottedLine = (centerX, width = 180, lineY) => {
     if (isDraw) {
-      ctx.beginPath();
-      ctx.setLineDash([3, 4]); // 3px dot, 4px space
-      ctx.lineWidth = 1.6;
-      ctx.strokeStyle = '#000000';
-      ctx.moveTo(centerX - width / 2, lineY);
-      ctx.lineTo(centerX + width / 2, lineY);
-      ctx.stroke();
-      ctx.setLineDash([]); // Reset dash
+      ctx.fillStyle = '#000000'; // Explicitly ensure black color for signature text
+      ctx.font = FONTS.SIGN_LABEL;
+      ctx.textAlign = 'center';
+      ctx.fillText(leftSignLabel, sigColLeftX, y);
+      ctx.fillText(rightSignLabel, sigColRightX, y);
     }
-  };
 
-  drawSignDottedLine(sigColLeftX, 180, y);
-  drawSignDottedLine(sigColRightX, 180, y);
-  y += 36; // Breathing room below signature dots before barcode
+    // Generous 100px space for hand signature (per user request)
+    y += 100;
 
-  // 11. BARCODE STRIP (Oversized 50px height, 2.2x width for instantaneous laser scan)
+    // Dotted lines strictly under each respective column (180px wide to fill column width)
+    const drawSignDottedLine = (centerX, width = 180, lineY) => {
+      if (isDraw) {
+        ctx.beginPath();
+        ctx.setLineDash([3, 4]); // 3px dot, 4px space
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = '#000000';
+        ctx.moveTo(centerX - width / 2, lineY);
+        ctx.lineTo(centerX + width / 2, lineY);
+        ctx.stroke();
+        ctx.setLineDash([]); // Reset dash
+      }
+    };
+
+    drawSignDottedLine(sigColLeftX, 180, y);
+    drawSignDottedLine(sigColRightX, 180, y);
+    y += 36; // Breathing room below signature dots before barcode
+  }
+
+  // 11. BARCODE STRIP (Standard Code 128-B: Equal bar height, encodes exact bill code)
   drawDashedLine(y);
-  y += 20;
+  y += 22;
 
-  const barcodePattern = [2, 1, 3, 1, 2, 4, 1, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1, 2, 4, 1, 3, 1, 2, 1, 4, 2, 1, 3, 1, 2, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 2, 1, 2, 4];
-  const barcodeH = 50; // Increased from 36 to 50 for big, prominent barcode
-  const barcodeMultiplier = 2.2; // Bolder lines
-  const totalBarW = barcodePattern.reduce((s, w) => s + w * barcodeMultiplier, 0);
-  let barX = K80.CENTER_X - totalBarW / 2;
+  const barcodeData = generateBarcode128(receipt.receiptNumber || 'MEII-POS');
+  const moduleW = 2; // Crisp 2px module width (4 physical px on 2X canvas)
+  const barcodeTotalW = barcodeData.totalModules * moduleW;
+  const startX = Math.round(K80.CENTER_X - barcodeTotalW / 2);
+  const barcodeH = 80; // Uniform equal height across all bars
 
   if (isDraw) {
-    for (let i = 0; i < barcodePattern.length; i++) {
-      const bw = barcodePattern[i] * barcodeMultiplier;
-      if (i % 2 === 0) {
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(barX, y, bw, barcodeH);
+    // Pure white quiet zone
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(startX - 20, y - 4, barcodeTotalW + 40, barcodeH + 8);
+
+    // Draw barcode bars with crisp equal height
+    ctx.fillStyle = '#000000';
+    for (let i = 0; i < barcodeData.totalModules; i++) {
+      if (barcodeData.bits[i] === '1') {
+        const bx = startX + i * moduleW;
+        ctx.fillRect(bx, y, moduleW, barcodeH);
       }
-      barX += bw;
     }
   }
-  y += barcodeH + 18; // 18px clean gap below barcode bars!
 
-  // Receipt Number (20px bold monospace, clear separation)
+  y += barcodeH + 16; // Clean gap below uniform barcode bars
+
+  // Receipt Number (24px bold monospace, clear separation - EXACT bill code)
   drawCenter(receipt.receiptNumber || 'MEII-POS', y, FONTS.BARCODE_NUM);
-  y += 30; // 30px clean gap before footer text
+  y += 54; // Spacious gap between barcode bill code & thank you (User: dính nhau quá cách xa nhau một chút)
 
   // 12. FOOTER (Multi-line Thank You & Inspection / Return Policy)
   const thankYouLines = Array.isArray(L.thankYou) ? L.thankYou : [L.thankYou];
@@ -723,17 +903,17 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
   }
   y += 4;
 
-  const policyLines = Array.isArray(L.returnPolicy) ? L.returnPolicy : [L.returnPolicy];
+  const policyLines = isQuotation
+    ? (Array.isArray(L.quotationTerms) ? L.quotationTerms : [L.quotationTerms])
+    : (Array.isArray(L.returnPolicy) ? L.returnPolicy : [L.returnPolicy]);
   for (const pLine of policyLines) {
     if (pLine) {
       drawCenter(pLine, y, FONTS.FOOTER);
       y += 30;
     }
   }
-  y += 20;
-
-  // 13. Paper feed padding before cutter (44px)
-  y += 44;
+  // User: phần dưới từ chữ ສິນຄ້າສາມາດປ່ຽນ ຫຼື .... tới cuối trang nó dư khoảng trống nhiều quá bỏ khoảng trống đó đi để tiết kiệm giấy
+  y += 6; // Minimal padding at bottom of receipt to eliminate blank wasted paper
 
   return Math.ceil(y);
 }
@@ -742,39 +922,82 @@ function layoutReceipt(ctx, receipt, lang, qrImage = null) {
 export async function renderReceiptCanvas(receipt, lang = 'lo') {
   if (!receipt) throw new Error('Receipt data is missing');
 
-  // Pre-load embedded Saysettha OT fonts exclusively
-  try {
-    await ensureSaysetthaLoaded();
-    if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
-      await Promise.race([
-        Promise.all([
-          document.fonts.load('bold 44px "Saysettha OT"'),
-          document.fonts.load('bold 32px "Saysettha OT"'),
-          document.fonts.load('bold 25px "Saysettha OT"'),
-          document.fonts.load('bold 24px "Saysettha OT"'),
-          document.fonts.load('bold 22px "Saysettha OT"'),
-        ]),
-        new Promise((resolve) => setTimeout(resolve, 500)),
-      ]);
-    }
-  } catch (_) {}
+  // Pre-load fonts based on selected language
+  if (lang === 'vi') {
+    try {
+      await ensureTahomaLoaded();
+      await ensureSaysetthaLoaded();
+      if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
+        await Promise.race([
+          Promise.all([
+            document.fonts.load('bold 38px "Tahoma"'),
+            document.fonts.load('bold 28px "Tahoma"'),
+            document.fonts.load('bold 24px "Tahoma"'),
+            document.fonts.load('bold 23px "Tahoma"'),
+            document.fonts.load('bold 22px "Tahoma"'),
+            document.fonts.load('bold 21px "Tahoma"'),
+            document.fonts.load('22px "Tahoma"'),
+            document.fonts.load('21px "Tahoma"'),
+            document.fonts.load('bold 23px "Saysettha OT"'),
+            document.fonts.load('23px "Saysettha OT"'),
+          ]),
+          new Promise((resolve) => setTimeout(resolve, 400)),
+        ]);
+      }
+    } catch (_) {}
+  } else {
+    // Pre-load embedded Saysettha OT fonts exclusively
+    try {
+      await ensureSaysetthaLoaded();
+      if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
+        await Promise.race([
+          Promise.all([
+            document.fonts.load('bold 44px "Saysettha OT"'),
+            document.fonts.load('bold 34px "Saysettha OT"'),
+            document.fonts.load('bold 32px "Saysettha OT"'),
+            document.fonts.load('bold 30px "Saysettha OT"'),
+            document.fonts.load('bold 28px "Saysettha OT"'),
+            document.fonts.load('bold 26px "Saysettha OT"'),
+            document.fonts.load('bold 25px "Saysettha OT"'),
+            document.fonts.load('bold 24px "Saysettha OT"'),
+            document.fonts.load('bold 23px "Saysettha OT"'),
+            document.fonts.load('bold 22px "Saysettha OT"'),
+            document.fonts.load('24px "Saysettha OT"'),
+            document.fonts.load('22px "Saysettha OT"'),
+            document.fonts.load('bold 44px "Saysettha"'),
+            document.fonts.load('bold 32px "Saysettha"'),
+            document.fonts.load('bold 26px "Saysettha"'),
+            document.fonts.load('bold 25px "Saysettha"'),
+            document.fonts.load('bold 24px "Saysettha"'),
+            document.fonts.load('bold 22px "Saysettha"'),
+            document.fonts.load('24px "Saysettha"'),
+          ]),
+          new Promise((resolve) => setTimeout(resolve, 500)),
+        ]);
+      }
+    } catch (_) {}
+  }
 
   // Pre-load QR code if transfer payment or debt
   let qrImg = null;
-  const isDebt = receipt.paymentMethod === 'debt' || receipt.isDebt;
-  const isTransfer = receipt.paymentMethod !== 'cash';
-  if (isTransfer || (isDebt && (receipt.debtAmount ?? receipt.grandTotal) > 0)) {
-    qrImg = await preloadImage('/qr.jpg', 600);
+  const pm = String(receipt.paymentMethod || receipt.payment_method || 'cash').toLowerCase();
+  const isDebt = pm === 'debt' || Boolean(receipt.isDebt);
+  const isCash = pm === 'cash';
+  const isTransfer = pm === 'transfer' || pm === 'onepay' || pm === 'qrtransfer' || pm === 'qr' || (!isCash && !isDebt);
+  const showQr = !receipt.isQuotation && (isTransfer || (isDebt && (Number(receipt.debtAmount ?? receipt.grandTotal) > 0)));
+  if (showQr) {
+    qrImg = await loadShopQrImage();
   }
 
   // Pass 1: Measure exact height with zero discrepancy
   const exactHeight = layoutReceipt(null, receipt, lang, qrImg);
 
-  // Pass 2: Allocate 2X Super-Sampled 1152px canvas (Double Pixel Density)
-  const SCALE = 2;
+  // Pass 2: Direct 1:1 Pixel Mapping on 576-dot Thermal Printhead
+  // Rendering at exact 576px width eliminates 2X downsampling blur
+  // and bilinear interpolation gray fringing that eroded thin Lao character loops.
   const canvas = document.createElement('canvas');
-  canvas.width = K80.CANVAS_WIDTH * SCALE;   // 576 * 2 = 1152px
-  canvas.height = exactHeight * SCALE;
+  canvas.width = K80.CANVAS_WIDTH; // Exact 576 dots
+  canvas.height = exactHeight;
 
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
@@ -782,18 +1005,14 @@ export async function renderReceiptCanvas(receipt, lang = 'lo') {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Maximum sub-pixel geometric precision
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-
-  // Scale 2x: All layout coordinates remain in standard 576-based logical units
-  ctx.scale(SCALE, SCALE);
 
   // High-contrast rendering
   ctx.fillStyle = '#000000';
   ctx.textBaseline = 'top';
 
-  // Execute actual drawing at double vector density
+  // Execute actual drawing directly on 1:1 thermal grid
   layoutReceipt(ctx, receipt, lang, qrImg);
 
   return canvas;

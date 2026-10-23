@@ -672,7 +672,7 @@ export default function MultiProductGRNForm({
                   type="text"
                   value={receivedBy}
                   onChange={(e) => setReceivedBy(e.target.value)}
-                  placeholder="ໄມ້ຄຳ (Meii)"
+                  placeholder="Meii"
                   className="w-full px-3 py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs"
                 />
               </div>

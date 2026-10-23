@@ -116,6 +116,23 @@
   src: url('/fonts/BeVietnamPro-Bold.ttf') format('truetype');
 }
 
+/* Offline Local Fonts for Tahoma */
+@font-face {
+  font-family: 'Tahoma';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/tahoma.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Tahoma';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/tahomabd.ttf') format('truetype');
+}
+
 @theme {
   --font-sans: 'Noto Sans Lao', 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', Consolas, Monaco, monospace, 'Noto Sans Lao';
@@ -126,8 +143,9 @@
   --font-vietnam: 'Be Vietnam Pro', 'Noto Sans Lao', sans-serif;
 }
 
-.font-vietnam {
-  font-family: 'Be Vietnam Pro', 'Noto Sans Lao', sans-serif !important;
+.font-vietnam,
+.font-vietnam * {
+  font-family: 'Be Vietnam Pro', 'Noto Sans Lao', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
 
 .font-lao {
@@ -180,18 +198,21 @@ button, a, input, select, textarea, [role="button"] {
   font-family: 'Noto Sans Lao', 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
 
-/* Thermal Receipt Printing & Preview strictly uses Saysettha OT */
-#thermal-receipt-print-area,
-#thermal-receipt-print-area *,
-#quotation-print-area,
-#quotation-print-area *,
+/* Thermal Receipt Printing (Spooler iframe & @media print) strictly uses Saysettha OT */
 .thermal-receipt-spooler-wrapper,
 .thermal-receipt-spooler-wrapper *,
 .font-receipt-saysettha,
-.font-receipt-saysettha *,
-.font-receipt-phetsarath,
-.font-receipt-phetsarath * {
+.font-receipt-saysettha * {
   font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
+}
+
+@media print {
+  #thermal-receipt-print-area,
+  #thermal-receipt-print-area *,
+  #quotation-print-area,
+  #quotation-print-area * {
+    font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
+  }
 }
 
 .font-mono {
@@ -305,6 +326,20 @@ button, a, input, select, textarea, [role="button"] {
   .thermal-receipt-spooler-wrapper,
   .thermal-receipt-spooler-wrapper * {
     font-family: 'Saysettha OT', 'Saysettha', sans-serif !important;
+  }
+
+  /* Vietnamese font override when printing in Vietnamese */
+  #thermal-receipt-print-area.font-vietnam,
+  #thermal-receipt-print-area.font-vietnam *,
+  #quotation-print-area.font-vietnam,
+  #quotation-print-area.font-vietnam *,
+  .thermal-receipt-spooler-wrapper.font-vietnam,
+  .thermal-receipt-spooler-wrapper.font-vietnam *,
+  .thermal-receipt-spooler-wrapper .font-vietnam,
+  .thermal-receipt-spooler-wrapper .font-vietnam *,
+  .font-vietnam,
+  .font-vietnam * {
+    font-family: 'Be Vietnam Pro', 'Noto Sans Lao', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
   }
 
   /* Khổ K80: width 80mm !important; margin: 0; padding: 0; */

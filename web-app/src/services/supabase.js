@@ -5,6 +5,13 @@ const SUPABASE_ANON_KEY = 'sb_publishable_zQw2L3JfnT-5o_-tJgZaIA_WETQFTPq';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+export function sanitizeCashierName(name) {
+  if (!name) return 'Meii';
+  const str = String(name);
+  if (str.includes('\u0ec4\u0ea1\u0ec9\u0e84\u0eb3') || str.includes('(Meii)')) return 'Meii';
+  return str.trim() || 'Meii';
+}
+
 /**
  * Helper to store product metadata (Baht cost, Kip cost, tier settings) locally
  */
@@ -569,7 +576,7 @@ export async function fetchTransactionsFromSupabase() {
         createdAt: t.created_at,
         date: new Date(t.created_at).toLocaleString('lo-LA'),
         customerName: t.customer_name || 'ລູກຄ້າທົ່ວໄປ',
-        cashierName: t.cashier_name || 'ໄມ້ຄຳ (Meii)',
+        cashierName: sanitizeCashierName(t.cashier_name),
         isWholesale: Boolean(t.is_wholesale),
         paymentMethod: cleanPaymentMethod,
         originalPaymentMethod: cleanPaymentMethod,
@@ -599,19 +606,50 @@ export async function fetchTransactionsFromSupabase() {
             return cachedMeta;
           }
 
-          return (t.sale_transaction_items || []).map((i) => ({
-            product: { id: i.product_id, name: i.product_name },
-            productName: i.product_name,
-            unit: {
+          let cachedProds = [];
+          try {
+            const raw = typeof window !== 'undefined' ? localStorage.getItem('meiishop_products_v5') : null;
+            if (raw) cachedProds = JSON.parse(raw);
+          } catch (_) {}
+
+          return (t.sale_transaction_items || []).map((i) => {
+            const matchedProd = Array.isArray(cachedProds)
+              ? cachedProds.find(
+                  (p) => (i.product_id && p.id === i.product_id) || (p.name && i.product_name && p.name.trim() === i.product_name.trim())
+                )
+              : null;
+            const nameVi = matchedProd?.name_vi || matchedProd?.nameVi || i.name_vi || i.nameVi || '';
+            const uPrice = Number(i.unit_price) || 0;
+            const qty = Number(i.quantity) || 1;
+            const rawLineTotal = Number(i.line_total) || (uPrice * qty);
+            const baseTotal = uPrice * qty;
+            const diff = rawLineTotal > baseTotal ? (rawLineTotal - baseTotal) : 0;
+            const fee = Number(matchedProd?.crateDepositFee) || 30000;
+            const crateDepositTotal = Number(i.crateDepositTotal) || (diff > 0 ? diff : 0);
+            const missingCount = Number(i.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0);
+            const hasMissingCrates = Boolean(i.noEmptyCrates || crateDepositTotal > 0 || (matchedProd?.hasCrateDeposit && diff > 0));
+
+            return {
+              product: matchedProd || { id: i.product_id, name: i.product_name, name_vi: nameVi },
+              productId: i.product_id,
+              productName: i.product_name,
+              name_vi: nameVi,
+              nameVi: nameVi,
+              unit: {
+                unitName: i.unit_name,
+                multiplier: Number(i.multiplier) || 1,
+                retailPrice: uPrice,
+                wholesalePrice: uPrice,
+              },
               unitName: i.unit_name,
-              multiplier: Number(i.multiplier) || 1,
-              retailPrice: Number(i.unit_price) || 0,
-              wholesalePrice: Number(i.unit_price) || 0,
-            },
-            unitName: i.unit_name,
-            quantity: Number(i.quantity) || 1,
-            lineTotal: Number(i.line_total) || ((Number(i.unit_price) || 0) * (Number(i.quantity) || 1)),
-          }));
+              quantity: qty,
+              lineTotal: rawLineTotal,
+              noEmptyCrates: hasMissingCrates,
+              missingCratesCount: missingCount,
+              crateDepositFee: fee,
+              crateDepositTotal,
+            };
+          });
         })(),
       };
     });
@@ -743,7 +781,7 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       total_cost_thb: totalCostThb,
       gross_profit_lak: grossProfitLak,
       gross_profit_thb: grossProfitThb,
-      cashier_name: tx.cashierName || 'ໄມ້ຄຳ (Meii)',
+      cashier_name: sanitizeCashierName(tx.cashierName),
       paid_amount: Number(tx.paidAmount ?? (tx.paymentMethod === 'debt' ? (tx.amountTendered || 0) : (tx.amountTendered || tx.grandTotal || 0))),
       remaining_debt: Number(tx.debtAmount ?? (tx.paymentMethod === 'debt' ? Math.max(0, (tx.grandTotal || 0) - (tx.amountTendered || 0)) : 0)),
       payment_status: tx.paymentStatus || (tx.paymentMethod === 'debt' ? ((tx.amountTendered || 0) > 0 ? 'PARTIAL' : 'DEBT') : 'PAID'),
@@ -795,7 +833,7 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       gross_profit: grossProfitLak,
       gross_profit_lak: grossProfitLak,
       gross_profit_thb: grossProfitThb,
-      cashier_name: tx.cashierName || 'ໄມ້ຄຳ (Meii)',
+      cashier_name: sanitizeCashierName(tx.cashierName),
       paid_amount: Number(tx.paidAmount ?? (tx.paymentMethod === 'debt' ? (tx.amountTendered || 0) : (tx.amountTendered || tx.grandTotal || 0))),
       remaining_debt: Number(tx.debtAmount ?? (tx.paymentMethod === 'debt' ? Math.max(0, (tx.grandTotal || 0) - (tx.amountTendered || 0)) : 0)),
       payment_status: tx.paymentStatus || (tx.paymentMethod === 'debt' ? ((tx.amountTendered || 0) > 0 ? 'PARTIAL' : 'DEBT') : 'PAID'),
@@ -852,7 +890,7 @@ export const syncSaleTransactionToSupabase = createSaleTransactionInSupabase;
 export async function cancelTransactionInSupabase(txId, itemsToRestore = [], originalPaymentMethod = 'cash', options = {}) {
   try {
     const reason = options.reason || 'ຍົກເລີກບິນຂາຍ (Void Order)';
-    const voidedBy = options.voidedBy || 'ໄມ້ຄຳ (Meii)';
+    const voidedBy = sanitizeCashierName(options.voidedBy);
 
     // 1. GỌI POSTGRES RPC NGUYÊN TỬ: process_pos_void
     const { data: rpcData, error: rpcErr } = await supabase.rpc('process_pos_void', {
@@ -1458,7 +1496,7 @@ async function fallbackProcessMultiProductGRN(payload) {
       paid_amount: paidLak,
       debt_amount: debtLak,
       payment_status: paymentStatus,
-      received_by: payload.receiver_name || 'ໄມ້ຄຳ (Meii)',
+      received_by: sanitizeCashierName(payload.receiver_name),
       note: payload.notes || null,
       updated_at: new Date().toISOString(),
     };
@@ -1586,7 +1624,7 @@ export async function createPurchaseOrderInSupabase(poData, draftItems = []) {
     const grnPayload = {
       po_code: poId,
       supplier_id: poData.supplierId || null,
-      receiver_name: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
+      receiver_name: sanitizeCashierName(poData.receivedBy),
       total_lak: Number(poData.totalCostLak) || 0,
       total_thb: Number(poData.totalCostThb) || 0,
       payment_status: poData.paymentStatus || 'PAID',
@@ -1681,7 +1719,7 @@ export async function updatePurchaseOrderInSupabase(poId, poData, draftItems = [
     const grnPayload = {
       po_code: poId,
       supplier_id: poData.supplierId || null,
-      receiver_name: poData.receivedBy || 'ໄມ້ຄຳ (Meii)',
+      receiver_name: sanitizeCashierName(poData.receivedBy),
       total_lak: Number(poData.totalCostLak) || 0,
       total_thb: Number(poData.totalCostThb) || 0,
       payment_status: poData.paymentStatus || 'PAID',

@@ -40,7 +40,7 @@ export default function PurchaseEntryModal({
 }) {
   // Box 1: Supplier & Receiver
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
-  const [receivedBy, setReceivedBy] = useState('ໄມ້ຄຳ (Meii)');
+  const [receivedBy, setReceivedBy] = useState('Meii');
 
   // Box 2: Selected Product & Multi-Tier Inputs
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -356,7 +356,7 @@ export default function PurchaseEntryModal({
         paidAmount: parseDots(paidAmount),
         debtAmount,
         paymentStatus,
-        receivedBy: receivedBy.trim() || 'ໄມ້ຄຳ (Meii)',
+        receivedBy: receivedBy.trim() || 'Meii',
         note,
       };
 
@@ -509,7 +509,7 @@ export default function PurchaseEntryModal({
                   type="text"
                   value={receivedBy}
                   onChange={(e) => setReceivedBy(e.target.value)}
-                  placeholder="ໄມ້ຄຳ (Meii)"
+                  placeholder="Meii"
                   className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs"
                 />
               </div>

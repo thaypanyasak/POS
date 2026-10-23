@@ -81,7 +81,7 @@ export default function PurchasesView({
   // =========================================================================
   // 1. Header Information
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
-  const [receivedBy, setReceivedBy] = useState('ໄມ້ຄຳ (Meii)');
+  const [receivedBy, setReceivedBy] = useState('Meii');
   const [poCode, setPoCode] = useState('');
   const [note, setNote] = useState('');
   const [currentExchangeRate, setCurrentExchangeRate] = useState(exchangeRate || 0);
@@ -259,7 +259,7 @@ export default function PurchasesView({
     setEditingPoId(po.id);
     setPoCode(po.id);
     setSelectedSupplierId(po.supplier_id || (suppliers[0]?.id || ''));
-    setReceivedBy(po.received_by || 'ໄມ້ຄຳ (Meii)');
+    setReceivedBy(po.received_by || 'Meii');
     setPaymentStatus(po.payment_status || 'PAID');
     setPaidAmount(formatDots(po.paid_amount || 0));
     setNote(po.note || '');
@@ -668,7 +668,7 @@ export default function PurchasesView({
         po_id: editingPoId || null,
         po_code: effectivePoCode,
         supplier_id: selectedSupplierId || null,
-        receiver_name: receivedBy.trim() || 'ໄມ້ຄຳ (Meii)',
+        receiver_name: receivedBy.trim() || 'Meii',
         total_lak: finalTotalLak,
         total_thb: finalTotalThb,
         payment_status: finalPaymentStatus,

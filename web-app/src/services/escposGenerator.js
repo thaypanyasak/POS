@@ -8,7 +8,7 @@
 
 // ─── ESC/POS Command Constants ───────────────────────────────────────────────
 export const ESC_INIT = [0x1b, 0x40]; // ESC @ (Initialize printer)
-export const ESC_HEAT_DENSITY = [0x1b, 0x37, 0x07, 0xff, 0x0a]; // ESC 7 (Max thermal heating for pitch-black print)
+export const ESC_HEAT_DENSITY = []; // Deprecated: Standard ESC/POS printers do not support proprietary ESC 7
 export const ESC_DRAWER_KICK = [0x1b, 0x70, 0x00, 0x19, 0xfa]; // ESC p 0 25 250 (Kick cash drawer)
 export const GS_CUT_PARTIAL = [0x1d, 0x56, 0x42, 0x00]; // GS V 66 0 (Partial cut with feed)
 export const ESC_FEED_LINES = (n = 3) => [0x1b, 0x64, n]; // ESC d n (Feed n lines)
@@ -26,17 +26,17 @@ export const WIDTH_BYTES = 72;       // 576 / 8 = 72 bytes per line
  * @param {Object} options
  * @param {boolean} [options.kickCashDrawer=true] - Send ESC p drawer kick command
  * @param {boolean} [options.cutPaper=true] - Send GS V partial cut command
- * @param {number} [options.luminanceThreshold=145] - Brightness cutoff (default 145)
- * @param {boolean} [options.useDithering=true] - Floyd-Steinberg dithering flag
- * @param {number} [options.feedLines=4] - Lines to feed before cut
+ * @param {number} [options.luminanceThreshold=205] - Brightness cutoff (default 205: captures fine Lao character curves without white specks)
+ * @param {boolean} [options.useDithering=false] - Floyd-Steinberg dithering flag (false for crisp solid black text and barcodes)
+ * @param {number} [options.feedLines=2] - Lines to feed before cut (default 2 to save paper)
  * @returns {Uint8Array} Complete ESC/POS byte stream ready for TCP transmission
  */
 export function canvasToEscPosRaster(sourceCanvas, {
   kickCashDrawer = true,
   cutPaper = true,
-  luminanceThreshold = 145,
-  useDithering = true,
-  feedLines = 4,
+  luminanceThreshold = 205,
+  useDithering = false,
+  feedLines = 2,
 } = {}) {
   if (!sourceCanvas) {
     throw new Error('Canvas element is required for ESC/POS rasterization');
@@ -82,9 +82,9 @@ export function canvasToEscPosRaster(sourceCanvas, {
     }
   }
 
-  // ─── Step 4: Floyd-Steinberg Dithering to Binary Array ───────────────
+  // ─── Step 4: Convert Grayscale to Binary Array ──────────────────────
   // 1 = Black dot (burn thermal element), 0 = White (no burn)
-  const binary = new Uint8Array(width * height);
+  const rawBinary = new Uint8Array(width * height);
 
   if (useDithering) {
     for (let y = 0; y < height; y++) {
@@ -92,14 +92,10 @@ export function canvasToEscPosRaster(sourceCanvas, {
         const idx = y * width + x;
         const oldVal = gray[idx];
         const newVal = oldVal < luminanceThreshold ? 0.0 : 255.0;
-        binary[idx] = newVal === 0.0 ? 1 : 0;
+        rawBinary[idx] = newVal === 0.0 ? 1 : 0;
         const err = oldVal - newVal;
 
         // Distribute error to neighboring pixels
-        // (x+1, y)   += err * 7/16
-        // (x-1, y+1) += err * 3/16
-        // (x,   y+1) += err * 5/16
-        // (x+1, y+1) += err * 1/16
         if (x + 1 < width) {
           gray[idx + 1] += (err * 7) / 16;
         }
@@ -116,18 +112,38 @@ export function canvasToEscPosRaster(sourceCanvas, {
     }
   } else {
     for (let i = 0; i < width * height; i++) {
-      binary[i] = gray[i] < luminanceThreshold ? 1 : 0;
+      rawBinary[i] = gray[i] < luminanceThreshold ? 1 : 0;
+    }
+  }
+
+  // ─── Step 4.5: Subpixel Pinhole Sealing Filter ───────────────────────
+  // Scans for isolated 0s (white pinholes) inside character strokes.
+  // If a pixel is 0, but surrounded on >= 3 sides by 1 (black pixels),
+  // it is an antialiasing dropout in the thermal grid -> seal it solid black (1).
+  const binary = new Uint8Array(rawBinary);
+  if (!useDithering) {
+    for (let y = 1; y < height - 1; y++) {
+      const rowOffset = y * width;
+      for (let x = 1; x < width - 1; x++) {
+        const idx = rowOffset + x;
+        if (rawBinary[idx] === 0) {
+          const top = rawBinary[idx - width];
+          const bottom = rawBinary[idx + width];
+          const left = rawBinary[idx - 1];
+          const right = rawBinary[idx + 1];
+          if (top + bottom + left + right >= 3) {
+            binary[idx] = 1;
+          }
+        }
+      }
     }
   }
 
   // ─── Step 5: Assemble ESC/POS Commands ──────────────────────────────
   const bytes = [];
 
-  // ESC @: Initialize printer
+  // ESC @: Initialize printer (resets mode, clears errors)
   bytes.push(...ESC_INIT);
-
-  // ESC 7: Set thermal heating parameters for high contrast & dark black dots
-  bytes.push(...ESC_HEAT_DENSITY);
 
   // ESC p: Kick cash drawer if enabled
   if (kickCashDrawer) {
@@ -135,8 +151,13 @@ export function canvasToEscPosRaster(sourceCanvas, {
   }
 
   // ─── Step 6: Chunked GS v 0 Raster Bit Image ────────────────────────
-  // Max 256 lines per chunk to avoid printer buffer overflow
-  const MAX_CHUNK_LINES = 256;
+  // Max 64 lines per chunk:
+  // 1) Guaranteed yL <= 64, yH = 0. Prevents the notorious yL == 0 firmware bug
+  //    where low-cost thermal printers read 0 dots, exit raster mode, and spew
+  //    thousands of binary bytes as random garbage text / infinite feed.
+  // 2) 72 bytes * 64 lines = 4,608 bytes per chunk, completely immune to FIFO
+  //    hardware buffer overflow on microcontrollers.
+  const MAX_CHUNK_LINES = 64;
   let currentY = 0;
 
   while (currentY < height) {

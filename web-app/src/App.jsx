@@ -1359,23 +1359,45 @@ export default function App() {
 
   // Cart operations
   const addToCart = (product, unit, qty = 1, options = {}) => {
+    const isCrateEligible =
+      Boolean(product?.hasCrateDeposit) ||
+      Boolean(
+        (product?.category?.includes('ເບຍ') || product?.name?.includes('ເບຍ')) &&
+          (unit?.unitName === 'ແກັດ' || unit?.unitName === 'ລັງ' || (unit?.multiplier && unit.multiplier >= 12))
+      );
+    const feePerCrate = Number(product?.crateDepositFee) || 30000;
+
     const existingIndex = cart.findIndex(
       (item) => item.product.id === product.id && item.unit.id === unit.id
     );
 
     if (existingIndex > -1) {
       const next = [...cart];
-      next[existingIndex].quantity += qty;
+      const updatedQty = next[existingIndex].quantity + qty;
+      next[existingIndex] = {
+        ...next[existingIndex],
+        quantity: updatedQty,
+        missingCratesCount: next[existingIndex].noEmptyCrates
+          ? (Number(next[existingIndex].missingCratesCount) || 0) + qty
+          : next[existingIndex].missingCratesCount,
+      };
       setCart(next);
     } else {
       setCart([
         ...cart,
         {
           product,
+          productId: product.id,
+          productName: product.name,
+          name_vi: product.name_vi || product.nameVi || '',
+          nameVi: product.name_vi || product.nameVi || '',
           unit,
           quantity: qty,
           selectedPriceTier: 1, // Default 100% is always Price 1 (Giá 1 - Chuẩn)
           customPrice: null,
+          noEmptyCrates: isCrateEligible,
+          missingCratesCount: isCrateEligible ? qty : 0,
+          crateDepositFee: feePerCrate,
         },
       ]);
     }
@@ -1552,6 +1574,14 @@ export default function App() {
         return merged.filter((_, idx) => idx !== oldIndex);
       }
 
+      const isNewUnitEligible =
+        Boolean(oldItem.product?.hasCrateDeposit) ||
+        Boolean(
+          (oldItem.product?.category?.includes('ເບຍ') || oldItem.product?.name?.includes('ເບຍ')) &&
+            (newUnit?.unitName === 'ແກັດ' || newUnit?.unitName === 'ລັງ' || (newUnit?.multiplier && newUnit.multiplier >= 12))
+        );
+      const fee = Number(oldItem.product?.crateDepositFee) || 30000;
+
       const updated = [...prevCart];
       updated[oldIndex] = {
         ...oldItem,
@@ -1560,8 +1590,9 @@ export default function App() {
         selectedPriceTier: oldItem.selectedPriceTier || 1,
         customPrice: null,
         overrideReason: '',
-        noEmptyCrates: false,
-        missingCratesCount: 0,
+        noEmptyCrates: isNewUnitEligible,
+        missingCratesCount: isNewUnitEligible ? (oldItem.missingCratesCount || oldItem.quantity) : 0,
+        crateDepositFee: fee,
       };
       return updated;
     });
@@ -1631,18 +1662,40 @@ export default function App() {
 
     if (!target.items || target.items.length === 0) {
       if (target.sale_transaction_items && target.sale_transaction_items.length > 0) {
-        target.items = target.sale_transaction_items.map((i) => ({
-          product: { name: i.product_name, id: i.product_id },
-          productName: i.product_name,
-          unit: {
+        target.items = target.sale_transaction_items.map((i) => {
+          const matchedProd = products.find(
+            (p) => (i.product_id && p.id === i.product_id) || (p.name && i.product_name && p.name.trim() === i.product_name.trim())
+          );
+          const uPrice = Number(i.unit_price) || 0;
+          const qty = Number(i.quantity) || 1;
+          const rawLineTotal = Number(i.line_total) || (uPrice * qty);
+          const baseTotal = uPrice * qty;
+          const diff = rawLineTotal > baseTotal ? (rawLineTotal - baseTotal) : 0;
+          const fee = Number(matchedProd?.crateDepositFee) || 30000;
+          const crateDepositTotal = Number(i.crateDepositTotal) || (diff > 0 ? diff : 0);
+          const missingCount = Number(i.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0);
+          const hasMissingCrates = Boolean(i.noEmptyCrates || crateDepositTotal > 0 || (matchedProd?.hasCrateDeposit && diff > 0));
+
+          return {
+            product: matchedProd || { name: i.product_name, id: i.product_id, name_vi: '' },
+            productId: i.product_id,
+            productName: i.product_name,
+            name_vi: matchedProd?.name_vi || matchedProd?.nameVi || i.name_vi || '',
+            nameVi: matchedProd?.name_vi || matchedProd?.nameVi || i.nameVi || '',
+            unit: {
+              unitName: i.unit_name,
+              retailPrice: uPrice,
+              wholesalePrice: uPrice,
+            },
             unitName: i.unit_name,
-            retailPrice: Number(i.unit_price) || 0,
-            wholesalePrice: Number(i.unit_price) || 0,
-          },
-          unitName: i.unit_name,
-          quantity: Number(i.quantity) || 1,
-          lineTotal: Number(i.line_total) || ((Number(i.unit_price) || 0) * (Number(i.quantity) || 1)),
-        }));
+            quantity: qty,
+            lineTotal: rawLineTotal,
+            noEmptyCrates: hasMissingCrates,
+            missingCratesCount: missingCount,
+            crateDepositFee: fee,
+            crateDepositTotal,
+          };
+        });
       } else {
         try {
           const { data: dbItems } = await supabase
@@ -1650,18 +1703,40 @@ export default function App() {
             .select('*')
             .eq('transaction_id', target.id);
           if (dbItems && dbItems.length > 0) {
-            target.items = dbItems.map((i) => ({
-              product: { name: i.product_name, id: i.product_id },
-              productName: i.product_name,
-              unit: {
+            target.items = dbItems.map((i) => {
+              const matchedProd = products.find(
+                (p) => (i.product_id && p.id === i.product_id) || (p.name && i.product_name && p.name.trim() === i.product_name.trim())
+              );
+              const uPrice = Number(i.unit_price) || 0;
+              const qty = Number(i.quantity) || 1;
+              const rawLineTotal = Number(i.line_total) || (uPrice * qty);
+              const baseTotal = uPrice * qty;
+              const diff = rawLineTotal > baseTotal ? (rawLineTotal - baseTotal) : 0;
+              const fee = Number(matchedProd?.crateDepositFee) || 30000;
+              const crateDepositTotal = Number(i.crateDepositTotal) || (diff > 0 ? diff : 0);
+              const missingCount = Number(i.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0);
+              const hasMissingCrates = Boolean(i.noEmptyCrates || crateDepositTotal > 0 || (matchedProd?.hasCrateDeposit && diff > 0));
+
+              return {
+                product: matchedProd || { name: i.product_name, id: i.product_id, name_vi: '' },
+                productId: i.product_id,
+                productName: i.product_name,
+                name_vi: matchedProd?.name_vi || matchedProd?.nameVi || i.name_vi || '',
+                nameVi: matchedProd?.name_vi || matchedProd?.nameVi || i.nameVi || '',
+                unit: {
+                  unitName: i.unit_name,
+                  retailPrice: uPrice,
+                  wholesalePrice: uPrice,
+                },
                 unitName: i.unit_name,
-                retailPrice: Number(i.unit_price) || 0,
-                wholesalePrice: Number(i.unit_price) || 0,
-              },
-              unitName: i.unit_name,
-              quantity: Number(i.quantity) || 1,
-              lineTotal: Number(i.line_total) || ((Number(i.unit_price) || 0) * (Number(i.quantity) || 1)),
-            }));
+                quantity: qty,
+                lineTotal: rawLineTotal,
+                noEmptyCrates: hasMissingCrates,
+                missingCratesCount: missingCount,
+                crateDepositFee: fee,
+                crateDepositTotal,
+              };
+            });
           }
         } catch (e) {
           console.warn('Could not query items for transaction:', e);
@@ -1744,6 +1819,10 @@ export default function App() {
 
         return {
           ...it,
+          productId: it.product?.id || it.productId,
+          productName: it.product?.name || it.productName,
+          name_vi: it.product?.name_vi || it.product?.nameVi || it.name_vi || it.nameVi || '',
+          nameVi: it.product?.name_vi || it.product?.nameVi || it.name_vi || it.nameVi || '',
           customPrice: effectivePrice,
           unitPrice: effectivePrice,
           effectiveMultiplier,
@@ -1780,7 +1859,7 @@ export default function App() {
         receiptNumber: receiptNo,
         createdAt,
         date: new Date(createdAt).toLocaleString('lo-LA'),
-        cashierName: 'ໄມ້ຄຳ (Meii)',
+        cashierName: 'Meii',
         customerName: customerName.trim() || (isDebt ? 'ລູກຄ້າຄ້າງຊຳລະ' : 'ລູກຄ້າທົ່ວໄປ'),
         items: receiptItems,
         isWholesale: false,
@@ -1814,6 +1893,7 @@ export default function App() {
         grossProfitLak,
         gross_profit_thb: grossProfitThb,
         grossProfitThb,
+        products, // Point-in-time reference for bilingual product name lookups
       };
 
       // Cache local tx metadata for rich offline/receipt re-rendering with crate deposit and debt info
@@ -1965,18 +2045,24 @@ export default function App() {
       };
 
       const qty = Number(it.quantity) || 1;
-      const lineTotal = Number(it.lineTotal || it.line_total) || (unitPrice * qty);
+      const rawLineTotal = Number(it.lineTotal || it.line_total) || (unitPrice * qty);
+      const baseTotal = unitPrice * qty;
+      const diff = rawLineTotal > baseTotal ? (rawLineTotal - baseTotal) : 0;
+      const fee = Number(foundProd.crateDepositFee || it.crateDepositFee) || 30000;
+      const crateDepositTotal = Number(it.crateDepositTotal) || (diff > 0 ? diff : 0);
+      const missingCount = Number(it.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0);
+      const hasMissingCrates = Boolean(it.noEmptyCrates || crateDepositTotal > 0 || (foundProd.hasCrateDeposit && diff > 0));
 
       return {
         product: foundProd,
         unit: matchedUnit,
         quantity: qty,
         customPrice: unitPrice,
-        noEmptyCrates: Boolean(it.noEmptyCrates),
-        missingCratesCount: Number(it.missingCratesCount) || 0,
-        crateDepositFee: Number(it.crateDepositFee) || 0,
-        crateDepositTotal: Number(it.crateDepositTotal) || 0,
-        lineTotal,
+        noEmptyCrates: hasMissingCrates,
+        missingCratesCount: missingCount,
+        crateDepositFee: fee,
+        crateDepositTotal,
+        lineTotal: rawLineTotal,
       };
     });
 
@@ -2081,7 +2167,7 @@ export default function App() {
             tx.id,
             itemsToRestore,
             tx.originalPaymentMethod || tx.paymentMethod,
-            { reason: 'ຍົກເລີກບິນຂາຍ (Void Order)', voidedBy: 'ໄມ້ຄຳ (Meii)' }
+            { reason: 'ຍົກເລີກບິນຂາຍ (Void Order)', voidedBy: 'Meii' }
           );
           if (!res.success) {
             openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການຍົກເລີກບິນ: ' + (res.error || 'Unknown error'), 'ຂໍ້ຜິດພາດ', 'error');
@@ -2100,7 +2186,7 @@ export default function App() {
                     isCancelled: true,
                     cancelledAt: nowIso,
                     voidedAt: nowIso,
-                    voidedBy: 'ໄມ້ຄຳ (Meii)',
+                    voidedBy: 'Meii',
                     voidReason: 'ຍົກເລີກບິນຂາຍ (Void Order)',
                   }
                 : t
@@ -2116,7 +2202,7 @@ export default function App() {
                   isCancelled: true,
                   cancelledAt: nowIso,
                   voidedAt: nowIso,
-                  voidedBy: 'ໄມ້ຄຳ (Meii)',
+                  voidedBy: 'Meii',
                   voidReason: 'ຍົກເລີກບິນຂາຍ (Void Order)',
                 }
               : prev
@@ -2786,6 +2872,7 @@ export default function App() {
         receipt={selectedReceiptForView}
         onCancelReceipt={handleCancelTransaction}
         onAlert={openAlert}
+        products={products}
       />
 
       {/* Global Beautiful Alert & Confirmation Dialog */}

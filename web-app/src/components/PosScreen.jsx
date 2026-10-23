@@ -586,7 +586,7 @@ export default function PosScreen({
           const isCrateEligible =
             Boolean(item.product?.hasCrateDeposit) ||
             Boolean(
-              (item.product?.category === 'ເບຍ/ເຄື່ອງດື່ມມີທາດເຫຼົ້າ' ||
+              (item.product?.category?.includes('ເບຍ') ||
                 item.product?.name?.includes('ເບຍ')) &&
                 (item.unit?.unitName === 'ແກັດ' ||
                   item.unit?.unitName === 'ລັງ' ||
@@ -602,12 +602,14 @@ export default function PosScreen({
           const imgUrl = item.product?.imageUrl || item.product?.image_url;
 
           const isPriceMenuOpen = openPriceMenuKey === itemKey;
+          const isItemHalfMenuOpen = Boolean(openHalfCartonMenuKey && openHalfCartonMenuKey.startsWith(itemKey));
+          const isAnyMenuOpen = isPriceMenuOpen || isItemHalfMenuOpen;
 
           return (
             <div
               key={`${item.product.id}_${item.unit.id}`}
               className={`p-1.5 px-2 rounded-lg border bg-white flex flex-col gap-1 transition-all shadow-2xs ${
-                isPriceMenuOpen ? 'relative z-30 overflow-visible' : 'relative z-0'
+                isAnyMenuOpen ? 'relative z-40 overflow-visible' : 'relative z-0'
               } ${
                 isOverridden ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200/80 hover:border-slate-300'
               }`}
@@ -860,7 +862,7 @@ export default function PosScreen({
                               : u.unitName;
 
                             return (
-                              <div key={u.id || u.unitName} className="relative inline-flex items-center">
+                              <div key={u.id || u.unitName} className={`relative inline-flex items-center ${isHalfMenuOpen ? 'z-50' : ''}`}>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -948,7 +950,7 @@ export default function PosScreen({
                         })()}
                         </div>
                       ) : (
-                        <div className="relative inline-flex items-center">
+                        <div className={`relative inline-flex items-center ${openHalfCartonMenuKey === `${itemKey}_single` ? 'z-50' : ''}`}>
                           {(() => {
                             const u = item.unit;
                             const isCartonUnit =
@@ -1642,6 +1644,7 @@ export default function PosScreen({
         cart={cart}
         cartSubtotal={cartSubtotal}
         customerName={customerName}
+        products={products}
       />
     </main>
   );

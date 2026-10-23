@@ -321,14 +321,14 @@ export default function CheckoutModal({
           {/* CHOICE 2: Combined Transfer / Lao QR */}
           {(paymentMethod === 'transfer' || paymentMethod === 'onepay') && (
             <div className="p-3 bg-blue-50/40 rounded-2xl border border-blue-200 flex flex-col items-center gap-2 text-center">
-              <div className="w-32 h-32 bg-white p-1.5 rounded-xl shadow-xs flex items-center justify-center border border-slate-200">
+              <div className="w-56 h-56 sm:w-64 sm:h-64 bg-white p-2.5 rounded-2xl shadow-md flex items-center justify-center border border-slate-300">
                 <img
                   src="/qr.jpg"
                   alt="Lao QR / BCEL One"
                   className="w-full h-full object-contain"
                   onError={(e) => {
                     e.currentTarget.src =
-                      'https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=LAO_BCEL_POS_TRANSFER';
+                      'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=LAO_BCEL_POS_TRANSFER';
                   }}
                 />
               </div>
@@ -339,8 +339,8 @@ export default function CheckoutModal({
                 <span className="text-xs font-bold text-slate-700 font-mono mt-0.5">
                   ຍອດໂອນ: <strong className="text-blue-700 text-sm">{formatKip(cartSubtotal)}</strong>
                 </span>
-                <span className="text-[10.5px] text-slate-500 font-medium mt-0.5">
-                  010-12-000-12345678-001 • ຮ້ານ MeiiShop
+                <span className="text-xs font-bold text-blue-950 mt-1">
+                  ທ່ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)
                 </span>
               </div>
             </div>

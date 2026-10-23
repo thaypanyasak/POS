@@ -18,7 +18,28 @@ export const SAYSETTHA_CSS = `
 @font-face {
   font-family: 'Saysettha OT';
   font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64}) format('truetype');
+}
+@font-face {
+  font-family: 'Saysettha OT';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64}) format('truetype');
+}
+@font-face {
+  font-family: 'Saysettha OT';
+  font-style: normal;
   font-weight: 700;
+  font-display: swap;
+  src: url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64}) format('truetype');
+}
+@font-face {
+  font-family: 'Saysettha OT';
+  font-style: normal;
+  font-weight: bold;
   font-display: swap;
   src: url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64}) format('truetype');
 }
@@ -43,48 +64,63 @@ export const SAYSETTHA_CSS = `
   font-display: swap;
   src: url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64}) format('truetype');
 }
+@font-face {
+  font-family: 'Saysettha';
+  font-style: normal;
+  font-weight: bold;
+  font-display: swap;
+  src: url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64}) format('truetype');
+}
 `;
+
+let saysetthaLoadedPromise = null;
 
 export async function ensureSaysetthaLoaded() {
   if (typeof document === 'undefined') return;
-  try {
-    if (!document.getElementById('saysettha-base64-style')) {
-      const style = document.createElement('style');
-      style.id = 'saysettha-base64-style';
-      style.textContent = SAYSETTHA_CSS;
-      document.head.appendChild(style);
+  if (saysetthaLoadedPromise) return saysetthaLoadedPromise;
+
+  saysetthaLoadedPromise = (async () => {
+    try {
+      if (!document.getElementById('saysettha-base64-style')) {
+        const style = document.createElement('style');
+        style.id = 'saysettha-base64-style';
+        style.textContent = SAYSETTHA_CSS;
+        document.head.appendChild(style);
+      }
+      if (document.fonts && typeof FontFace !== 'undefined') {
+        const sOT = new FontFace(
+          'Saysettha OT',
+          `url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64})`,
+          { weight: '400', style: 'normal' }
+        );
+        const sOTBold = new FontFace(
+          'Saysettha OT',
+          `url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64})`,
+          { weight: '700', style: 'normal' }
+        );
+        const sPlain = new FontFace(
+          'Saysettha',
+          `url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64})`,
+          { weight: '400', style: 'normal' }
+        );
+        const sPlainBold = new FontFace(
+          'Saysettha',
+          `url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64})`,
+          { weight: '700', style: 'normal' }
+        );
+        const faces = await Promise.all([
+          sOT.load(),
+          sOTBold.load(),
+          sPlain.load(),
+          sPlainBold.load()
+        ]);
+        faces.forEach((f) => document.fonts.add(f));
+        await document.fonts.ready;
+      }
+    } catch (err) {
+      console.warn('[saysetthaFont] Font loading notice:', err);
     }
-    if (document.fonts && typeof FontFace !== 'undefined') {
-      const sOT = new FontFace(
-        'Saysettha OT',
-        `url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64})`,
-        { weight: '400', style: 'normal' }
-      );
-      const sOTBold = new FontFace(
-        'Saysettha OT',
-        `url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64})`,
-        { weight: '700', style: 'normal' }
-      );
-      const sPlain = new FontFace(
-        'Saysettha',
-        `url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64})`,
-        { weight: '400', style: 'normal' }
-      );
-      const sPlainBold = new FontFace(
-        'Saysettha',
-        `url(data:font/truetype;charset=utf-8;base64,${SAYSETTHA_REGULAR_B64})`,
-        { weight: '700', style: 'normal' }
-      );
-      const faces = await Promise.all([
-        sOT.load(),
-        sOTBold.load(),
-        sPlain.load(),
-        sPlainBold.load()
-      ]);
-      faces.forEach((f) => document.fonts.add(f));
-      await document.fonts.ready;
-    }
-  } catch (err) {
-    console.warn('[saysetthaFont] Font loading notice:', err);
-  }
+  })();
+
+  return saysetthaLoadedPromise;
 }
