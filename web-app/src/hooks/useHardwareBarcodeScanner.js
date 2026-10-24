@@ -22,7 +22,7 @@ import { Haptics, NotificationType } from '@capacitor/haptics';
 export function useHardwareBarcodeScanner({
   onScan,
   enabled = true,
-  maxInterval = 30, // Strict threshold distinguishing scanner burst (<30ms between keys) from human typing
+  maxInterval = 75, // Threshold distinguishing physical barcode scanner burst (<75ms between keys) from human typing (>150ms)
   minLength = 3,
   preventDefaultOnEnter = true,
   cleanActiveInput = true,
@@ -33,6 +33,7 @@ export function useHardwareBarcodeScanner({
   const lastKeyTimeRef = useRef(0);
   const lastScannedBarcodeRef = useRef({ code: '', time: 0 });
   const inputSnapshotRef = useRef({ element: null, originalValue: '' });
+  const flushTimerRef = useRef(null);
 
   // Keep latest onScan callback without re-registering the global window listener
   useEffect(() => {
@@ -44,6 +45,7 @@ export function useHardwareBarcodeScanner({
 
     /**
      * Revert barcode characters accidentally dumped into an active input element
+     * or cleanly replace active search input if marked with data-barcode-replace="true"
      */
     const cleanActiveInputElement = (scannedCode) => {
       try {
@@ -75,7 +77,7 @@ export function useHardwareBarcodeScanner({
           cleanedValue = inputSnapshotRef.current.originalValue;
         }
 
-        if (cleanedValue !== currentValue) {
+        if (cleanedValue !== currentValue || activeEl.getAttribute('data-barcode-replace') === 'true') {
           const proto =
             activeEl instanceof HTMLTextAreaElement
               ? window.HTMLTextAreaElement.prototype
@@ -106,62 +108,85 @@ export function useHardwareBarcodeScanner({
       }
     };
 
+    const processBarcode = (rawCode, e = null) => {
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+
+      const currentBuffer = (rawCode || bufferRef.current).trim();
+
+      if (currentBuffer.length >= minLength) {
+        if (e && preventDefaultOnEnter) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+
+        const now = Date.now();
+        // Debounce duplicate reads of the exact same code within 800ms
+        const isDuplicate =
+          lastScannedBarcodeRef.current.code === currentBuffer &&
+          now - lastScannedBarcodeRef.current.time < 800;
+
+        if (isDuplicate) {
+          bufferRef.current = '';
+          inputSnapshotRef.current = { element: null, originalValue: '' };
+          return true;
+        }
+
+        lastScannedBarcodeRef.current = { code: currentBuffer, time: now };
+
+        // Clean active input if barcode characters were typed into it
+        if (cleanActiveInput) {
+          cleanActiveInputElement(currentBuffer);
+        }
+
+        // Trigger sound & haptic feedback
+        triggerFeedback();
+
+        // Reset buffer
+        bufferRef.current = '';
+        inputSnapshotRef.current = { element: null, originalValue: '' };
+
+        // Dispatch scan callback
+        if (typeof onScanRef.current === 'function') {
+          onScanRef.current(currentBuffer);
+        }
+        return true;
+      }
+
+      bufferRef.current = '';
+      inputSnapshotRef.current = { element: null, originalValue: '' };
+      return false;
+    };
+
     const handleGlobalKeyDown = (e) => {
       const now = Date.now();
       const delta = now - lastKeyTimeRef.current;
       lastKeyTimeRef.current = now;
 
-      // 1. Check for scanner terminator (Enter key)
-      if (e.key === 'Enter') {
-        const currentBuffer = bufferRef.current.trim();
+      // 1. Universal Terminator Detection (Enter, NumpadEnter, Tab, KeyCodes 13/9)
+      const isTerminator =
+        e.key === 'Enter' ||
+        e.code === 'Enter' ||
+        e.code === 'NumpadEnter' ||
+        e.keyCode === 13 ||
+        e.which === 13 ||
+        e.key === 'Tab' ||
+        e.keyCode === 9;
 
-        // Valid Hardware Barcode detected!
-        if (currentBuffer.length >= minLength) {
-          if (preventDefaultOnEnter) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
+      if (isTerminator) {
+        const handled = processBarcode(bufferRef.current, e);
+        if (handled) return;
 
-          // Debounce duplicate reads of the exact same code within 800ms
-          const isDuplicate =
-            lastScannedBarcodeRef.current.code === currentBuffer &&
-            now - lastScannedBarcodeRef.current.time < 800;
-
-          if (isDuplicate) {
-            bufferRef.current = '';
-            inputSnapshotRef.current = { element: null, originalValue: '' };
-            return;
-          }
-
-          lastScannedBarcodeRef.current = { code: currentBuffer, time: now };
-
-          // Clean active input if barcode characters were typed into it
-          if (cleanActiveInput) {
-            cleanActiveInputElement(currentBuffer);
-          }
-
-          // Trigger sound & haptic feedback
-          triggerFeedback();
-
-          // Reset buffer
-          bufferRef.current = '';
-          inputSnapshotRef.current = { element: null, originalValue: '' };
-
-          // Dispatch scan callback
-          if (typeof onScanRef.current === 'function') {
-            onScanRef.current(currentBuffer);
-          }
-          return;
-        }
-
-        // Normal human Enter key press -> reset buffer without interfering
+        // Normal human Enter/Tab key press -> reset buffer without interfering
         bufferRef.current = '';
         inputSnapshotRef.current = { element: null, originalValue: '' };
         return;
       }
 
       // 2. Inter-keystroke Speed Heuristic:
-      // If time between keystrokes exceeds threshold (> 35ms), it's human typing.
+      // If time between keystrokes exceeds threshold (> 75ms), it's human typing.
       if (delta > maxInterval) {
         bufferRef.current = '';
 
@@ -178,8 +203,19 @@ export function useHardwareBarcodeScanner({
       }
 
       // 3. Accumulate printable characters only
-      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         bufferRef.current += e.key;
+
+        // 4. Auto-flush timer for scanners configured WITHOUT Enter/CR suffix
+        // If a burst of >= minLength characters completes and no new key arrives for (maxInterval + 45ms), process scan automatically!
+        if (flushTimerRef.current) {
+          clearTimeout(flushTimerRef.current);
+        }
+        if (bufferRef.current.length >= minLength) {
+          flushTimerRef.current = setTimeout(() => {
+            processBarcode(bufferRef.current, null);
+          }, Math.max(maxInterval + 45, 110));
+        }
       }
     };
 
@@ -187,6 +223,9 @@ export function useHardwareBarcodeScanner({
     window.addEventListener('keydown', handleGlobalKeyDown, { capture: true });
 
     return () => {
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+      }
       window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
     };
   }, [enabled, maxInterval, minLength, preventDefaultOnEnter, cleanActiveInput, feedback]);

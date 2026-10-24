@@ -33,6 +33,7 @@ export default function BarcodeScannerModal({
   isOpen,
   onClose,
   onScanSuccess,
+  onScan,
   title = 'ສະແກນບາໂຄດສິນຄ້າ (Barcode Scanner)',
   description = 'ວາງບາໂຄດໃຫ້ຕົງກັບກອບສີ່ຫຼ່ຽມເພື່ອສະແກນອັດຕະໂນມັດ'
 }) {
@@ -230,7 +231,8 @@ export default function BarcodeScannerModal({
         setLastScanned(cleaned);
 
         await cleanupScanner();
-        if (onScanSuccess) onScanSuccess(cleaned);
+        const scanHandler = onScanSuccess || onScan;
+        if (typeof scanHandler === 'function') scanHandler(cleaned);
         if (onClose) onClose();
       };
 
@@ -354,7 +356,8 @@ export default function BarcodeScannerModal({
     const cleaned = manualCode.trim();
     if (!cleaned) return;
     triggerScanFeedback();
-    if (onScanSuccess) onScanSuccess(cleaned);
+    const scanHandler = onScanSuccess || onScan;
+    if (typeof scanHandler === 'function') scanHandler(cleaned);
     if (onClose) onClose();
   };
 

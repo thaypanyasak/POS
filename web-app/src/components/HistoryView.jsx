@@ -187,17 +187,23 @@ export default function HistoryView({
     }
 
     // 3. Search query filter: Mã bill, tên khách hàng, hình thức thanh toán VÀ tên sản phẩm / barcode / đơn vị trong bill
-    const q = normalizeLao(searchTerm);
-    if (!q) return list;
+    // 3. Search query filter: Mã bill, tên khách hàng, hình thức thanh toán VÀ tên sản phẩm / barcode / đơn vị trong bill
+    const rawSearch = String(searchTerm || '').replace(/[\r\n\t]/g, '').trim();
+    if (!rawSearch) return list;
+    const cleanQ = normalizeLao(rawSearch).replace(/^#/, '');
+    if (!cleanQ) return list;
+
     return list.filter((tx) => {
-      // 3.1. Tìm theo thông tin chung của đơn hàng
+      // 3.1. Tìm theo thông tin chung của đơn hàng (receiptNumber, receipt_number, id, customerName, ...)
+      const txNum = normalizeLao(tx.receiptNumber || tx.receipt_number || '').replace(/^#/, '');
+      const txId = normalizeLao(tx.id || '').replace(/^#/, '');
       const matchBasic =
-        normalizeLao(tx.receiptNumber).includes(q) ||
-        normalizeLao(tx.id).includes(q) ||
-        normalizeLao(tx.customerName).includes(q) ||
-        normalizeLao(tx.paymentMethod).includes(q) ||
-        normalizeLao(tx.status).includes(q) ||
-        normalizeLao(tx.debtNote).includes(q);
+        (txNum && (txNum === cleanQ || txNum.includes(cleanQ) || cleanQ.includes(txNum))) ||
+        (txId && (txId === cleanQ || txId.includes(cleanQ) || cleanQ.includes(txId))) ||
+        normalizeLao(tx.customerName).includes(cleanQ) ||
+        normalizeLao(tx.paymentMethod).includes(cleanQ) ||
+        normalizeLao(tx.status).includes(cleanQ) ||
+        normalizeLao(tx.debtNote).includes(cleanQ);
 
       if (matchBasic) return true;
 
@@ -212,9 +218,9 @@ export default function HistoryView({
         const unitName = normalizeLao(it.unitName || it.unit_name || it.unit?.unitName || '');
 
         return (
-          prodName.includes(q) ||
-          barcode.includes(q) ||
-          unitName.includes(q)
+          prodName.includes(cleanQ) ||
+          (barcode && (barcode === cleanQ || barcode.includes(cleanQ) || cleanQ.includes(barcode))) ||
+          unitName.includes(cleanQ)
         );
       });
 
@@ -226,39 +232,57 @@ export default function HistoryView({
   // Replaces the search term without requiring manual clear or backspace
   const handleScanBarcode = (barcode) => {
     if (!barcode) return;
-    const cleanCode = String(barcode).trim();
+    const cleanCode = String(barcode).replace(/[\r\n\t\x00-\x1F\x7F]/g, '').trim();
     if (!cleanCode) return;
 
-    // Immediately replace search term
+    // 1. Immediately reset date and tab filters to 'all' so scanned bill is always visible
+    setDateFilter('all');
+    setActiveTab('all');
+
+    // 2. Immediately set search term in state
     setSearchTerm(cleanCode);
-    if (searchInputRef.current) {
-      searchInputRef.current.value = cleanCode;
+
+    // 3. Direct DOM sync to ensure input displays value without requiring focus or backspace
+    const inputEl = searchInputRef.current || document.getElementById('history-search-input');
+    if (inputEl) {
+      const proto = window.HTMLInputElement.prototype;
+      const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+      if (descriptor && descriptor.set) {
+        descriptor.set.call(inputEl, cleanCode);
+      } else {
+        inputEl.value = cleanCode;
+      }
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
     }
+
     setScannerOpen(false);
 
-    // Look for matching transaction in full list
-    const q = normalizeLao(cleanCode);
+    // 4. Look for matching transaction in full list
+    const cleanRaw = cleanCode.replace(/^#/, '');
+    const q = normalizeLao(cleanRaw);
+
     const matched = transactions.find((tx) => {
-      const matchReceiptNum = tx.receiptNumber && normalizeLao(tx.receiptNumber).includes(q);
-      const matchId = tx.id && normalizeLao(tx.id).includes(q);
-      if (matchReceiptNum || matchId) return true;
+      const txNum = normalizeLao(tx.receiptNumber || tx.receipt_number || '').replace(/^#/, '');
+      const txId = normalizeLao(tx.id || '').replace(/^#/, '');
+      if ((txNum && (txNum === q || txNum.includes(q) || q.includes(txNum))) ||
+          (txId && (txId === q || txId.includes(q) || q.includes(txId)))) {
+        return true;
+      }
 
       const billItems = tx.items?.length > 0 ? tx.items : (tx.sale_transaction_items || []);
       return billItems.some((it) => {
         const b = normalizeLao(it.barcode || it.product?.barcode || '');
-        return b && b === q;
+        return b && (b === q || b.includes(q) || q.includes(b));
       });
     });
 
     if (matched) {
       playSuccessBeep();
-      if (dateFilter !== 'all') setDateFilter('all');
-      if (activeTab !== 'all') setActiveTab('all');
-
       setScannedHighlightId(matched.id);
       setScanToast({
         type: 'success',
-        message: `ພົບເຫັນບິນ #${matched.receiptNumber || matched.id} (${matched.customerName || 'ລູກຄ້າທົ່ວໄປ'})`,
+        message: `ພົບເຫັນບິນ #${matched.receiptNumber || matched.receipt_number || matched.id} (${matched.customerName || 'ລູກຄ້າທົ່ວໄປ'})`,
       });
       setTimeout(() => setScanToast(null), 3500);
       setTimeout(() => setScannedHighlightId(null), 7000);
@@ -283,7 +307,7 @@ export default function HistoryView({
   useHardwareBarcodeScanner({
     onScan: handleScanBarcode,
     enabled: true,
-    maxInterval: 50,
+    maxInterval: 75,
     minLength: 3,
     preventDefaultOnEnter: true,
     cleanActiveInput: true,
@@ -574,6 +598,7 @@ export default function HistoryView({
             />
             <input
               ref={searchInputRef}
+              id="history-search-input"
               type="text"
               data-barcode-replace="true"
               value={searchTerm}
@@ -1219,6 +1244,7 @@ export default function HistoryView({
       <BarcodeScannerModal
         isOpen={scannerOpen}
         onClose={() => setScannerOpen(false)}
+        onScanSuccess={handleScanBarcode}
         onScan={handleScanBarcode}
         title="ສະແກນບາໂຄດໃບບິນ (Scan Receipt Barcode)"
       />

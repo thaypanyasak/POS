@@ -248,19 +248,34 @@ export default function ProductsView({
 
   const handleScanBarcode = (barcode) => {
     if (!barcode) return;
-    const cleanCode = String(barcode).trim();
+    const cleanCode = String(barcode).replace(/[\r\n\t\x00-\x1F\x7F]/g, '').trim();
+    if (!cleanCode) return;
+
     setSearchTerm(cleanCode);
-    if (searchInputRef.current) {
-      searchInputRef.current.value = cleanCode;
+
+    // Direct DOM sync so input displays value immediately even without focus
+    const inputEl = searchInputRef.current || document.getElementById('product-search-input');
+    if (inputEl) {
+      const proto = window.HTMLInputElement.prototype;
+      const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+      if (descriptor && descriptor.set) {
+        descriptor.set.call(inputEl, cleanCode);
+      } else {
+        inputEl.value = cleanCode;
+      }
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
     }
+
     setScannerOpen(false);
 
+    const cleanLower = cleanCode.toLowerCase();
     const matched = products.find(
       (p) =>
-        (p.barcode && String(p.barcode).trim().toLowerCase() === cleanCode.toLowerCase()) ||
+        (p.barcode && String(p.barcode).trim().toLowerCase() === cleanLower) ||
         (p.units &&
           p.units.some(
-            (u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanCode.toLowerCase()
+            (u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanLower
           ))
     );
 
@@ -273,6 +288,13 @@ export default function ProductsView({
       });
       setTimeout(() => setScanToast(null), 3000);
       setTimeout(() => setScannedHighlightId(null), 6000);
+
+      setTimeout(() => {
+        const el = document.getElementById(`product-card-${matched.id}`) || document.getElementById(`product-row-${matched.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 150);
     } else {
       playErrorBeep();
       setScanToast({
@@ -288,7 +310,7 @@ export default function ProductsView({
   useHardwareBarcodeScanner({
     onScan: handleScanBarcode,
     enabled: true,
-    maxInterval: 50,
+    maxInterval: 75,
     minLength: 3,
     preventDefaultOnEnter: true,
     cleanActiveInput: true,
@@ -377,6 +399,7 @@ export default function ProductsView({
           <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             ref={searchInputRef}
+            id="product-search-input"
             type="text"
             data-barcode-replace="true"
             value={searchTerm}
@@ -845,6 +868,7 @@ export default function ProductsView({
         isOpen={scannerOpen}
         onClose={() => setScannerOpen(false)}
         onScanSuccess={handleScanBarcode}
+        onScan={handleScanBarcode}
         title="ສະແກນບາໂຄດຄົ້ນຫາສິນຄ້າ (Product Scanner)"
         description="ສ່ອງກ້ອງຫຼັງໃສ່ບາໂຄດສິນຄ້າເພື່ອກວດສອບ ແລະ ແກ້ໄຂຂໍ້ມູນທັນທີ"
       />
