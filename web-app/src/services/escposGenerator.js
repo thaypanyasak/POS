@@ -26,7 +26,7 @@ export const WIDTH_BYTES = 72;       // 576 / 8 = 72 bytes per line
  * @param {Object} options
  * @param {boolean} [options.kickCashDrawer=true] - Send ESC p drawer kick command
  * @param {boolean} [options.cutPaper=true] - Send GS V partial cut command
- * @param {number} [options.luminanceThreshold=205] - Brightness cutoff (default 205: captures fine Lao character curves without white specks)
+ * @param {number} [options.luminanceThreshold=195] - Brightness cutoff (default 195: solid dark strokes without white specks while keeping loops open)
  * @param {boolean} [options.useDithering=false] - Floyd-Steinberg dithering flag (false for crisp solid black text and barcodes)
  * @param {number} [options.feedLines=2] - Lines to feed before cut (default 2 to save paper)
  * @returns {Uint8Array} Complete ESC/POS byte stream ready for TCP transmission
@@ -34,7 +34,7 @@ export const WIDTH_BYTES = 72;       // 576 / 8 = 72 bytes per line
 export function canvasToEscPosRaster(sourceCanvas, {
   kickCashDrawer = true,
   cutPaper = true,
-  luminanceThreshold = 205,
+  luminanceThreshold = 195,
   useDithering = false,
   feedLines = 2,
 } = {}) {
@@ -116,22 +116,124 @@ export function canvasToEscPosRaster(sourceCanvas, {
     }
   }
 
-  // ─── Step 4.5: Subpixel Pinhole Sealing Filter ───────────────────────
-  // Scans for isolated 0s (white pinholes) inside character strokes.
-  // If a pixel is 0, but surrounded on >= 3 sides by 1 (black pixels),
-  // it is an antialiasing dropout in the thermal grid -> seal it solid black (1).
+  // ─── Step 4.5: Precision Enclosed Dropout Void Sealer ───────────────
+  // Thermal printing on stiff paper exposes micro-dropouts (chấm trắng 1px - 4px)
+  // inside stroke bodies where font rasterization produced antialiased pixels.
+  //
+  // Algorithm:
+  // 1. Flood-fill from the 4 outer canvas boundaries to identify ALL exterior
+  //    white pixels (the background).
+  // 2. Any remaining white pixels are internal enclosed voids / counters.
+  // 3. For any enclosed void of size <= 5 pixels (true dropout specks):
+  //    seal them completely (turn to 1 / black).
+  // 4. True typographical loops (Lao ອ, ສ, ຂ, ຊ, ຣ, Latin O, o, 0, B, D, etc.,
+  //    which have hole size >= 11 pixels) and open loops (Lao ລ head) are 100%
+  //    preserved with zero closure.
+  // 5. Exterior boundaries are never expanded, guaranteeing text NEVER becomes
+  //    bolder, thicker, or blurred.
   const binary = new Uint8Array(rawBinary);
   if (!useDithering) {
+    const totalPixels = width * height;
+    // status: 0 = unvisited white, 1 = black, 2 = exterior background white, 3 = visited internal hole
+    const status = new Uint8Array(totalPixels);
+    for (let i = 0; i < totalPixels; i++) {
+      if (rawBinary[i] === 1) status[i] = 1;
+    }
+
+    // Flat queue for BFS flood-fill from borders
+    const queue = new Int32Array(totalPixels);
+    let head = 0;
+    let tail = 0;
+
+    // Seed top and bottom borders
+    for (let x = 0; x < width; x++) {
+      const topIdx = x;
+      if (status[topIdx] === 0) { status[topIdx] = 2; queue[tail++] = topIdx; }
+      const btmIdx = (height - 1) * width + x;
+      if (status[btmIdx] === 0) { status[btmIdx] = 2; queue[tail++] = btmIdx; }
+    }
+
+    // Seed left and right borders
+    for (let y = 0; y < height; y++) {
+      const leftIdx = y * width;
+      if (status[leftIdx] === 0) { status[leftIdx] = 2; queue[tail++] = leftIdx; }
+      const rightIdx = y * width + (width - 1);
+      if (status[rightIdx] === 0) { status[rightIdx] = 2; queue[tail++] = rightIdx; }
+    }
+
+    // Fast 4-neighbor BFS flood fill to mark all exterior white
+    while (head < tail) {
+      const idx = queue[head++];
+      const x = idx % width;
+      const y = (idx - x) / width;
+      if (x > 0 && status[idx - 1] === 0) { status[idx - 1] = 2; queue[tail++] = idx - 1; }
+      if (x < width - 1 && status[idx + 1] === 0) { status[idx + 1] = 2; queue[tail++] = idx + 1; }
+      if (y > 0 && status[idx - width] === 0) { status[idx - width] = 2; queue[tail++] = idx - width; }
+      if (y < height - 1 && status[idx + width] === 0) { status[idx + width] = 2; queue[tail++] = idx + width; }
+    }
+
+    // Seal small enclosed dropout voids (size <= MAX_HOLE_SIZE)
+    const MAX_HOLE_SIZE = 5;
+
     for (let y = 1; y < height - 1; y++) {
       const rowOffset = y * width;
       for (let x = 1; x < width - 1; x++) {
+        const startIdx = rowOffset + x;
+        if (status[startIdx] === 0) {
+          let hHead = 0;
+          let hTail = 0;
+          status[startIdx] = 3;
+          queue[hTail++] = startIdx;
+
+          while (hHead < hTail) {
+            const cIdx = queue[hHead++];
+            const cx = cIdx % width;
+            const cy = (cIdx - cx) / width;
+            if (cx > 0 && status[cIdx - 1] === 0) { status[cIdx - 1] = 3; queue[hTail++] = cIdx - 1; }
+            if (cx < width - 1 && status[cIdx + 1] === 0) { status[cIdx + 1] = 3; queue[hTail++] = cIdx + 1; }
+            if (cy > 0 && status[cIdx - width] === 0) { status[cIdx - width] = 3; queue[hTail++] = cIdx - width; }
+            if (cy < height - 1 && status[cIdx + width] === 0) { status[cIdx + width] = 3; queue[hTail++] = cIdx + width; }
+          }
+
+          if (hTail <= MAX_HOLE_SIZE) {
+            for (let i = 0; i < hTail; i++) {
+              binary[queue[i]] = 1;
+            }
+          }
+        }
+      }
+    }
+
+    // Phase 3: Seal inward stroke edge notches / dropouts (1-pixel dropouts within a stroke)
+    // Eliminates micro-notches/specks along Latin & Vietnamese characters (Segoe UI) and Lao characters
+    // without thickening or expanding the outer boundaries of any letters.
+    for (let y = 2; y < height - 2; y++) {
+      const rowOffset = y * width;
+      for (let x = 2; x < width - 2; x++) {
         const idx = rowOffset + x;
-        if (rawBinary[idx] === 0) {
-          const top = rawBinary[idx - width];
-          const bottom = rawBinary[idx + width];
-          const left = rawBinary[idx - 1];
-          const right = rawBinary[idx + 1];
-          if (top + bottom + left + right >= 3) {
+        if (binary[idx] === 0) {
+          const top = binary[idx - width];
+          const bottom = binary[idx + width];
+          const left = binary[idx - 1];
+          const right = binary[idx + 1];
+
+          // Enclosed 4-neighbor dropout
+          if (top === 1 && bottom === 1 && left === 1 && right === 1) {
+            binary[idx] = 1;
+            continue;
+          }
+
+          // Horizontal stroke dropout: flanked by black horizontally and backed vertically
+          const isHorizStrokeDropout = (left === 1 && right === 1) &&
+            (binary[idx - 2] === 1 || binary[idx + 2] === 1) &&
+            (top === 1 || bottom === 1);
+
+          // Vertical stroke dropout: flanked by black vertically and backed horizontally
+          const isVertStrokeDropout = (top === 1 && bottom === 1) &&
+            (binary[idx - 2 * width] === 1 || binary[idx + 2 * width] === 1) &&
+            (left === 1 || right === 1);
+
+          if (isHorizStrokeDropout || isVertStrokeDropout) {
             binary[idx] = 1;
           }
         }

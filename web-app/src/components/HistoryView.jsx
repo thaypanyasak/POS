@@ -17,11 +17,14 @@ import {
   QrCode,
   Warning,
   XCircle,
-  Check
+  Check,
+  Barcode,
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
-import { playUnitChangeBeep, playActionClickBeep, playErrorBeep } from '../utils/audioFeedback';
+import BarcodeScannerModal from './BarcodeScannerModal';
+import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
+import { playUnitChangeBeep, playActionClickBeep, playErrorBeep, playSuccessBeep } from '../utils/audioFeedback';
 import { HistoryListSkeleton } from './common/SkeletonLoaders';
 
 export default function HistoryView({
@@ -38,9 +41,15 @@ export default function HistoryView({
   const [searchTerm, setSearchTerm] = useState('');
   const searchInputRef = useRef(null);
 
+  // Barcode scanner states
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanToast, setScanToast] = useState(null);
+  const [scannedHighlightId, setScannedHighlightId] = useState(null);
+
   const handleClearSearch = () => {
     setSearchTerm('');
     if (searchInputRef.current) {
+      searchInputRef.current.value = '';
       searchInputRef.current.focus();
     }
   };
@@ -184,6 +193,7 @@ export default function HistoryView({
       // 3.1. Tìm theo thông tin chung của đơn hàng
       const matchBasic =
         normalizeLao(tx.receiptNumber).includes(q) ||
+        normalizeLao(tx.id).includes(q) ||
         normalizeLao(tx.customerName).includes(q) ||
         normalizeLao(tx.paymentMethod).includes(q) ||
         normalizeLao(tx.status).includes(q) ||
@@ -211,6 +221,73 @@ export default function HistoryView({
       return matchItem;
     });
   }, [transactions, activeTab, dateFilter, startDate, endDate, searchTerm]);
+
+  // Handle Barcode Scan (Both Camera modal & Hardware USB/Bluetooth scanner)
+  // Replaces the search term without requiring manual clear or backspace
+  const handleScanBarcode = (barcode) => {
+    if (!barcode) return;
+    const cleanCode = String(barcode).trim();
+    if (!cleanCode) return;
+
+    // Immediately replace search term
+    setSearchTerm(cleanCode);
+    if (searchInputRef.current) {
+      searchInputRef.current.value = cleanCode;
+    }
+    setScannerOpen(false);
+
+    // Look for matching transaction in full list
+    const q = normalizeLao(cleanCode);
+    const matched = transactions.find((tx) => {
+      const matchReceiptNum = tx.receiptNumber && normalizeLao(tx.receiptNumber).includes(q);
+      const matchId = tx.id && normalizeLao(tx.id).includes(q);
+      if (matchReceiptNum || matchId) return true;
+
+      const billItems = tx.items?.length > 0 ? tx.items : (tx.sale_transaction_items || []);
+      return billItems.some((it) => {
+        const b = normalizeLao(it.barcode || it.product?.barcode || '');
+        return b && b === q;
+      });
+    });
+
+    if (matched) {
+      playSuccessBeep();
+      if (dateFilter !== 'all') setDateFilter('all');
+      if (activeTab !== 'all') setActiveTab('all');
+
+      setScannedHighlightId(matched.id);
+      setScanToast({
+        type: 'success',
+        message: `ພົບເຫັນບິນ #${matched.receiptNumber || matched.id} (${matched.customerName || 'ລູກຄ້າທົ່ວໄປ'})`,
+      });
+      setTimeout(() => setScanToast(null), 3500);
+      setTimeout(() => setScannedHighlightId(null), 7000);
+
+      setTimeout(() => {
+        const el = document.getElementById(`tx-card-${matched.id}`) || document.getElementById(`tx-row-${matched.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 150);
+    } else {
+      playErrorBeep();
+      setScanToast({
+        type: 'error',
+        message: `ບໍ່ພົບເຫັນບິນທີ່ມີລະຫັດບາໂຄດ: "${cleanCode}"`,
+      });
+      setTimeout(() => setScanToast(null), 3500);
+    }
+  };
+
+  // Hardware Scanner Listener: Automatically captures barcode & fills/replaces search input without focus
+  useHardwareBarcodeScanner({
+    onScan: handleScanBarcode,
+    enabled: true,
+    maxInterval: 50,
+    minLength: 3,
+    preventDefaultOnEnter: true,
+    cleanActiveInput: true,
+  });
 
   // Simple Customer Name / Method edit modal
   const handleOpenEdit = (tx) => {
@@ -488,9 +565,9 @@ export default function HistoryView({
           </div>
         )}
 
-        {/* Search input & Result count */}
+        {/* Search input & Barcode scanner */}
         <div className="flex items-center gap-2">
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-80">
             <MagnifyingGlass
               size={15}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
@@ -498,27 +575,70 @@ export default function HistoryView({
             <input
               ref={searchInputRef}
               type="text"
+              data-barcode-replace="true"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="ຄົ້ນຫາເລກບິນ, ລູກຄ້າ, ສິນຄ້າ..."
-              className="w-full pl-8 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium"
+              className="w-full pl-8 pr-28 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium"
             />
             {searchTerm && (
               <button
                 type="button"
                 onClick={handleClearSearch}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full cursor-pointer transition-colors active:scale-90 flex items-center justify-center"
+                className="absolute right-20 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full cursor-pointer transition-colors active:scale-90 flex items-center justify-center"
                 title="ລຶບການຄົ້ນຫາ (Clear search)"
               >
                 <XCircle size={16} weight="fill" />
               </button>
             )}
+
+            {/* Barcode Camera Button inside Search Bar */}
+            <button
+              type="button"
+              onClick={() => {
+                playActionClickBeep();
+                setScannerOpen(true);
+              }}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center gap-1 active:scale-95"
+              title="ເປີດກ້ອງສະແກນບາໂຄດບິນ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
+            >
+              <Barcode size={15} weight="bold" />
+              <span className="text-[10px] font-bold hidden sm:inline">ສະແກນ</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Hardware Scanner Ready" />
+            </button>
           </div>
           <span className="text-xs text-slate-500 whitespace-nowrap font-medium shrink-0">
             {filteredTransactions.length} ບິນ
           </span>
         </div>
       </div>
+
+      {/* Scan Toast Feedback Banner */}
+      {scanToast && (
+        <div
+          className={`mb-3 p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 shadow-sm transition-all animate-in fade-in slide-in-from-top-1 ${
+            scanToast.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {scanToast.type === 'success' ? (
+              <CheckCircle size={18} weight="fill" className="text-emerald-600 shrink-0" />
+            ) : (
+              <Warning size={18} weight="fill" className="text-rose-600 shrink-0" />
+            )}
+            <span className="truncate">{scanToast.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setScanToast(null)}
+            className="p-1 hover:bg-black/5 rounded-lg cursor-pointer shrink-0"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Skeleton Loading State */}
       {isLoading && transactions.length === 0 ? (
@@ -547,8 +667,11 @@ export default function HistoryView({
           return (
             <div
               key={tx.id}
+              id={`tx-card-${tx.id}`}
               className={`p-3.5 bg-white rounded-2xl border transition-all shadow-xs flex flex-col gap-3 ${
-                isCancelled
+                scannedHighlightId === tx.id
+                  ? 'ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/20'
+                  : isCancelled
                   ? 'border-rose-200 bg-rose-50/20'
                   : hasDebt
                   ? 'border-amber-300 bg-amber-50/15'
@@ -779,8 +902,11 @@ export default function HistoryView({
               return (
                 <tr
                   key={tx.id}
+                  id={`tx-row-${tx.id}`}
                   className={`transition-colors ${
-                    isCancelled
+                    scannedHighlightId === tx.id
+                      ? 'bg-emerald-50/40 text-slate-900 ring-2 ring-inset ring-emerald-500'
+                      : isCancelled
                       ? 'bg-rose-50/30 hover:bg-rose-50/60 text-slate-500'
                       : hasDebt
                       ? 'bg-amber-50/20 hover:bg-amber-50/40 text-slate-900'
@@ -1088,6 +1214,14 @@ export default function HistoryView({
           </div>
         </div>
       )}
+
+      {/* 4. Barcode Camera Scanner Modal */}
+      <BarcodeScannerModal
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={handleScanBarcode}
+        title="ສະແກນບາໂຄດໃບບິນ (Scan Receipt Barcode)"
+      />
     </main>
   );
 }

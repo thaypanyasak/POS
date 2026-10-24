@@ -1447,6 +1447,7 @@ export default function App() {
     enabled:
       activeMainTab !== 'pos' &&
       activeMainTab !== 'products' &&
+      activeMainTab !== 'history' &&
       !productFormModalOpen &&
       !checkoutModalOpen &&
       !receiptModalOpen,

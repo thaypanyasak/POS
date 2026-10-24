@@ -19,6 +19,7 @@ import {
 import { renderReceiptCanvas } from './receiptCanvasEngine';
 import { ensureSaysetthaLoaded, SAYSETTHA_CSS } from '../utils/saysetthaFont';
 import { ensureTahomaLoaded } from '../utils/tahomaFont';
+import { ensureSegoeUiLoaded, SEGOE_UI_CSS } from '../utils/segoeUiFont';
 import { TcpSocket } from '@deedarb/capacitor-tcp-socket';
 
 // Re-export printer configuration APIs for seamless backward compatibility
@@ -228,19 +229,35 @@ export async function printReceiptSmart({
     try {
       // 1. Ensure appropriate font is loaded in browser/webview memory
       if (language === 'vi') {
+        await ensureSegoeUiLoaded();
         await ensureTahomaLoaded();
         await ensureSaysetthaLoaded();
         if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
           try {
             await Promise.race([
               Promise.all([
-                document.fonts.load('bold 38px "Tahoma"'),
-                document.fonts.load('bold 28px "Tahoma"'),
-                document.fonts.load('bold 24px "Tahoma"'),
-                document.fonts.load('22px "Tahoma"'),
-                document.fonts.load('23px "Saysettha OT"'),
+                document.fonts.load('bold 44px "Segoe UI"'),
+                document.fonts.load('bold 38px "Segoe UI"'),
+                document.fonts.load('bold 32px "Segoe UI"'),
+                document.fonts.load('bold 26px "Segoe UI"'),
+                document.fonts.load('bold 24px "Segoe UI"'),
+                document.fonts.load('600 26px "Segoe UI"'),
+                document.fonts.load('600 24px "Segoe UI"'),
+                document.fonts.load('600 23px "Segoe UI"'),
+                document.fonts.load('600 22px "Segoe UI"'),
+                document.fonts.load('600 21px "Segoe UI"'),
+                document.fonts.load('500 22px "Segoe UI"'),
+                document.fonts.load('24px "Segoe UI"'),
+                document.fonts.load('23px "Segoe UI"'),
+                document.fonts.load('22px "Segoe UI"'),
+                document.fonts.load('21px "Segoe UI"'),
+                document.fonts.load('bold 44px "Tahoma"'),
+                document.fonts.load('bold 32px "Tahoma"'),
+                document.fonts.load('24px "Tahoma"'),
+                document.fonts.load('24px "Saysettha OT"'),
+                document.fonts.load('22px "Saysettha OT"'),
               ]),
-              new Promise((r) => setTimeout(r, 400)),
+              new Promise((r) => setTimeout(r, 500)),
             ]);
           } catch (_) {}
         }
@@ -251,11 +268,11 @@ export async function printReceiptSmart({
       // 2. Render receipt to 1:1 Canvas
       const canvas = await renderReceiptCanvas(receipt, language);
 
-      // 3. Convert Canvas to 1-bit ESC/POS raster bytes (threshold 205 for solid, continuous black strokes without white specks)
+      // 3. Convert Canvas to 1-bit ESC/POS raster bytes (threshold 195 for dense black strokes without white specks while keeping loops open)
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: config.drawerKick,
         cutPaper: config.autoCut,
-        luminanceThreshold: 205,
+        luminanceThreshold: 195,
         useDithering: false,
         feedLines: 2,
       });
@@ -459,7 +476,7 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
   // Detect language if element has .font-vietnam class or language is 'vi'
   const isVi = language === 'vi' || targetElement.classList.contains('font-vietnam');
   const targetFontFamily = isVi
-    ? "'Tahoma', 'Saysettha OT', 'Saysettha', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif !important"
+    ? "'Segoe UI', 'Tahoma', 'Saysettha OT', 'Saysettha', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif !important"
     : "'Saysettha OT', 'Saysettha', sans-serif !important";
 
   const contentHtml = targetElement.innerHTML;
@@ -477,6 +494,7 @@ export async function printViaNativeSpooler(elementId = 'thermal-receipt-print-a
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
       ${SAYSETTHA_CSS}
+      ${SEGOE_UI_CSS}
       @font-face {
         font-family: 'Tahoma';
         font-style: normal;

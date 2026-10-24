@@ -42,53 +42,54 @@ export const K80 = {
 
 import { ensureSaysetthaLoaded } from '../utils/saysetthaFont';
 import { ensureTahomaLoaded } from '../utils/tahomaFont';
+import { ensureSegoeUiLoaded } from '../utils/segoeUiFont';
 
 // ─── Typography (High-Res POS Scale — Large & Bold for Maximum Thermal Clarity) ──
 export function getFonts(lang = 'lo') {
   const isVi = lang === 'vi';
-  // Vietnamese bills use Tahoma with Saysettha OT fallback for un-translated Lao product names;
+  // Vietnamese bills use Segoe UI (inlined Base64 with Semibold 600 weight) with Saysettha OT fallback for un-translated Lao product names;
   // Lao bills stay 100% untouched on Saysettha OT.
   const textFont = isVi
-    ? '"Tahoma", "Saysettha OT", "Saysettha", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif'
+    ? '"Segoe UI", "Tahoma", "Saysettha OT", "Saysettha", -apple-system, BlinkMacSystemFont, Arial, sans-serif'
     : '"Saysettha OT", "Saysettha", sans-serif';
   const numFont = isVi
-    ? '"Tahoma", "Outfit", -apple-system, sans-serif'
+    ? '"Segoe UI", "Tahoma", "Outfit", -apple-system, sans-serif'
     : '"Outfit", "Segoe UI", -apple-system, sans-serif';
 
   return {
-    STORE_NAME: isVi ? `bold 38px ${textFont}` : `bold 44px ${textFont}`,
-    SLOGAN: isVi ? `bold 24px ${textFont}` : `bold 26px ${textFont}`,
-    ADDRESS: isVi ? `bold 21px ${textFont}` : `bold 23px ${textFont}`,
-    TEL: isVi ? `bold 24px ${textFont}` : `bold 26px ${textFont}`,
-    TITLE: isVi ? `bold 28px ${textFont}` : `bold 32px ${textFont}`,
-    META_LABEL: isVi ? `bold 21px ${textFont}` : `bold 23px ${textFont}`,
-    META_VAL: isVi ? `bold 22px ${textFont}` : `bold 24px ${textFont}`,
-    META_BOLD: isVi ? `bold 24px ${textFont}` : `bold 26px ${textFont}`,
-    COL_HEADER: isVi ? `bold 22px ${textFont}` : `bold 24px ${textFont}`,
-    COL_HEADER_REGULAR: isVi ? `22px ${textFont}` : `24px ${textFont}`,
-    ITEM_NAME: isVi ? `bold 23px ${textFont}` : `bold 25px ${textFont}`,
-    ITEM_UNIT: isVi ? `bold 20px ${textFont}` : `bold 22px ${textFont}`,
-    ITEM_NUM: isVi ? `21px ${numFont}` : `23px ${numFont}`,
-    ITEM_TOTAL: isVi ? `bold 22px ${numFont}` : `bold 24px ${numFont}`,
-    CRATE_LABEL: isVi ? `bold 20px ${textFont}` : `bold 22px ${textFont}`,
-    CRATE_NUM: isVi ? `20px ${numFont}` : `21px ${numFont}`,
-    SUBTOTAL_LABEL: isVi ? `bold 22px ${textFont}` : `bold 24px ${textFont}`,
-    SUBTOTAL_NUM: isVi ? `bold 23px ${numFont}` : `bold 25px ${numFont}`,
-    GRAND_LABEL: isVi ? `bold 28px ${textFont}` : `bold 32px ${textFont}`,
-    GRAND_NUM: isVi ? `bold 34px ${numFont}` : `bold 38px ${numFont}`,
-    TENDER_LABEL: isVi ? `bold 22px ${textFont}` : `bold 24px ${textFont}`,
-    TENDER_NUM: isVi ? `bold 23px ${numFont}` : `bold 25px ${numFont}`,
-    DEBT_LABEL: isVi ? `bold 26px ${textFont}` : `bold 28px ${textFont}`,
-    DEBT_NUM: isVi ? `bold 28px ${numFont}` : `bold 30px ${numFont}`,
-    QR_NAME: isVi ? `bold 22px ${textFont}` : `bold 24px ${textFont}`,
-    QR_AMOUNT_LABEL: isVi ? `bold 24px ${textFont}` : `bold 26px ${textFont}`,
-    QR_AMOUNT_NUM: isVi ? `bold 24px ${numFont}` : `bold 26px ${numFont}`,
-    SIGN_LABEL: isVi ? `bold 23px ${textFont}` : `bold 25px ${textFont}`,
+    STORE_NAME: `bold 44px ${textFont}`,
+    SLOGAN: `bold 26px ${textFont}`,
+    ADDRESS: isVi ? `600 23px ${textFont}` : `bold 23px ${textFont}`,
+    TEL: `bold 26px ${textFont}`,
+    TITLE: `bold 32px ${textFont}`,
+    META_LABEL: isVi ? `600 23px ${textFont}` : `23px ${textFont}`,
+    META_VAL: isVi ? `600 24px ${textFont}` : `24px ${textFont}`,
+    META_BOLD: `bold 26px ${textFont}`,
+    COL_HEADER: `bold 24px ${textFont}`,
+    COL_HEADER_REGULAR: isVi ? `600 24px ${textFont}` : `24px ${textFont}`,
+    ITEM_NAME: isVi ? `600 24px ${textFont}` : `24px ${textFont}`,
+    ITEM_UNIT: isVi ? `600 21px ${textFont}` : `21px ${textFont}`,
+    ITEM_NUM: isVi ? `600 22px ${numFont}` : `22px ${numFont}`,
+    ITEM_TOTAL: isVi ? `600 22px ${numFont}` : `500 22px ${numFont}`,
+    CRATE_LABEL: isVi ? `600 21px ${textFont}` : `21px ${textFont}`,
+    CRATE_NUM: `21px ${numFont}`,
+    SUBTOTAL_LABEL: isVi ? `600 24px ${textFont}` : `bold 24px ${textFont}`,
+    SUBTOTAL_NUM: isVi ? `600 24px ${numFont}` : `bold 25px ${numFont}`,
+    GRAND_LABEL: `bold 32px ${textFont}`,
+    GRAND_NUM: `bold 38px ${numFont}`,
+    TENDER_LABEL: isVi ? `600 24px ${textFont}` : `bold 24px ${textFont}`,
+    TENDER_NUM: isVi ? `600 24px ${numFont}` : `bold 25px ${numFont}`,
+    DEBT_LABEL: isVi ? `600 26px ${textFont}` : `bold 28px ${textFont}`,
+    DEBT_NUM: isVi ? `600 26px ${numFont}` : `bold 30px ${numFont}`,
+    QR_NAME: `bold 24px ${textFont}`,
+    QR_AMOUNT_LABEL: `bold 26px ${textFont}`,
+    QR_AMOUNT_NUM: `bold 26px ${numFont}`,
+    SIGN_LABEL: isVi ? `600 24px ${textFont}` : `bold 25px ${textFont}`,
     SIGN_LINE: 'bold 22px monospace',
-    BARCODE_NUM: isVi ? `bold 22px ${numFont}` : `bold 24px ${numFont}`,
-    FOOTER_BOLD: isVi ? `bold 23px ${textFont}` : `bold 25px ${textFont}`,
-    FOOTER: isVi ? `bold 20px ${textFont}` : `bold 22px ${textFont}`,
-    VOID_TEXT: isVi ? `bold 26px ${textFont}` : `bold 30px ${textFont}`,
+    BARCODE_NUM: `bold 24px ${numFont}`,
+    FOOTER_BOLD: isVi ? `600 24px ${textFont}` : `24px ${textFont}`,
+    FOOTER: isVi ? `600 21px ${textFont}` : `21px ${textFont}`,
+    VOID_TEXT: `bold 30px ${textFont}`,
   };
 }
 
@@ -925,23 +926,38 @@ export async function renderReceiptCanvas(receipt, lang = 'lo') {
   // Pre-load fonts based on selected language
   if (lang === 'vi') {
     try {
+      await ensureSegoeUiLoaded();
       await ensureTahomaLoaded();
       await ensureSaysetthaLoaded();
       if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
         await Promise.race([
           Promise.all([
-            document.fonts.load('bold 38px "Tahoma"'),
-            document.fonts.load('bold 28px "Tahoma"'),
-            document.fonts.load('bold 24px "Tahoma"'),
-            document.fonts.load('bold 23px "Tahoma"'),
-            document.fonts.load('bold 22px "Tahoma"'),
-            document.fonts.load('bold 21px "Tahoma"'),
-            document.fonts.load('22px "Tahoma"'),
-            document.fonts.load('21px "Tahoma"'),
-            document.fonts.load('bold 23px "Saysettha OT"'),
-            document.fonts.load('23px "Saysettha OT"'),
+            document.fonts.load('bold 44px "Segoe UI"'),
+            document.fonts.load('bold 38px "Segoe UI"'),
+            document.fonts.load('bold 32px "Segoe UI"'),
+            document.fonts.load('bold 30px "Segoe UI"'),
+            document.fonts.load('bold 28px "Segoe UI"'),
+            document.fonts.load('bold 26px "Segoe UI"'),
+            document.fonts.load('bold 25px "Segoe UI"'),
+            document.fonts.load('bold 24px "Segoe UI"'),
+            document.fonts.load('bold 23px "Segoe UI"'),
+            document.fonts.load('600 26px "Segoe UI"'),
+            document.fonts.load('600 24px "Segoe UI"'),
+            document.fonts.load('600 23px "Segoe UI"'),
+            document.fonts.load('600 22px "Segoe UI"'),
+            document.fonts.load('600 21px "Segoe UI"'),
+            document.fonts.load('500 22px "Segoe UI"'),
+            document.fonts.load('24px "Segoe UI"'),
+            document.fonts.load('23px "Segoe UI"'),
+            document.fonts.load('22px "Segoe UI"'),
+            document.fonts.load('21px "Segoe UI"'),
+            document.fonts.load('bold 44px "Tahoma"'),
+            document.fonts.load('bold 32px "Tahoma"'),
+            document.fonts.load('24px "Tahoma"'),
+            document.fonts.load('24px "Saysettha OT"'),
+            document.fonts.load('22px "Saysettha OT"'),
           ]),
-          new Promise((resolve) => setTimeout(resolve, 400)),
+          new Promise((resolve) => setTimeout(resolve, 500)),
         ]);
       }
     } catch (_) {}
