@@ -921,17 +921,22 @@ export default function HistoryView({
           const highlightType = realtimeHighlights?.[tx.id];
           const isRealtimeNew = highlightType === 'new';
           const isRealtimeUpdated = highlightType === 'updated';
-          const isUnread = (unreadOrderIds && unreadOrderIds.has(tx.id)) || isRealtimeNew;
+
+          // 1. Phân biệt đơn sửa (ưu tiên updatedOrderIds bền vững hoặc realtime highlight)
+          const isOrderUpdated = (updatedOrderIds && updatedOrderIds.has(tx.id)) || isRealtimeUpdated;
+
+          // 2. Phân biệt đơn mới (chỉ khi không phải đơn sửa và có unreadOrderIds hoặc realtime new)
+          const isOrderNew = !isOrderUpdated && ((unreadOrderIds && unreadOrderIds.has(tx.id)) || isRealtimeNew);
 
           return (
             <div
               key={tx.id}
               id={`tx-card-${tx.id}`}
               className={`p-3.5 bg-white rounded-2xl border transition-all duration-300 shadow-xs flex flex-col gap-3 ${
-                isUnread
+                isOrderUpdated
+                  ? 'border-amber-300 bg-amber-50/40 shadow-xs'
+                  : isOrderNew
                   ? 'border-slate-200 bg-emerald-50/40 shadow-xs'
-                  : isRealtimeUpdated
-                  ? 'border-slate-200 bg-amber-50/40 shadow-xs'
                   : scannedHighlightId === tx.id
                   ? 'ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/20'
                   : isCancelled
@@ -951,13 +956,13 @@ export default function HistoryView({
                   >
                     #{tx.receiptNumber}
                   </span>
-                  {!isRealtimeUpdated && isUnread && (
+                  {isOrderNew && (
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-600 text-white animate-pulse shadow-xs inline-flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-white" />
                       <span>ບິນໃໝ່</span>
                     </span>
                   )}
-                  {isRealtimeUpdated && (
+                  {isOrderUpdated && (
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white animate-pulse shadow-xs inline-flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-white" />
                       <span>ແກ້ໄຂໃໝ່</span>
@@ -1199,17 +1204,22 @@ export default function HistoryView({
               const highlightType = realtimeHighlights?.[tx.id];
               const isRealtimeNew = highlightType === 'new';
               const isRealtimeUpdated = highlightType === 'updated';
-              const isUnread = (unreadOrderIds && unreadOrderIds.has(tx.id)) || isRealtimeNew;
+
+              // 1. Phân biệt đơn sửa (ưu tiên updatedOrderIds bền vững hoặc realtime highlight)
+              const isOrderUpdated = (updatedOrderIds && updatedOrderIds.has(tx.id)) || isRealtimeUpdated;
+
+              // 2. Phân biệt đơn mới (chỉ khi không phải đơn sửa và có unreadOrderIds hoặc realtime new)
+              const isOrderNew = !isOrderUpdated && ((unreadOrderIds && unreadOrderIds.has(tx.id)) || isRealtimeNew);
 
               return (
                 <tr
                   key={tx.id}
                   id={`tx-row-${tx.id}`}
                   className={`transition-all duration-300 ${
-                    isUnread
-                      ? 'bg-emerald-50/80 text-slate-900 font-bold'
-                      : isRealtimeUpdated
+                    isOrderUpdated
                       ? 'bg-amber-50/80 text-slate-900 font-bold'
+                      : isOrderNew
+                      ? 'bg-emerald-50/80 text-slate-900 font-bold'
                       : scannedHighlightId === tx.id
                       ? 'bg-emerald-50/40 text-slate-900 ring-2 ring-inset ring-emerald-500'
                       : isCancelled
@@ -1227,13 +1237,13 @@ export default function HistoryView({
                       >
                         #{tx.receiptNumber}
                       </span>
-                      {!isRealtimeUpdated && isUnread && (
+                      {isOrderNew && (
                         <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-emerald-600 text-white animate-pulse shadow-2xs inline-flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-white" />
                           <span>ບິນໃໝ່</span>
                         </span>
                       )}
-                      {isRealtimeUpdated && (
+                      {isOrderUpdated && (
                         <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-500 text-white animate-pulse shadow-2xs inline-flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-white" />
                           <span>ແກ້ໄຂໃໝ່</span>
