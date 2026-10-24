@@ -474,5 +474,44 @@ body.barcode-scanner-active .scanner-hide {
   animation: focusPulseRing 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
+/* =========================================================================
+   High-End Auth Splash & Modern Loader Animations
+   ========================================================================= */
+@keyframes shimmerBeam {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
 
+.animate-shimmer-beam {
+  animation: shimmerBeam 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
 
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spinSlow 6s linear infinite;
+}
+
+@keyframes floatGentle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-float-gentle {
+  animation: floatGentle 2.6s ease-in-out infinite;
+}

@@ -19,6 +19,9 @@ import {
   XCircle,
   Check,
   Barcode,
+  User,
+  Clock,
+  ChartBar,
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
@@ -26,9 +29,14 @@ import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 import { playUnitChangeBeep, playActionClickBeep, playErrorBeep, playSuccessBeep } from '../utils/audioFeedback';
 import { HistoryListSkeleton } from './common/SkeletonLoaders';
+import { useAuthRole } from '../contexts/AuthContext';
 
 export default function HistoryView({
   transactions = [],
+  realtimeHighlights = {},
+  unreadOrderIds = new Set(),
+  onMarkOrderAsRead,
+  onMarkAllOrdersAsRead,
   onOpenReceipt,
   onCancelTransaction,
   onDeleteTransaction,
@@ -38,6 +46,7 @@ export default function HistoryView({
   isLoading,
   onAlert,
 }) {
+  const { canDeleteOrders } = useAuthRole();
   const [searchTerm, setSearchTerm] = useState('');
   const searchInputRef = useRef(null);
 
@@ -56,8 +65,8 @@ export default function HistoryView({
   // 3 Primary Tabs: 'cash' | 'transfer' | 'debt' + 'all' | 'cancelled'
   const [activeTab, setActiveTab] = useState('all');
   
-  // Date range filters: 'today' | 'yesterday' | '7days' | 'all' | 'custom'
-  const [dateFilter, setDateFilter] = useState('all');
+  // Date range filters: 'today' | 'yesterday' | '7days' | 'all' | 'custom' (default 'today' for fast performance at counter)
+  const [dateFilter, setDateFilter] = useState('today');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -112,6 +121,133 @@ export default function HistoryView({
 
     return { cash, transfer, debt, cancelled, total: transactions.length };
   }, [transactions]);
+
+  // Counts of transactions for each date pill button
+  const dateCounts = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+    const endOfYesterday = new Date(startOfToday.getTime() - 1);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    let all = transactions.length;
+    let today = 0;
+    let yesterday = 0;
+    let sevenDays = 0;
+
+    transactions.forEach((tx) => {
+      const createdAt = new Date(tx.createdAt || tx.created_at || Date.now());
+      if (createdAt >= startOfToday) {
+        today++;
+      }
+      if (createdAt >= startOfYesterday && createdAt <= endOfYesterday) {
+        yesterday++;
+      }
+      if (createdAt >= sevenDaysAgo) {
+        sevenDays++;
+      }
+    });
+
+    return { all, today, yesterday, sevenDays };
+  }, [transactions]);
+
+  // Dynamic statistics calculated specifically for the CURRENTLY SELECTED timeframe
+  const selectedPeriodStats = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+    const endOfYesterday = new Date(startOfToday.getTime() - 1);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    let list = transactions;
+    if (dateFilter === 'today') {
+      list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) >= startOfToday);
+    } else if (dateFilter === 'yesterday') {
+      list = list.filter((tx) => {
+        const d = new Date(tx.createdAt || tx.created_at);
+        return d >= startOfYesterday && d <= endOfYesterday;
+      });
+    } else if (dateFilter === '7days') {
+      list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) >= sevenDaysAgo);
+    } else if (dateFilter === 'custom') {
+      if (startDate) {
+        const s = new Date(startDate);
+        s.setHours(0, 0, 0, 0);
+        list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) >= s);
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        e.setHours(23, 59, 59, 999);
+        list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) <= e);
+      }
+    }
+
+    let totalBills = 0;
+    let totalRevenue = 0;
+    let cashBills = 0;
+    let cashRevenue = 0;
+    let transferBills = 0;
+    let transferRevenue = 0;
+    let debtBills = 0;
+    let debtAmount = 0;
+
+    list.forEach((tx) => {
+      totalBills++; // Count all transactions in this timeframe
+
+      const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
+      if (isCancelled) return; // Cancelled bills do not contribute to revenue or active payment categories
+
+      const rev = Number(tx.finalTotalKip || tx.final_total_kip || tx.totalKip || tx.total_kip || 0);
+      totalRevenue += rev;
+
+      const method = (tx.paymentMethod || '').toLowerCase();
+      const status = (tx.paymentStatus || '').toUpperCase();
+      const remainingDebt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
+      const isDebt = status === 'DEBT' || status === 'PARTIAL' || remainingDebt > 0 || method === 'debt';
+
+      if (isDebt) {
+        debtBills++;
+        debtAmount += remainingDebt;
+      } else if (method === 'cash' || method === 'ເງິນສົດ') {
+        cashBills++;
+        cashRevenue += rev;
+      } else if (method === 'transfer' || method === 'qrtransfer' || method === 'onepay' || method === 'qr') {
+        transferBills++;
+        transferRevenue += rev;
+      } else {
+        cashBills++;
+        cashRevenue += rev;
+      }
+    });
+
+    return {
+      totalBills,
+      totalRevenue,
+      cashBills,
+      cashRevenue,
+      transferBills,
+      transferRevenue,
+      debtBills,
+      debtAmount,
+    };
+  }, [transactions, dateFilter, startDate, endDate]);
+
+  const selectedPeriodLabel = useMemo(() => {
+    if (dateFilter === 'today') return 'ມື້ນີ້';
+    if (dateFilter === 'yesterday') return 'ມື້ວານ';
+    if (dateFilter === '7days') return '7 ມື້ຜ່ານມາ';
+    if (dateFilter === 'custom') return 'ຊ່ວງວັນທີເລືອກ';
+    return 'ທັງໝົດ';
+  }, [dateFilter]);
+
+  // Handler: When clicking Print, mark the order as read
+  const handlePrintReceipt = (tx) => {
+    playActionClickBeep('history');
+    onMarkOrderAsRead?.(tx.id);
+    onOpenReceipt?.(tx);
+  };
+
+  const unreadCount = unreadOrderIds ? unreadOrderIds.size : 0;
 
   // Filtering pipeline: Tab Filter -> Date Filter -> Search Filter
   const filteredTransactions = useMemo(() => {
@@ -376,134 +512,19 @@ export default function HistoryView({
         </div>
       </div>
 
-      {/* 1. PRIMARY NAVIGATION: All + 3 Payment Categories (Cash, Transfer, Debt) + Cancelled */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2 mb-3">
-        {/* Tab 1: ທັງໝົດ */}
-        <button
-          type="button"
-          onClick={() => {
-            playUnitChangeBeep('history');
-            setActiveTab('all');
-          }}
-          className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
-            activeTab === 'all'
-              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          <Receipt size={16} weight="bold" />
-          <span>ທັງໝົດ</span>
-          <span
-            className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-              activeTab === 'all' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
-            }`}
-          >
-            {counts.total}
-          </span>
-        </button>
-
-        {/* Tab 2: ເງິນສົດ */}
-        <button
-          type="button"
-          onClick={() => {
-            playUnitChangeBeep('history');
-            setActiveTab('cash');
-          }}
-          className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
-            activeTab === 'cash'
-              ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          <Money size={16} weight="bold" />
-          <span>ເງິນສົດ</span>
-          <span
-            className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-              activeTab === 'cash' ? 'bg-teal-700 text-teal-100' : 'bg-slate-100 text-slate-600'
-            }`}
-          >
-            {counts.cash}
-          </span>
-        </button>
-
-        {/* Tab 3: ເງິນໂອນ */}
-        <button
-          type="button"
-          onClick={() => {
-            playUnitChangeBeep('history');
-            setActiveTab('transfer');
-          }}
-          className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
-            activeTab === 'transfer'
-              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          <QrCode size={16} weight="bold" />
-          <span>ເງິນໂອນ</span>
-          <span
-            className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-              activeTab === 'transfer' ? 'bg-blue-700 text-blue-100' : 'bg-slate-100 text-slate-600'
-            }`}
-          >
-            {counts.transfer}
-          </span>
-        </button>
-
-        {/* Tab 4: ຕິດໜີ້ */}
-        <button
-          type="button"
-          onClick={() => {
-            playUnitChangeBeep('history');
-            setActiveTab('debt');
-          }}
-          className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
-            activeTab === 'debt'
-              ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
-              : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100/70'
-          }`}
-        >
-          <HandCoins size={16} weight="bold" />
-          <span>ຕິດໜີ້</span>
-          <span
-            className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
-              activeTab === 'debt' ? 'bg-amber-700 text-amber-100' : 'bg-amber-200 text-amber-900'
-            }`}
-          >
-            {counts.debt}
-          </span>
-        </button>
-
-        {/* Tab 5: ຍົກເລີກແລ້ວ */}
-        <button
-          type="button"
-          onClick={() => {
-            playUnitChangeBeep('history');
-            setActiveTab('cancelled');
-          }}
-          className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
-            activeTab === 'cancelled'
-              ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-              : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
-          }`}
-        >
-          <span>ຍົກເລີກແລ້ວ ({counts.cancelled})</span>
-        </button>
-      </div>
-
-      {/* 2. DATE FILTER TOOLBAR & SEARCH BAR */}
-      <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-2xs mb-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-        {/* Date Quick Filter Pills */}
+      {/* 1. DATE FILTER TOOLBAR (Top: ທັງໝົດ, ມື້ນີ້, ມື້ວານ, 7 ມື້ຜ່ານມາ, ເລືອກວັນທີ...) */}
+      <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/90 shadow-2xs mb-3 flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           <CalendarBlank size={16} className="text-slate-400 shrink-0 ml-1 mr-0.5" />
-          {/* First button: ທັງໝົດ (All) */}
+          
+          {/* ທັງໝົດ */}
           <button
             type="button"
             onClick={() => {
               playUnitChangeBeep('history');
               setDateFilter('all');
             }}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               dateFilter === 'all'
                 ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
                 : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
@@ -511,13 +532,15 @@ export default function HistoryView({
           >
             ທັງໝົດ
           </button>
+
+          {/* ມື້ນີ້ (Today) */}
           <button
             type="button"
             onClick={() => {
               playUnitChangeBeep('history');
               setDateFilter('today');
             }}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               dateFilter === 'today'
                 ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
                 : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
@@ -525,13 +548,15 @@ export default function HistoryView({
           >
             ມື້ນີ້ (Today)
           </button>
+
+          {/* ມື້ວານ (Yesterday) */}
           <button
             type="button"
             onClick={() => {
               playUnitChangeBeep('history');
               setDateFilter('yesterday');
             }}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               dateFilter === 'yesterday'
                 ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
                 : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
@@ -539,13 +564,15 @@ export default function HistoryView({
           >
             ມື້ວານ (Yesterday)
           </button>
+
+          {/* 7 ມື້ຜ່ານມາ (7 Days) */}
           <button
             type="button"
             onClick={() => {
               playUnitChangeBeep('history');
               setDateFilter('7days');
             }}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               dateFilter === '7days'
                 ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
                 : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
@@ -553,13 +580,15 @@ export default function HistoryView({
           >
             7 ມື້ຜ່ານມາ (7 Days)
           </button>
+
+          {/* ເລືອກວັນທີ... */}
           <button
             type="button"
             onClick={() => {
               playUnitChangeBeep('history');
               setDateFilter('custom');
             }}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               dateFilter === 'custom'
                 ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
                 : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
@@ -569,7 +598,7 @@ export default function HistoryView({
           </button>
         </div>
 
-        {/* Custom Range Inputs (shown when dateFilter === 'custom' or on desktop) */}
+        {/* Custom Range Inputs (shown when dateFilter === 'custom') */}
         {dateFilter === 'custom' && (
           <div className="flex items-center gap-2 text-xs">
             <span className="text-slate-400 font-medium">ແຕ່:</span>
@@ -588,6 +617,187 @@ export default function HistoryView({
             />
           </div>
         )}
+      </div>
+
+      {/* 2. STATS IN THE MIDDLE: Info-only compact cards (identical style to user/staff stats with 2 lines only) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3.5 select-none pointer-events-none">
+        {/* Card 1: ຍອດລວມ */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black shrink-0">
+            <Receipt size={20} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider truncate">
+              ທັງໝົດ ({selectedPeriodLabel})
+            </div>
+            <div className="text-lg font-black text-slate-900 font-mono leading-tight">
+              {selectedPeriodStats.totalBills} <span className="text-xs font-normal text-slate-400">ບິນ</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: ເງິນສົດ */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black shrink-0">
+            <Money size={20} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-teal-600 font-bold uppercase tracking-wider truncate">
+              ເງິນສົດ
+            </div>
+            <div className="text-lg font-black text-teal-900 font-mono leading-tight">
+              {selectedPeriodStats.cashBills} <span className="text-xs font-normal text-teal-600/70">ບິນ</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: ເງິນໂອນ */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black shrink-0">
+            <QrCode size={20} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-blue-600 font-bold uppercase tracking-wider truncate">
+              ເງິນໂອນ
+            </div>
+            <div className="text-lg font-black text-blue-900 font-mono leading-tight">
+              {selectedPeriodStats.transferBills} <span className="text-xs font-normal text-blue-600/70">ບິນ</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: ຕິດໜີ້ */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black shrink-0">
+            <HandCoins size={20} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-amber-600 font-bold uppercase tracking-wider truncate">
+              ຕິດໜີ້
+            </div>
+            <div className="text-lg font-black text-amber-900 font-mono leading-tight">
+              {selectedPeriodStats.debtBills} <span className="text-xs font-normal text-amber-600/70">ບິນ</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. PAYMENT CATEGORY TABS & SEARCH BAR (Below Stats) */}
+      <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/90 shadow-2xs mb-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+        {/* Payment category tabs: All, Cash, Transfer, Debt, Cancelled */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          {/* Tab 1: ທັງໝົດ */}
+          <button
+            type="button"
+            onClick={() => {
+              playUnitChangeBeep('history');
+              setActiveTab('all');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
+              activeTab === 'all'
+                ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <Receipt size={15} weight="bold" />
+            <span>ທັງໝົດ</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                activeTab === 'all' ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {counts.total}
+            </span>
+          </button>
+
+          {/* Tab 2: ເງິນສົດ */}
+          <button
+            type="button"
+            onClick={() => {
+              playUnitChangeBeep('history');
+              setActiveTab('cash');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
+              activeTab === 'cash'
+                ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <Money size={15} weight="bold" />
+            <span>ເງິນສົດ</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                activeTab === 'cash' ? 'bg-teal-700 text-teal-100' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {counts.cash}
+            </span>
+          </button>
+
+          {/* Tab 3: ເງິນໂອນ */}
+          <button
+            type="button"
+            onClick={() => {
+              playUnitChangeBeep('history');
+              setActiveTab('transfer');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
+              activeTab === 'transfer'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <QrCode size={15} weight="bold" />
+            <span>ເງິນໂອນ</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                activeTab === 'transfer' ? 'bg-blue-700 text-blue-100' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {counts.transfer}
+            </span>
+          </button>
+
+          {/* Tab 4: ຕິດໜີ້ */}
+          <button
+            type="button"
+            onClick={() => {
+              playUnitChangeBeep('history');
+              setActiveTab('debt');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
+              activeTab === 'debt'
+                ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100/70'
+            }`}
+          >
+            <HandCoins size={15} weight="bold" />
+            <span>ຕິດໜີ້</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                activeTab === 'debt' ? 'bg-amber-700 text-amber-100' : 'bg-amber-200 text-amber-900'
+              }`}
+            >
+              {counts.debt}
+            </span>
+          </button>
+
+          {/* Tab 5: ຍົກເລີກແລ້ວ */}
+          <button
+            type="button"
+            onClick={() => {
+              playUnitChangeBeep('history');
+              setActiveTab('cancelled');
+            }}
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+              activeTab === 'cancelled'
+                ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+            }`}
+          >
+            <span>ຍົກເລີກແລ້ວ ({counts.cancelled})</span>
+          </button>
+        </div>
 
         {/* Search input & Barcode scanner */}
         <div className="flex items-center gap-2">
@@ -635,6 +845,26 @@ export default function HistoryView({
           <span className="text-xs text-slate-500 whitespace-nowrap font-medium shrink-0">
             {filteredTransactions.length} ບິນ
           </span>
+
+          {/* Mark All As Read Button: placed on the right side next to search bar */}
+          {unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                playSuccessBeep('history');
+                onMarkAllOrdersAsRead?.();
+              }}
+              className="py-1.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer whitespace-nowrap shrink-0"
+              title="ໝາຍວ່າອ່ານທັງໝົດ (Mark all as read)"
+            >
+              <CheckCircle size={15} weight="bold" />
+              <span className="hidden sm:inline">ໝາຍວ່າອ່ານທັງໝົດ</span>
+              <span className="sm:hidden">ອ່ານໝົດ</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-teal-800 text-white text-[10px] font-mono font-bold">
+                {unreadCount}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -689,12 +919,21 @@ export default function HistoryView({
             (tx.debtPayments && tx.debtPayments.length > 0);
           const hasDebt = remainingDebt > 0 || status === 'DEBT' || status === 'PARTIAL';
 
+          const highlightType = realtimeHighlights?.[tx.id];
+          const isRealtimeNew = highlightType === 'new';
+          const isRealtimeUpdated = highlightType === 'updated';
+          const isUnread = (unreadOrderIds && unreadOrderIds.has(tx.id)) || isRealtimeNew;
+
           return (
             <div
               key={tx.id}
               id={`tx-card-${tx.id}`}
-              className={`p-3.5 bg-white rounded-2xl border transition-all shadow-xs flex flex-col gap-3 ${
-                scannedHighlightId === tx.id
+              className={`p-3.5 bg-white rounded-2xl border transition-all duration-300 shadow-xs flex flex-col gap-3 ${
+                isUnread
+                  ? 'ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/30 shadow-md'
+                  : isRealtimeUpdated
+                  ? 'ring-2 ring-amber-500 border-amber-500 bg-amber-50/30 shadow-md'
+                  : scannedHighlightId === tx.id
                   ? 'ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/20'
                   : isCancelled
                   ? 'border-rose-200 bg-rose-50/20'
@@ -713,6 +952,17 @@ export default function HistoryView({
                   >
                     #{tx.receiptNumber}
                   </span>
+                  {isUnread && (
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-600 text-white animate-pulse shadow-xs inline-flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                      <span>✨ ບິນໃໝ່</span>
+                    </span>
+                  )}
+                  {isRealtimeUpdated && (
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white animate-pulse shadow-xs">
+                      🔄 ແກ້ໄຂແລ້ວ
+                    </span>
+                  )}
                   {isCancelled && (
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-300">
                       ຍົກເລີກແລ້ວ
@@ -735,17 +985,25 @@ export default function HistoryView({
                 </div>
               </div>
 
-              {/* Middle Row: Customer Name, Method, Amounts */}
+              {/* Middle Row: Customer Name, Cashier, Method, Amounts */}
               <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <div>
+                <div className="flex items-center justify-between gap-1">
+                  <div className="min-w-0">
                     <span className="text-[10px] text-slate-400 block font-medium">ລູກຄ້າ:</span>
-                    <span className="text-xs font-bold text-slate-900">
+                    <span className="text-xs font-bold text-slate-900 truncate block">
                       {tx.customerName || 'ລູກຄ້າທົ່ວໄປ'}
                     </span>
                   </div>
 
-                  <div className="text-right">
+                  <div className="text-center px-1 shrink-0">
+                    <span className="text-[9.5px] text-slate-400 block font-medium">ຜູ້ຂາຍ:</span>
+                    <span className="text-[10.5px] font-bold text-indigo-700 bg-indigo-50/90 px-1.5 py-0.5 rounded border border-indigo-200/80 inline-flex items-center gap-1">
+                      <User size={10} weight="bold" />
+                      <span className="truncate max-w-[70px]">{tx.cashierName || tx.cashier_name || 'Meii'}</span>
+                    </span>
+                  </div>
+
+                  <div className="text-right shrink-0">
                     <span className="text-[10px] text-slate-400 block font-medium">ຮູບແບບ:</span>
                     <span
                       className={`px-2 py-0.5 rounded-md text-[10px] font-bold inline-flex items-center gap-1 ${
@@ -776,8 +1034,8 @@ export default function HistoryView({
                   </div>
                 </div>
 
-                {/* Amounts Breakdown: Only show จ่ายแล้ว & หนี้ค้าง for Debt Items */}
-                {isDebtItem ? (
+                {/* Amounts Breakdown: Only show ຈ່າຍແລ້ວ & ໜີ້ຄ້າງ when activeTab === 'debt' */}
+                {activeTab === 'debt' && isDebtItem ? (
                   <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-slate-200/60 text-center">
                     <div>
                       <span className="text-[9.5px] text-slate-500 block uppercase">ຍອດລວມ</span>
@@ -817,10 +1075,7 @@ export default function HistoryView({
                 {/* View/Print Receipt */}
                 <button
                   type="button"
-                  onClick={() => {
-                    playActionClickBeep('history');
-                    onOpenReceipt(tx);
-                  }}
+                  onClick={() => handlePrintReceipt(tx)}
                   className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer"
                 >
                   <Printer size={15} weight="bold" />
@@ -877,14 +1132,16 @@ export default function HistoryView({
                   </span>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => onDeleteTransaction && onDeleteTransaction(tx)}
-                  className="p-2 rounded-xl bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-600 cursor-pointer"
-                  title="ລຶບ"
-                >
-                  <Trash size={15} />
-                </button>
+                {canDeleteOrders && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteTransaction && onDeleteTransaction(tx)}
+                    className="p-2 rounded-xl bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-600 cursor-pointer"
+                    title="ລຶບ (Admin Only)"
+                  >
+                    <Trash size={15} />
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -893,16 +1150,21 @@ export default function HistoryView({
 
       {/* 4. TABLET & DESKTOP VIEW (>= 768px): Data Table */}
       <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-auto overscroll-x-contain touch-pan-y mb-10">
-        <table className="w-full min-w-[840px] text-left text-xs border-collapse">
+        <table className={`w-full text-left text-xs border-collapse ${activeTab === 'debt' ? 'min-w-[840px]' : 'min-w-[700px]'}`}>
           <thead>
             <tr className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 text-slate-700 font-extrabold">
               <th className="py-3 px-4">ເລກທີບິນ</th>
               <th className="py-3 px-3">ວັນທີ & ເວລາ</th>
+              <th className="py-3 px-3">ຜູ້ຂາຍ</th>
               <th className="py-3 px-3">ຊື່ລູກຄ້າ</th>
               <th className="py-3 px-3">ຮູບແບບ / ສະຖານະ</th>
               <th className="py-3 px-3 text-right">ຍອດລວມ</th>
-              <th className="py-3 px-3 text-right">ຈ່າຍແລ້ວ</th>
-              <th className="py-3 px-3 text-right">ໜີ້ຄ້າງ</th>
+              {activeTab === 'debt' && (
+                <>
+                  <th className="py-3 px-3 text-right">ຈ່າຍແລ້ວ</th>
+                  <th className="py-3 px-3 text-right">ໜີ້ຄ້າງ</th>
+                </>
+              )}
               <th className="py-3 px-4 text-center">ຈັດການບິນ (Actions)</th>
             </tr>
           </thead>
@@ -924,12 +1186,21 @@ export default function HistoryView({
                 (tx.debtPayments && tx.debtPayments.length > 0);
               const hasDebt = remainingDebt > 0 || status === 'DEBT' || status === 'PARTIAL';
 
+              const highlightType = realtimeHighlights?.[tx.id];
+              const isRealtimeNew = highlightType === 'new';
+              const isRealtimeUpdated = highlightType === 'updated';
+              const isUnread = (unreadOrderIds && unreadOrderIds.has(tx.id)) || isRealtimeNew;
+
               return (
                 <tr
                   key={tx.id}
                   id={`tx-row-${tx.id}`}
-                  className={`transition-colors ${
-                    scannedHighlightId === tx.id
+                  className={`transition-all duration-300 ${
+                    isUnread
+                      ? 'bg-emerald-50/80 text-slate-900 ring-2 ring-inset ring-emerald-500 font-bold'
+                      : isRealtimeUpdated
+                      ? 'bg-amber-50/80 text-slate-900 ring-2 ring-inset ring-amber-500 font-bold'
+                      : scannedHighlightId === tx.id
                       ? 'bg-emerald-50/40 text-slate-900 ring-2 ring-inset ring-emerald-500'
                       : isCancelled
                       ? 'bg-rose-50/30 hover:bg-rose-50/60 text-slate-500'
@@ -946,6 +1217,17 @@ export default function HistoryView({
                       >
                         #{tx.receiptNumber}
                       </span>
+                      {isUnread && (
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-emerald-600 text-white animate-pulse shadow-2xs inline-flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                          <span>✨ ບິນໃໝ່</span>
+                        </span>
+                      )}
+                      {isRealtimeUpdated && (
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-500 text-white animate-pulse shadow-2xs">
+                          🔄 ແກ້ໄຂແລ້ວ
+                        </span>
+                      )}
                       {isCancelled && (
                         <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-rose-100 text-rose-700 border border-rose-300">
                           ຍົກເລີກແລ້ວ
@@ -963,6 +1245,14 @@ export default function HistoryView({
                         minute: '2-digit',
                       })}
                     </div>
+                  </td>
+
+                  {/* Cashier */}
+                  <td className="py-3 px-3 whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
+                      <User size={12} weight="bold" />
+                      <span>{tx.cashierName || tx.cashier_name || 'Meii'}</span>
+                    </span>
                   </td>
 
                   {/* Customer Name */}
@@ -1018,30 +1308,35 @@ export default function HistoryView({
                     </span>
                   </td>
 
-                  {/* Paid Amount (ຈ່າຍແລ້ວ) - Only for debt items */}
-                  <td className="py-3 px-3 text-right font-mono">
-                    {isDebtItem ? (
-                      <span className="font-bold text-emerald-700">{formatKip(paid)}</span>
-                    ) : (
-                      <span className="text-slate-300 font-bold select-none">-</span>
-                    )}
-                  </td>
+                  {/* Paid Amount & Remaining Debt - ONLY DISPLAYED WHEN activeTab === 'debt' */}
+                  {activeTab === 'debt' && (
+                    <>
+                      {/* Paid Amount (ຈ່າຍແລ້ວ) */}
+                      <td className="py-3 px-3 text-right font-mono">
+                        {isDebtItem ? (
+                          <span className="font-bold text-emerald-700">{formatKip(paid)}</span>
+                        ) : (
+                          <span className="text-slate-300 font-bold select-none">-</span>
+                        )}
+                      </td>
 
-                  {/* Remaining Debt (ໜີ້ຄ້າງ) - Only for debt items */}
-                  <td className="py-3 px-3 text-right font-mono">
-                    {isDebtItem ? (
-                      remainingDebt > 0 ? (
-                        <span className="font-black text-rose-600">{formatKip(remainingDebt)}</span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <Check size={11} weight="bold" />
-                          <span>ຄົບແລ້ວ</span>
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-slate-300 font-bold select-none">-</span>
-                    )}
-                  </td>
+                      {/* Remaining Debt (ໜີ້ຄ້າງ) */}
+                      <td className="py-3 px-3 text-right font-mono">
+                        {isDebtItem ? (
+                          remainingDebt > 0 ? (
+                            <span className="font-black text-rose-600">{formatKip(remainingDebt)}</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <Check size={11} weight="bold" />
+                              <span>ຄົບແລ້ວ</span>
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-slate-300 font-bold select-none">-</span>
+                        )}
+                      </td>
+                    </>
+                  )}
 
                   {/* Actions */}
                   <td className="py-3 px-4 text-center">
@@ -1049,7 +1344,7 @@ export default function HistoryView({
                       {/* View Receipt */}
                       <button
                         type="button"
-                        onClick={() => onOpenReceipt(tx)}
+                        onClick={() => handlePrintReceipt(tx)}
                         className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
                         title="ເບິ່ງ / ພິມບິນ"
                       >
@@ -1100,15 +1395,17 @@ export default function HistoryView({
                         </span>
                       )}
 
-                      {/* Delete */}
-                      <button
-                        type="button"
-                        onClick={() => onDeleteTransaction && onDeleteTransaction(tx)}
-                        className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer"
-                        title="ລຶບຖາວອນ"
-                      >
-                        <Trash size={14} />
-                      </button>
+                      {/* Delete (Admin Only) */}
+                      {canDeleteOrders && (
+                        <button
+                          type="button"
+                          onClick={() => onDeleteTransaction && onDeleteTransaction(tx)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer"
+                          title="ລຶບຖາວອນ (Admin Only)"
+                        >
+                          <Trash size={14} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

@@ -495,7 +495,10 @@ export default function ReceiptModal({
               <div className="flex items-center gap-1 truncate max-w-[48%] pt-0.5">
                 <span className="text-slate-500 font-normal">{L.cashier}</span>
                 <span className="font-medium text-slate-800 truncate">
-                  {(!receipt.cashierName || receipt.cashierName.includes('\u0ec4\u0ea1\u0ec9\u0e84\u0eb3') || receipt.cashierName.includes('Meii')) ? 'Meii' : receipt.cashierName}
+                  {(() => {
+                    const c = receipt.cashierName || receipt.cashier_name || '';
+                    return (!c || c.includes('\u0ec4\u0ea1\u0ec9\u0e84\u0eb3') || c.toLowerCase() === 'meii') ? 'Meii' : c;
+                  })()}
                 </span>
               </div>
               <div className="flex items-center justify-end gap-1 truncate max-w-[50%] pt-0.5">

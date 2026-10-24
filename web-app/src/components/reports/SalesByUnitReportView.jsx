@@ -552,91 +552,68 @@ export default function SalesByUnitReportView({
 
       {/* 2. MAIN SCROLLABLE CONTENT */}
       <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
-        {/* 2.1 4 COMPACT STATS CARDS */}
+        {/* 2.1 4 COMPACT STATS CARDS (REDESIGNED MATCHING STAFF STATS) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Card 1: Total Cartons */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-2xs hover:border-slate-300 transition-all flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 truncate">
-                ຂາຍຕາມແກັດ (Cartons)
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 border border-amber-200/70 flex items-center justify-center shrink-0">
-                <Package size={18} weight="bold" />
-              </div>
+          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black shrink-0">
+              <Package size={20} weight="duotone" />
             </div>
-            <div className="mt-2">
-              <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight font-mono">
-                {formatDots(totalCartons)}{' '}
-                <span className="text-xs font-bold text-slate-500 font-sans">ແກັດ</span>
+            <div className="min-w-0">
+              <div className="text-[11px] text-amber-600 font-bold uppercase tracking-wider truncate">
+                ຂາຍຕາມແກັດ
               </div>
-              <div className="text-[11px] font-medium text-slate-400 mt-0.5">
-                ຫົວໜ່ວຍຍົກລັງ / ແກັດໃຫຍ່
+              <div className="text-lg font-black text-slate-900 font-mono truncate">
+                {formatDots(totalCartons)}{' '}
+                <span className="text-xs font-bold font-sans text-slate-500">ແກັດ</span>
               </div>
             </div>
           </div>
 
           {/* Card 2: Total Packs */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-2xs hover:border-slate-300 transition-all flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 truncate">
-                ຂາຍຕາມແພັກ (Packs)
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 border border-sky-200/70 flex items-center justify-center shrink-0">
-                <SquaresFour size={18} weight="bold" />
-              </div>
+          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center font-black shrink-0">
+              <SquaresFour size={20} weight="duotone" />
             </div>
-            <div className="mt-2">
-              <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight font-mono">
-                {formatDots(totalPacks)}{' '}
-                <span className="text-xs font-bold text-slate-500 font-sans">ແພັກ</span>
+            <div className="min-w-0">
+              <div className="text-[11px] text-sky-600 font-bold uppercase tracking-wider truncate">
+                ຂາຍຕາມແພັກ
               </div>
-              <div className="text-[11px] font-medium text-slate-400 mt-0.5">
-                ຫົວໜ່ວຍຂາຍກາງ / ແພັກ
+              <div className="text-lg font-black text-slate-900 font-mono truncate">
+                {formatDots(totalPacks)}{' '}
+                <span className="text-xs font-bold font-sans text-slate-500">ແພັກ</span>
               </div>
             </div>
           </div>
 
           {/* Card 3: Total Retail Units */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-2xs hover:border-slate-300 transition-all flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 truncate">
-                ຂາຍຍ່ອຍ (Retail Units)
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200/70 flex items-center justify-center shrink-0">
-                <Tag size={18} weight="bold" />
-              </div>
+          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-black shrink-0">
+              <Tag size={20} weight="duotone" />
             </div>
-            <div className="mt-2">
-              <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight font-mono">
-                {formatDots(totalRetail)}{' '}
-                <span className="text-xs font-bold text-slate-500 font-sans">ອັນ</span>
+            <div className="min-w-0">
+              <div className="text-[11px] text-indigo-600 font-bold uppercase tracking-wider truncate">
+                ຂາຍຍ່ອຍ
               </div>
-              <div className="text-[11px] font-medium text-slate-400 mt-0.5">
-                ຫົວໜ່ວຍຍ່ອຍສຸດ / ປ໋ອງ / ແກ້ວ
+              <div className="text-lg font-black text-slate-900 font-mono truncate">
+                {formatDots(totalRetail)}{' '}
+                <span className="text-xs font-bold font-sans text-slate-500">ອັນ</span>
               </div>
             </div>
           </div>
 
           {/* Card 4: Total Revenue */}
-          <div className="bg-white border border-teal-200/90 rounded-2xl p-3.5 shadow-2xs ring-2 ring-teal-50/50 hover:border-teal-300 transition-all flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-teal-800 truncate">
-                ລວມຍອດຂາຍ (Total Revenue)
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center shrink-0">
-                <CurrencyCircleDollar size={18} weight="fill" />
-              </div>
+          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black shrink-0">
+              <CurrencyCircleDollar size={20} weight="duotone" />
             </div>
-            <div className="mt-2">
-              <div className="text-xl md:text-2xl font-black text-teal-700 tracking-tight font-mono">
+            <div className="min-w-0">
+              <div className="text-[11px] text-teal-600 font-bold uppercase tracking-wider truncate">
+                ລວມຍອດຂາຍ
+              </div>
+              <div className="text-lg font-black text-teal-900 font-mono truncate">
                 {formatKip(totalRevenue)}
               </div>
-              {bahtEquivalent > 0 && (
-                <div className="text-[11px] font-bold text-amber-600 mt-0.5 font-mono">
-                  ≈ {formatBaht(bahtEquivalent)}{' '}
-                  <span className="text-[10px] text-slate-400 font-sans font-normal">(1฿ = {exchangeRate}₭)</span>
-                </div>
-              )}
             </div>
           </div>
         </div>

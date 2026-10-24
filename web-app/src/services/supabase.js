@@ -1,15 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
+import { universalStorage } from './authStorage';
 
 const SUPABASE_URL = 'https://qanphpmphnipyuwcadwz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_zQw2L3JfnT-5o_-tJgZaIA_WETQFTPq';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    storage: universalStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
 
 export function sanitizeCashierName(name) {
   if (!name) return 'Meii';
-  const str = String(name);
-  if (str.includes('\u0ec4\u0ea1\u0ec9\u0e84\u0eb3') || str.includes('(Meii)')) return 'Meii';
-  return str.trim() || 'Meii';
+  const str = String(name).trim();
+  return str || 'Meii';
 }
 
 /**
@@ -535,131 +542,211 @@ export async function updateProductStockInSupabase(productId, newStock) {
 }
 
 /**
- * 5. Fetch all sale transactions from Supabase with line items
+ * Normalize and map a database sale_transaction record (with child items) to the UI model
  */
-export async function fetchTransactionsFromSupabase() {
+export function mapDatabaseSaleTransaction(t, cachedProds = null) {
+  if (!t) return null;
+
+  let cachedMeta = null;
   try {
-    const { data: txs, error } = await supabase
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(`meiishop_tx_meta_${t.id}`) : null;
+    if (raw) cachedMeta = JSON.parse(raw);
+  } catch (_) {}
+
+  const isDbCancelled = (t.payment_method || '').startsWith('cancelled');
+  const isCancelled =
+    isDbCancelled ||
+    Boolean(cachedMeta?.isCancelled) ||
+    cachedMeta?.status === 'cancelled';
+
+  let cleanPaymentMethod = t.payment_method || 'cash';
+  if (cleanPaymentMethod.startsWith('cancelled:')) {
+    cleanPaymentMethod = cleanPaymentMethod.replace('cancelled:', '');
+  } else if (cleanPaymentMethod === 'cancelled') {
+    cleanPaymentMethod = cachedMeta?.originalPaymentMethod || 'cash';
+  }
+
+  let prods = cachedProds;
+  if (!prods && typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('meiishop_products_v5');
+      if (raw) prods = JSON.parse(raw);
+    } catch (_) {}
+  }
+
+  const rawItems = (t.sale_transaction_items || []).map((i) => {
+    const matchedProd = Array.isArray(prods)
+      ? prods.find(
+          (p) =>
+            (i.product_id && p.id === i.product_id) ||
+            (p.name && i.product_name && p.name.trim() === i.product_name.trim())
+        )
+      : null;
+    const nameVi = matchedProd?.name_vi || matchedProd?.nameVi || i.name_vi || i.nameVi || '';
+    const uPrice = Number(i.unit_price) || 0;
+    const qty = Number(i.quantity) || 1;
+    const rawLineTotal = Number(i.line_total) || uPrice * qty;
+    const baseTotal = uPrice * qty;
+    const diff = rawLineTotal > baseTotal ? rawLineTotal - baseTotal : 0;
+    const fee = Number(matchedProd?.crateDepositFee) || 30000;
+    const crateDepositTotal = Number(i.crateDepositTotal) || (diff > 0 ? diff : 0);
+    const missingCount =
+      Number(i.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0);
+    const hasMissingCrates = Boolean(
+      i.noEmptyCrates || crateDepositTotal > 0 || (matchedProd?.hasCrateDeposit && diff > 0)
+    );
+
+    return {
+      product: matchedProd || { id: i.product_id, name: i.product_name, name_vi: nameVi },
+      productId: i.product_id,
+      productName: i.product_name,
+      name_vi: nameVi,
+      nameVi: nameVi,
+      unit: {
+        unitName: i.unit_name,
+        multiplier: Number(i.multiplier) || 1,
+        retailPrice: uPrice,
+        wholesalePrice: uPrice,
+      },
+      unitName: i.unit_name,
+      quantity: qty,
+      lineTotal: rawLineTotal,
+      noEmptyCrates: hasMissingCrates,
+      missingCratesCount: missingCount,
+      crateDepositFee: fee,
+      crateDepositTotal,
+    };
+  });
+
+  return {
+    id: t.id,
+    receiptNumber: t.receipt_number,
+    createdAt: t.created_at,
+    updatedAt: t.updated_at || t.created_at,
+    date: new Date(t.created_at).toLocaleString('lo-LA'),
+    customerName: t.customer_name || 'ລູກຄ້າທົ່ວໄປ',
+    cashierName: sanitizeCashierName(t.cashier_name),
+    cashierId: t.cashier_id || null,
+    isWholesale: Boolean(t.is_wholesale),
+    paymentMethod: cleanPaymentMethod,
+    originalPaymentMethod: cleanPaymentMethod,
+    status: isCancelled ? 'cancelled' : 'completed',
+    isCancelled: isCancelled,
+    cancelledAt: cachedMeta?.cancelledAt || (isCancelled ? t.created_at : null),
+    subtotal: Number(t.subtotal) || 0,
+    discountTotal: Number(t.discount_total) || 0,
+    grandTotal: Number(t.grand_total) || 0,
+    amountTendered: Number(t.amount_tendered) || 0,
+    changeAmount: Number(t.change_amount) || 0,
+    totalCost: Number(t.total_cost) || 0,
+    grossProfit: Number(t.gross_profit) || 0,
+    isDebt: Boolean(
+      t.payment_status === 'DEBT' ||
+        t.payment_status === 'PARTIAL' ||
+        cleanPaymentMethod === 'debt' ||
+        Number(t.remaining_debt) > 0
+    ),
+    remainingDebt: Number(
+      t.remaining_debt ??
+        (cleanPaymentMethod === 'debt'
+          ? Math.max(0, (Number(t.grand_total) || 0) - (Number(t.amount_tendered) || 0))
+          : 0)
+    ),
+    debtAmount: Number(
+      t.remaining_debt ??
+        cachedMeta?.receipt?.debtAmount ??
+        (cleanPaymentMethod === 'debt' ? Number(t.grand_total) || 0 : 0)
+    ),
+    paidAmount: Number(
+      t.paid_amount ??
+        t.amount_tendered ??
+        (cleanPaymentMethod === 'debt' ? 0 : Number(t.grand_total) || 0)
+    ),
+    paymentStatus: t.payment_status || (cleanPaymentMethod === 'debt' ? 'DEBT' : 'PAID'),
+    debtNote: cachedMeta?.receipt?.debtNote || cachedMeta?.debtNote || '',
+    debtStatus:
+      t.payment_status ||
+      cachedMeta?.receipt?.debtStatus ||
+      (cleanPaymentMethod === 'debt' ? 'unpaid' : 'paid'),
+    sale_transaction_items: t.sale_transaction_items || [],
+    items:
+      cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0
+        ? cachedMeta.items
+        : rawItems,
+  };
+}
+
+/**
+ * 5. Fetch all sale transactions from Supabase with line items (scoped/capped)
+ */
+export async function fetchTransactionsFromSupabase({ limit = 100 } = {}) {
+  try {
+    let query = supabase
       .from('sale_transactions')
       .select('*, sale_transaction_items(*)')
       .order('created_at', { ascending: false });
+
+    if (limit && Number(limit) > 0) {
+      query = query.limit(Number(limit));
+    }
+
+    const { data: txs, error } = await query;
 
     if (error || !txs) {
       console.warn('fetchTransactionsFromSupabase error:', error);
       return null;
     }
 
-    // Map database fields to application model
-    const mapped = txs.map((t) => {
-      let cachedMeta = null;
-      try {
-        const raw = localStorage.getItem(`meiishop_tx_meta_${t.id}`);
-        if (raw) cachedMeta = JSON.parse(raw);
-      } catch (_) {}
+    let cachedProds = [];
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('meiishop_products_v5') : null;
+      if (raw) cachedProds = JSON.parse(raw);
+    } catch (_) {}
 
-      const isDbCancelled = (t.payment_method || '').startsWith('cancelled');
-      const isCancelled =
-        isDbCancelled ||
-        Boolean(cachedMeta?.isCancelled) ||
-        cachedMeta?.status === 'cancelled';
-
-      let cleanPaymentMethod = t.payment_method || 'cash';
-      if (cleanPaymentMethod.startsWith('cancelled:')) {
-        cleanPaymentMethod = cleanPaymentMethod.replace('cancelled:', '');
-      } else if (cleanPaymentMethod === 'cancelled') {
-        cleanPaymentMethod = cachedMeta?.originalPaymentMethod || 'cash';
-      }
-
-      return {
-        id: t.id,
-        receiptNumber: t.receipt_number,
-        createdAt: t.created_at,
-        date: new Date(t.created_at).toLocaleString('lo-LA'),
-        customerName: t.customer_name || 'ລູກຄ້າທົ່ວໄປ',
-        cashierName: sanitizeCashierName(t.cashier_name),
-        isWholesale: Boolean(t.is_wholesale),
-        paymentMethod: cleanPaymentMethod,
-        originalPaymentMethod: cleanPaymentMethod,
-        status: isCancelled ? 'cancelled' : 'completed',
-        isCancelled: isCancelled,
-        cancelledAt: cachedMeta?.cancelledAt || (isCancelled ? t.created_at : null),
-        subtotal: Number(t.subtotal) || 0,
-        discountTotal: Number(t.discount_total) || 0,
-        grandTotal: Number(t.grand_total) || 0,
-        amountTendered: Number(t.amount_tendered) || 0,
-        changeAmount: Number(t.change_amount) || 0,
-        totalCost: Number(t.total_cost) || 0,
-        grossProfit: Number(t.gross_profit) || 0,
-        isDebt: Boolean(t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL' || cleanPaymentMethod === 'debt' || (Number(t.remaining_debt) > 0)),
-        remainingDebt: Number(t.remaining_debt ?? (cleanPaymentMethod === 'debt' ? Math.max(0, (Number(t.grand_total) || 0) - (Number(t.amount_tendered) || 0)) : 0)),
-        debtAmount: Number(t.remaining_debt ?? cachedMeta?.receipt?.debtAmount ?? (cleanPaymentMethod === 'debt' ? (Number(t.grand_total) || 0) : 0)),
-        paidAmount: Number(t.paid_amount ?? t.amount_tendered ?? (cleanPaymentMethod === 'debt' ? 0 : Number(t.grand_total) || 0)),
-        paymentStatus: t.payment_status || (cleanPaymentMethod === 'debt' ? 'DEBT' : 'PAID'),
-        debtNote: cachedMeta?.receipt?.debtNote || cachedMeta?.debtNote || '',
-        debtStatus: t.payment_status || cachedMeta?.receipt?.debtStatus || (cleanPaymentMethod === 'debt' ? 'unpaid' : 'paid'),
-        sale_transaction_items: t.sale_transaction_items || [],
-        items: (() => {
-          if (cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0) {
-            return cachedMeta.items;
-          }
-          if (Array.isArray(cachedMeta) && cachedMeta.length > 0) {
-            return cachedMeta;
-          }
-
-          let cachedProds = [];
-          try {
-            const raw = typeof window !== 'undefined' ? localStorage.getItem('meiishop_products_v5') : null;
-            if (raw) cachedProds = JSON.parse(raw);
-          } catch (_) {}
-
-          return (t.sale_transaction_items || []).map((i) => {
-            const matchedProd = Array.isArray(cachedProds)
-              ? cachedProds.find(
-                  (p) => (i.product_id && p.id === i.product_id) || (p.name && i.product_name && p.name.trim() === i.product_name.trim())
-                )
-              : null;
-            const nameVi = matchedProd?.name_vi || matchedProd?.nameVi || i.name_vi || i.nameVi || '';
-            const uPrice = Number(i.unit_price) || 0;
-            const qty = Number(i.quantity) || 1;
-            const rawLineTotal = Number(i.line_total) || (uPrice * qty);
-            const baseTotal = uPrice * qty;
-            const diff = rawLineTotal > baseTotal ? (rawLineTotal - baseTotal) : 0;
-            const fee = Number(matchedProd?.crateDepositFee) || 30000;
-            const crateDepositTotal = Number(i.crateDepositTotal) || (diff > 0 ? diff : 0);
-            const missingCount = Number(i.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0);
-            const hasMissingCrates = Boolean(i.noEmptyCrates || crateDepositTotal > 0 || (matchedProd?.hasCrateDeposit && diff > 0));
-
-            return {
-              product: matchedProd || { id: i.product_id, name: i.product_name, name_vi: nameVi },
-              productId: i.product_id,
-              productName: i.product_name,
-              name_vi: nameVi,
-              nameVi: nameVi,
-              unit: {
-                unitName: i.unit_name,
-                multiplier: Number(i.multiplier) || 1,
-                retailPrice: uPrice,
-                wholesalePrice: uPrice,
-              },
-              unitName: i.unit_name,
-              quantity: qty,
-              lineTotal: rawLineTotal,
-              noEmptyCrates: hasMissingCrates,
-              missingCratesCount: missingCount,
-              crateDepositFee: fee,
-              crateDepositTotal,
-            };
-          });
-        })(),
-      };
-    });
-
-    return mapped;
+    return txs.map((t) => mapDatabaseSaleTransaction(t, cachedProds));
   } catch (e) {
     console.warn('fetchTransactionsFromSupabase error:', e);
     return null;
   }
 }
+
+/**
+ * 5.1 Fetch a single sale transaction with child items (for Realtime auto-refetch)
+ */
+export async function fetchTransactionByIdFromSupabase(txId, retryIfEmpty = true) {
+  try {
+    if (!txId) return null;
+    const { data: tx, error } = await supabase
+      .from('sale_transactions')
+      .select('*, sale_transaction_items(*)')
+      .eq('id', txId)
+      .single();
+
+    if (error || !tx) {
+      console.warn('fetchTransactionByIdFromSupabase error:', error);
+      return null;
+    }
+
+    // If items haven't landed yet due to network delay, retry once after 250ms
+    if (retryIfEmpty && (!tx.sale_transaction_items || tx.sale_transaction_items.length === 0)) {
+      await new Promise((r) => setTimeout(r, 250));
+      const { data: retryTx } = await supabase
+        .from('sale_transactions')
+        .select('*, sale_transaction_items(*)')
+        .eq('id', txId)
+        .single();
+      if (retryTx && retryTx.sale_transaction_items && retryTx.sale_transaction_items.length > 0) {
+        return mapDatabaseSaleTransaction(retryTx);
+      }
+    }
+
+    return mapDatabaseSaleTransaction(tx);
+  } catch (err) {
+    console.error('fetchTransactionByIdFromSupabase exception:', err);
+    return null;
+  }
+}
+
 
 /**
  * 6. Record a sale transaction into Supabase and deduct product stock
@@ -782,6 +869,7 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       gross_profit_lak: grossProfitLak,
       gross_profit_thb: grossProfitThb,
       cashier_name: sanitizeCashierName(tx.cashierName),
+      cashier_id: tx.cashierId || null,
       paid_amount: Number(tx.paidAmount ?? (tx.paymentMethod === 'debt' ? (tx.amountTendered || 0) : (tx.amountTendered || tx.grandTotal || 0))),
       remaining_debt: Number(tx.debtAmount ?? (tx.paymentMethod === 'debt' ? Math.max(0, (tx.grandTotal || 0) - (tx.amountTendered || 0)) : 0)),
       payment_status: tx.paymentStatus || (tx.paymentMethod === 'debt' ? ((tx.amountTendered || 0) > 0 ? 'PARTIAL' : 'DEBT') : 'PAID'),
@@ -834,6 +922,7 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       gross_profit_lak: grossProfitLak,
       gross_profit_thb: grossProfitThb,
       cashier_name: sanitizeCashierName(tx.cashierName),
+      cashier_id: tx.cashierId || null,
       paid_amount: Number(tx.paidAmount ?? (tx.paymentMethod === 'debt' ? (tx.amountTendered || 0) : (tx.amountTendered || tx.grandTotal || 0))),
       remaining_debt: Number(tx.debtAmount ?? (tx.paymentMethod === 'debt' ? Math.max(0, (tx.grandTotal || 0) - (tx.amountTendered || 0)) : 0)),
       payment_status: tx.paymentStatus || (tx.paymentMethod === 'debt' ? ((tx.amountTendered || 0) > 0 ? 'PARTIAL' : 'DEBT') : 'PAID'),
@@ -2017,6 +2106,7 @@ export async function updateExistingSaleTransactionInSupabase(
         total_thb: Number(newTxData.total_thb ?? newTxData.totalThb ?? 0),
         gross_profit_lak: Number(newTxData.gross_profit_lak ?? newTxData.grossProfitLak ?? newTxData.grossProfit ?? 0),
         gross_profit_thb: Number(newTxData.gross_profit_thb ?? newTxData.grossProfitThb ?? 0),
+        updated_at: new Date().toISOString(),
       })
       .eq('id', txId);
 

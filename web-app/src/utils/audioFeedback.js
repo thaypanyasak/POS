@@ -553,6 +553,41 @@ export function playModalConfirmBeep(section = 'checkout') {
   } catch (_) {}
 }
 
+/**
+ * Play pleasant register bell / ding sound when a new order arrives via Realtime
+ * Tone: Dual harmonious bell chime (1046.5Hz C6 + 1318.5Hz E6), ~350ms duration with smooth exponential decay
+ * Haptic: 80ms double tap [40ms on, 30ms off, 40ms on]
+ */
+export function playOrderDingSound(section = 'history') {
+  try {
+    const ctx = getAudioContext(section);
+    if (ctx) {
+      const now = ctx.currentTime;
+      [1046.5, 1318.5, 2093].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.04);
+        gain.gain.setValueAtTime(0.0001, now + idx * 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.25 / (idx + 1), now + idx * 0.04 + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.04 + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + idx * 0.04);
+        osc.stop(now + idx * 0.04 + 0.36);
+      });
+    }
+  } catch (err) {
+    console.debug('[audioFeedback] playOrderDingSound muted:', err);
+  }
+
+  try {
+    if (isSoundEnabled(section) && typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([40, 30, 40]);
+    }
+  } catch (_) {}
+}
+
 export default {
   isSoundEnabled,
   setSoundEnabled,
@@ -568,4 +603,6 @@ export default {
   playActionClickBeep,
   playModalCloseBeep,
   playModalConfirmBeep,
+  playOrderDingSound,
 };
+

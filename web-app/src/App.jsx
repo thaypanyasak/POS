@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import {
   fetchProductsFromSupabase,
@@ -23,6 +23,7 @@ import {
 } from './services/supabase';
 import queryClient from './services/queryClient';
 import { Capacitor } from '@capacitor/core';
+import { Storefront } from '@phosphor-icons/react';
 
 // Modular Components
 import Navbar from './components/Navbar';
@@ -41,6 +42,13 @@ import UnitSelectorModal from './components/UnitSelectorModal';
 import ProductFormModal from './components/ProductFormModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import ConfirmDialogModal from './components/ConfirmDialogModal';
+import StaffManagementView from './components/auth/StaffManagementView';
+import CashierLockOverlay from './components/auth/CashierLockOverlay';
+import RouteGuard from './components/auth/RouteGuard';
+import LoginScreen from './components/auth/LoginScreen';
+import AuthLoadingSplash from './components/auth/AuthLoadingSplash';
+import { useAuth, useAuthRole } from './contexts/AuthContext';
+import { useOrderRealtime } from './hooks/useOrderRealtime';
 
 import { formatDots, parseDots, parseCurrencyInput, formatCompoundStock, getEffectiveUnitPrice, PRICE_TIERS, normalizeLao } from './utils/formatters';
 import { useHardwareBarcodeScanner } from './hooks/useHardwareBarcodeScanner';
@@ -56,7 +64,10 @@ import {
 } from './utils/audioFeedback';
 
 export default function App() {
-  // Navigation Tabs: 'pos' | 'dashboard' | 'products' | 'history' | 'purchases' | 'sales-by-unit' | 'settings'
+  const { activeCashier, user, isLoading } = useAuth();
+  const { canAccessRoute } = useAuthRole();
+
+  // Navigation Tabs: 'pos' | 'dashboard' | 'products' | 'history' | 'purchases' | 'sales-by-unit' | 'settings' | 'staff-management'
   const [activeMainTab, setActiveMainTab] = useState(() => {
     try {
       if (typeof window !== 'undefined') {
@@ -70,8 +81,25 @@ export default function App() {
   });
 
   const handleTabChange = (tabId) => {
+    if (!canAccessRoute(tabId)) {
+      openAlert('ທ່ານບໍ່ມີສິດເຂົ້າເຖິງໜ້ານີ້ (Admin Only / ສະຫງວນສິດສະເພາະຜູ້ຈັດການ)', 'ຈຳກັດສິດ', 'warning');
+      return;
+    }
     setActiveMainTab(tabId);
   };
+
+  // Enforce route protection when active cashier role changes
+  useEffect(() => {
+    if (!canAccessRoute(activeMainTab)) {
+      setActiveMainTab('pos');
+    }
+  }, [activeMainTab, canAccessRoute]);
+
+  // Keep activeMainTabRef in sync
+  const activeMainTabRef = useRef(activeMainTab);
+  useEffect(() => {
+    activeMainTabRef.current = activeMainTab;
+  }, [activeMainTab]);
 
   // Products Data (Supabase Live Sync with local cache, NO mock data)
   const [products, setProducts] = useState(() => {
@@ -377,6 +405,59 @@ export default function App() {
   const [rawCategories, setRawCategories] = useState([]);
   const [categoryManagerModalOpen, setCategoryManagerModalOpen] = useState(false);
 
+  // Local Echo Suppression & Realtime Synchronization for Orders
+  const localEchoIdsRef = useRef(new Set());
+  const [unreadOrderIds, setUnreadOrderIds] = useState(() => new Set());
+
+  const handleRealtimeNewOrder = useCallback((newTx) => {
+    setTransactions((prev) => {
+      const exists = prev.some((t) => t.id === newTx.id);
+      if (exists) return prev;
+      return [newTx, ...prev];
+    });
+
+    // Mark as unread so user sees new order badge until printed or marked all read
+    setUnreadOrderIds((prev) => new Set([...prev, newTx.id]));
+  }, []);
+
+  const handleRealtimeUpdateOrder = useCallback((updatedTx) => {
+    setTransactions((prev) => {
+      const exists = prev.some((t) => t.id === updatedTx.id);
+      if (!exists) {
+        return [updatedTx, ...prev];
+      }
+      return prev.map((t) => (t.id === updatedTx.id ? updatedTx : t));
+    });
+
+    setUnreadOrderIds((prev) => new Set([...prev, updatedTx.id]));
+  }, []);
+
+  const handleMarkOrderAsRead = useCallback((orderId) => {
+    if (!orderId) return;
+    setUnreadOrderIds((prev) => {
+      if (!prev.has(orderId)) return prev;
+      const next = new Set(prev);
+      next.delete(orderId);
+      return next;
+    });
+  }, []);
+
+  const handleMarkAllOrdersAsRead = useCallback(() => {
+    setUnreadOrderIds(new Set());
+  }, []);
+
+  const handleRealtimeDeleteOrder = useCallback((deletedId) => {
+    setTransactions((prev) => prev.filter((t) => t.id !== deletedId));
+  }, []);
+
+  const { realtimeHighlights } = useOrderRealtime({
+    enabled: true,
+    onNewOrder: handleRealtimeNewOrder,
+    onUpdateOrder: handleRealtimeUpdateOrder,
+    onDeleteOrder: handleRealtimeDeleteOrder,
+    localEchoIdsRef,
+  });
+
   // Custom Alert & Confirm Dialog State
   const [dialogState, setDialogState] = useState({
     isOpen: false,
@@ -414,6 +495,38 @@ export default function App() {
       onConfirm,
     });
   };
+
+  // Layer 2 Security: Real-time Two-Way URL Hash Sync & Direct Route Guard
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (typeof window === 'undefined') return;
+      const raw = window.location.hash.replace(/^#\/?/, '').trim();
+      if (!raw) return;
+
+      if (canAccessRoute(raw)) {
+        setActiveMainTab(raw);
+      } else {
+        // Enforce strict Route Guard: Revert hash to #pos and trigger Security Warning
+        window.location.hash = '#pos';
+        setActiveMainTab('pos');
+        openAlert(
+          'ທ່ານບໍ່ມີສິດເຂົ້າເຖິງໜ້ານີ້ (Admin Only / ສະຫງວນສິດສະເພາະຜູ້ຈັດການ)',
+          'ຈຳກັດສິດການເຂົ້າເຖິງ (Access Denied)',
+          'warning'
+        );
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [canAccessRoute]);
+
+  // Keep URL hash updated with activeMainTab state
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash !== `#${activeMainTab}`) {
+      window.location.hash = `#${activeMainTab}`;
+    }
+  }, [activeMainTab]);
 
   const [categoriesList, setCategoriesList] = useState(() => {
     try {
@@ -1395,8 +1508,8 @@ export default function App() {
           quantity: qty,
           selectedPriceTier: 1, // Default 100% is always Price 1 (Giá 1 - Chuẩn)
           customPrice: null,
-          noEmptyCrates: isCrateEligible,
-          missingCratesCount: isCrateEligible ? qty : 0,
+          noEmptyCrates: false, // Do not auto-select crate deposit
+          missingCratesCount: 0,
           crateDepositFee: feePerCrate,
         },
       ]);
@@ -1591,8 +1704,8 @@ export default function App() {
         selectedPriceTier: oldItem.selectedPriceTier || 1,
         customPrice: null,
         overrideReason: '',
-        noEmptyCrates: isNewUnitEligible,
-        missingCratesCount: isNewUnitEligible ? (oldItem.missingCratesCount || oldItem.quantity) : 0,
+        noEmptyCrates: isNewUnitEligible ? Boolean(oldItem.noEmptyCrates) : false,
+        missingCratesCount: isNewUnitEligible && oldItem.noEmptyCrates ? (oldItem.missingCratesCount || oldItem.quantity) : 0,
         crateDepositFee: fee,
       };
       return updated;
@@ -1860,7 +1973,10 @@ export default function App() {
         receiptNumber: receiptNo,
         createdAt,
         date: new Date(createdAt).toLocaleString('lo-LA'),
-        cashierName: 'Meii',
+        cashierName: activeCashier?.full_name || 'Meii',
+        cashierId: activeCashier?.id || null,
+        cashier_name: activeCashier?.full_name || 'Meii',
+        cashier_id: activeCashier?.id || null,
         customerName: customerName.trim() || (isDebt ? 'ລູກຄ້າຄ້າງຊຳລະ' : 'ລູກຄ້າທົ່ວໄປ'),
         items: receiptItems,
         isWholesale: false,
@@ -1906,6 +2022,9 @@ export default function App() {
       } catch (_) {}
 
       if (editingOldTransaction) {
+        // Track local echo to avoid redundant notification
+        localEchoIdsRef.current.add(editingOldTransaction.id);
+
         // Sequential Safe Replacement Pattern:
         // 1. Restore old stock 2. Delete old items 3. Deduct new stock 4. Insert new items 5. Update header
         const res = await updateExistingSaleTransactionInSupabase(
@@ -1955,6 +2074,7 @@ export default function App() {
         });
 
         // REAL SUPABASE DATABASE API CALL:
+        localEchoIdsRef.current.add(receipt.id);
         const res = await createSaleTransactionInSupabase(receipt, stockDeductions);
         if (!res.success) {
           openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກລົງຖານຂໍ້ມູນ:\n' + res.error, 'ຂໍ້ຜິດພາດ', 'error');
@@ -2562,6 +2682,16 @@ export default function App() {
 
   const isNativeApp = Capacitor.isNativePlatform();
 
+  // While validating session on startup, show high-end loading splash screen
+  if (isLoading) {
+    return <AuthLoadingSplash />;
+  }
+
+  // If not logged in / logged out, show LoginScreen (do not stay in POS)
+  if (!activeCashier && !user) {
+    return <LoginScreen />;
+  }
+
   return (
     <div 
       className={`flex flex-col md:flex-row h-full h-dvh min-h-screen w-full min-w-full max-w-full bg-slate-100 text-slate-900 overflow-hidden font-sans ${
@@ -2576,9 +2706,7 @@ export default function App() {
         setIsCollapsed={setIsSidebarCollapsed}
         isCloudSynced={isCloudSynced}
         cartCount={cart.length}
-        transactionsCount={transactions.length}
-        outOfStockCount={outOfStockCount}
-        debtCount={totalDebtTransactionsCount}
+        unreadOrdersCount={unreadOrderIds.size}
         exchangeRate={exchangeRate}
       />
 
@@ -2629,90 +2757,112 @@ export default function App() {
         )}
 
         {activeMainTab === 'dashboard' && (
-          <DashboardView
-            dashboardTimeframe={dashboardTimeframe}
-            setDashboardTimeframe={setDashboardTimeframe}
-            dashboardData={dashboardData}
-            transactions={transactions}
-            products={products}
-            rawCategories={rawCategories}
-            exchangeRate={exchangeRate}
-            isLoading={isLoadingProducts || isRefreshing}
-          />
+          <RouteGuard routeId="dashboard" onRedirect={handleTabChange}>
+            <DashboardView
+              dashboardTimeframe={dashboardTimeframe}
+              setDashboardTimeframe={setDashboardTimeframe}
+              dashboardData={dashboardData}
+              transactions={transactions}
+              products={products}
+              rawCategories={rawCategories}
+              exchangeRate={exchangeRate}
+              isLoading={isLoadingProducts || isRefreshing}
+            />
+          </RouteGuard>
         )}
 
         {activeMainTab === 'products' && (
-          <ProductsView
-            products={products}
-            exchangeRate={exchangeRate}
-            onAddNewProduct={handleOpenNewProduct}
-            onEditProduct={handleOpenEditProduct}
-            onDeleteProduct={handleDeleteProduct}
-            onRefreshProducts={handleRefreshAllFromSupabase}
-            onOpenCategoryManager={() => setCategoryManagerModalOpen(true)}
-            isLoading={isLoadingProducts || isRefreshing}
-          />
+          <RouteGuard routeId="products" onRedirect={handleTabChange}>
+            <ProductsView
+              products={products}
+              exchangeRate={exchangeRate}
+              onAddNewProduct={handleOpenNewProduct}
+              onEditProduct={handleOpenEditProduct}
+              onDeleteProduct={handleDeleteProduct}
+              onRefreshProducts={handleRefreshAllFromSupabase}
+              onOpenCategoryManager={() => setCategoryManagerModalOpen(true)}
+              isLoading={isLoadingProducts || isRefreshing}
+            />
+          </RouteGuard>
         )}
 
         {activeMainTab === 'history' && (
-          <HistoryView
-            transactions={transactions}
-            onOpenReceipt={handleOpenReceipt}
-            onCancelTransaction={handleCancelTransaction}
-            onDeleteTransaction={handleDeleteTransaction}
-            onUpdateTransaction={handleUpdateTransaction}
-            onRefreshTransactions={handleRefreshAllFromSupabase}
-            onEditOrderInPos={handleEditOrderInPos}
-            isLoading={isLoadingProducts || isRefreshing}
-            onAlert={openAlert}
-          />
+          <RouteGuard routeId="history" onRedirect={handleTabChange}>
+            <HistoryView
+              transactions={transactions}
+              realtimeHighlights={realtimeHighlights}
+              unreadOrderIds={unreadOrderIds}
+              onMarkOrderAsRead={handleMarkOrderAsRead}
+              onMarkAllOrdersAsRead={handleMarkAllOrdersAsRead}
+              onOpenReceipt={handleOpenReceipt}
+              onCancelTransaction={handleCancelTransaction}
+              onDeleteTransaction={handleDeleteTransaction}
+              onUpdateTransaction={handleUpdateTransaction}
+              onRefreshTransactions={handleRefreshAllFromSupabase}
+              onEditOrderInPos={handleEditOrderInPos}
+              isLoading={isLoadingProducts || isRefreshing}
+              onAlert={openAlert}
+            />
+          </RouteGuard>
         )}
 
         {activeMainTab === 'purchases' && (
-          <PurchasesView
-            purchaseOrders={purchaseOrders}
-            suppliers={suppliers}
-            products={products}
-            exchangeRate={exchangeRate}
-            onOpenNewGRN={() => {
-              handleRefreshAllFromSupabase();
-              setPurchaseEntryModalOpen(true);
-            }}
-            onOpenSupplierManager={() => setSupplierManagerModalOpen(true)}
-            onRefresh={handleRefreshAllFromSupabase}
-            isLoading={isLoadingProducts || isRefreshing}
-            onAlert={openAlert}
-          />
+          <RouteGuard routeId="purchases" onRedirect={handleTabChange}>
+            <PurchasesView
+              purchaseOrders={purchaseOrders}
+              suppliers={suppliers}
+              products={products}
+              exchangeRate={exchangeRate}
+              onOpenNewGRN={() => {
+                handleRefreshAllFromSupabase();
+                setPurchaseEntryModalOpen(true);
+              }}
+              onOpenSupplierManager={() => setSupplierManagerModalOpen(true)}
+              onRefresh={handleRefreshAllFromSupabase}
+              isLoading={isLoadingProducts || isRefreshing}
+              onAlert={openAlert}
+            />
+          </RouteGuard>
         )}
 
         {activeMainTab === 'sales-by-unit' && (
-          <SalesByUnitReportView
-            transactions={transactions}
-            products={products}
-            exchangeRate={exchangeRate}
-            onRefresh={handleRefreshAllFromSupabase}
-            isLoading={isLoadingProducts || isRefreshing}
-          />
+          <RouteGuard routeId="sales-by-unit" onRedirect={handleTabChange}>
+            <SalesByUnitReportView
+              transactions={transactions}
+              products={products}
+              exchangeRate={exchangeRate}
+              onRefresh={handleRefreshAllFromSupabase}
+              isLoading={isLoadingProducts || isRefreshing}
+            />
+          </RouteGuard>
         )}
 
         {activeMainTab === 'settings' && (
-          <SettingsView
-            exchangeRate={exchangeRate}
-            setExchangeRate={setExchangeRate}
-            isCloudSynced={isCloudSynced}
-            onAlert={openAlert}
-            productsCount={products.length}
-            transactionsCount={transactions.length}
-            outOfStockCount={outOfStockCount}
-            debtCount={totalDebtTransactionsCount}
-            receiptPaperWidth={receiptPaperWidth}
-            setReceiptPaperWidth={setReceiptPaperWidth}
-            onOpenCategoryManager={() => setCategoryManagerModalOpen(true)}
-            onOpenSupplierManager={() => setSupplierManagerModalOpen(true)}
-            onAddNewProduct={handleOpenNewProduct}
-            onRefreshAll={handleRefreshAllFromSupabase}
-            isLoading={isRefreshing}
-          />
+          <RouteGuard routeId="settings" onRedirect={handleTabChange}>
+            <SettingsView
+              exchangeRate={exchangeRate}
+              setExchangeRate={setExchangeRate}
+              isCloudSynced={isCloudSynced}
+              onAlert={openAlert}
+              productsCount={products.length}
+              transactionsCount={transactions.length}
+              outOfStockCount={outOfStockCount}
+              debtCount={totalDebtTransactionsCount}
+              receiptPaperWidth={receiptPaperWidth}
+              setReceiptPaperWidth={setReceiptPaperWidth}
+              onOpenCategoryManager={() => setCategoryManagerModalOpen(true)}
+              onOpenSupplierManager={() => setSupplierManagerModalOpen(true)}
+              onAddNewProduct={handleOpenNewProduct}
+              onRefreshAll={handleRefreshAllFromSupabase}
+              isLoading={isRefreshing}
+            />
+          </RouteGuard>
+        )}
+
+        {activeMainTab === 'staff-management' && (
+          <RouteGuard routeId="staff-management" onRedirect={handleTabChange}>
+            <StaffManagementView onAlert={openAlert} />
+          </RouteGuard>
         )}
       </div>
 
@@ -2900,6 +3050,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* 5. TACTILE NUMPAD CASHIER PIN LOCK OVERLAY */}
+      <CashierLockOverlay />
     </div>
   );
 }

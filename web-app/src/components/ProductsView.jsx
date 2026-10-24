@@ -18,6 +18,7 @@ import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep, playErrorBeep, playActionClickBeep, playUnitChangeBeep } from '../utils/audioFeedback';
 import { ProductsListSkeleton } from './common/SkeletonLoaders';
+import { useAuthRole } from '../contexts/AuthContext';
 
 /**
  * Shared helper to resolve unit tiers, cost conversions, and stock counts for both Mobile Card & Desktop Table
@@ -246,6 +247,31 @@ export default function ProductsView({
     });
   }, [products, searchTerm]);
 
+  const productStats = useMemo(() => {
+    let inStock = 0;
+    let lowOrOutStock = 0;
+    const categoriesSet = new Set();
+
+    (products || []).forEach((p) => {
+      const stock = Number(p.stock) || 0;
+      if (stock > 5) {
+        inStock++;
+      } else {
+        lowOrOutStock++;
+      }
+      if (p.category && typeof p.category === 'string') {
+        categoriesSet.add(p.category.trim());
+      }
+    });
+
+    return {
+      total: (products || []).length,
+      inStock,
+      lowOrOutStock,
+      categoriesCount: categoriesSet.size || 0,
+    };
+  }, [products]);
+
   const handleScanBarcode = (barcode) => {
     if (!barcode) return;
     const cleanCode = String(barcode).replace(/[\r\n\t\x00-\x1F\x7F]/g, '').trim();
@@ -390,6 +416,53 @@ export default function ProductsView({
             <Plus size={16} weight="bold" />
             <span>+ ເພີ່ມສິນຄ້າໃໝ່</span>
           </button>
+        </div>
+      </div>
+
+      {/* 1.1 Top KPI Metrics (Matching Staff Management & GRN style) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 shrink-0">
+        {/* Card 1: Total Products */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black shrink-0">
+            <Package size={20} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider truncate">ສິນຄ້າທັງໝົດ</div>
+            <div className="text-lg font-black text-slate-900 font-mono truncate">{productStats.total}</div>
+          </div>
+        </div>
+
+        {/* Card 2: In Stock */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black shrink-0">
+            <CheckCircle size={20} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-teal-600 font-bold uppercase tracking-wider truncate">ພ້ອມຂາຍ (In Stock)</div>
+            <div className="text-lg font-black text-teal-900 font-mono truncate">{productStats.inStock}</div>
+          </div>
+        </div>
+
+        {/* Card 3: Low or Out of Stock */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center font-black shrink-0">
+            <WarningCircle size={20} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-rose-600 font-bold uppercase tracking-wider truncate">ໃກ້ໝົດ / ໝົດສະຕັອກ</div>
+            <div className="text-lg font-black text-rose-900 font-mono truncate">{productStats.lowOrOutStock}</div>
+          </div>
+        </div>
+
+        {/* Card 4: Categories */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black shrink-0">
+            <Folders size={20} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-amber-600 font-bold uppercase tracking-wider truncate">ໝວດໝູ່ (Categories)</div>
+            <div className="text-lg font-black text-amber-900 font-mono truncate">{productStats.categoriesCount}</div>
+          </div>
         </div>
       </div>
 
@@ -625,13 +698,12 @@ export default function ProductsView({
         <table className="w-full min-w-[980px] text-left text-xs border-collapse">
           <thead>
             <tr className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 text-slate-700 font-extrabold">
-              <th className="py-3.5 px-4 w-[22%] min-w-[200px]">ຮູບ & ຊື່ສິນຄ້າ</th>
-              <th className="py-3.5 px-3 w-[12%] min-w-[110px]">ໝວດໝູ່</th>
-              <th className="py-3.5 px-3 w-[13%] min-w-[110px]">ຕົ້ນທຶນບາດ (฿) & ກີບ (₭)</th>
-              <th className="py-3.5 px-3 w-[25%] min-w-[230px]">ລະດັບຫົວໜ່ວຍຂາຍ</th>
-              <th className="py-3.5 px-3 w-[14%] min-w-[130px]">ສາງຄົງເຫຼືອ (Stock)</th>
-              <th className="py-3.5 px-3 w-[10%] min-w-[100px]">ອັດຕາສ່ວນ (Ratio)</th>
-              <th className="py-3.5 px-4 w-[4%] min-w-[60px] text-center">ຈັດການ</th>
+              <th className="py-3.5 px-4 w-[24%] min-w-[200px]">ຮູບ & ຊື່ສິນຄ້າ</th>
+              <th className="py-3.5 px-3 w-[13%] min-w-[110px]">ໝວດໝູ່</th>
+              <th className="py-3.5 px-3 w-[15%] min-w-[110px]">ຕົ້ນທຶນບາດ (฿) & ກີບ (₭)</th>
+              <th className="py-3.5 px-3 w-[24%] min-w-[220px]">ລະດັບຫົວໜ່ວຍຂາຍ</th>
+              <th className="py-3.5 px-3 w-[15%] min-w-[130px]">ສາງຄົງເຫຼືອ (Stock)</th>
+              <th className="py-3.5 pl-3 pr-6 sm:pr-8 w-[9%] min-w-[105px] text-center">ຈັດການ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -775,26 +847,10 @@ export default function ProductsView({
                     )}
                   </td>
 
-                  {/* Ratio Column */}
-                  <td className="py-3 px-3">
-                    {info.cartonUnit && info.packUnit && (
-                      <span className="text-slate-600 font-medium text-[11px] block">
-                        1 {info.cName} = {info.packsPerCarton} {info.pName}
-                      </span>
-                    )}
-                    {info.packUnit && info.pieceUnit && info.piecesPerPack > 1 && (
-                      <span className="text-slate-500 text-[10px] block mt-0.5">
-                        1 {info.pName} = {info.piecesPerPack} {info.pcName}
-                      </span>
-                    )}
-                    {!info.packUnit && !info.pieceUnit && (
-                      <span className="text-slate-400 text-[10px]">-</span>
-                    )}
-                  </td>
 
                   {/* Action Column */}
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex items-center justify-center gap-1.5">
+                  <td className="py-3 pl-3 pr-6 sm:pr-8 text-center">
+                    <div className="flex items-center justify-center gap-2">
                       <button
                         onClick={() => {
                           playActionClickBeep('products');
@@ -803,7 +859,7 @@ export default function ProductsView({
                         className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs transition-colors cursor-pointer"
                         title="ແກ້ໄຂ"
                       >
-                        <PencilSimple size={14} />
+                        <PencilSimple size={15} />
                       </button>
                       <button
                         onClick={() => {
@@ -813,7 +869,7 @@ export default function ProductsView({
                         className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs transition-colors cursor-pointer"
                         title="ລຶບ"
                       >
-                        <Trash size={14} />
+                        <Trash size={15} />
                       </button>
                     </div>
                   </td>

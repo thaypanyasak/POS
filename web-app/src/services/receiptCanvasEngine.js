@@ -586,7 +586,8 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null) {
 
   // 4. METADATA SECTION (Clear, Bolder, High-Contrast Typography)
   // Row 1: Cashier & Customer
-  const cashierDisp = (!receipt.cashierName || receipt.cashierName.includes('\u0ec4\u0ea1\u0ec9\u0e84\u0eb3') || receipt.cashierName.includes('Meii')) ? 'Meii' : receipt.cashierName;
+  const rawCashier = receipt.cashierName || receipt.cashier_name || '';
+  const cashierDisp = (!rawCashier || rawCashier.includes('\u0ec4\u0ea1\u0ec9\u0e84\u0eb3') || rawCashier.toLowerCase() === 'meii') ? 'Meii' : rawCashier;
   drawLeft(`${L.cashier} ${cashierDisp}`, K80.LEFT_MARGIN, y, FONTS.META_VAL);
   const custName = (!receipt.customerName || receipt.customerName === 'ລູກຄ້າທົ່ວໄປ' || receipt.customerName === 'Khách lẻ / Khách vãng lai')
     ? L.defaultCustomer

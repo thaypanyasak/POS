@@ -174,17 +174,20 @@ export default function PurchasesView({
     let totalLak = 0;
     let totalThb = 0;
     let totalDebt = 0;
+    let totalPaid = 0;
 
     purchaseOrders.forEach((po) => {
       totalLak += Number(po.total_cost_lak) || 0;
       totalThb += Number(po.total_cost_thb) || 0;
       totalDebt += Number(po.debt_amount) || 0;
+      totalPaid += Number(po.paid_amount) || 0;
     });
 
     return {
       totalLak,
       totalThb,
       totalDebt,
+      totalPaid: totalPaid || Math.max(0, totalLak - totalDebt),
       totalOrders: purchaseOrders.length,
     };
   }, [purchaseOrders]);
@@ -974,69 +977,50 @@ export default function PurchasesView({
       </div>
 
       {/* ============================================================== */}
-      {/* 1.1. TOP KPI METRICS (COMPACT SINGLE-ROW ON MOBILE)           */}
+      {/* 1.1. TOP KPI METRICS (REDESIGNED MATCHING STAFF STATS)        */}
       {/* ============================================================== */}
-      <div className="px-3 sm:px-6 pt-2.5 sm:pt-3.5 pb-1 sm:pb-1.5 grid grid-cols-3 gap-1.5 sm:gap-3 shrink-0">
-        {/* Card 1: Total Purchase Cost */}
-        <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col justify-between min-w-0">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[9.5px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider truncate block">
-              <span className="sm:hidden">ມູນຄ່າຮັບເຂົ້າ</span>
-              <span className="hidden sm:inline">1. ມູນຄ່າຮັບເຂົ້າລວມ</span>
-            </span>
-            <div className="w-5 h-5 sm:w-8 sm:h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
-              <Coins size={12} className="sm:w-4 sm:h-4" weight="duotone" />
-            </div>
+      <div className="px-3 sm:px-6 pt-3 pb-2 grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+        {/* Card 1: Total Orders */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black shrink-0">
+            <Receipt size={20} weight="duotone" />
           </div>
-          <div className="mt-0.5 sm:mt-1 min-w-0">
-            <div className="text-[12px] sm:text-base md:text-lg font-mono font-black text-slate-900 truncate">
-              {formatKip(kpiMetrics.totalLak)}
-            </div>
-            <div className="text-[9.5px] sm:text-xs font-mono font-bold text-slate-400 truncate mt-0.5">
-              {kpiMetrics.totalThb > 0 ? `${formatThb(kpiMetrics.totalThb)} ฿` : '0 ฿'}
-            </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider truncate">ໃບຮັບທັງໝົດ</div>
+            <div className="text-lg font-black text-slate-900 font-mono truncate">{kpiMetrics.totalOrders}</div>
           </div>
         </div>
 
-        {/* Card 2: Accounts Payable (Red Debt Amount) */}
-        <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col justify-between min-w-0">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[9.5px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider truncate block">
-              <span className="sm:hidden">ໜີ້ຜູ້ສະໜອງ</span>
-              <span className="hidden sm:inline">2. ໜີ້ຄ້າງຊຳລະ</span>
-            </span>
-            <div className="w-5 h-5 sm:w-8 sm:h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-              <WarningCircle size={12} className="sm:w-4 sm:h-4" weight="duotone" />
-            </div>
+        {/* Card 2: Total Cost Lak/Thb */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black shrink-0">
+            <Coins size={20} weight="duotone" />
           </div>
-          <div className="mt-0.5 sm:mt-1 min-w-0">
-            <div className="text-[12px] sm:text-base md:text-lg font-mono font-black text-rose-600 truncate">
-              {formatKip(kpiMetrics.totalDebt)}
-            </div>
-            <div className="text-[9.5px] sm:text-xs text-rose-500 font-bold truncate mt-0.5">
-              {kpiMetrics.totalDebt > 0 ? 'ຍັງຕິດໜີ້' : 'ບໍ່ມີໜີ້'}
-            </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-teal-600 font-bold uppercase tracking-wider truncate">ມູນຄ່າຮັບເຂົ້າລວມ</div>
+            <div className="text-lg font-black text-teal-900 font-mono truncate">{formatKip(kpiMetrics.totalLak)}</div>
           </div>
         </div>
 
-        {/* Card 3: Total GRN Orders */}
-        <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col justify-between min-w-0">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[9.5px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-tight sm:tracking-wider truncate block">
-              <span className="sm:hidden">ໃບຮັບທັງໝົດ</span>
-              <span className="hidden sm:inline">3. ໃບຮັບທັງໝົດ</span>
-            </span>
-            <div className="w-5 h-5 sm:w-8 sm:h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-              <Receipt size={12} className="sm:w-4 sm:h-4" weight="duotone" />
-            </div>
+        {/* Card 3: Total Paid */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-black shrink-0">
+            <CheckCircle size={20} weight="duotone" />
           </div>
-          <div className="mt-0.5 sm:mt-1 min-w-0">
-            <div className="text-[12px] sm:text-base md:text-lg font-mono font-black text-slate-900 truncate">
-              {kpiMetrics.totalOrders} <span className="text-[10px] sm:text-xs font-sans font-bold text-slate-500">ບິນ</span>
-            </div>
-            <div className="text-[9.5px] sm:text-xs text-slate-400 truncate mt-0.5">
-              ຮັບເຂົ້າແລ້ວ
-            </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-emerald-600 font-bold uppercase tracking-wider truncate">ຊຳລະແລ້ວ</div>
+            <div className="text-lg font-black text-emerald-900 font-mono truncate">{formatKip(kpiMetrics.totalPaid)}</div>
+          </div>
+        </div>
+
+        {/* Card 4: Accounts Payable Debt */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center font-black shrink-0">
+            <WarningCircle size={20} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] text-rose-600 font-bold uppercase tracking-wider truncate">ໜີ້ຄ້າງຊຳລະ</div>
+            <div className="text-lg font-black text-rose-900 font-mono truncate">{formatKip(kpiMetrics.totalDebt)}</div>
           </div>
         </div>
       </div>

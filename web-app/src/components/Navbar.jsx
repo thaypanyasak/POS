@@ -13,22 +13,37 @@ import {
   CornersOut,
   CurrencyCircleDollar,
   CloudCheck,
-  CloudSlash
+  CloudSlash,
+  Users,
+  UserSwitch,
+  Lock,
+  ShieldCheck,
+  SignOut,
+  SignIn,
 } from '@phosphor-icons/react';
 import { playUnitChangeBeep } from '../utils/audioFeedback';
+import { useAuth, useAuthRole } from '../contexts/AuthContext';
+import CashierSwitchModal from './auth/CashierSwitchModal';
+import LoginModal from './auth/LoginModal';
+import ConfirmDialogModal from './ConfirmDialogModal';
+import { NAVIGATION_SCHEMA } from '../config/navigationSchema';
 
 export default function Navbar({
   activeMainTab = 'pos',
   setActiveMainTab,
   isCloudSynced = false,
   cartCount = 0,
-  transactionsCount = 0,
-  outOfStockCount = 0,
-  debtCount = 0,
+  unreadOrdersCount = 0,
   exchangeRate = 0,
   isCollapsed,
   setIsCollapsed,
 }) {
+  const { activeCashier, lockPos, logout, session, user } = useAuth();
+  const { canAccessRoute, isAdmin } = useAuthRole();
+  const [isSwitchModalOpen, setIsSwitchModalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+
   // Controlled or uncontrolled collapsed state
   const [localCollapsed, setLocalCollapsed] = useState(true);
   const collapsed = isCollapsed !== undefined ? isCollapsed : localCollapsed;
@@ -41,60 +56,22 @@ export default function Navbar({
     }
   };
 
-  const navItems = [
-    {
-      id: 'pos',
-      label: 'ຂາຍໜ້າຮ້ານ (POS)',
-      sub: 'Terminal ຂາຍເຄື່ອງ',
-      shortLabel: 'ຂາຍໜ້າຮ້ານ',
-      icon: Storefront,
-      badge: cartCount > 0 ? cartCount : null,
-    },
-    {
-      id: 'purchases',
-      label: 'ຮັບສິນຄ້າເຂົ້າ (GRN)',
-      sub: 'ສາງ & ໜີ້ຜູ້ສະໜອງ',
-      shortLabel: 'ຮັບເຂົ້າ',
-      icon: Warehouse,
-    },
-    {
-      id: 'products',
-      label: 'ລາຍການສິນຄ້າ',
-      sub: 'ຕົ້ນທຶນບາດ & ສະຕັອກ',
-      shortLabel: 'ສິນຄ້າ',
-      icon: Package,
-      badge: outOfStockCount > 0 ? outOfStockCount : null,
-    },
-    {
-      id: 'history',
-      label: 'ປະຫວັດບິນ',
-      sub: 'ລາຍການຂາຍສຳເລັດ',
-      shortLabel: 'ປະຫວັດ',
-      icon: ClockCounterClockwise,
-      badge: debtCount > 0 ? debtCount : (transactionsCount > 0 ? transactionsCount : null),
-    },
-    {
-      id: 'dashboard',
-      label: 'ແຜງຄວບຄຸມ (Dashboard)',
-      sub: 'ລາຍຮັບ & ກຳໄລ',
-      shortLabel: 'ລາຍຮັບ',
-      icon: ChartBar,
-    },
-    {
-      id: 'sales-by-unit',
-      label: 'ຍອດຂາຍຕາມຫົວໜ່ວຍ',
-      sub: 'ແກັດ, ແພັກ, ອັນ & ລາຍຮັບ',
-      shortLabel: 'ຍອດຂາຍ',
-      icon: ChartPieSlice,
-    },
-    {
-      id: 'settings',
-      label: 'ຕັ້ງຄ່າລະບົບ',
-      sub: 'ອັດຕາແລກປ່ຽນ & ຮ້ານ',
-      shortLabel: 'ຕັ້ງຄ່າ',
-      icon: Gear,
-    },
-  ];
+  const allNavItems = NAVIGATION_SCHEMA.map((item) => {
+    let badge = null;
+    if (item.badgeKey === 'cartCount' && cartCount > 0) {
+      badge = cartCount;
+    } else if (item.id === 'history' || item.badgeKey === 'transactionsCount') {
+      // ONLY show unread/new orders count, NEVER the total count of all orders
+      badge = unreadOrdersCount > 0 ? unreadOrdersCount : null;
+    }
+    return {
+      ...item,
+      badge,
+    };
+  });
+
+  // RBAC: Filter navigation items based on current active cashier role
+  const visibleNavItems = allNavItems.filter((item) => canAccessRoute(item.id));
 
   const toggleFullscreen = () => {
     try {
@@ -107,6 +84,10 @@ export default function Navbar({
       console.warn('Fullscreen toggle error:', e);
     }
   };
+
+  const cashierInitial = activeCashier?.full_name?.charAt(0) || 'U';
+  const cashierDisplayName = activeCashier?.full_name || 'Staff';
+  const isCashierAdmin = activeCashier?.role === 'admin';
 
   return (
     <>
@@ -140,7 +121,7 @@ export default function Navbar({
               </div>
             ) : (
               <div
-                className="flex items-center cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                className="flex items-center cursor-pointer transition-transform active:scale-98"
                 onClick={() => setActiveMainTab('pos')}
                 title="MeiiShop POS & Retail System"
               >
@@ -155,7 +136,7 @@ export default function Navbar({
 
           {/* Navigation Items List */}
           <nav className="p-2.5 space-y-1.5 mt-1">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeMainTab === item.id;
               const hasBadge = item.badge !== null && item.badge !== undefined && item.badge > 0;
@@ -199,34 +180,28 @@ export default function Navbar({
                     {!collapsed && (
                       <div className="text-left min-w-0 overflow-hidden">
                         <div
-                          className={`text-sm leading-tight truncate ${
-                            isActive
-                              ? 'font-bold text-teal-700'
-                              : 'font-semibold text-slate-800 group-hover:text-slate-900'
+                          className={`text-xs truncate ${
+                            isActive ? 'text-teal-800 font-black' : 'text-slate-800'
                           }`}
                         >
                           {item.label}
                         </div>
-                        <div
-                          className={`text-[11px] leading-tight truncate mt-0.5 ${
-                            isActive
-                              ? 'text-teal-600/80 font-medium'
-                              : 'text-slate-400 group-hover:text-slate-500'
-                          }`}
-                        >
+                        <div className="text-[10.5px] text-slate-400 font-normal truncate mt-0.5">
                           {item.sub}
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Notification Badge: Hình tròn nhỏ màu đỏ son bg-rose-500 text-white font-mono text-xs */}
+                  {/* Badge */}
                   {hasBadge && (
                     <span
-                      className={`font-mono font-bold bg-rose-500 text-white shadow-xs ${
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold font-mono shrink-0 shadow-2xs ${
                         collapsed
-                          ? 'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full text-xs flex items-center justify-center border-2 border-white'
-                          : 'min-w-[20px] h-5 px-1.5 rounded-full text-xs flex items-center justify-center shrink-0'
+                          ? 'absolute -top-1 -right-1 bg-rose-500 text-white min-w-[18px] text-center border-2 border-white'
+                          : isActive
+                          ? 'bg-teal-600 text-white'
+                          : 'bg-rose-500 text-white'
                       }`}
                     >
                       {item.badge}
@@ -238,10 +213,65 @@ export default function Navbar({
           </nav>
         </div>
 
-        {/* Bottom Area: Controls, Rate, Sync & Collapse Button at the bottom */}
+        {/* Bottom Area: Controls, Active Cashier Card, Rate, Sync & Collapse Button */}
         <div className="p-2.5 border-t border-slate-200/90 flex flex-col gap-2 bg-slate-50/50">
           {!collapsed ? (
             <>
+              {/* Active Cashier Shift Card */}
+              <div className="p-2.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div
+                      className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center shrink-0 shadow-xs text-white ${
+                        isCashierAdmin
+                          ? 'bg-gradient-to-tr from-amber-600 to-amber-500'
+                          : 'bg-gradient-to-tr from-teal-600 to-emerald-500'
+                      }`}
+                    >
+                      {cashierInitial}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-black text-slate-900 truncate">
+                        {cashierDisplayName}
+                      </div>
+                      <div className="text-[10px] text-teal-700 font-bold font-mono">
+                        {isCashierAdmin ? 'ຜູ້ຈັດການ (Admin)' : 'ພະນັກງານຂາຍ'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsSwitchModalOpen(true)}
+                    className="py-1 px-1 rounded-lg bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-800 text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors active:scale-95"
+                    title="ປ່ຽນກະຂາຍເຄື່ອງ (Switch Shift)"
+                  >
+                    <UserSwitch size={12} weight="bold" />
+                    <span>ປ່ຽນກະ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={lockPos}
+                    className="py-1 px-1 rounded-lg bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors active:scale-95"
+                    title="ລັອກໜ້າຈໍ POS (Lock Screen)"
+                  >
+                    <Lock size={12} weight="bold" />
+                    <span>ລັອກ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsLogoutConfirmOpen(true)}
+                    className="py-1 px-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors active:scale-95 border border-rose-200"
+                    title="ອອກຈາກລະບົບ (Logout)"
+                  >
+                    <SignOut size={12} weight="bold" />
+                    <span>ອອກ</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Currency Rate Widget */}
               <div className="flex items-center justify-between px-3 py-2 bg-white rounded-xl border border-slate-200/80 text-xs shadow-2xs">
                 <div className="flex items-center gap-1.5 text-slate-600 font-bold">
@@ -253,34 +283,9 @@ export default function Navbar({
                 </span>
               </div>
 
-              {/* Sync Status Badge */}
-              <div className="flex items-center justify-between px-3 py-1.5 bg-white rounded-xl border border-slate-200/80 text-xs font-semibold">
-                <div className="flex items-center gap-1.5 text-slate-600">
-                  {isCloudSynced ? (
-                    <CloudCheck size={16} className="text-teal-600" weight="fill" />
-                  ) : (
-                    <CloudSlash size={16} className="text-amber-600" weight="fill" />
-                  )}
-                  <span>{isCloudSynced ? 'Supabase Sync' : 'Offline Mode'}</span>
-                </div>
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    isCloudSynced ? 'bg-teal-500' : 'bg-amber-500'
-                  }`}
-                />
-              </div>
+             
 
-              {/* Fullscreen Button */}
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                className="w-full py-2 px-3 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 hover:text-teal-700 rounded-xl text-xs font-bold flex items-center justify-between shadow-2xs transition-all cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <CornersOut size={16} weight="bold" />
-                  <span>ເຕັມຈໍ (Full Screen)</span>
-                </div>
-              </button>
+              
 
               {/* Nút thu gọn Sidebar ở chân trang */}
               <button
@@ -298,15 +303,29 @@ export default function Navbar({
             </>
           ) : (
             <div className="flex flex-col items-center gap-2">
-              {/* Fullscreen Icon */}
+              {/* Cashier Shift Avatar in collapsed mode */}
               <button
                 type="button"
-                onClick={toggleFullscreen}
-                className="w-12 h-10 mx-auto rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-teal-700 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
-                title="ເຕັມຈໍ (Full Screen)"
+                onClick={() => setIsSwitchModalOpen(true)}
+                className="w-10 h-10 rounded-xl bg-teal-600 text-white font-black text-xs flex items-center justify-center relative shadow-xs cursor-pointer active:scale-95 transition-transform"
+                title={`ຜູ້ຂາຍ: ${cashierDisplayName} • ກົດເພື່ອປ່ຽນກະ`}
               >
-                <CornersOut size={18} weight="bold" />
+                <span>{cashierInitial}</span>
+                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-[8px] text-teal-400">
+                  <UserSwitch size={9} weight="bold" />
+                </span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setIsLogoutConfirmOpen(true)}
+                className="w-10 h-6 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-2xs border border-rose-200"
+                title="ອອກຈາກລະບົບ (Logout)"
+              >
+                <SignOut size={13} weight="bold" />
+              </button>
+
+              
 
               {/* Rate Icon */}
               <div
@@ -320,17 +339,7 @@ export default function Navbar({
                 </span>
               </div>
 
-              {/* Cloud Sync Dot */}
-              <div
-                className="flex items-center justify-center py-1"
-                title={isCloudSynced ? 'Supabase Sync: Online' : 'Supabase: Offline'}
-              >
-                {isCloudSynced ? (
-                  <div className="w-2.5 h-2.5 rounded-full bg-teal-500 ring-4 ring-teal-50" />
-                ) : (
-                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500 ring-4 ring-amber-50" />
-                )}
-              </div>
+              
 
               {/* Nút mở rộng Sidebar ở chân trang */}
               <button
@@ -353,7 +362,7 @@ export default function Navbar({
           paddingBottom: 'max(0.4rem, env(safe-area-inset-bottom, 0px))',
         }}
       >
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeMainTab === item.id;
           const hasBadge = item.badge !== null && item.badge !== undefined && item.badge > 0;
@@ -393,7 +402,54 @@ export default function Navbar({
             </button>
           );
         })}
+
+        {/* Mobile Cashier Quick Shift / Lock button */}
+        <button
+          type="button"
+          onClick={() => setIsSwitchModalOpen(true)}
+          className="flex-1 py-1 px-0.5 rounded-xl flex flex-col items-center justify-center transition-all text-slate-500 hover:text-teal-700 min-h-[48px] active:scale-95 cursor-pointer"
+          title={`ຜູ້ຂາຍ: ${cashierDisplayName} • ປ່ຽນກະ`}
+        >
+          <div className="w-5 h-5 rounded-full bg-teal-600 text-white font-black text-[10px] flex items-center justify-center shadow-2xs">
+            {cashierInitial}
+          </div>
+          <span className="text-[10px] mt-0.5 truncate leading-tight font-bold text-teal-800">
+            {cashierDisplayName.split(' ')[0]}
+          </span>
+        </button>
       </nav>
+
+      {/* Cashier Shift Switch Modal */}
+      <CashierSwitchModal
+        isOpen={isSwitchModalOpen}
+        onClose={() => setIsSwitchModalOpen(false)}
+        onOpenLogin={() => {
+          setIsSwitchModalOpen(false);
+          setIsLoginModalOpen(true);
+        }}
+      />
+
+      {/* Supabase Cloud Login Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+      />
+
+      {/* Logout Confirmation Dialog */}
+      <ConfirmDialogModal
+        isOpen={isLogoutConfirmOpen}
+        onClose={() => setIsLogoutConfirmOpen(false)}
+        onConfirm={async () => {
+          setIsLogoutConfirmOpen(false);
+          await logout();
+        }}
+        type="danger"
+        title="ອອກຈາກລະບົບ (Logout)"
+        message="ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການອອກຈາກລະບົບ? ລະບົບຈະກັບຄືນສູ່ໜ້າຈໍ Login."
+        confirmText="ອອກຈາກລະບົບ"
+        cancelText="ຍົກເລີກ"
+        isConfirm={true}
+      />
     </>
   );
 }
