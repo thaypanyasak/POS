@@ -408,6 +408,7 @@ export default function App() {
   // Local Echo Suppression & Realtime Synchronization for Orders
   const localEchoIdsRef = useRef(new Set());
   const [unreadOrderIds, setUnreadOrderIds] = useState(() => new Set());
+  const [updatedOrderIds, setUpdatedOrderIds] = useState(() => new Set());
 
   const handleRealtimeNewOrder = useCallback((newTx) => {
     setTransactions((prev) => {
@@ -418,6 +419,12 @@ export default function App() {
 
     // Mark as unread so user sees new order badge until printed or marked all read
     setUnreadOrderIds((prev) => new Set([...prev, newTx.id]));
+    setUpdatedOrderIds((prev) => {
+      if (!prev.has(newTx.id)) return prev;
+      const next = new Set(prev);
+      next.delete(newTx.id);
+      return next;
+    });
   }, []);
 
   const handleRealtimeUpdateOrder = useCallback((updatedTx) => {
@@ -429,7 +436,9 @@ export default function App() {
       return prev.map((t) => (t.id === updatedTx.id ? updatedTx : t));
     });
 
+    // When an order is edited, keep it in unread (for sidebar badge) and mark as updated (for amber highlight)
     setUnreadOrderIds((prev) => new Set([...prev, updatedTx.id]));
+    setUpdatedOrderIds((prev) => new Set([...prev, updatedTx.id]));
   }, []);
 
   const handleMarkOrderAsRead = useCallback((orderId) => {
@@ -440,17 +449,36 @@ export default function App() {
       next.delete(orderId);
       return next;
     });
+    setUpdatedOrderIds((prev) => {
+      if (!prev.has(orderId)) return prev;
+      const next = new Set(prev);
+      next.delete(orderId);
+      return next;
+    });
   }, []);
 
   const handleMarkAllOrdersAsRead = useCallback(() => {
     setUnreadOrderIds(new Set());
+    setUpdatedOrderIds(new Set());
   }, []);
 
   const handleRealtimeDeleteOrder = useCallback((deletedId) => {
     setTransactions((prev) => prev.filter((t) => t.id !== deletedId));
+    setUnreadOrderIds((prev) => {
+      if (!prev.has(deletedId)) return prev;
+      const next = new Set(prev);
+      next.delete(deletedId);
+      return next;
+    });
+    setUpdatedOrderIds((prev) => {
+      if (!prev.has(deletedId)) return prev;
+      const next = new Set(prev);
+      next.delete(deletedId);
+      return next;
+    });
   }, []);
 
-  const { realtimeHighlights } = useOrderRealtime({
+  const { realtimeHighlights, triggerHighlight } = useOrderRealtime({
     enabled: true,
     onNewOrder: handleRealtimeNewOrder,
     onUpdateOrder: handleRealtimeUpdateOrder,
@@ -2038,6 +2066,10 @@ export default function App() {
           openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກການແກ້ໄຂ: ' + res.error, 'ຂໍ້ຜິດພາດ', 'error');
         } else {
           openAlert(`ບັນທຶກການແກ້ໄຂບິນ #${receiptNo} ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
+          // Đánh dấu đơn này là đơn đã chỉnh sửa (vừa hiện badge ở sidebar, vừa giữ nhãn & highlight amber bền vững)
+          setUnreadOrderIds((prev) => new Set([...prev, editingOldTransaction.id]));
+          setUpdatedOrderIds((prev) => new Set([...prev, editingOldTransaction.id]));
+          triggerHighlight?.(editingOldTransaction.id, 'updated');
         }
 
         setEditingOldTransaction(null);
@@ -2792,6 +2824,7 @@ export default function App() {
               transactions={transactions}
               realtimeHighlights={realtimeHighlights}
               unreadOrderIds={unreadOrderIds}
+              updatedOrderIds={updatedOrderIds}
               onMarkOrderAsRead={handleMarkOrderAsRead}
               onMarkAllOrdersAsRead={handleMarkAllOrdersAsRead}
               onOpenReceipt={handleOpenReceipt}

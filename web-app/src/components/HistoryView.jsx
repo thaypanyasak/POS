@@ -35,6 +35,7 @@ export default function HistoryView({
   transactions = [],
   realtimeHighlights = {},
   unreadOrderIds = new Set(),
+  updatedOrderIds = new Set(),
   onMarkOrderAsRead,
   onMarkAllOrdersAsRead,
   onOpenReceipt,
@@ -842,9 +843,7 @@ export default function HistoryView({
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Hardware Scanner Ready" />
             </button>
           </div>
-          <span className="text-xs text-slate-500 whitespace-nowrap font-medium shrink-0">
-            {filteredTransactions.length} ບິນ
-          </span>
+          
 
           {/* Mark All As Read Button: placed on the right side next to search bar */}
           {unreadCount > 0 && (
@@ -930,9 +929,9 @@ export default function HistoryView({
               id={`tx-card-${tx.id}`}
               className={`p-3.5 bg-white rounded-2xl border transition-all duration-300 shadow-xs flex flex-col gap-3 ${
                 isUnread
-                  ? 'ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/30 shadow-md'
+                  ? 'border-slate-200 bg-emerald-50/40 shadow-xs'
                   : isRealtimeUpdated
-                  ? 'ring-2 ring-amber-500 border-amber-500 bg-amber-50/30 shadow-md'
+                  ? 'border-slate-200 bg-amber-50/40 shadow-xs'
                   : scannedHighlightId === tx.id
                   ? 'ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/20'
                   : isCancelled
@@ -952,20 +951,27 @@ export default function HistoryView({
                   >
                     #{tx.receiptNumber}
                   </span>
-                  {isUnread && (
+                  {!isRealtimeUpdated && isUnread && (
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-600 text-white animate-pulse shadow-xs inline-flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                      <span>✨ ບິນໃໝ່</span>
+                      <span>ບິນໃໝ່</span>
                     </span>
                   )}
                   {isRealtimeUpdated && (
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white animate-pulse shadow-xs">
-                      🔄 ແກ້ໄຂແລ້ວ
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white animate-pulse shadow-xs inline-flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                      <span>ແກ້ໄຂໃໝ່</span>
                     </span>
                   )}
                   {isCancelled && (
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-300">
                       ຍົກເລີກແລ້ວ
+                    </span>
+                  )}
+                  {Boolean(tx.is_printed || tx.isPrinted) && !isCancelled && (
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300 inline-flex items-center gap-1 shadow-2xs">
+                      <Check size={11} weight="bold" className="text-emerald-600" />
+                      <span>ພິມແລ້ວ</span>
                     </span>
                   )}
                   {!isCancelled && hasDebt && (
@@ -1076,10 +1082,14 @@ export default function HistoryView({
                 <button
                   type="button"
                   onClick={() => handlePrintReceipt(tx)}
-                  className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer"
+                  className={`py-2 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer ${
+                    (tx.is_printed || tx.isPrinted)
+                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
+                  }`}
                 >
                   <Printer size={15} weight="bold" />
-                  <span>ພິມບິນ</span>
+                  <span>{(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນ' : 'ພິມບິນ'}</span>
                 </button>
 
                 {/* Edit Order via POS (Replace & Re-checkout) */}
@@ -1197,9 +1207,9 @@ export default function HistoryView({
                   id={`tx-row-${tx.id}`}
                   className={`transition-all duration-300 ${
                     isUnread
-                      ? 'bg-emerald-50/80 text-slate-900 ring-2 ring-inset ring-emerald-500 font-bold'
+                      ? 'bg-emerald-50/80 text-slate-900 font-bold'
                       : isRealtimeUpdated
-                      ? 'bg-amber-50/80 text-slate-900 ring-2 ring-inset ring-amber-500 font-bold'
+                      ? 'bg-amber-50/80 text-slate-900 font-bold'
                       : scannedHighlightId === tx.id
                       ? 'bg-emerald-50/40 text-slate-900 ring-2 ring-inset ring-emerald-500'
                       : isCancelled
@@ -1217,20 +1227,27 @@ export default function HistoryView({
                       >
                         #{tx.receiptNumber}
                       </span>
-                      {isUnread && (
+                      {!isRealtimeUpdated && isUnread && (
                         <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-emerald-600 text-white animate-pulse shadow-2xs inline-flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                          <span>✨ ບິນໃໝ່</span>
+                          <span>ບິນໃໝ່</span>
                         </span>
                       )}
                       {isRealtimeUpdated && (
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-500 text-white animate-pulse shadow-2xs">
-                          🔄 ແກ້ໄຂແລ້ວ
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-500 text-white animate-pulse shadow-2xs inline-flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                          <span>ແກ້ໄຂໃໝ່</span>
                         </span>
                       )}
                       {isCancelled && (
                         <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-rose-100 text-rose-700 border border-rose-300">
                           ຍົກເລີກແລ້ວ
+                        </span>
+                      )}
+                      {Boolean(tx.is_printed || tx.isPrinted) && !isCancelled && (
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 text-slate-700 border border-slate-300 inline-flex items-center gap-1 shadow-2xs">
+                          <Check size={10} weight="bold" className="text-emerald-600" />
+                          <span>ພິມແລ້ວ</span>
                         </span>
                       )}
                     </div>
@@ -1341,15 +1358,19 @@ export default function HistoryView({
                   {/* Actions */}
                   <td className="py-3 px-4 text-center">
                     <div className="flex items-center justify-center gap-1 flex-wrap">
-                      {/* View Receipt */}
+                      {/* View/Print Receipt */}
                       <button
                         type="button"
                         onClick={() => handlePrintReceipt(tx)}
-                        className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-                        title="ເບິ່ງ / ພິມບິນ"
+                        className={`px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer ${
+                          Boolean(tx.is_printed || tx.isPrinted)
+                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                            : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
+                        }`}
+                        title={Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນໃໝ່' : 'ເບິ່ງ / ພິມບິນ'}
                       >
                         <Printer size={13} />
-                        <span>ພິມ</span>
+                        <span>{Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນ' : 'ພິມ'}</span>
                       </button>
 
                       {/* Edit Order via POS (Replace & Re-checkout pattern) */}
@@ -1361,7 +1382,7 @@ export default function HistoryView({
                           title="ແກ້ໄຂບິນໂດຍນຳເຂົ້າໜ້າ POS"
                         >
                           <PencilSimple size={13} weight="bold" />
-                          <span>ແກ້ໄຂບິນ</span>
+                          <span>ແກ້ໄຂ</span>
                         </button>
                       )}
 
@@ -1374,7 +1395,7 @@ export default function HistoryView({
                           title="ຊຳລະໜີ້ລູກຄ້າ"
                         >
                           <HandCoins size={13} weight="bold" />
-                          <span>ຊຳລະໜີ້</span>
+                          <span>ຊຳລະ</span>
                         </button>
                       )}
 

@@ -302,6 +302,65 @@ export async function printReceiptSmart({
 }
 
 /**
+ * Multi-device Resilient Print Wrapper:
+ * Handles concurrent printing collisions on Port 9100 across 2-3 devices.
+ * Automatically retries silently up to `maxRetries` times with 1.0-1.2s sleep intervals.
+ * Only bubbles an error up to the UI if all retry attempts are exhausted.
+ */
+export async function printReceiptWithRetry({
+  elementId = 'thermal-receipt-print-area',
+  receipt = null,
+  language = 'lo',
+  allowFallback = false,
+  method = null,
+  products = null,
+  maxRetries = 3,
+  retryDelayMs = 1100,
+  onRetryAttempt = null,
+} = {}) {
+  let attempt = 0;
+  let lastError = null;
+
+  while (attempt <= maxRetries) {
+    try {
+      const res = await printReceiptSmart({
+        elementId,
+        receipt,
+        language,
+        allowFallback,
+        method,
+        products,
+      });
+      return res;
+    } catch (err) {
+      lastError = err;
+      attempt++;
+
+      if (attempt > maxRetries) {
+        break;
+      }
+
+      console.warn(
+        `[printerService] Socket busy/collision detected on attempt ${attempt}/${maxRetries}. Retrying in ${retryDelayMs}ms...`,
+        err?.message || err
+      );
+
+      if (typeof onRetryAttempt === 'function') {
+        try {
+          onRetryAttempt(attempt, maxRetries);
+        } catch (_) {}
+      }
+
+      // Add a slight random jitter (50ms - 200ms) to desynchronize concurrent devices
+      const jitter = Math.floor(Math.random() * 150) + 50;
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs + jitter));
+    }
+  }
+
+  throw lastError || new Error('ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມໄດ້ຫຼັງຈາກພະຍາຍາມຫຼາຍຄັ້ງ.');
+}
+
+/**
  * Test connection to printer IP & Port (Prints test receipt slip via TCP Socket)
  */
 export async function testPrinterConnection(ip, port, { printSlip = true } = {}) {

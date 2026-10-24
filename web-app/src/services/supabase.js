@@ -640,6 +640,10 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     changeAmount: Number(t.change_amount) || 0,
     totalCost: Number(t.total_cost) || 0,
     grossProfit: Number(t.gross_profit) || 0,
+    is_printed: Boolean(t.is_printed),
+    isPrinted: Boolean(t.is_printed),
+    printed_at: t.printed_at || null,
+    printedAt: t.printed_at || null,
     isDebt: Boolean(
       t.payment_status === 'DEBT' ||
         t.payment_status === 'PARTIAL' ||
@@ -2401,6 +2405,34 @@ export async function fetchAnnual12MonthSales(targetYear = new Date().getFullYea
   } catch (err) {
     console.error('fetchAnnual12MonthSales exception:', err);
     return [];
+  }
+}
+
+/**
+ * Mark an order as printed in Supabase sale_transactions table.
+ * Emits realtime UPDATE event so other devices know the receipt has already been printed.
+ */
+export async function markOrderAsPrintedInSupabase(orderId) {
+  if (!orderId) return { success: false, error: 'No orderId provided' };
+  try {
+    const printedAt = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('sale_transactions')
+      .update({
+        is_printed: true,
+        printed_at: printedAt,
+      })
+      .eq('id', orderId)
+      .select('id, is_printed, printed_at');
+
+    if (error) {
+      console.warn('[Supabase] markOrderAsPrinted warning:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true, printedAt, data };
+  } catch (err) {
+    console.error('[Supabase] markOrderAsPrinted exception:', err);
+    return { success: false, error: err.message };
   }
 }
 

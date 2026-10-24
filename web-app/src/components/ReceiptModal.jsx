@@ -11,7 +11,13 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react';
 import { formatKip } from '../utils/formatters';
-import { printReceiptSmart, printViaNativeSpooler, getPrinterConfig } from '../services/printerService';
+import {
+  printReceiptSmart,
+  printReceiptWithRetry,
+  printViaNativeSpooler,
+  getPrinterConfig,
+} from '../services/printerService';
+import { markOrderAsPrintedInSupabase } from '../services/supabase';
 import { generateBarcode128 } from '../services/receiptCanvasEngine';
 import { Capacitor } from '@capacitor/core';
 import {
@@ -307,18 +313,8 @@ export default function ReceiptModal({
         // Native Print Spooler (AirPrint / OS Dialog) — Vector-sharp typography
         res = await printViaNativeSpooler('thermal-receipt-print-area', receiptLanguage);
       } else {
-        // Socket Print (Port 9100) — Direct ESC/POS with timeout protection
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error('ໝົດເວລາເຊື່ອມຕໍ່ຫາເຄື່ອງພິມ (Timeout 8s). ກະລຸນາກວດສອບວ່າເຄື່ອງພິມເປີດຢູ່ ແລະ ຢູ່ Wi-Fi ດຽວກັນ.')
-              ),
-            8000
-          )
-        );
-
-        const printPromise = printReceiptSmart({
+        // Multi-device Socket Print with Silent Auto-Retry (Max 3 attempts, 1.1s delay + jitter)
+        res = await printReceiptWithRetry({
           elementId: 'thermal-receipt-print-area',
           receipt: {
             ...receipt,
@@ -328,9 +324,12 @@ export default function ReceiptModal({
           allowFallback: false,
           method: 'socket',
           products: (products && products.length > 0) ? products : receipt.products,
+          maxRetries: 3,
+          retryDelayMs: 1100,
+          onRetryAttempt: (attempt, max) => {
+            console.log(`[ReceiptModal] Retrying print attempt ${attempt}/${max} due to printer collision...`);
+          },
         });
-
-        res = await Promise.race([printPromise, timeoutPromise]);
       }
 
       if (res && res.success) {
@@ -339,6 +338,17 @@ export default function ReceiptModal({
           message: res.message || 'ພິມໃບບິນສຳເລັດແລ້ວ!',
         });
         playSuccessBeep();
+
+        // Synchronize 'is_printed: true' to Supabase so other POS terminals receive Realtime update
+        if (receipt?.id && !isQuotation) {
+          receipt.is_printed = true;
+          receipt.isPrinted = true;
+          receipt.printed_at = new Date().toISOString();
+          markOrderAsPrintedInSupabase(receipt.id).catch((e) => {
+            console.warn('[ReceiptModal] Failed to sync printed state to Supabase:', e);
+          });
+        }
+
         setTimeout(() => setPrintFeedback(null), 4000);
       } else {
         throw new Error(res?.message || 'ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມໄດ້.');
