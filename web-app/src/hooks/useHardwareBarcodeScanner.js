@@ -61,7 +61,10 @@ export function useHardwareBarcodeScanner({
         const currentValue = activeEl.value || '';
         let cleanedValue = currentValue;
 
-        if (currentValue === scannedCode) {
+        if (activeEl.getAttribute('data-barcode-replace') === 'true') {
+          // Replace entire input value with the new scanned code without requiring manual clear/deletion
+          cleanedValue = scannedCode;
+        } else if (currentValue === scannedCode) {
           cleanedValue = '';
         } else if (currentValue.endsWith(scannedCode)) {
           cleanedValue = currentValue.slice(0, -scannedCode.length);

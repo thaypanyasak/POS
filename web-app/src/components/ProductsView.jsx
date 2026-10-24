@@ -250,6 +250,9 @@ export default function ProductsView({
     if (!barcode) return;
     const cleanCode = String(barcode).trim();
     setSearchTerm(cleanCode);
+    if (searchInputRef.current) {
+      searchInputRef.current.value = cleanCode;
+    }
     setScannerOpen(false);
 
     const matched = products.find(
@@ -288,7 +291,7 @@ export default function ProductsView({
     maxInterval: 50,
     minLength: 3,
     preventDefaultOnEnter: true,
-    cleanActiveInput: false,
+    cleanActiveInput: true,
   });
 
   return (
@@ -375,6 +378,7 @@ export default function ProductsView({
           <input
             ref={searchInputRef}
             type="text"
+            data-barcode-replace="true"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ, ໝວດໝູ່ ຫຼື ສະແກນບາໂຄດ..."

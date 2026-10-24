@@ -430,7 +430,7 @@ export default function ReceiptModal({
             id="thermal-receipt-print-area"
           style={{
             fontFamily: receiptLanguage === 'vi'
-              ? "'Be Vietnam Pro', 'Noto Sans Lao', sans-serif"
+              ? "'Segoe UI', 'Tahoma', 'Noto Sans Lao', sans-serif"
               : "'Noto Sans Lao', 'Outfit', sans-serif",
           }}
           className={`bg-white mx-auto px-4 pt-4 pb-2 border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto paper-80mm w-full max-w-full rounded-2xl ${
