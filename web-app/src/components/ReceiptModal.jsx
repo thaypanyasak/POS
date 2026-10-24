@@ -577,7 +577,7 @@ export default function ReceiptModal({
                       <span className="font-sans font-normal text-slate-700 text-[11px]">
                         {qty} x {formatKip(price).replace(' ₭', '')}
                       </span>
-                      <span className="font-sans font-bold text-slate-950 text-xs tracking-tight">
+                      <span className="font-sans font-semibold text-slate-800 text-xs tracking-tight">
                         {formatKip(baseLineTotal).replace(' ₭', '')}
                       </span>
                     </div>

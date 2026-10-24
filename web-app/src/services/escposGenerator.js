@@ -26,7 +26,7 @@ export const WIDTH_BYTES = 72;       // 576 / 8 = 72 bytes per line
  * @param {Object} options
  * @param {boolean} [options.kickCashDrawer=true] - Send ESC p drawer kick command
  * @param {boolean} [options.cutPaper=true] - Send GS V partial cut command
- * @param {number} [options.luminanceThreshold=205] - Brightness cutoff (default 205: captures fine Lao character curves without white specks)
+ * @param {number} [options.luminanceThreshold=180] - Brightness cutoff (default 180: balanced contrast, prevents loop clogging on thicker thermal paper)
  * @param {boolean} [options.useDithering=false] - Floyd-Steinberg dithering flag (false for crisp solid black text and barcodes)
  * @param {number} [options.feedLines=2] - Lines to feed before cut (default 2 to save paper)
  * @returns {Uint8Array} Complete ESC/POS byte stream ready for TCP transmission
@@ -34,7 +34,7 @@ export const WIDTH_BYTES = 72;       // 576 / 8 = 72 bytes per line
 export function canvasToEscPosRaster(sourceCanvas, {
   kickCashDrawer = true,
   cutPaper = true,
-  luminanceThreshold = 205,
+  luminanceThreshold = 180,
   useDithering = false,
   feedLines = 2,
 } = {}) {
@@ -116,28 +116,10 @@ export function canvasToEscPosRaster(sourceCanvas, {
     }
   }
 
-  // ─── Step 4.5: Subpixel Pinhole Sealing Filter ───────────────────────
-  // Scans for isolated 0s (white pinholes) inside character strokes.
-  // If a pixel is 0, but surrounded on >= 3 sides by 1 (black pixels),
-  // it is an antialiasing dropout in the thermal grid -> seal it solid black (1).
-  const binary = new Uint8Array(rawBinary);
-  if (!useDithering) {
-    for (let y = 1; y < height - 1; y++) {
-      const rowOffset = y * width;
-      for (let x = 1; x < width - 1; x++) {
-        const idx = rowOffset + x;
-        if (rawBinary[idx] === 0) {
-          const top = rawBinary[idx - width];
-          const bottom = rawBinary[idx + width];
-          const left = rawBinary[idx - 1];
-          const right = rawBinary[idx + 1];
-          if (top + bottom + left + right >= 3) {
-            binary[idx] = 1;
-          }
-        }
-      }
-    }
-  }
+  // ─── Step 4.5: Direct 1-to-1 Binary Array ───────────────────────────
+  // Preserve true typographical counters, character loops (Lao ລ, ວ, ອ, ມ, ດ)
+  // and number counters (0, 6, 8, 9) without filling them with faux black dots.
+  const binary = rawBinary;
 
   // ─── Step 5: Assemble ESC/POS Commands ──────────────────────────────
   const bytes = [];

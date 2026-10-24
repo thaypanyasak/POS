@@ -251,11 +251,11 @@ export async function printReceiptSmart({
       // 2. Render receipt to 1:1 Canvas
       const canvas = await renderReceiptCanvas(receipt, language);
 
-      // 3. Convert Canvas to 1-bit ESC/POS raster bytes (threshold 205 for solid, continuous black strokes without white specks)
+      // 3. Convert Canvas to 1-bit ESC/POS raster bytes (threshold 180 for solid strokes while keeping open loops on thicker paper)
       const escPosBytes = canvasToEscPosRaster(canvas, {
         kickCashDrawer: config.drawerKick,
         cutPaper: config.autoCut,
-        luminanceThreshold: 205,
+        luminanceThreshold: 180,
         useDithering: false,
         feedLines: 2,
       });
