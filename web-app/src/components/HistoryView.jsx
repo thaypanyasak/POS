@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   ClockCounterClockwise,
   Printer,
@@ -22,6 +22,8 @@ import {
   User,
   Clock,
   ChartBar,
+  CaretLeft,
+  CaretRight,
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
@@ -365,6 +367,79 @@ export default function HistoryView({
     });
   }, [transactions, activeTab, dateFilter, startDate, endDate, searchTerm]);
 
+  // Configurable Pagination States (Default 50, with 20 | 50 | 100 | 200 | ALL options)
+  const [pageSize, setPageSize] = useState(50);
+  const [currentPage, setCurrentPage] = useState(1);
+  const tableTopRef = useRef(null);
+
+  const scrollToTableTop = () => {
+    tableTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handlePageChange = (newPage) => {
+    if (newPage === currentPage || newPage < 1 || newPage > totalPages) return;
+    playActionClickBeep('history');
+    setCurrentPage(newPage);
+    scrollToTableTop();
+  };
+
+  const handlePageSizeChange = (newSize) => {
+    playActionClickBeep('history');
+    setPageSize(newSize);
+    setCurrentPage(1);
+    scrollToTableTop();
+  };
+
+  // Auto-reset currentPage to 1 when filters or search query change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, dateFilter, startDate, endDate, searchTerm]);
+
+  const totalPages = useMemo(() => {
+    if (pageSize === 'ALL' || !pageSize) return 1;
+    return Math.max(1, Math.ceil(filteredTransactions.length / pageSize));
+  }, [filteredTransactions.length, pageSize]);
+
+  // Protect currentPage within bounds when items count changes
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const paginatedTransactions = useMemo(() => {
+    if (pageSize === 'ALL' || !pageSize) {
+      return filteredTransactions;
+    }
+    const start = (currentPage - 1) * pageSize;
+    return filteredTransactions.slice(start, start + pageSize);
+  }, [filteredTransactions, currentPage, pageSize]);
+
+  // Aliased to paginatedTransactions so all internal card & row maps work seamlessly
+  const displayedTransactions = paginatedTransactions;
+
+  // Smart page numbers pagination algorithm (identical to ProductsView)
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages = [];
+    pages.push(1);
+    if (currentPage > 3) {
+      pages.push('...');
+    }
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    if (currentPage < totalPages - 2) {
+      pages.push('...');
+    }
+    pages.push(totalPages);
+    return pages;
+  };
+
   // Handle Barcode Scan (Both Camera modal & Hardware USB/Bluetooth scanner)
   // Replaces the search term without requiring manual clear or backspace
   const handleScanBarcode = (barcode) => {
@@ -471,10 +546,10 @@ export default function HistoryView({
 
   return (
     <main
-      className="flex-1 w-full p-4 sm:p-6 overflow-y-auto font-sans min-h-0 pb-24 touch-pan-y"
+      className="flex-1 w-full p-4 sm:p-6 overflow-y-auto font-sans min-h-0 pb-4 sm:pb-6 touch-pan-y"
       style={{
         paddingRight: 'max(1rem, env(safe-area-inset-right, 0px))',
-        paddingBottom: 'max(5.5rem, calc(4.5rem + env(safe-area-inset-bottom, 0px)))',
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
       }}
     >
       {/* Top Header Bar (Standardized matching GRN) */}
@@ -899,9 +974,11 @@ export default function HistoryView({
         <HistoryListSkeleton count={6} />
       ) : (
         <>
+          {/* Scroll anchor for pagination scroll-to-top */}
+          <div ref={tableTopRef} className="scroll-mt-3 sm:scroll-mt-4" />
           {/* 3. MOBILE VIEW (< 768px): Touch-Optimized Cards */}
           <div className="md:hidden flex flex-col gap-3 pb-6">
-            {filteredTransactions.map((tx) => {
+            {displayedTransactions.map((tx) => {
           const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
           const total = Number(tx.grandTotal) || 0;
           const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
@@ -1163,11 +1240,118 @@ export default function HistoryView({
         })}
       </div>
 
+      {/* Mobile-only pagination bar (< 768px) */}
+      {filteredTransactions.length > 0 && (
+        <div className="md:hidden bg-white rounded-2xl border border-slate-200 p-3 mb-3 flex flex-col items-center gap-3 shadow-2xs">
+          {/* Top: Page Size Selector (20 | 50 | 100 | 200 | ALL) */}
+          <div className="flex items-center gap-2 w-full justify-between">
+            <span className="text-xs text-slate-500 font-medium">
+              ຈຳນວນຕໍ່ໜ້າ:
+            </span>
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              {[20, 50, 100, 200, 'ALL'].map((size) => {
+                const isActive = pageSize === size;
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => handlePageSizeChange(size)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-teal-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                    }`}
+                  >
+                    {size === 'ALL' ? 'ທັງໝົດ' : size}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Middle: Summary Text (Compact for iPad & Mobile) */}
+          <div className="text-xs text-slate-600 font-medium text-center whitespace-nowrap shrink-0 px-1">
+            {pageSize === 'ALL' ? (
+              <span>
+                ທັງໝົດ <strong className="text-slate-900 font-bold font-mono">{filteredTransactions.length}</strong>
+              </span>
+            ) : (
+              <span>
+                <strong className="text-slate-900 font-bold font-mono">{Math.min((currentPage - 1) * pageSize + 1, filteredTransactions.length)} - {Math.min(currentPage * pageSize, filteredTransactions.length)}</strong>{' '}
+                ຈາກ{' '}
+                <strong className="text-slate-900 font-bold font-mono">{filteredTransactions.length}</strong>
+              </span>
+            )}
+          </div>
+
+          {/* Bottom: Page Navigation (Only shown when not ALL) */}
+          {pageSize !== 'ALL' && totalPages > 1 && (
+            <div className="flex items-center gap-1 w-full justify-center">
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => handlePageChange(currentPage - 1)}
+                className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                  currentPage === 1
+                    ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                    : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                }`}
+              >
+                <CaretLeft size={13} weight="bold" />
+                <span>ກ່ອນໜ້າ</span>
+              </button>
+
+              <div className="flex items-center gap-1">
+                {getPageNumbers().map((page, idx) => {
+                  if (page === '...') {
+                    return (
+                      <span key={`dots-${idx}`} className="px-1 text-slate-400 font-bold text-xs">
+                        ...
+                      </span>
+                    );
+                  }
+                  const isCurrent = currentPage === page;
+                  return (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => handlePageChange(page)}
+                      className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-teal-600 text-white shadow-2xs font-black'
+                          : 'text-slate-700 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => handlePageChange(currentPage + 1)}
+                className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                  currentPage === totalPages
+                    ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                    : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                }`}
+              >
+                <span>ຕໍ່ໄປ</span>
+                <CaretRight size={13} weight="bold" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 4. TABLET & DESKTOP VIEW (>= 768px): Data Table */}
-      <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-auto overscroll-x-contain touch-pan-y mb-10">
-        <table className={`w-full text-left text-xs border-collapse ${activeTab === 'debt' ? 'min-w-[840px]' : 'min-w-[700px]'}`}>
+      <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-xs mb-3 overflow-hidden">
+        <div className="w-full overflow-x-auto overscroll-x-contain touch-pan-y">
+          <table className={`w-full text-left text-xs border-separate border-spacing-0 ${activeTab === 'debt' ? 'min-w-[840px]' : 'min-w-[700px]'}`}>
           <thead>
-            <tr className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 text-slate-700 font-extrabold">
+            <tr className="sticky top-0 z-10 text-slate-700 font-extrabold [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
               <th className="py-3 px-4">ເລກທີບິນ</th>
               <th className="py-3 px-3">ວັນທີ & ເວລາ</th>
               <th className="py-3 px-3">ຜູ້ຂາຍ</th>
@@ -1183,8 +1367,8 @@ export default function HistoryView({
               <th className="py-3 px-4 text-center">ຈັດການບິນ (Actions)</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredTransactions.map((tx) => {
+          <tbody className="[&_td]:border-b [&_td]:border-slate-100">
+            {displayedTransactions.map((tx) => {
               const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
               const total = Number(tx.grandTotal) || 0;
               const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
@@ -1215,7 +1399,7 @@ export default function HistoryView({
                 <tr
                   key={tx.id}
                   id={`tx-row-${tx.id}`}
-                  className={`transition-all duration-300 ${
+                  className={`transition-colors duration-150 ${
                     isOrderUpdated
                       ? 'bg-amber-50/80 text-slate-900 font-bold'
                       : isOrderNew
@@ -1449,6 +1633,116 @@ export default function HistoryView({
           <div className="py-20 text-center text-slate-400">
             <Receipt size={40} className="mx-auto mb-2 opacity-50" />
             <p className="text-xs font-bold">ບໍ່ພົບລາຍການບິນຕາມເງື່ອນໄຂທີ່ເລືອກ</p>
+          </div>
+        )}
+        </div>
+
+        {/* Attached Desktop Pagination Bar (Seamless with table, 0 gap) */}
+        {filteredTransactions.length > 0 && (
+          <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
+            {/* Left: Page Size Selector (20 | 50 | 100 | 200 | ALL) */}
+            <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
+              <span className="text-xs text-slate-500 font-medium">
+                ຈຳນວນຕໍ່ໜ້າ:
+              </span>
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                {[20, 50, 100, 200, 'ALL'].map((size) => {
+                  const isActive = pageSize === size;
+                  return (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => handlePageSizeChange(size)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-teal-600 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                      }`}
+                    >
+                      {size === 'ALL' ? 'ທັງໝົດ' : size}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Middle: Summary Text (Compact for iPad & Responsive) */}
+            <div className="text-xs text-slate-600 font-medium text-center whitespace-nowrap shrink-0 px-2">
+              {pageSize === 'ALL' ? (
+                <span>
+                  ທັງໝົດ <strong className="text-slate-900 font-bold font-mono">{filteredTransactions.length}</strong>
+                </span>
+              ) : (
+                <span>
+                  <strong className="text-slate-900 font-bold font-mono">{Math.min((currentPage - 1) * pageSize + 1, filteredTransactions.length)} - {Math.min(currentPage * pageSize, filteredTransactions.length)}</strong>{' '}
+                  ຈາກ{' '}
+                  <strong className="text-slate-900 font-bold font-mono">{filteredTransactions.length}</strong>
+                </span>
+              )}
+            </div>
+
+            {/* Right: Page Navigation (Only shown when not ALL) */}
+            {pageSize !== 'ALL' && totalPages > 1 && (
+              <div className="flex items-center gap-1 w-full md:w-auto justify-center md:justify-end">
+                {/* Previous Page */}
+                <button
+                  type="button"
+                  disabled={currentPage === 1}
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                    currentPage === 1
+                      ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                      : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                  }`}
+                >
+                  <CaretLeft size={13} weight="bold" />
+                  <span className="hidden sm:inline">ກ່ອນໜ້າ</span>
+                </button>
+
+                {/* Number buttons with smart truncation */}
+                <div className="flex items-center gap-1">
+                  {getPageNumbers().map((page, idx) => {
+                    if (page === '...') {
+                      return (
+                        <span key={`dots-${idx}`} className="px-1 text-slate-400 font-bold text-xs">
+                          ...
+                        </span>
+                      );
+                    }
+                    const isCurrent = currentPage === page;
+                    return (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => handlePageChange(page)}
+                        className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                          isCurrent
+                            ? 'bg-teal-600 text-white shadow-2xs font-black'
+                            : 'text-slate-700 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Next Page */}
+                <button
+                  type="button"
+                  disabled={currentPage === totalPages}
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                    currentPage === totalPages
+                      ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                      : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                  }`}
+                >
+                  <span className="hidden sm:inline">ຕໍ່ໄປ</span>
+                  <CaretRight size={13} weight="bold" />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Package,
   Plus,
@@ -21,6 +21,8 @@ import {
   CurrencyCircleDollar,
   PencilSimple,
   Trash,
+  CaretLeft,
+  CaretRight,
 } from '@phosphor-icons/react';
 import {
   formatKip,
@@ -211,6 +213,75 @@ export default function PurchasesView({
       return true;
     });
   }, [purchaseOrders, filterStatus, searchQuery]);
+
+  // Configurable Pagination States for PO List (Default 20, with 20 | 50 | 100 | ALL options)
+  const [poPageSize, setPoPageSize] = useState(20);
+  const [poCurrentPage, setPoCurrentPage] = useState(1);
+  const tableTopRef = useRef(null);
+
+  const scrollToTableTop = () => {
+    tableTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handlePoPageChange = (newPage) => {
+    if (newPage === poCurrentPage || newPage < 1 || newPage > poTotalPages) return;
+    playActionClickBeep('inventory');
+    setPoCurrentPage(newPage);
+    scrollToTableTop();
+  };
+
+  const handlePoPageSizeChange = (newSize) => {
+    playActionClickBeep('inventory');
+    setPoPageSize(newSize);
+    setPoCurrentPage(1);
+    scrollToTableTop();
+  };
+
+  // Auto-reset currentPage to 1 when filter or search changes
+  useEffect(() => {
+    setPoCurrentPage(1);
+  }, [filterStatus, searchQuery]);
+
+  const poTotalPages = useMemo(() => {
+    if (poPageSize === 'ALL' || !poPageSize) return 1;
+    return Math.max(1, Math.ceil(filteredOrders.length / poPageSize));
+  }, [filteredOrders.length, poPageSize]);
+
+  useEffect(() => {
+    if (poCurrentPage > poTotalPages) {
+      setPoCurrentPage(poTotalPages);
+    }
+  }, [poCurrentPage, poTotalPages]);
+
+  const paginatedOrders = useMemo(() => {
+    if (poPageSize === 'ALL' || !poPageSize) {
+      return filteredOrders;
+    }
+    const start = (poCurrentPage - 1) * poPageSize;
+    return filteredOrders.slice(start, start + poPageSize);
+  }, [filteredOrders, poCurrentPage, poPageSize]);
+
+  // Smart page numbers pagination algorithm
+  const getPoPageNumbers = () => {
+    if (poTotalPages <= 7) {
+      return Array.from({ length: poTotalPages }, (_, i) => i + 1);
+    }
+    const pages = [];
+    pages.push(1);
+    if (poCurrentPage > 3) {
+      pages.push('...');
+    }
+    const start = Math.max(2, poCurrentPage - 1);
+    const end = Math.min(poTotalPages - 1, poCurrentPage + 1);
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    if (poCurrentPage < poTotalPages - 2) {
+      pages.push('...');
+    }
+    pages.push(poTotalPages);
+    return pages;
+  };
 
   // Note: Product filtering is handled inside MultiProductGRNForm
 
@@ -911,9 +982,14 @@ export default function PurchasesView({
   // RENDER: GRN LIST & HISTORY SCREEN (PART 1)
   // =========================================================================
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50 select-none font-sans">
+    <main
+      className="flex-1 w-full overflow-y-auto bg-slate-50 select-none font-sans min-h-0 pb-4 sm:pb-6 touch-pan-y"
+      style={{
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
+      }}
+    >
       {/* Top Header Bar */}
-      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 shadow-2xs">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0">
             <Package size={20} className="sm:w-5 sm:h-5" weight="duotone" />
@@ -976,7 +1052,7 @@ export default function PurchasesView({
       {/* ============================================================== */}
       {/* 1.1. TOP KPI METRICS (REDESIGNED MATCHING STAFF STATS)        */}
       {/* ============================================================== */}
-      <div className="px-3 sm:px-6 pt-3 pb-2 grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+      <div className="px-3 sm:px-6 pt-3 pb-2.5 grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* Card 1: Total Orders */}
         <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black shrink-0">
@@ -1025,7 +1101,7 @@ export default function PurchasesView({
       {/* ============================================================== */}
       {/* 1.2. ACTION BAR (KHUNG BACKGROUND TRẮNG BO GÓC GIỐNG LỊCH SỬ)   */}
       {/* ============================================================== */}
-      <div className="px-3 sm:px-6 pb-2.5 sm:pb-3 shrink-0">
+      <div className="px-3 sm:px-6 pb-3">
         <div className="bg-white p-2 sm:p-2.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-2.5">
           {/* Status Filter Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
@@ -1099,7 +1175,7 @@ export default function PurchasesView({
       {/* ============================================================== */}
       {/* 1.3. MODERN GRN DATA LIST (CARDS ON MOBILE, TABLE ON DESKTOP) */}
       {/* ============================================================== */}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-6 pb-6">
+      <div className="px-3 sm:px-6">
         {isLoading && purchaseOrders.length === 0 ? (
           <PurchasesListSkeleton count={5} />
         ) : filteredOrders.length === 0 ? (
@@ -1112,9 +1188,11 @@ export default function PurchasesView({
           </div>
         ) : (
           <>
+            {/* Scroll anchor for pagination scroll-to-top */}
+            <div ref={tableTopRef} className="scroll-mt-3 sm:scroll-mt-4" />
             {/* MOBILE CARD LIST (< 1024px, block lg:hidden) */}
             <div className="block lg:hidden space-y-2.5">
-              {filteredOrders.map((po) => {
+              {paginatedOrders.map((po) => {
                 const dateFormatted = new Date(po.created_at).toLocaleString('lo-LA', {
                   day: '2-digit',
                   month: '2-digit',
@@ -1256,12 +1334,118 @@ export default function PurchasesView({
               })}
             </div>
 
+            {/* Mobile-only pagination bar for POs (< 1024px) */}
+            {filteredOrders.length > 0 && (
+              <div className="lg:hidden bg-white rounded-2xl border border-slate-200/90 p-3 mb-3 flex flex-col items-center gap-3 shadow-2xs">
+                {/* Top: Page Size Selector (20 | 50 | 100 | 200 | ALL) */}
+                <div className="flex items-center gap-2 w-full justify-between">
+                  <span className="text-xs text-slate-500 font-medium">
+                    ຈຳນວນຕໍ່ໜ້າ:
+                  </span>
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                    {[20, 50, 100, 200, 'ALL'].map((size) => {
+                      const isActive = poPageSize === size;
+                      return (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => handlePoPageSizeChange(size)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-teal-600 text-white shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                          }`}
+                        >
+                          {size === 'ALL' ? 'ທັງໝົດ' : size}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Middle: Summary Text (Compact for iPad & Mobile) */}
+                <div className="text-xs text-slate-600 font-medium text-center whitespace-nowrap shrink-0 px-1">
+                  {poPageSize === 'ALL' ? (
+                    <span>
+                      ທັງໝົດ <strong className="text-slate-900 font-bold font-mono">{filteredOrders.length}</strong>
+                    </span>
+                  ) : (
+                    <span>
+                      <strong className="text-slate-900 font-bold font-mono">{Math.min((poCurrentPage - 1) * poPageSize + 1, filteredOrders.length)} - {Math.min(poCurrentPage * poPageSize, filteredOrders.length)}</strong>{' '}
+                      ຈາກ{' '}
+                      <strong className="text-slate-900 font-bold font-mono">{filteredOrders.length}</strong>
+                    </span>
+                  )}
+                </div>
+
+                {/* Bottom: Page Navigation (Only shown when not ALL) */}
+                {poPageSize !== 'ALL' && poTotalPages > 1 && (
+                  <div className="flex items-center gap-1 w-full justify-center">
+                    <button
+                      type="button"
+                      disabled={poCurrentPage === 1}
+                      onClick={() => handlePoPageChange(poCurrentPage - 1)}
+                      className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                        poCurrentPage === 1
+                          ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                          : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                      }`}
+                    >
+                      <CaretLeft size={13} weight="bold" />
+                      <span>ກ່ອນໜ້າ</span>
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      {getPoPageNumbers().map((page, idx) => {
+                        if (page === '...') {
+                          return (
+                            <span key={`dots-${idx}`} className="px-1 text-slate-400 font-bold text-xs">
+                              ...
+                            </span>
+                          );
+                        }
+                        const isCurrent = poCurrentPage === page;
+                        return (
+                          <button
+                            key={page}
+                            type="button"
+                            onClick={() => handlePoPageChange(page)}
+                            className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                              isCurrent
+                                ? 'bg-teal-600 text-white shadow-2xs font-black'
+                                : 'text-slate-700 hover:bg-slate-100 border border-slate-200'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={poCurrentPage === poTotalPages}
+                      onClick={() => handlePoPageChange(poCurrentPage + 1)}
+                      className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                        poCurrentPage === poTotalPages
+                          ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                          : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                      }`}
+                    >
+                      <span>ຕໍ່ໄປ</span>
+                      <CaretRight size={13} weight="bold" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* DESKTOP DATA TABLE (>= 1024px, hidden lg:block) */}
-            <div className="hidden lg:block bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="hidden lg:block bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden mb-3">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-sm">
+                <table className="w-full text-left text-sm border-separate border-spacing-0">
                   <thead>
-                    <tr className="bg-slate-50/90 text-slate-600 font-bold border-b border-slate-200 text-xs">
+                    <tr className="sticky top-0 z-10 text-slate-600 font-bold text-xs [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50/90">
                       <th className="py-3.5 px-4 font-bold">ລະຫັດບິນ & ວັນທີ</th>
                       <th className="py-3.5 px-4 font-bold">ຮ້ານສົ່ງ</th>
                       <th className="py-3.5 px-4 font-bold">ສິນຄ້າ & ຈຳນວນ</th>
@@ -1272,8 +1456,8 @@ export default function PurchasesView({
                       <th className="py-3.5 px-4 text-center font-bold">ຈັດການ</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {filteredOrders.map((po) => {
+                  <tbody className="[&_td]:border-b [&_td]:border-slate-100 text-slate-700">
+                    {paginatedOrders.map((po) => {
                       const dateFormatted = new Date(po.created_at).toLocaleString('lo-LA', {
                         day: '2-digit',
                         month: '2-digit',
@@ -1410,6 +1594,115 @@ export default function PurchasesView({
                   </tbody>
                 </table>
               </div>
+
+              {/* Attached Desktop Pagination Bar for POs (Seamless with table, 0 gap) */}
+              {filteredOrders.length > 0 && (
+                <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
+                  {/* Left: Page Size Selector (20 | 50 | 100 | 200 | All) */}
+                  <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
+                    <span className="text-xs text-slate-500 font-medium">
+                      ຈຳນວນຕໍ່ໜ້າ:
+                    </span>
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                      {[20, 50, 100, 200, 'ALL'].map((size) => {
+                        const isActive = poPageSize === size;
+                        return (
+                          <button
+                            key={size}
+                            type="button"
+                            onClick={() => handlePoPageSizeChange(size)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              isActive
+                                ? 'bg-teal-600 text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                            }`}
+                          >
+                            {size === 'ALL' ? 'ທັງໝົດ' : size}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Middle: Summary Text (Compact for iPad & Responsive) */}
+                  <div className="text-xs text-slate-600 font-medium text-center whitespace-nowrap shrink-0 px-2">
+                    {poPageSize === 'ALL' ? (
+                      <span>
+                        ທັງໝົດ <strong className="text-slate-900 font-bold font-mono">{filteredOrders.length}</strong>
+                      </span>
+                    ) : (
+                      <span>
+                        <strong className="text-slate-900 font-bold font-mono">{Math.min((poCurrentPage - 1) * poPageSize + 1, filteredOrders.length)} - {Math.min(poCurrentPage * poPageSize, filteredOrders.length)}</strong>{' '}
+                        ຈາກ{' '}
+                        <strong className="text-slate-900 font-bold font-mono">{filteredOrders.length}</strong>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Right: Page Navigation (Only shown when not ALL) */}
+                  {poPageSize !== 'ALL' && poTotalPages > 1 && (
+                    <div className="flex items-center gap-1 w-full md:w-auto justify-center md:justify-end">
+                      {/* Previous Page */}
+                      <button
+                        type="button"
+                        disabled={poCurrentPage === 1}
+                        onClick={() => handlePoPageChange(poCurrentPage - 1)}
+                        className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                          poCurrentPage === 1
+                            ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                            : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                        }`}
+                      >
+                        <CaretLeft size={13} weight="bold" />
+                        <span className="hidden sm:inline">ກ່ອນໜ້າ</span>
+                      </button>
+
+                      {/* Number buttons with smart truncation */}
+                      <div className="flex items-center gap-1">
+                        {getPoPageNumbers().map((page, idx) => {
+                          if (page === '...') {
+                            return (
+                              <span key={`dots-${idx}`} className="px-1 text-slate-400 font-bold text-xs">
+                                ...
+                              </span>
+                            );
+                          }
+                          const isCurrent = poCurrentPage === page;
+                          return (
+                            <button
+                              key={page}
+                              type="button"
+                              onClick={() => handlePoPageChange(page)}
+                              className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                                isCurrent
+                                  ? 'bg-teal-600 text-white shadow-2xs font-black'
+                                  : 'text-slate-700 hover:bg-slate-100 border border-slate-200'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Next Page */}
+                      <button
+                        type="button"
+                        disabled={poCurrentPage === poTotalPages}
+                        onClick={() => handlePoPageChange(poCurrentPage + 1)}
+                        className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                          poCurrentPage === poTotalPages
+                            ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                            : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                        }`}
+                      >
+                        <span className="hidden sm:inline">ຕໍ່ໄປ</span>
+                        <CaretRight size={13} weight="bold" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </>
         )}
@@ -1716,6 +2009,6 @@ export default function PurchasesView({
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   MagnifyingGlass,
@@ -172,6 +172,63 @@ export default function PosScreen({
   const [orderMenuOpen, setOrderMenuOpen] = useState(false);
   const [quotationModalOpen, setQuotationModalOpen] = useState(false);
   const searchInputRef = useRef(null);
+
+  // High-performance Infinite Scroll / Lazy Load for product catalog (Optimized for 3000+ items)
+  const INITIAL_BATCH_SIZE = 48;
+  const LOAD_MORE_STEP = 36;
+  const [visibleLimit, setVisibleLimit] = useState(INITIAL_BATCH_SIZE);
+  const gridContainerRef = useRef(null);
+  const sentinelRef = useRef(null);
+
+  // Reset display limit and scroll to top whenever search query or category filter changes
+  useEffect(() => {
+    setVisibleLimit(INITIAL_BATCH_SIZE);
+    if (gridContainerRef.current) {
+      gridContainerRef.current.scrollTop = 0;
+    }
+  }, [searchQuery, activeCategory]);
+
+  const visibleProducts = useMemo(() => {
+    if (!filteredProducts) return [];
+    if (filteredProducts.length <= INITIAL_BATCH_SIZE) return filteredProducts;
+    return filteredProducts.slice(0, visibleLimit);
+  }, [filteredProducts, visibleLimit]);
+
+  // Load more items smoothly when approaching bottom
+  const loadMoreProducts = useCallback(() => {
+    if (filteredProducts && visibleLimit < filteredProducts.length) {
+      setVisibleLimit((prev) => Math.min(prev + LOAD_MORE_STEP, filteredProducts.length));
+    }
+  }, [filteredProducts, visibleLimit]);
+
+  // Dual-trigger: IntersectionObserver on sentinel element (400px before bottom) + scroll listener
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMoreProducts();
+        }
+      },
+      {
+        root: gridContainerRef.current,
+        rootMargin: '400px 0px',
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loadMoreProducts]);
+
+  const handleGridScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 400) {
+      loadMoreProducts();
+    }
+  };
 
   const handleClearSearch = () => {
     if (setSearchQuery) {
@@ -1351,13 +1408,17 @@ export default function PosScreen({
         </div>
 
         {/* Lưới sản phẩm (High-Density Grid: 2-3 cols mobile, 4-5-6 cols desktop) */}
-        <div className="flex-1 min-h-0 p-2.5 overflow-y-auto overscroll-contain pb-16 sm:pb-12">
+        <div
+          ref={gridContainerRef}
+          onScroll={handleGridScroll}
+          className="flex-1 min-h-0 p-2.5 overflow-y-auto overscroll-contain pb-16 sm:pb-12"
+        >
           {isLoading && products.length === 0 ? (
             <PosProductGridSkeleton count={12} />
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-2.5 w-full">
-                {filteredProducts.map((p) => {
+                {visibleProducts.map((p) => {
                   const rawStock = p.currentStockBaseUnits ?? p.current_stock_base_units;
                   const hasTrackStock = p.trackStock !== false;
                   const stockVal = hasTrackStock && rawStock !== null && rawStock !== undefined && !isNaN(rawStock) ? Number(rawStock) : null;
@@ -1492,6 +1553,18 @@ export default function PosScreen({
                     </div>
                   );
                 })}
+
+                {/* Sentinel & smooth loader indicator at bottom */}
+                {visibleLimit < filteredProducts.length && (
+                  <div
+                    ref={sentinelRef}
+                    className="col-span-full py-3.5 flex items-center justify-center text-xs font-bold text-slate-400 gap-2"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                    <span>ສະແດງ {visibleProducts.length} ຈາກ {filteredProducts.length} ລາຍການ</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                  </div>
+                )}
               </div>
 
               {!isLoading && filteredProducts.length === 0 && (

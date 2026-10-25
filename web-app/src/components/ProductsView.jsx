@@ -17,6 +17,8 @@ import {
   CaretUp,
   Check,
   X,
+  CaretLeft,
+  CaretRight,
 } from '@phosphor-icons/react';
 import { formatKip, formatBaht, getCartonUnitInfo, formatStockDisplay, formatNegativeStockCompound, normalizeLao } from '../utils/formatters';
 import BarcodeScannerModal from './BarcodeScannerModal';
@@ -290,6 +292,76 @@ export default function ProductsView({
     });
   }, [products, searchTerm, selectedCategory]);
 
+  // Configurable Pagination States (Default 50, with 20 | 50 | 100 | 200 | ALL options)
+  const [pageSize, setPageSize] = useState(50);
+  const [currentPage, setCurrentPage] = useState(1);
+  const tableTopRef = useRef(null);
+
+  const scrollToTableTop = () => {
+    tableTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handlePageChange = (newPage) => {
+    if (newPage === currentPage || newPage < 1 || newPage > totalPages) return;
+    playActionClickBeep('products');
+    setCurrentPage(newPage);
+    scrollToTableTop();
+  };
+
+  const handlePageSizeChange = (newSize) => {
+    playActionClickBeep('products');
+    setPageSize(newSize);
+    setCurrentPage(1);
+    scrollToTableTop();
+  };
+
+  // Auto-reset currentPage to 1 when search query or category filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory]);
+
+  const totalPages = useMemo(() => {
+    if (pageSize === 'ALL' || !pageSize) return 1;
+    return Math.max(1, Math.ceil(filteredProducts.length / pageSize));
+  }, [filteredProducts.length, pageSize]);
+
+  // Protect currentPage within bounds when items count changes
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const paginatedProducts = useMemo(() => {
+    if (pageSize === 'ALL' || !pageSize) {
+      return filteredProducts;
+    }
+    const start = (currentPage - 1) * pageSize;
+    return filteredProducts.slice(start, start + pageSize);
+  }, [filteredProducts, currentPage, pageSize]);
+
+  // Smart page numbers pagination algorithm
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages = [];
+    pages.push(1);
+    if (currentPage > 3) {
+      pages.push('...');
+    }
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    if (currentPage < totalPages - 2) {
+      pages.push('...');
+    }
+    pages.push(totalPages);
+    return pages;
+  };
+
   const productStats = useMemo(() => {
     let inStock = 0;
     let lowOrOutStock = 0;
@@ -408,10 +480,10 @@ export default function ProductsView({
 
   return (
     <main
-      className="flex-1 w-full p-3 sm:p-5 md:p-6 overflow-y-auto font-sans min-h-0 pb-20 sm:pb-24 touch-pan-y"
+      className="flex-1 w-full p-3 sm:p-5 md:p-6 overflow-y-auto font-sans min-h-0 pb-4 sm:pb-6 touch-pan-y"
       style={{
         paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
-        paddingBottom: 'max(5rem, calc(4rem + env(safe-area-inset-bottom, 0px)))',
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
       }}
     >
       {/* 1. Header Toolbar: Standardized responsive header matching GRN */}
@@ -746,9 +818,11 @@ export default function ProductsView({
         <ProductsListSkeleton count={8} />
       ) : (
         <>
+          {/* Scroll anchor for pagination scroll-to-top */}
+          <div ref={tableTopRef} className="scroll-mt-3 sm:scroll-mt-4" />
           {/* 3. A: MOBILE VIEW (< 768px) - Touch-Optimized Card List */}
-          <div className="md:hidden flex flex-col gap-3 pb-24">
-            {filteredProducts.map((p) => {
+          <div className="md:hidden flex flex-col gap-3 pb-8">
+            {paginatedProducts.map((p) => {
           const info = getProductStockDetails(p, exchangeRate);
           const isHighlighted = p.id === scannedHighlightId;
 
@@ -778,6 +852,8 @@ export default function ProductsView({
                       <img
                         src={p.imageUrl}
                         alt={p.name}
+                        loading="lazy"
+                        decoding="async"
                         className="w-12 h-12 rounded-xl object-cover bg-slate-100 border border-slate-200 transition-transform duration-200 group-hover/thumb:scale-108"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
@@ -926,11 +1002,118 @@ export default function ProductsView({
         })}
       </div>
 
+      {/* Mobile-only pagination bar (< 768px) */}
+      {filteredProducts.length > 0 && (
+        <div className="md:hidden bg-white rounded-2xl border border-slate-200 p-3 mb-3 flex flex-col items-center gap-3 shadow-2xs">
+          {/* Top: Page Size Selector (20 | 50 | 100 | 200 | All) */}
+          <div className="flex items-center gap-2 w-full justify-between">
+            <span className="text-xs text-slate-500 font-medium">
+              ຈຳນວນຕໍ່ໜ້າ:
+            </span>
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              {[20, 50, 100, 200, 'ALL'].map((size) => {
+                const isActive = pageSize === size;
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => handlePageSizeChange(size)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-teal-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                    }`}
+                  >
+                    {size === 'ALL' ? 'ທັງໝົດ' : size}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Middle: Summary Text (Compact for iPad & Mobile) */}
+          <div className="text-xs text-slate-600 font-medium text-center whitespace-nowrap shrink-0 px-1">
+            {pageSize === 'ALL' ? (
+              <span>
+                ທັງໝົດ <strong className="text-slate-900 font-bold font-mono">{filteredProducts.length}</strong>
+              </span>
+            ) : (
+              <span>
+                <strong className="text-slate-900 font-bold font-mono">{Math.min((currentPage - 1) * pageSize + 1, filteredProducts.length)} - {Math.min(currentPage * pageSize, filteredProducts.length)}</strong>{' '}
+                ຈາກ{' '}
+                <strong className="text-slate-900 font-bold font-mono">{filteredProducts.length}</strong>
+              </span>
+            )}
+          </div>
+
+          {/* Bottom: Page Navigation (Only shown when not ALL) */}
+          {pageSize !== 'ALL' && totalPages > 1 && (
+            <div className="flex items-center gap-1 w-full justify-center">
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => handlePageChange(currentPage - 1)}
+                className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                  currentPage === 1
+                    ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                    : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                }`}
+              >
+                <CaretLeft size={13} weight="bold" />
+                <span>ກ່ອນໜ້າ</span>
+              </button>
+
+              <div className="flex items-center gap-1">
+                {getPageNumbers().map((page, idx) => {
+                  if (page === '...') {
+                    return (
+                      <span key={`dots-${idx}`} className="px-1 text-slate-400 font-bold text-xs">
+                        ...
+                      </span>
+                    );
+                  }
+                  const isCurrent = currentPage === page;
+                  return (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => handlePageChange(page)}
+                      className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-teal-600 text-white shadow-2xs font-black'
+                          : 'text-slate-700 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => handlePageChange(currentPage + 1)}
+                className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                  currentPage === totalPages
+                    ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                    : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                }`}
+              >
+                <span>ຕໍ່ໄປ</span>
+                <CaretRight size={13} weight="bold" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 3. B: TABLET & DESKTOP VIEW (>= 768px) - Responsive Horizontal Scroll Table */}
-      <div className="hidden md:block w-full overflow-x-auto rounded-2xl border border-slate-200 shadow-xs overscroll-x-contain touch-pan-y bg-white mb-10">
-        <table className="w-full min-w-[980px] text-left text-xs border-collapse">
+      <div className="hidden md:block w-full rounded-2xl border border-slate-200 shadow-xs bg-white mb-3 overflow-hidden">
+        <div className="w-full overflow-x-auto overscroll-x-contain touch-pan-y">
+          <table className="w-full min-w-[980px] text-left text-xs border-separate border-spacing-0">
           <thead>
-            <tr className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 text-slate-700 font-extrabold">
+            <tr className="sticky top-0 z-10 text-slate-700 font-extrabold [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
               <th className="py-3.5 px-4 w-[24%] min-w-[200px]">ຮູບ & ຊື່ສິນຄ້າ</th>
               <th className="py-3.5 px-3 w-[13%] min-w-[110px]">ໝວດໝູ່</th>
               <th className="py-3.5 px-3 w-[15%] min-w-[110px]">ຕົ້ນທຶນບາດ (฿) & ກີບ (₭)</th>
@@ -939,15 +1122,15 @@ export default function ProductsView({
               <th className="py-3.5 pl-3 pr-6 sm:pr-8 w-[9%] min-w-[105px] text-center">ຈັດການ</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredProducts.map((p) => {
+          <tbody className="[&_td]:border-b [&_td]:border-slate-100">
+            {paginatedProducts.map((p) => {
               const info = getProductStockDetails(p, exchangeRate);
               const isHighlighted = p.id === scannedHighlightId;
 
               return (
                 <tr
                   key={p.id}
-                  className={`transition-all duration-300 ${
+                  className={`transition-colors duration-150 ${
                     isHighlighted
                       ? 'bg-teal-50 ring-2 ring-teal-500 shadow-sm'
                       : 'hover:bg-slate-50/80'
@@ -969,6 +1152,8 @@ export default function ProductsView({
                         <img
                           src={p.imageUrl}
                           alt={p.name}
+                          loading="lazy"
+                          decoding="async"
                           className="w-11 h-11 rounded-xl object-cover bg-slate-100 border border-slate-200 transition-transform duration-200 group-hover/thumb:scale-108"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
@@ -1125,6 +1310,116 @@ export default function ProductsView({
             })}
           </tbody>
         </table>
+        </div>
+
+        {/* Attached Desktop Pagination Bar (Seamless with table, 0 gap) */}
+        {filteredProducts.length > 0 && (
+          <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
+            {/* Left: Page Size Selector (20 | 50 | 100 | 200 | All) */}
+            <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
+              <span className="text-xs text-slate-500 font-medium">
+                ຈຳນວນຕໍ່ໜ້າ:
+              </span>
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                {[20, 50, 100, 200, 'ALL'].map((size) => {
+                  const isActive = pageSize === size;
+                  return (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => handlePageSizeChange(size)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-teal-600 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                      }`}
+                    >
+                      {size === 'ALL' ? 'ທັງໝົດ' : size}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Middle: Summary Text (Compact for iPad & Responsive) */}
+            <div className="text-xs text-slate-600 font-medium text-center whitespace-nowrap shrink-0 px-2">
+              {pageSize === 'ALL' ? (
+                <span>
+                  ທັງໝົດ <strong className="text-slate-900 font-bold font-mono">{filteredProducts.length}</strong>
+                </span>
+              ) : (
+                <span>
+                  <strong className="text-slate-900 font-bold font-mono">{Math.min((currentPage - 1) * pageSize + 1, filteredProducts.length)} - {Math.min(currentPage * pageSize, filteredProducts.length)}</strong>{' '}
+                  ຈາກ{' '}
+                  <strong className="text-slate-900 font-bold font-mono">{filteredProducts.length}</strong>
+                </span>
+              )}
+            </div>
+
+            {/* Right: Page Navigation (Only shown when not ALL) */}
+            {pageSize !== 'ALL' && totalPages > 1 && (
+              <div className="flex items-center gap-1 w-full md:w-auto justify-center md:justify-end">
+                {/* Previous Page */}
+                <button
+                  type="button"
+                  disabled={currentPage === 1}
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                    currentPage === 1
+                      ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                      : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                  }`}
+                >
+                  <CaretLeft size={13} weight="bold" />
+                  <span className="hidden sm:inline">ກ່ອນໜ້າ</span>
+                </button>
+
+                {/* Number buttons with smart truncation */}
+                <div className="flex items-center gap-1">
+                  {getPageNumbers().map((page, idx) => {
+                    if (page === '...') {
+                      return (
+                        <span key={`dots-${idx}`} className="px-1 text-slate-400 font-bold text-xs">
+                          ...
+                        </span>
+                      );
+                    }
+                    const isCurrent = currentPage === page;
+                    return (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => handlePageChange(page)}
+                        className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                          isCurrent
+                            ? 'bg-teal-600 text-white shadow-2xs font-black'
+                            : 'text-slate-700 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Next Page */}
+                <button
+                  type="button"
+                  disabled={currentPage === totalPages}
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                    currentPage === totalPages
+                      ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                      : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                  }`}
+                >
+                  <span className="hidden sm:inline">ຕໍ່ໄປ</span>
+                  <CaretRight size={13} weight="bold" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </>
   )}

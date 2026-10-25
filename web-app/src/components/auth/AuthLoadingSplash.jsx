@@ -33,9 +33,9 @@ export default function AuthLoadingSplash() {
             <Storefront size={38} weight="fill" className="drop-shadow-sm" />
             
             {/* Sparkle Accent */}
-            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-400 text-amber-950 flex items-center justify-center shadow-sm animate-pulse">
+            {/* <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-400 text-amber-950 flex items-center justify-center shadow-sm animate-pulse">
               <Sparkle size={11} weight="fill" />
-            </div>
+            </div> */}
           </div>
         </div>
 
