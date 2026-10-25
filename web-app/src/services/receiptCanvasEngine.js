@@ -659,6 +659,20 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null) {
     drawRight(totalStr, K80.RIGHT_EDGE, y, FONTS.ITEM_TOTAL);
     y += 28;
 
+    // Mixed carton bundle flavor breakdown if applicable
+    const bundleComponents = it.bundle_components || it.bundleComponents;
+    if (Array.isArray(bundleComponents) && bundleComponents.length > 0) {
+      for (const comp of bundleComponents) {
+        const compName = comp.productName || comp.product_name || comp.name || '';
+        const compQty = comp.quantity || comp.qty || 0;
+        if (compQty > 0) {
+          const compStr = `↳ ${compName} x${compQty}`;
+          drawLeft(compStr, indentX + 10, y, FONTS.CRATE_LABEL);
+          y += 24;
+        }
+      }
+    }
+
     // Crate deposit sub-row if applicable
     const feePerCrate = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
     const rawLineTotal = Number(it.lineTotal || it.line_total) || 0;

@@ -19,6 +19,9 @@ import {
   updateExistingSaleTransactionInSupabase,
   fetchExchangeRate,
   updateExchangeRateInSupabase,
+  fetchProductBundlesFromSupabase,
+  saveProductBundleToSupabase,
+  deleteProductBundleInSupabase,
   supabase
 } from './services/supabase';
 import queryClient from './services/queryClient';
@@ -41,6 +44,7 @@ import CheckoutModal from './components/CheckoutModal';
 import UnitSelectorModal from './components/UnitSelectorModal';
 import ProductFormModal from './components/ProductFormModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
+import ProductBundleModal from './components/ProductBundleModal';
 import ConfirmDialogModal from './components/ConfirmDialogModal';
 import StaffManagementView from './components/auth/StaffManagementView';
 import CashierLockOverlay from './components/auth/CashierLockOverlay';
@@ -404,7 +408,15 @@ export default function App() {
 
   const [rawCategories, setRawCategories] = useState([]);
   const [categoryManagerModalOpen, setCategoryManagerModalOpen] = useState(false);
-
+  const [bundles, setBundles] = useState(() => {
+    try {
+      const local = localStorage.getItem('meiishop_product_bundles_v1');
+      return local ? JSON.parse(local) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [bundleModalOpen, setBundleModalOpen] = useState(false);
   // Local Echo Suppression & Realtime Synchronization for Orders
   const localEchoIdsRef = useRef(new Set());
   const [unreadOrderIds, setUnreadOrderIds] = useState(() => new Set());
@@ -678,7 +690,38 @@ export default function App() {
           }
         }
       } catch (catErr) {
-        console.warn('Category fetch error:', catErr);
+        console.warn('Categories fetch error:', catErr);
+      }
+
+      // Fetch mixed carton bundles
+      try {
+        const cloudBundles = await fetchProductBundlesFromSupabase();
+        if (cloudBundles) {
+          const resolved = cloudBundles.map((b) => {
+            const bItemIds = b.itemIds || (b.product_bundle_items || []).map((it) => it.product_id) || [];
+            const childs = (products || []).filter((p) => bItemIds.includes(p.id));
+            if (childs.length > 0) {
+              for (const p of childs) {
+                const units = Array.isArray(p.units) ? p.units : [];
+                const cartonUnit =
+                  units.find(
+                    (u) =>
+                      u.tier === 3 ||
+                      u.id?.endsWith('_carton') ||
+                      ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].includes(u.unitName)
+                  ) || [...units].sort((a, b) => (Number(b.multiplier) || 1) - (Number(a.multiplier) || 1))[0];
+                const price = Number(cartonUnit?.retailPrice ?? cartonUnit?.price_1 ?? cartonUnit?.price1 ?? p.cartonPrice ?? 0);
+                if (price > 0) {
+                  return { ...b, price_lak: price };
+                }
+              }
+            }
+            return b;
+          });
+          setBundles(resolved);
+        }
+      } catch (bErr) {
+        console.warn('Bundles fetch error:', bErr);
       }
     } catch (err) {
       console.warn('Supabase load error:', err);
@@ -688,6 +731,44 @@ export default function App() {
     } finally {
       setIsRefreshing(false);
       setIsLoadingProducts(false);
+    }
+  };
+
+  const handleSaveBundle = async (bundleData, childProductIds) => {
+    setIsSavingDb(true);
+    setDbSavingMessage('ກຳລັງບັນທຶກກຸ່ມສິນຄ້າລວມ...');
+    try {
+      const res = await saveProductBundleToSupabase(bundleData, childProductIds);
+      if (res.success) {
+        const updated = await fetchProductBundlesFromSupabase();
+        setBundles(updated || []);
+        queryClient.invalidateQueries({ queryKey: ['bundles'] });
+      }
+      return res;
+    } catch (err) {
+      return { success: false, error: err.message };
+    } finally {
+      setIsSavingDb(false);
+      setDbSavingMessage('');
+    }
+  };
+
+  const handleDeleteBundle = async (bundleId) => {
+    setIsSavingDb(true);
+    setDbSavingMessage('ກຳລັງລຶບກຸ່ມສິນຄ້າລວມ...');
+    try {
+      const res = await deleteProductBundleInSupabase(bundleId);
+      if (res.success) {
+        const updated = await fetchProductBundlesFromSupabase();
+        setBundles(updated || []);
+        queryClient.invalidateQueries({ queryKey: ['bundles'] });
+      }
+      return res;
+    } catch (err) {
+      return { success: false, error: err.message };
+    } finally {
+      setIsSavingDb(false);
+      setDbSavingMessage('');
     }
   };
 
@@ -1502,6 +1583,15 @@ export default function App() {
 
   // Cart operations
   const addToCart = (product, unit, qty = 1, options = {}) => {
+    // Mixed Carton Bundle support
+    if (product?.isBundle) {
+      setCart([...cart, product]);
+      if (!options?.silent) {
+        playAddToCartBeep();
+      }
+      return;
+    }
+
     const isCrateEligible =
       Boolean(product?.hasCrateDeposit) ||
       Boolean(
@@ -1511,7 +1601,7 @@ export default function App() {
     const feePerCrate = Number(product?.crateDepositFee) || 30000;
 
     const existingIndex = cart.findIndex(
-      (item) => item.product.id === product.id && item.unit.id === unit.id
+      (item) => !item.isBundle && item.product?.id === product.id && item.unit?.id === unit?.id
     );
 
     if (existingIndex > -1) {
@@ -1603,7 +1693,7 @@ export default function App() {
   const changeCartItemPriceTier = (productId, unitId, newTier) => {
     setCart((prevCart) =>
       prevCart.map((item) => {
-        if (item.product.id === productId && item.unit.id === unitId) {
+        if (!item.isBundle && item.product?.id === productId && item.unit?.id === unitId) {
           return {
             ...item,
             selectedPriceTier: newTier,
@@ -1620,12 +1710,27 @@ export default function App() {
   const setGlobalCartPriceTier = (newTier) => {
     setGlobalPriceTier(newTier);
     setCart((prevCart) =>
-      prevCart.map((item) => ({
-        ...item,
-        selectedPriceTier: newTier,
-        customPrice: null,
-        overrideReason: '',
-      }))
+      prevCart.map((item) => {
+        if (item.isBundle) {
+          const baseCartonPrice = Number(item.cartonPrice || item.unitPrice || 0);
+          const cartonCount = Number(item.cartonQty ?? 0);
+          const looseTotal = Number(item.loosePriceTotal || 0);
+          const newLineTotal = (baseCartonPrice * cartonCount) + looseTotal;
+          return {
+            ...item,
+            selectedPriceTier: newTier,
+            customPrice: null,
+            overrideReason: '',
+            lineTotal: newLineTotal,
+          };
+        }
+        return {
+          ...item,
+          selectedPriceTier: newTier,
+          customPrice: null,
+          overrideReason: '',
+        };
+      })
     );
   };
 
@@ -1634,12 +1739,12 @@ export default function App() {
       removeFromCart(productId, unitId);
       return;
     }
-    const currentItem = cart.find((item) => item.product.id === productId && item.unit.id === unitId);
+    const currentItem = cart.find((item) => !item.isBundle && item.product?.id === productId && item.unit?.id === unitId);
     const delta = currentItem ? newQty - currentItem.quantity : 1;
 
     setCart(
       cart.map((item) => {
-        if (item.product.id === productId && item.unit.id === unitId) {
+        if (!item.isBundle && item.product?.id === productId && item.unit?.id === unitId) {
           const newMissing = item.noEmptyCrates
             ? Math.max(1, Math.min(newQty, item.missingCratesCount || newQty))
             : item.missingCratesCount;
@@ -1659,7 +1764,7 @@ export default function App() {
   const toggleCartItemCrateDeposit = (productId, unitId, checked) => {
     setCart((prev) =>
       prev.map((it) => {
-        if (it.product.id === productId && it.unit.id === unitId) {
+        if (!it.isBundle && it.product?.id === productId && it.unit?.id === unitId) {
           return {
             ...it,
             noEmptyCrates: checked,
@@ -1675,7 +1780,7 @@ export default function App() {
   const updateMissingCrates = (productId, unitId, newCount) => {
     setCart((prev) =>
       prev.map((it) => {
-        if (it.product.id === productId && it.unit.id === unitId) {
+        if (!it.isBundle && it.product?.id === productId && it.unit?.id === unitId) {
           const clamped = Math.max(1, Math.min(it.quantity, Number(newCount) || 1));
           return {
             ...it,
@@ -1690,7 +1795,12 @@ export default function App() {
   };
 
   const removeFromCart = (productId, unitId) => {
-    setCart(cart.filter((item) => !(item.product.id === productId && item.unit.id === unitId)));
+    setCart(
+      cart.filter((item) => {
+        if (item.isBundle && (item.id === productId || item.bundleId === productId)) return false;
+        return !(item.product?.id === productId && item.unit?.id === unitId);
+      })
+    );
     // Bold, distinctive descending tone for item removal
     playRemoveFromCartBeep();
   };
@@ -1699,14 +1809,14 @@ export default function App() {
     if (!newUnit) return;
     setCart((prevCart) => {
       const oldIndex = prevCart.findIndex(
-        (it) => it.product.id === productId && (it.unit.id === oldUnitId || it.unit.unitName === oldUnitId)
+        (it) => it.product?.id === productId && (it.unit?.id === oldUnitId || it.unit?.unitName === oldUnitId)
       );
       if (oldIndex === -1) return prevCart;
 
       const oldItem = prevCart[oldIndex];
       // Check if item with newUnit already exists in cart
       const existingIndex = prevCart.findIndex(
-        (it, idx) => idx !== oldIndex && it.product.id === productId && (it.unit.id === newUnit.id || it.unit.unitName === newUnit.unitName)
+        (it, idx) => idx !== oldIndex && it.product?.id === productId && (it.unit?.id === newUnit.id || it.unit?.unitName === newUnit.unitName)
       );
 
       if (existingIndex !== -1) {
@@ -1751,7 +1861,7 @@ export default function App() {
   const toggleCartItemHalfCarton = (productId, unitId, isHalf) => {
     setCart((prevCart) =>
       prevCart.map((item) => {
-        if (item.product.id === productId && (item.unit.id === unitId || item.unit.unitName === unitId)) {
+        if (item.product?.id === productId && (item.unit?.id === unitId || item.unit?.unitName === unitId)) {
           return {
             ...item,
             isHalfCarton: isHalf !== undefined ? Boolean(isHalf) : !item.isHalfCarton,
@@ -1766,6 +1876,13 @@ export default function App() {
 
   const cartSubtotal = useMemo(() => {
     return cart.reduce((sum, item) => {
+      // Mixed Carton Bundle uses precalculated lineTotal
+      if (item.isBundle) {
+        if (item.customPrice !== undefined && item.customPrice !== null) {
+          return sum + Number(item.customPrice);
+        }
+        return sum + (Number(item.lineTotal) || 0);
+      }
       const tierPrice = getEffectiveUnitPrice(item.unit, item.selectedPriceTier || 1);
       const standardPrice = item.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
       const price =
@@ -1939,13 +2056,40 @@ export default function App() {
 
       let totalCost = 0;
       cart.forEach((it) => {
-        const fullMult = Number(it.unit.multiplier || 1);
-        const effectiveMult = it.isHalfCarton ? fullMult / 2 : fullMult;
-        totalCost += (it.product.costPerBaseUnit || 0) * effectiveMult * it.quantity;
+        if (it.isBundle) {
+          (it.bundleComponents || []).forEach((c) => {
+            const compCost = Number(c.product?.costPerBaseUnit ?? c.costPerBaseUnit ?? 0);
+            totalCost += compCost * (Number(c.quantity) || 1);
+          });
+        } else {
+          const fullMult = Number(it.unit?.multiplier || 1);
+          const effectiveMult = it.isHalfCarton ? fullMult / 2 : fullMult;
+          totalCost += (it.product?.costPerBaseUnit || 0) * effectiveMult * it.quantity;
+        }
       });
       const grossProfit = cartSubtotal - totalCost;
 
       const receiptItems = cart.map((it) => {
+        if (it.isBundle) {
+          const effectivePrice =
+            it.customPrice !== undefined && it.customPrice !== null
+              ? Number(it.customPrice)
+              : (it.cartonPrice || it.unitPrice || 0);
+          return {
+            ...it,
+            productId: it.bundleId || it.id,
+            productName: it.bundleName || 'ນົມກ່ອງ ລວມລົດຊາດ',
+            name_vi: it.bundleNameVi || '',
+            nameVi: it.bundleNameVi || '',
+            unitName: it.unitName || 'ແກັດ',
+            unitPrice: effectivePrice,
+            customPrice: it.customPrice,
+            lineTotal: it.lineTotal,
+            isBundle: true,
+            bundleComponents: it.bundleComponents || [],
+          };
+        }
+
         const tierPrice = getEffectiveUnitPrice(it.unit, it.selectedPriceTier || 1);
         const standardPrice = it.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
         const effectivePrice =
@@ -2080,18 +2224,31 @@ export default function App() {
         // Prepare stock deductions for tracked products
         const stockDeductions = [];
         const updatedProducts = products.map((prod) => {
-          const soldItems = cart.filter((it) => it.product.id === prod.id);
-          if (soldItems.length === 0) return prod;
+          const soldItems = cart.filter((it) => !it.isBundle && it.product?.id === prod.id);
+
+          // Calculate bundle component deductions
+          let bundleSoldQty = 0;
+          cart.filter((it) => it.isBundle && it.bundleComponents).forEach((bundle) => {
+            (bundle.bundleComponents || []).forEach((comp) => {
+              if (comp.productId === prod.id || comp.product?.id === prod.id) {
+                bundleSoldQty += Number(comp.quantity) || 0;
+              }
+            });
+          });
+
+          if (soldItems.length === 0 && bundleSoldQty === 0) return prod;
 
           if (prod.trackStock === false) {
             return prod;
           }
 
-          const totalBaseUnitsSold = soldItems.reduce((sum, it) => {
-            const mult = Number(it.unit.multiplier || 1);
+          const regularBaseSold = soldItems.reduce((sum, it) => {
+            const mult = Number(it.unit?.multiplier || 1);
             const effMult = it.isHalfCarton ? mult / 2 : mult;
             return sum + effMult * it.quantity;
           }, 0);
+
+          const totalBaseUnitsSold = regularBaseSold + bundleSoldQty;
 
           const currentStock = prod.currentStockBaseUnits ?? 0;
           const newStock = currentStock - totalBaseUnitsSold;
@@ -2573,12 +2730,19 @@ export default function App() {
     }
   };
 
-  // Strictly list categories from database: 'ທັງໝົດ' + categories loaded from Supabase!
+  // Strictly list categories from database: 'ທັງໝົດ' + optional 'ລວມ' + categories loaded from Supabase!
   const categories = useMemo(() => {
-    return ['ທັງໝົດ', ...categoriesList];
-  }, [categoriesList]);
+    const list = ['ທັງໝົດ'];
+    if (bundles && bundles.length > 0) {
+      list.push('ລວມ');
+    }
+    return [...list, ...categoriesList];
+  }, [categoriesList, bundles]);
 
   const filteredProducts = useMemo(() => {
+    if (activeCategory === 'ລວມ') {
+      return []; // Bundles are rendered directly in PosScreen
+    }
     const q = normalizeLao(searchQuery);
     return products.filter((p) => {
       const matchesCat = activeCategory === 'ທັງໝົດ' || p.category === activeCategory;
@@ -2759,6 +2923,7 @@ export default function App() {
             setSearchQuery={setSearchQuery}
             filteredProducts={filteredProducts}
             products={products}
+            bundles={bundles}
             isLoading={isLoadingProducts || isRefreshing}
             onRefreshProducts={handleRefreshAllFromSupabase}
             addToCart={addToCart}
@@ -2815,6 +2980,7 @@ export default function App() {
               onDeleteProduct={handleDeleteProduct}
               onRefreshProducts={handleRefreshAllFromSupabase}
               onOpenCategoryManager={() => setCategoryManagerModalOpen(true)}
+              onOpenBundleManager={() => setBundleModalOpen(true)}
               isLoading={isLoadingProducts || isRefreshing}
             />
           </RouteGuard>
@@ -3033,6 +3199,16 @@ export default function App() {
         onUpdateCategory={handleUpdateCategory}
         onDeleteCategory={handleDeleteCategory}
         products={products}
+      />
+
+      <ProductBundleModal
+        isOpen={bundleModalOpen}
+        onClose={() => setBundleModalOpen(false)}
+        products={products}
+        bundles={bundles}
+        exchangeRate={exchangeRate}
+        onSaveBundle={handleSaveBundle}
+        onDeleteBundle={handleDeleteBundle}
       />
 
       <CheckoutModal

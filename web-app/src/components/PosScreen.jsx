@@ -30,8 +30,10 @@ import { formatKip, formatCompoundStock, formatStockDisplay, formatNegativeStock
 import PriceOverrideModal from './PriceOverrideModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import QuotationPreviewModal from './inventory/QuotationPreviewModal';
+import MixedCartonSelectorModal from './MixedCartonSelectorModal';
 import ExchangeRateBadge from './common/ExchangeRateBadge';
 import { PosProductGridSkeleton } from './common/SkeletonLoaders';
+import BundleCollage from './common/BundleCollage';
 import queryClient from '../services/queryClient';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 import {
@@ -124,6 +126,10 @@ function CartQuantityStepper({ quantity, onUpdateQuantity, onStepQuantity }) {
   );
 }
 
+function renderBundleCollage(images, sizeClass = "w-full h-full", fallbackIconSize = 44) {
+  return <BundleCollage images={images} className={sizeClass} fallbackIconSize={fallbackIconSize} />;
+}
+
 export default function PosScreen({
   categories,
   activeCategory,
@@ -132,6 +138,7 @@ export default function PosScreen({
   setSearchQuery,
   filteredProducts,
   products = [],
+  bundles = [],
   addToCart,
   openUnitSelector,
   cart,
@@ -171,6 +178,8 @@ export default function PosScreen({
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [orderMenuOpen, setOrderMenuOpen] = useState(false);
   const [quotationModalOpen, setQuotationModalOpen] = useState(false);
+  const [selectedBundleForModal, setSelectedBundleForModal] = useState(null);
+  const [editingBundleCartItem, setEditingBundleCartItem] = useState(null);
   const searchInputRef = useRef(null);
 
   // High-performance Infinite Scroll / Lazy Load for product catalog (Optimized for 3000+ items)
@@ -230,6 +239,32 @@ export default function PosScreen({
     }
   };
 
+  // Mixed Carton Bundles filter for POS catalog
+  const matchingBundles = useMemo(() => {
+    if (!bundles || bundles.length === 0) return [];
+    if (activeCategory === 'ລວມ' || activeCategory === '📦 ລວມ') {
+      if (!searchQuery?.trim()) return bundles;
+      const q = normalizeLao(searchQuery.trim());
+      return bundles.filter(
+        (b) =>
+          normalizeLao(b.name).includes(q) ||
+          normalizeLao(b.name_vi || '').includes(q) ||
+          (b.barcode && b.barcode.toLowerCase().includes(q.toLowerCase()))
+      );
+    }
+    if (activeCategory === 'ທັງໝົດ') {
+      if (!searchQuery?.trim()) return bundles;
+      const q = normalizeLao(searchQuery.trim());
+      return bundles.filter(
+        (b) =>
+          normalizeLao(b.name).includes(q) ||
+          normalizeLao(b.name_vi || '').includes(q) ||
+          (b.barcode && b.barcode.toLowerCase().includes(q.toLowerCase()))
+      );
+    }
+    return [];
+  }, [bundles, activeCategory, searchQuery]);
+
   const handleClearSearch = () => {
     if (setSearchQuery) {
       setSearchQuery('');
@@ -242,6 +277,23 @@ export default function PosScreen({
   const handleScanBarcode = (barcode) => {
     if (!barcode) return;
     const cleanCode = String(barcode).trim().toLowerCase();
+
+    // Check if barcode matches any mixed carton bundle
+    const matchedBundle = (bundles || []).find(
+      (b) => b.barcode && String(b.barcode).trim().toLowerCase() === cleanCode
+    );
+    if (matchedBundle) {
+      setSelectedBundleForModal(matchedBundle);
+      playSuccessBeep();
+      setScannerOpen(false);
+      setSearchQuery?.('');
+      setScanToast({
+        type: 'success',
+        message: `ເປີດເລືອກລົດຊາດ: "${matchedBundle.name}"!`,
+      });
+      setTimeout(() => setScanToast(null), 3000);
+      return;
+    }
 
     // Check all products
     const productPool = products && products.length > 0 ? products : filteredProducts;
@@ -311,7 +363,7 @@ export default function PosScreen({
   const handleApplyPriceOverride = (productId, unitId, newPrice, reason) => {
     setCart(
       cart.map((item) => {
-        if (item.product.id === productId && item.unit.id === unitId) {
+        if (!item.isBundle && item.product?.id === productId && item.unit?.id === unitId) {
           return {
             ...item,
             customPrice: newPrice,
@@ -326,12 +378,78 @@ export default function PosScreen({
   const handleResetPriceOverride = (productId, unitId) => {
     setCart(
       cart.map((item) => {
-        if (item.product.id === productId && item.unit.id === unitId) {
+        if (!item.isBundle && item.product?.id === productId && item.unit?.id === unitId) {
           const { customPrice, overrideReason, ...rest } = item;
           return rest;
         }
         return item;
       })
+    );
+  };
+
+  const handleApplyBundlePriceOverride = (bundleItemId, newPrice, reason) => {
+    setCart(
+      cart.map((item) => {
+        if (item.id === bundleItemId) {
+          const overrideVal = Number(newPrice) || 0;
+          return {
+            ...item,
+            customPrice: overrideVal,
+            lineTotal: overrideVal,
+            overrideReason: reason || 'ປັບລາຄາພິເສດ',
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleResetBundlePriceOverride = (bundleItemId) => {
+    setCart(
+      cart.map((item) => {
+        if (item.id === bundleItemId) {
+          const { customPrice, overrideReason, ...rest } = item;
+          const cartonCount = Number(item.cartonQty ?? 0);
+          const origCartonPrice = Number(item.cartonPrice || item.unitPrice || 0);
+          const looseTotal = Number(item.loosePriceTotal || 0);
+          const newLineTotal = (origCartonPrice * cartonCount) + looseTotal;
+          return {
+            ...rest,
+            lineTotal: newLineTotal,
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  // Open Mixed Carton Modal to edit an existing cart bundle item
+  const handleOpenEditBundleModal = (cartItem) => {
+    playActionClickBeep();
+    const bDef = (bundles || []).find((b) => b.id === cartItem.bundleId);
+    const bundleToOpen = bDef
+      ? {
+          ...bDef,
+          price_lak: bDef.price_lak || cartItem.cartonPrice,
+        }
+      : {
+          id: cartItem.bundleId,
+          name: cartItem.bundleName,
+          name_vi: cartItem.bundleNameVi,
+          package_qty: cartItem.packageQty,
+          unit_name: cartItem.unitName,
+          base_unit_name: cartItem.baseUnitName,
+          price_lak: cartItem.cartonPrice,
+          itemIds: (cartItem.bundleComponents || []).map((c) => c.productId || c.product_id),
+        };
+
+    setEditingBundleCartItem(cartItem);
+    setSelectedBundleForModal(bundleToOpen);
+  };
+
+  const handleUpdateBundleCartItem = (itemId, updatedItem) => {
+    setCart((prevCart) =>
+      prevCart.map((it) => (it.id === itemId ? updatedItem : it))
     );
   };
 
@@ -626,6 +744,268 @@ export default function PosScreen({
       {/* 3. High-Density Cart Item List (BẮT BUỘC flex-1 VÀ overflow-y-auto để cuộn độc lập) */}
       <div className="flex-1 overflow-y-auto overscroll-contain p-2 space-y-2 min-h-0">
         {cart.map((item) => {
+          if (item.isBundle) {
+            const isPriceMenuOpen = openPriceMenuKey === item.id;
+            const isOverridden = item.customPrice !== undefined && item.customPrice !== null;
+            const cartonCount = Number(item.cartonQty ?? 0);
+            const cartonPrice = Number(item.cartonPrice || 0);
+            const looseTotal = Number(item.loosePriceTotal || 0);
+            const standardLinePrice = (cartonCount * cartonPrice) + looseTotal;
+            const effectivePrice = isOverridden
+              ? Number(item.customPrice)
+              : (item.lineTotal !== undefined && item.lineTotal !== null ? Number(item.lineTotal) : standardLinePrice);
+
+            return (
+              <div
+                key={item.id}
+                className={`p-1.5 px-2 rounded-lg border bg-white flex flex-col gap-1 transition-all shadow-2xs ${
+                  isPriceMenuOpen ? 'relative z-40 overflow-visible' : 'relative z-0'
+                } ${
+                  isOverridden ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200/80 hover:border-slate-300'
+                }`}
+              >
+                {/* Product Thumbnail (Left) + 2 Rows (Right) */}
+                <div className="flex items-center gap-2">
+                  {/* Thumbnail 36x36 Collage from Child Flavors */}
+                  <div className="w-9 h-9 rounded-md bg-teal-50 overflow-hidden shrink-0 border border-teal-200/80 flex items-center justify-center self-center text-teal-700 shadow-2xs">
+                    {(() => {
+                      const compImages = (item.bundleComponents || [])
+                        .map((c) => {
+                          const prod = c.product || (products || []).find((p) => p.id === (c.productId || c.product_id));
+                          return prod?.imageUrl || prod?.image_url;
+                        })
+                        .filter(Boolean);
+
+                      let allImages = compImages;
+                      if (allImages.length === 0 && item.bundleId) {
+                        const bDef = (bundles || []).find((b) => b.id === item.bundleId);
+                        const bItemIds = bDef?.itemIds || (bDef?.product_bundle_items || []).map((it) => it.product_id) || [];
+                        allImages = (products || [])
+                          .filter((p) => bItemIds.includes(p.id))
+                          .map((p) => p.imageUrl || p.image_url)
+                          .filter(Boolean);
+                      }
+                      if (allImages.length === 0 && item.bundleChildImages) {
+                        allImages = item.bundleChildImages;
+                      }
+
+                      return <BundleCollage images={allImages} className="w-full h-full" fallbackIconSize={18} />;
+                    })()}
+                  </div>
+
+                  {/* 2 Rows Container */}
+                  <div className="flex-1 min-w-0 flex flex-col justify-between gap-0.5">
+                    {/* Row 1: Name & Badge (Left) vs Single Price Button (Right) */}
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="font-semibold text-xs text-slate-900 truncate" title={item.bundleName}>
+                          {item.bundleName}
+                        </span>
+                        <span className="px-1 py-0.2 rounded text-[8.5px] font-bold bg-teal-100 text-teal-800 border border-teal-200 shrink-0 flex items-center gap-0.5">
+                          <Package size={9} weight="duotone" />
+                          <span>Mix</span>
+                        </span>
+                      </div>
+
+                      {/* Right: DUY NHẤT 1 GIÁ NÚT BẤM [ <Tag /> {effectivePrice} ₭ <CaretDown /> ] */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isPriceMenuOpen) {
+                                setOpenPriceMenuKey(null);
+                              } else {
+                                setOpenPriceMenuKey(item.id);
+                                setCustomPriceInput(effectivePrice > 0 ? formatDots(effectivePrice) : '');
+                              }
+                            }}
+                            className={`h-6 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-md px-2 text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs ${
+                              isOverridden ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-400/40' : ''
+                            }`}
+                            title="ກົດເພື່ອປັບລາຄາພິເສດ"
+                          >
+                            <Tag size={11} weight="bold" className={isOverridden ? 'text-amber-800' : 'text-teal-700'} />
+                            <span className="font-mono tabular-nums">{formatDots(effectivePrice)} ₭</span>
+                            <CaretDown size={10} weight="bold" className="opacity-70" />
+                          </button>
+
+                          {/* Price popover: Only real price and custom price */}
+                          {isPriceMenuOpen && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-40"
+                                onClick={() => setOpenPriceMenuKey(null)}
+                              />
+                              <div className="absolute right-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-lg border border-slate-200 p-2 min-w-[260px] max-w-[280px] w-[270px] flex flex-col gap-1 animate-in fade-in-50 zoom-in-95">
+                                {/* Header */}
+                                <div className="px-1 py-0.5 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                                  <span>ເລືອກລະດັບລາຄາ:</span>
+                                  <span className="text-teal-700 font-extrabold">
+                                    {cartonCount > 0 ? `${cartonCount} ${item.unitName || 'ແກັດ'}` : ''}
+                                    {cartonCount > 0 && Number(item.looseQty || 0) > 0 ? ' + ' : ''}
+                                    {Number(item.looseQty || 0) > 0 ? `${item.looseQty} ${item.baseUnitName || 'ອັນ'}` : ''}
+                                  </span>
+                                </div>
+
+                                {/* Real standard price */}
+                                <div className="flex flex-col gap-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      playPriceTierBeep();
+                                      handleResetBundlePriceOverride(item.id);
+                                      setOpenPriceMenuKey(null);
+                                    }}
+                                    className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg hover:bg-slate-50 cursor-pointer text-xs transition-colors ${
+                                      !isOverridden
+                                        ? 'bg-teal-50 text-teal-900 font-bold'
+                                        : 'text-slate-700 font-medium'
+                                    }`}
+                                  >
+                                    <span className={`whitespace-nowrap ${!isOverridden ? 'text-teal-950 font-bold' : 'text-slate-700'}`}>
+                                      ລາຄາມາດຕະຖານ
+                                    </span>
+                                    <div className="font-bold text-slate-900 whitespace-nowrap flex items-center gap-1.5 font-mono tabular-nums shrink-0">
+                                      <span>{formatDots(standardLinePrice)} ₭</span>
+                                      {!isOverridden && (
+                                        <Check size={14} weight="bold" className="text-teal-600 shrink-0" />
+                                      )}
+                                    </div>
+                                  </button>
+                                </div>
+
+                                {/* Divider */}
+                                <div className="border-t border-slate-100 my-1.5" />
+
+                                {/* Custom price input */}
+                                <div className="flex flex-col gap-1 px-1">
+                                  <span className="text-[10.5px] font-bold text-slate-500">
+                                    ປ້ອນລາຄາຕາມໃຈ (Custom Price):
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={customPriceInput}
+                                      onChange={(e) => {
+                                        const cleanVal = e.target.value.replace(/\D/g, '');
+                                        if (!cleanVal) {
+                                          setCustomPriceInput('');
+                                        } else {
+                                          setCustomPriceInput(Number(cleanVal).toLocaleString('de-DE'));
+                                        }
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          const cleanVal = String(customPriceInput).replace(/\D/g, '');
+                                          const parsed = parseInt(cleanVal, 10);
+                                          if (parsed > 0) {
+                                            playPriceTierBeep();
+                                            handleApplyBundlePriceOverride(item.id, parsed, 'ປັບລາຄາພິເສດ');
+                                            setOpenPriceMenuKey(null);
+                                          }
+                                        }
+                                      }}
+                                      placeholder="ປ້ອນລາຄາ..."
+                                      className="flex-1 h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-mono font-bold tabular-nums focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const cleanVal = String(customPriceInput).replace(/\D/g, '');
+                                        const parsed = parseInt(cleanVal, 10);
+                                        if (parsed > 0) {
+                                          playPriceTierBeep();
+                                          handleApplyBundlePriceOverride(item.id, parsed, 'ປັບລາຄາພິເສດ');
+                                          setOpenPriceMenuKey(null);
+                                        }
+                                      }}
+                                      className="h-8 px-3 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
+                                    >
+                                      OK
+                                    </button>
+                                  </div>
+                                  {isOverridden && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        playPriceTierBeep();
+                                        handleResetBundlePriceOverride(item.id);
+                                        setOpenPriceMenuKey(null);
+                                      }}
+                                      className="text-[10px] text-rose-600 hover:text-rose-700 font-bold text-center mt-1 py-0.5 cursor-pointer"
+                                    >
+                                      ຣີເຊັດກັບລາຄາເດີມ
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Row 2: Unit Breakdown (Left) vs Edit & Trash buttons (Right) */}
+                    <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                      <div className="flex items-center min-w-0">
+                        <div
+                          onClick={() => handleOpenEditBundleModal(item)}
+                          className="inline-flex items-center bg-slate-100 hover:bg-slate-200/70 p-0.5 px-2 rounded-md border border-slate-200/80 gap-1 text-[11px] font-bold text-slate-700 cursor-pointer transition-all active:scale-95"
+                          title="ກົດເພື່ອແກ້ໄຂລົດຊາດ ແລະ ຈຳນວນ"
+                        >
+                          <Package size={13} weight="bold" className="text-teal-700" />
+                          <span>{cartonCount > 0 ? `${cartonCount} ${item.unitName || 'ແກັດ'}` : ''}</span>
+                          {cartonCount > 0 && Number(item.looseQty || 0) > 0 && <span className="text-slate-400">+</span>}
+                          {Number(item.looseQty || 0) > 0 && (
+                            <span className="text-amber-800 font-medium">
+                              {item.looseQty} {item.baseUnitName || 'ອັນ'} ຍ່ອຍ
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Bên phải: Nút Sửa & Nút Xóa tận dụng khoảng trống dòng 2 */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditBundleModal(item)}
+                          className="h-6 px-2 rounded-md bg-slate-100 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200 border border-slate-200 text-slate-600 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95 shadow-2xs"
+                          title="ແກ້ໄຂຈຳນວນ & ລົດຊາດ (Sửa số lượng & vị)"
+                        >
+                          <PencilSimple size={12} weight="bold" />
+                          <span>ແກ້ໄຂ</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => removeFromCart(item.id, null)}
+                          className="w-6 h-6 rounded-md flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 cursor-pointer shrink-0 transition-colors"
+                          title="ລຶບລາຍການ"
+                        >
+                          <Trash size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub components breakdown */}
+                {item.bundleComponents && item.bundleComponents.length > 0 && (
+                  <div className="pt-1.5 border-t border-slate-100 space-y-0.5">
+                    {item.bundleComponents.map((c, cIdx) => (
+                      <div key={cIdx} className="flex items-center justify-between text-[10.5px] text-slate-600">
+                        <span className="truncate">• {c.productName}</span>
+                        <span className="font-mono font-extrabold text-teal-800 shrink-0">x{c.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           const itemKey = `${item.product.id}_${item.unit.id}`;
           const currentTier = item.selectedPriceTier || 1;
           const tierPrice = getEffectiveUnitPrice(item.unit, currentTier);
@@ -1399,7 +1779,14 @@ export default function PosScreen({
                         : 'bg-slate-100/90 hover:bg-slate-200/80 text-slate-700 border-transparent'
                     }`}
                   >
-                    {cat}
+                    {cat === 'ລວມ' || cat === '📦 ລວມ' ? (
+                      <span className="flex items-center gap-1">
+                        <Package size={13} weight="duotone" />
+                        <span>ລວມ</span>
+                      </span>
+                    ) : (
+                      cat
+                    )}
                   </button>
                 );
               })}
@@ -1418,7 +1805,99 @@ export default function PosScreen({
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-2.5 w-full">
-                {visibleProducts.map((p) => {
+                {/* 1. Mixed Carton Bundles */}
+                {matchingBundles.map((b) => {
+                  const bundleChildIds = b.itemIds || (b.product_bundle_items || []).map((it) => it.product_id) || [];
+                  const bundleChildProducts = (products || []).filter((p) => bundleChildIds.includes(p.id));
+                  const bundleChildImages = bundleChildProducts
+                    .map((p) => p.imageUrl || p.image_url)
+                    .filter(Boolean);
+
+                  const cartonDisplayPrice = (() => {
+                    if (bundleChildProducts && bundleChildProducts.length > 0) {
+                      for (const p of bundleChildProducts) {
+                        const units = Array.isArray(p.units) ? p.units : [];
+                        const cartonUnit =
+                          units.find(
+                            (u) =>
+                              u.tier === 3 ||
+                              u.id?.endsWith('_carton') ||
+                              ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].includes(u.unitName)
+                          ) || [...units].sort((a, b) => (Number(b.multiplier) || 1) - (Number(a.multiplier) || 1))[0];
+                        
+                        const price = Number(cartonUnit?.retailPrice ?? cartonUnit?.price_1 ?? cartonUnit?.price1 ?? p.cartonPrice ?? 0);
+                        if (price > 0) return price;
+                      }
+                    }
+                    return Number(b.price_lak) || 0;
+                  })();
+
+                  const resolvedBundle = {
+                    ...b,
+                    price_lak: cartonDisplayPrice > 0 ? cartonDisplayPrice : Number(b.price_lak),
+                  };
+
+                  return (
+                    <div
+                      key={b.id}
+                      onClick={() => {
+                        playActionClickBeep();
+                        setSelectedBundleForModal(resolvedBundle);
+                      }}
+                      className="bg-gradient-to-b from-teal-50/50 to-white rounded-xl border-2 border-teal-500/80 hover:border-teal-600 hover:shadow-md transition-all duration-150 flex flex-col justify-between overflow-hidden cursor-pointer group select-none"
+                    >
+                      <div className="p-2 sm:p-2.5 flex-1 flex flex-col">
+                        <div className="relative h-28 sm:h-36 w-full rounded-[10px] overflow-hidden bg-teal-50/80 mb-2 shrink-0 flex items-center justify-center border border-teal-100">
+                          {bundleChildImages.length > 0 ? (
+                            <BundleCollage images={bundleChildImages} className="w-full h-full" fallbackIconSize={44} />
+                          ) : (b.image_url || b.imageUrl) ? (
+                            <img
+                              src={b.image_url || b.imageUrl}
+                              alt=""
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center text-teal-600">
+                              <Package size={44} weight="duotone" />
+                              <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 mt-1">
+                                {b.package_qty} {b.base_unit_name || 'ອັນ'}/{b.unit_name || 'ແກັດ'}
+                              </span>
+                            </div>
+                          )}
+                          <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-teal-600 text-[9.5px] font-black text-white shadow-xs flex items-center gap-1 z-10">
+                            <Package size={11} weight="duotone" />
+                            <span>ຍົກລັງ Mix</span>
+                          </span>
+                        </div>
+
+                        <div className="flex-1 flex flex-col justify-between">
+                          <div>
+                            <h3 className="font-black text-xs sm:text-sm text-slate-900 line-clamp-2 leading-tight">
+                              {b.name}
+                            </h3>
+                            {b.name_vi && (
+                              <p className="text-[10.5px] text-slate-500 line-clamp-1 mt-0.5">
+                                {b.name_vi}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="mt-2 pt-2 border-t border-teal-100 flex items-baseline justify-between">
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-bold">ລາຄາຍົກລັງ:</span>
+                              <span className="text-xs sm:text-sm font-black font-mono text-teal-800">
+                                {formatKip(cartonDisplayPrice)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* 2. Normal Products */}
+                {activeCategory !== 'ລວມ' && activeCategory !== '📦 ລວມ' && visibleProducts.map((p) => {
                   const rawStock = p.currentStockBaseUnits ?? p.current_stock_base_units;
                   const hasTrackStock = p.trackStock !== false;
                   const stockVal = hasTrackStock && rawStock !== null && rawStock !== undefined && !isNaN(rawStock) ? Number(rawStock) : null;
@@ -1555,7 +2034,7 @@ export default function PosScreen({
                 })}
 
                 {/* Sentinel & smooth loader indicator at bottom */}
-                {visibleLimit < filteredProducts.length && (
+                {activeCategory !== 'ລວມ' && activeCategory !== '📦 ລວມ' && visibleLimit < filteredProducts.length && (
                   <div
                     ref={sentinelRef}
                     className="col-span-full py-3.5 flex items-center justify-center text-xs font-bold text-slate-400 gap-2"
@@ -1567,7 +2046,7 @@ export default function PosScreen({
                 )}
               </div>
 
-              {!isLoading && filteredProducts.length === 0 && (
+              {!isLoading && filteredProducts.length === 0 && matchingBundles.length === 0 && (
                 <div className="py-16 text-center text-slate-400">
                   <Package size={40} className="mx-auto mb-2 opacity-40 text-slate-400" />
                   <p className="text-xs font-bold text-slate-600">
@@ -1718,6 +2197,22 @@ export default function PosScreen({
         cartSubtotal={cartSubtotal}
         customerName={customerName}
         products={products}
+      />
+
+      {/* Mixed Carton Bundle Selector Modal */}
+      <MixedCartonSelectorModal
+        isOpen={Boolean(selectedBundleForModal)}
+        onClose={() => {
+          setSelectedBundleForModal(null);
+          setEditingBundleCartItem(null);
+        }}
+        bundle={selectedBundleForModal}
+        products={products}
+        exchangeRate={exchangeRate}
+        onAddToCart={addToCart}
+        editingCartItem={editingBundleCartItem}
+        onUpdateCartItem={handleUpdateBundleCartItem}
+        onRemoveFromCart={removeFromCart}
       />
     </main>
   );

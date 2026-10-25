@@ -595,6 +595,18 @@ export default function ReceiptModal({
                       </span>
                     </div>
 
+                    {/* Bundle child flavor breakdown */}
+                    {(it.bundle_components || it.bundleComponents) && (it.bundle_components || it.bundleComponents).length > 0 && (
+                      <div className="pl-4 pt-0.5 space-y-0.5 text-[10.5px] text-slate-600">
+                        {(it.bundle_components || it.bundleComponents).map((comp, cIdx) => (
+                          <div key={cIdx} className="flex justify-between items-center italic">
+                            <span className="truncate">- {comp.product_name || comp.productName}</span>
+                            <span className="font-mono font-bold text-slate-800 shrink-0">x{comp.quantity}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Crate Deposit row for bottles/beers without empty crates to exchange (+30.000 ₭/crate) */}
                     {hasMissingCrates && missingCount > 0 && (
                       <div className="flex justify-between items-center pl-3 text-[10px] text-amber-900 pt-0.5">

@@ -860,29 +860,55 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
     const grossProfitThb = Number(tx.gross_profit_thb ?? tx.grossProfitThb ?? Number((totalThb - totalCostThb).toFixed(2)));
 
     const checkoutItems = (tx.items || []).map((item) => {
-      const prodId = item.product?.id || item.productId || 'p_custom';
+      const isBundle = Boolean(item.isBundle || item.bundle_components?.length || item.bundleComponents?.length);
+      const prodId = isBundle
+        ? (item.bundleId || item.bundle?.id || item.productId || 'bnd_custom')
+        : (item.product?.id || item.productId || 'p_custom');
+
       const unitPrice = Number(
         item.customPrice !== undefined
           ? item.customPrice
+          : isBundle
+          ? (item.unitPrice || item.cartonPrice || item.bundle?.price_lak || 0)
           : tx.isWholesale
           ? item.unit?.wholesalePrice
           : item.unit?.retailPrice
       ) || 0;
       const qty = Number(item.quantity) || 1;
-      const lineTotal = Number(item.lineTotal || (unitPrice * qty));
+      const lineTotal = Number(item.lineTotal !== undefined ? item.lineTotal : (unitPrice * qty));
       const fullMult = Number(item.effectiveMultiplier ?? item.unit?.multiplier) || 1;
       const multiplier = item.isHalfCarton ? fullMult / 2 : fullMult;
       const baseCost = Number(item.product?.costPerBaseUnit) || 0;
-      const lineCost = baseCost * multiplier * qty;
+
+      // Extract bundle components breakdown if item is a bundle
+      const bundleComponents = isBundle
+        ? (item.bundleComponents || item.bundle_components || []).map((c) => ({
+            product_id: c.productId || c.product_id,
+            product_name: c.productName || c.product_name,
+            quantity: Number(c.quantity) || 1,
+            unit_price: Number(c.unitPrice ?? c.unit_price) || 0,
+          }))
+        : null;
+
+      let lineCost = 0;
+      if (isBundle && bundleComponents && bundleComponents.length > 0) {
+        // Line cost of a bundle is the sum of cost of all child flavor components
+        lineCost = (item.bundleComponents || []).reduce((sum, c) => {
+          const compCost = Number(c.product?.costPerBaseUnit ?? c.costPerBaseUnit ?? 0);
+          return sum + compCost * (Number(c.quantity) || 1);
+        }, 0);
+      } else {
+        lineCost = baseCost * multiplier * qty;
+      }
       const lineProfit = lineTotal - lineCost;
 
-      const rawUnitName = item.unit?.unitName || item.unitName || 'ອັນ';
+      const rawUnitName = item.unit?.unitName || item.unitName || (isBundle ? (item.bundle?.unit_name || 'ແກັດ') : 'ອັນ');
       const unitName = item.isHalfCarton && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
 
-      return {
+      const mappedItem = {
         id: generateUUID(),
         product_id: prodId,
-        product_name: item.productName || item.product?.name || 'ສິນຄ້າ',
+        product_name: item.productName || item.product?.name || item.bundleName || (isBundle ? 'ນົມກ່ອງ ລວມລົດຊາດ' : 'ສິນຄ້າ'),
         unit_name: unitName,
         multiplier,
         quantity: qty,
@@ -891,6 +917,12 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
         line_cost: lineCost,
         line_profit: lineProfit,
       };
+
+      if (bundleComponents && bundleComponents.length > 0) {
+        mappedItem.bundle_components = bundleComponents;
+      }
+
+      return mappedItem;
     });
 
     const checkoutPayload = {
@@ -2473,6 +2505,154 @@ export async function markOrderAsPrintedInSupabase(orderId) {
   }
 }
 
+// ============================================================================
+// MIXED CARTON BUNDLES (NHÓM SẢN PHẨM ĐÓNG THÙNG MIX MÀU / MIX VỊ)
+// ============================================================================
 
+const BUNDLE_LOCAL_STORAGE_KEY = 'meiishop_product_bundles_v1';
 
+/**
+ * Lấy danh sách các nhóm thùng mix vị từ Supabase (kèm danh sách mã sản phẩm vị con)
+ */
+export async function fetchProductBundlesFromSupabase() {
+  try {
+    // 1. Fetch bundles from Supabase
+    const { data: bundlesData, error: bundlesErr } = await supabase
+      .from('product_bundles')
+      .select('*, product_bundle_items(*)')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
 
+    if (bundlesErr) {
+      console.warn('[Supabase] fetchProductBundles warning (using local fallback if available):', bundlesErr.message);
+      // Fallback local storage
+      const local = typeof window !== 'undefined' ? localStorage.getItem(BUNDLE_LOCAL_STORAGE_KEY) : null;
+      return local ? JSON.parse(local) : [];
+    }
+
+    const bundles = (bundlesData || []).map((b) => ({
+      ...b,
+      itemIds: (b.product_bundle_items || []).map((item) => item.product_id),
+    }));
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(BUNDLE_LOCAL_STORAGE_KEY, JSON.stringify(bundles));
+    }
+
+    return bundles;
+  } catch (err) {
+    console.error('fetchProductBundlesFromSupabase exception:', err);
+    const local = typeof window !== 'undefined' ? localStorage.getItem(BUNDLE_LOCAL_STORAGE_KEY) : null;
+    return local ? JSON.parse(local) : [];
+  }
+}
+
+/**
+ * Thêm mới hoặc Cập nhật nhóm thùng mix vị
+ */
+export async function saveProductBundleToSupabase(bundle, childProductIds = []) {
+  try {
+    const isEdit = Boolean(bundle.id && !bundle.id.startsWith('temp_'));
+    const bundleId = isEdit ? bundle.id : ('bnd_' + generateUUID().replace(/-/g, '').substring(0, 12));
+
+    const bundlePayload = {
+      id: bundleId,
+      name: bundle.name || 'ນົມກ່ອງ ລວມລົດຊາດ',
+      name_vi: bundle.name_vi || bundle.nameVi || '',
+      package_qty: Number(bundle.package_qty || bundle.packageQty) || 24,
+      unit_name: bundle.unit_name || bundle.unitName || 'ແກັດ',
+      base_unit_name: bundle.base_unit_name || bundle.baseUnitName || 'ອັນ',
+      price_lak: Number(bundle.price_lak || bundle.priceLak) || 0,
+      price_thb: Number(bundle.price_thb || bundle.priceThb) || 0,
+      barcode: bundle.barcode || null,
+      image_url: bundle.image_url || bundle.imageUrl || null,
+      is_active: bundle.is_active !== false,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (!isEdit) {
+      bundlePayload.created_at = new Date().toISOString();
+    }
+
+    // 1. Upsert bundle header
+    const { data: savedBundle, error: bErr } = await supabase
+      .from('product_bundles')
+      .upsert(bundlePayload)
+      .select()
+      .single();
+
+    if (bErr) {
+      console.warn('[Supabase] saveProductBundle warning, updating local cache:', bErr.message);
+      // Local fallback
+      try {
+        const local = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem(BUNDLE_LOCAL_STORAGE_KEY) || '[]') : [];
+        const index = local.findIndex((x) => x.id === bundleId);
+        const merged = { ...bundlePayload, itemIds: childProductIds };
+        if (index >= 0) local[index] = merged;
+        else local.unshift(merged);
+        localStorage.setItem(BUNDLE_LOCAL_STORAGE_KEY, JSON.stringify(local));
+      } catch (e) {}
+      return { success: true, data: { ...bundlePayload, itemIds: childProductIds }, via: 'local' };
+    }
+
+    // 2. Refresh child products relation in product_bundle_items
+    if (childProductIds && Array.isArray(childProductIds)) {
+      // Delete old items
+      await supabase.from('product_bundle_items').delete().eq('bundle_id', bundleId);
+
+      // Insert new items
+      if (childProductIds.length > 0) {
+        const itemsToInsert = childProductIds.map((pId, idx) => ({
+          bundle_id: bundleId,
+          product_id: pId,
+          sort_order: idx,
+        }));
+        const { error: itemsErr } = await supabase.from('product_bundle_items').insert(itemsToInsert);
+        if (itemsErr) console.warn('[Supabase] insert product_bundle_items warning:', itemsErr);
+      }
+    }
+
+    // Update local cache
+    try {
+      const local = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem(BUNDLE_LOCAL_STORAGE_KEY) || '[]') : [];
+      const index = local.findIndex((x) => x.id === bundleId);
+      const merged = { ...(savedBundle || bundlePayload), itemIds: childProductIds };
+      if (index >= 0) local[index] = merged;
+      else local.unshift(merged);
+      localStorage.setItem(BUNDLE_LOCAL_STORAGE_KEY, JSON.stringify(local));
+    } catch (e) {}
+
+    return { success: true, data: { ...(savedBundle || bundlePayload), itemIds: childProductIds } };
+  } catch (err) {
+    console.error('saveProductBundleToSupabase exception:', err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Xóa hoặc ẩn nhóm thùng mix vị
+ */
+export async function deleteProductBundleInSupabase(bundleId) {
+  try {
+    const { error } = await supabase
+      .from('product_bundles')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', bundleId);
+
+    if (error) {
+      console.warn('[Supabase] deleteProductBundle warning (soft-delete via local):', error.message);
+    }
+
+    // Update local cache
+    try {
+      const local = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem(BUNDLE_LOCAL_STORAGE_KEY) || '[]') : [];
+      const updated = local.filter((x) => x.id !== bundleId);
+      localStorage.setItem(BUNDLE_LOCAL_STORAGE_KEY, JSON.stringify(updated));
+    } catch (e) {}
+
+    return { success: true };
+  } catch (err) {
+    console.error('deleteProductBundleInSupabase exception:', err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
