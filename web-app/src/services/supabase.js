@@ -163,6 +163,9 @@ export async function fetchProductsFromSupabase() {
       return null;
     }
 
+    // Filter out soft-deleted products if is_deleted column is present
+    const activeProducts = prodData.filter((p) => p.is_deleted !== true);
+
     const { data: unitsData, error: unitsErr } = await supabase
       .from('product_units')
       .select('*');
@@ -173,7 +176,7 @@ export async function fetchProductsFromSupabase() {
     }
 
     // Map units to their corresponding products
-    const mapped = prodData.map((p) => {
+    const mapped = activeProducts.map((p) => {
       const pUnits = unitsData
         .filter((u) => u.product_id === p.id)
         .map((u) => {
@@ -386,9 +389,20 @@ export async function saveProductToSupabase(product) {
       updated_at: new Date().toISOString(),
     };
 
-    if (product.categoryId) {
-      prodPayload.category_id = product.categoryId;
+    let targetCategoryId = product.categoryId || null;
+    if (!targetCategoryId && product.category) {
+      try {
+        const { data: matchedCat } = await supabase
+          .from('categories')
+          .select('id')
+          .eq('name', product.category)
+          .maybeSingle();
+        if (matchedCat?.id) {
+          targetCategoryId = matchedCat.id;
+        }
+      } catch (_) {}
     }
+    prodPayload.category_id = targetCategoryId;
     const finalCostThb = product.cost_thb ?? product.costBaht;
     if (finalCostThb !== undefined && finalCostThb !== null && finalCostThb !== '') {
       prodPayload.cost_thb = Math.round(Number(finalCostThb) || 0);
@@ -484,7 +498,24 @@ export const syncProductToSupabase = saveProductToSupabase;
  */
 export async function deleteProductFromSupabase(productId) {
   try {
-    // 1. Delete associated units
+    // Step 1: Attempt soft-delete first if is_deleted column exists
+    const { error: softErr } = await supabase
+      .from('products')
+      .update({
+        is_deleted: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', productId);
+
+    if (!softErr) {
+      try {
+        localStorage.removeItem(`meiishop_prod_meta_${productId}`);
+      } catch (_) {}
+      return { success: true, mode: 'soft' };
+    }
+
+    // Step 2: Fallback to direct delete if is_deleted column not present yet
+    // Delete associated units
     const { error: uErr } = await supabase
       .from('product_units')
       .delete()
@@ -494,7 +525,7 @@ export async function deleteProductFromSupabase(productId) {
       console.warn('Delete product units warning:', uErr);
     }
 
-    // 2. Delete product record
+    // Delete product record
     const { error: pErr } = await supabase
       .from('products')
       .delete()
@@ -502,7 +533,13 @@ export async function deleteProductFromSupabase(productId) {
 
     if (pErr) {
       console.error('Delete product error:', pErr);
-      return { success: false, error: pErr.message || JSON.stringify(pErr) };
+      const isFkErr = pErr.code === '23503' || String(pErr.message).includes('foreign key constraint');
+      return {
+        success: false,
+        error: isFkErr
+          ? 'ສິນຄ້ານີ້ມີປະຫວັດການນຳເຂົ້າສາງ/ບິນຂາຍແລ້ວ. ກະລຸນາ run script migration_fix_product_delete_foreign_keys.sql ໃນ Supabase SQL Editor ເພື່ອປົດລັອກການລຶບ!'
+          : (pErr.message || JSON.stringify(pErr)),
+      };
     }
 
     // Clean up local meta
@@ -510,7 +547,7 @@ export async function deleteProductFromSupabase(productId) {
       localStorage.removeItem(`meiishop_prod_meta_${productId}`);
     } catch (_) {}
 
-    return { success: true };
+    return { success: true, mode: 'hard' };
   } catch (err) {
     console.error('deleteProductFromSupabase exception:', err);
     return { success: false, error: err.message || String(err) };

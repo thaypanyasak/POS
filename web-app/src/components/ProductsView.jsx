@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Warehouse,
   Plus,
@@ -11,7 +11,12 @@ import {
   CheckCircle,
   WarningCircle,
   Folders,
-  XCircle
+  XCircle,
+  MagnifyingGlassPlus,
+  CaretDown,
+  CaretUp,
+  Check,
+  X,
 } from '@phosphor-icons/react';
 import { formatKip, formatBaht, getCartonUnitInfo, formatStockDisplay, formatNegativeStockCompound, normalizeLao } from '../utils/formatters';
 import BarcodeScannerModal from './BarcodeScannerModal';
@@ -217,10 +222,15 @@ export default function ProductsView({
   isLoading,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [categorySearchTerm, setCategorySearchTerm] = useState('');
+  const [previewProduct, setPreviewProduct] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannedHighlightId, setScannedHighlightId] = useState(null);
   const [scanToast, setScanToast] = useState(null);
   const searchInputRef = useRef(null);
+  const categoryDropdownRef = useRef(null);
 
   const handleClearSearch = () => {
     setSearchTerm('');
@@ -229,10 +239,43 @@ export default function ProductsView({
     }
   };
 
+  // Extract categories and product counts
+  const categoryOptions = useMemo(() => {
+    const counts = {};
+    (products || []).forEach((p) => {
+      const cat = (p.category || 'ທົ່ວໄປ').trim();
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    const sortedCategories = Object.keys(counts).sort((a, b) => a.localeCompare(b));
+    return {
+      totalCount: (products || []).length,
+      list: sortedCategories.map((name) => ({
+        name,
+        count: counts[name],
+      })),
+    };
+  }, [products]);
+
+  // Filter categories inside dropdown search
+  const filteredCategoryOptions = useMemo(() => {
+    if (!categorySearchTerm.trim()) return categoryOptions.list;
+    const q = normalizeLao(categorySearchTerm.trim());
+    return categoryOptions.list.filter((cat) => normalizeLao(cat.name).includes(q));
+  }, [categoryOptions.list, categorySearchTerm]);
+
+  // Combined product filtering by category and search query
   const filteredProducts = useMemo(() => {
+    let list = products || [];
+
+    // 1. Category Filter
+    if (selectedCategory && selectedCategory !== 'ALL') {
+      list = list.filter((p) => (p.category || 'ທົ່ວໄປ').trim() === selectedCategory);
+    }
+
+    // 2. Search Query Filter
     const q = normalizeLao(searchTerm);
-    if (!q) return products;
-    return products.filter((p) => {
+    if (!q) return list;
+    return list.filter((p) => {
       return (
         (p.name && normalizeLao(p.name).includes(q)) ||
         (p.barcode && normalizeLao(p.barcode).includes(q)) ||
@@ -245,7 +288,7 @@ export default function ProductsView({
           ))
       );
     });
-  }, [products, searchTerm]);
+  }, [products, searchTerm, selectedCategory]);
 
   const productStats = useMemo(() => {
     let inStock = 0;
@@ -331,16 +374,37 @@ export default function ProductsView({
     }
   };
 
-  // Global Hardware Barcode Scanner Listener for Catalog Screen
-  // Auto-populates search filter and focuses on the matched product immediately
-  useHardwareBarcodeScanner({
-    onScan: handleScanBarcode,
-    enabled: true,
-    maxInterval: 75,
-    minLength: 3,
-    preventDefaultOnEnter: true,
-    cleanActiveInput: true,
-  });
+  // Auto-close category dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        categoryDropdownRef.current &&
+        !categoryDropdownRef.current.contains(event.target)
+      ) {
+        setIsCategoryDropdownOpen(false);
+      }
+    }
+    if (isCategoryDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isCategoryDropdownOpen]);
+
+  // Handle ESC key to close image preview modal or category dropdown
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        if (previewProduct) setPreviewProduct(null);
+        if (isCategoryDropdownOpen) setIsCategoryDropdownOpen(false);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewProduct, isCategoryDropdownOpen]);
 
   return (
     <main
@@ -466,57 +530,212 @@ export default function ProductsView({
         </div>
       </div>
 
-      {/* 2. Search Bar & Barcode Scanner Toolbar */}
+      {/* 2. Search Bar, Category Dropdown & Barcode Scanner Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
-        <div className="relative w-full sm:w-96">
-          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            ref={searchInputRef}
-            id="product-search-input"
-            type="text"
-            data-barcode-replace="true"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ, ໝວດໝູ່ ຫຼື ສະແກນບາໂຄດ..."
-            className="w-full pl-9 pr-32 py-2.5 sm:py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium shadow-2xs min-h-[44px] sm:min-h-0"
-          />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 min-w-0">
+          {/* Barcode & Text Search Input */}
+          <div className="relative flex-1 min-w-0">
+            <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              ref={searchInputRef}
+              id="product-search-input"
+              type="text"
+              data-barcode-replace="true"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ, ໝວດໝູ່ ຫຼື ສະແກນບາໂຄດ..."
+              className="w-full pl-9 pr-32 py-2.5 sm:py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium shadow-2xs min-h-[44px] sm:min-h-0"
+            />
 
-          {/* Quick Clear 'X' Button - placed inside right corner before scanner button */}
-          {searchTerm.length > 0 && (
+            {/* Quick Clear 'X' Button */}
+            {searchTerm.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="absolute right-22 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-all cursor-pointer flex items-center justify-center active:scale-90"
+                title="ລຶບການຄົ້ນຫາ (Clear search)"
+              >
+                <XCircle size={17} weight="fill" />
+              </button>
+            )}
+
+            {/* Barcode / Camera Button inside Search Bar */}
             <button
               type="button"
-              onClick={handleClearSearch}
-              className="absolute right-22 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-all cursor-pointer flex items-center justify-center active:scale-90"
-              title="ລຶບການຄົ້ນຫາ (Clear search)"
+              onClick={() => setScannerOpen(true)}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1.5 sm:py-1 rounded-lg bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center gap-1 active:scale-95"
+              title="ເປີດກ້ອງສະແກນບາໂຄດສິນຄ້າ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
             >
-              <XCircle size={17} weight="fill" />
+              <Barcode size={15} weight="bold" />
+              <span className="text-[10.5px] font-bold">ສະແກນ</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Hardware Scanner Ready"></span>
             </button>
-          )}
+          </div>
 
-          {/* Barcode / Camera Button inside Search Bar */}
-          <button
-            type="button"
-            onClick={() => setScannerOpen(true)}
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1.5 sm:py-1 rounded-lg bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center gap-1 active:scale-95"
-            title="ເປີດກ້ອງສະແກນບາໂຄດສິນຄ້າ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
-          >
-            <Barcode size={15} weight="bold" />
-            <span className="text-[10.5px] font-bold">ສະແກນ</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Hardware Scanner Ready"></span>
-          </button>
+          {/* Searchable Category Select Dropdown */}
+          <div ref={categoryDropdownRef} className="relative w-full sm:w-64 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                playActionClickBeep('products');
+                setIsCategoryDropdownOpen(!isCategoryDropdownOpen);
+              }}
+              className={`w-full px-3 py-2.5 sm:py-2 bg-white border rounded-xl text-xs flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs min-h-[44px] sm:min-h-0 ${
+                isCategoryDropdownOpen
+                  ? 'border-teal-600 ring-2 ring-teal-500/20 text-slate-900'
+                  : selectedCategory !== 'ALL'
+                  ? 'border-teal-500 bg-teal-50/40 text-teal-900 font-bold'
+                  : 'border-slate-200 text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Folders
+                  size={16}
+                  weight={selectedCategory !== 'ALL' ? 'fill' : 'duotone'}
+                  className={selectedCategory !== 'ALL' ? 'text-teal-600 shrink-0' : 'text-slate-400 shrink-0'}
+                />
+                <span className="truncate text-left font-medium">
+                  {selectedCategory === 'ALL' ? 'ທຸກໝວດໝູ່ (All Categories)' : selectedCategory}
+                </span>
+                {selectedCategory !== 'ALL' && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold shrink-0">
+                    {categoryOptions.list.find((c) => c.name === selectedCategory)?.count || 0}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0 text-slate-400">
+                {selectedCategory !== 'ALL' && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedCategory('ALL');
+                      setCategorySearchTerm('');
+                    }}
+                    className="p-0.5 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+                    title="ລ້າງໝວດໝູ່ (Reset)"
+                  >
+                    <X size={13} weight="bold" />
+                  </span>
+                )}
+                {isCategoryDropdownOpen ? (
+                  <CaretUp size={14} weight="bold" className="text-teal-600" />
+                ) : (
+                  <CaretDown size={14} weight="bold" />
+                )}
+              </div>
+            </button>
+
+            {/* Dropdown Popover */}
+            {isCategoryDropdownOpen && (
+              <div className="absolute left-0 right-0 sm:right-auto sm:w-72 top-full mt-1.5 z-50 bg-white border border-slate-200/90 rounded-2xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150 flex flex-col">
+                {/* Search inside Dropdown */}
+                <div className="p-2 border-b border-slate-100 bg-slate-50/70">
+                  <div className="relative">
+                    <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      autoFocus
+                      value={categorySearchTerm}
+                      onChange={(e) => setCategorySearchTerm(e.target.value)}
+                      placeholder="ຄົ້ນຫາຊື່ໝວດໝູ່..."
+                      className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium shadow-2xs"
+                    />
+                    {categorySearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setCategorySearchTerm('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X size={12} weight="bold" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Categories Options List */}
+                <div className="max-h-60 overflow-y-auto p-1.5 space-y-0.5">
+                  {/* Option: All Categories */}
+                  {!categorySearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategory('ALL');
+                        setIsCategoryDropdownOpen(false);
+                        setCategorySearchTerm('');
+                      }}
+                      className={`w-full px-2.5 py-2 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                        selectedCategory === 'ALL'
+                          ? 'bg-teal-50 text-teal-800 font-black'
+                          : 'text-slate-700 hover:bg-slate-100 font-medium'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        {selectedCategory === 'ALL' && <Check size={14} weight="bold" className="text-teal-600" />}
+                        <span>ທຸກໝວດໝູ່ (All Categories)</span>
+                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">
+                        {categoryOptions.totalCount}
+                      </span>
+                    </button>
+                  )}
+
+                  {filteredCategoryOptions.length > 0 ? (
+                    filteredCategoryOptions.map((cat) => {
+                      const isSelected = selectedCategory === cat.name;
+                      return (
+                        <button
+                          key={cat.name}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCategory(cat.name);
+                            setIsCategoryDropdownOpen(false);
+                            setCategorySearchTerm('');
+                          }}
+                          className={`w-full px-2.5 py-2 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-teal-50 text-teal-800 font-black'
+                              : 'text-slate-700 hover:bg-slate-100 font-medium'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 truncate">
+                            {isSelected && <Check size={14} weight="bold" className="text-teal-600 shrink-0" />}
+                            <span className="truncate">{cat.name}</span>
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-bold shrink-0">
+                            {cat.count}
+                          </span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="py-4 text-center text-xs text-slate-400 font-medium">
+                      ບໍ່ພົບໝວດໝູ່ "{categorySearchTerm}"
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {searchTerm && (
+        {/* Active Filter Summary Feedback */}
+        {(searchTerm || selectedCategory !== 'ALL') && (
           <div className="flex items-center justify-between sm:justify-start gap-2">
             <span className="text-xs text-slate-500 font-medium">
-              ພົບ <strong className="text-slate-800">{filteredProducts.length}</strong> ລາຍການ
+              ພົບ <strong className="text-slate-800">{filteredProducts.length}</strong> ສິນຄ້າ
             </span>
             <button
               type="button"
-              onClick={() => setSearchTerm('')}
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedCategory('ALL');
+              }}
               className="text-xs font-bold text-teal-700 hover:underline cursor-pointer py-1 px-2"
             >
-              ລຶບການຄົ້ນຫາ
+              ລຶບຕົວກັ່ນຕອງທັງໝົດ
             </button>
           </div>
         )}
@@ -546,14 +765,28 @@ export default function ProductsView({
               <div className="flex items-start justify-between gap-2.5">
                 <div className="flex items-center gap-3 min-w-0">
                   {p.imageUrl ? (
-                    <img
-                      src={p.imageUrl}
-                      alt={p.name}
-                      className="w-12 h-12 rounded-xl object-cover bg-slate-100 border border-slate-200 shrink-0"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        playActionClickBeep('products');
+                        setPreviewProduct(p);
                       }}
-                    />
+                      className="relative group/thumb cursor-zoom-in shrink-0 rounded-xl overflow-hidden focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      title="ກົດເພື່ອເບິ່ງຮູບຂະໜາດໃຫຍ່ (Click to zoom image)"
+                    >
+                      <img
+                        src={p.imageUrl}
+                        alt={p.name}
+                        className="w-12 h-12 rounded-xl object-cover bg-slate-100 border border-slate-200 transition-transform duration-200 group-hover/thumb:scale-108"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/25 transition-colors flex items-center justify-center">
+                        <MagnifyingGlassPlus size={16} className="text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity drop-shadow" />
+                      </div>
+                    </button>
                   ) : (
                     <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center text-slate-400">
                       <Package size={22} weight="duotone" />
@@ -723,14 +956,28 @@ export default function ProductsView({
                   {/* Image & Name */}
                   <td className="py-3 px-4 flex items-center gap-3">
                     {p.imageUrl ? (
-                      <img
-                        src={p.imageUrl}
-                        alt={p.name}
-                        className="w-11 h-11 rounded-xl object-cover bg-slate-100 border border-slate-200 shrink-0"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playActionClickBeep('products');
+                          setPreviewProduct(p);
                         }}
-                      />
+                        className="relative group/thumb cursor-zoom-in shrink-0 rounded-xl overflow-hidden focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        title="ກົດເພື່ອເບິ່ງຮູບຂະໜາດໃຫຍ່ (Click to zoom image)"
+                      >
+                        <img
+                          src={p.imageUrl}
+                          alt={p.name}
+                          className="w-11 h-11 rounded-xl object-cover bg-slate-100 border border-slate-200 transition-transform duration-200 group-hover/thumb:scale-108"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/25 transition-colors flex items-center justify-center">
+                          <MagnifyingGlassPlus size={15} className="text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity drop-shadow" />
+                        </div>
+                      </button>
                     ) : (
                       <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center text-slate-400">
                         <Package size={20} weight="duotone" />
@@ -928,6 +1175,78 @@ export default function ProductsView({
         title="ສະແກນບາໂຄດຄົ້ນຫາສິນຄ້າ (Product Scanner)"
         description="ສ່ອງກ້ອງຫຼັງໃສ່ບາໂຄດສິນຄ້າເພື່ອກວດສອບ ແລະ ແກ້ໄຂຂໍ້ມູນທັນທີ"
       />
+
+      {/* Product Image Zoom / Lightbox Modal Popup */}
+      {previewProduct && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200"
+          onClick={() => setPreviewProduct(null)}
+        >
+          <div
+            className="relative max-w-xl w-full bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header: Name, Category, Barcode & Close Button */}
+            <div className="p-3.5 sm:p-4 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-900/90">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-black text-white truncate">
+                  {previewProduct.name}
+                </h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="px-2 py-0.5 rounded-md bg-teal-500/20 text-teal-300 text-[10.5px] font-bold border border-teal-500/30">
+                    {previewProduct.category || 'ທົ່ວໄປ'}
+                  </span>
+                  {previewProduct.barcode && (
+                    <span className="text-[10.5px] text-slate-400 font-mono font-bold">
+                      #{previewProduct.barcode}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPreviewProduct(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title="ປິດ (Close - ESC)"
+              >
+                <X size={18} weight="bold" />
+              </button>
+            </div>
+
+            {/* Big High-Res Image Display */}
+            <div className="p-3 sm:p-5 bg-slate-950 flex items-center justify-center max-h-[70vh] sm:max-h-[75vh] overflow-hidden">
+              <img
+                src={previewProduct.imageUrl}
+                alt={previewProduct.name}
+                className="max-h-[62vh] w-auto max-w-full object-contain rounded-2xl shadow-xl border border-white/5"
+              />
+            </div>
+
+            {/* Bottom Actions Bar */}
+            <div className="p-3 sm:p-3.5 border-t border-slate-800 bg-slate-900 flex items-center justify-between gap-3">
+              <div className="text-xs text-slate-400">
+                ກົດ <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-mono border border-slate-700">ESC</kbd> ຫຼື ກົດພື້ນຫຼັງເພື່ອປິດ
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const p = previewProduct;
+                  setPreviewProduct(null);
+                  onEditProduct?.(p);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <PencilSimple size={15} weight="bold" />
+                <span>ແກ້ໄຂສິນຄ້າ</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

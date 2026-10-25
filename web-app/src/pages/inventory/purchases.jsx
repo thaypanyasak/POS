@@ -47,6 +47,7 @@ import BarcodeScannerModal from '../../components/BarcodeScannerModal';
 import MultiProductGRNForm from '../../components/inventory/MultiProductGRNForm';
 import { playUnitChangeBeep, playActionClickBeep, playSuccessBeep, playErrorBeep } from '../../utils/audioFeedback';
 import { PurchasesListSkeleton } from '../../components/common/SkeletonLoaders';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function PurchasesView({
   purchaseOrders = [],
@@ -59,6 +60,8 @@ export default function PurchasesView({
   onAlert,
   exchangeRate = 0,
 }) {
+  const { activeCashier } = useAuth() || {};
+
   // Navigation State: 'LIST' (GRN History Table) or 'ENTRY' (Fullscreen 3-Card Form)
   const [viewMode, setViewMode] = useState('LIST');
 
@@ -81,7 +84,7 @@ export default function PurchasesView({
   // =========================================================================
   // 1. Header Information
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
-  const [receivedBy, setReceivedBy] = useState('Meii');
+  const [receivedBy, setReceivedBy] = useState(activeCashier?.full_name || 'Meii');
   const [poCode, setPoCode] = useState('');
   const [note, setNote] = useState('');
   const [currentExchangeRate, setCurrentExchangeRate] = useState(exchangeRate || 0);
@@ -209,17 +212,7 @@ export default function PurchasesView({
     });
   }, [purchaseOrders, filterStatus, searchQuery]);
 
-  // Filter products for the searchable picker
-  const filteredProducts = useMemo(() => {
-    const q = normalizeLao(productSearch);
-    if (!q) return products.slice(0, 30);
-    return products.filter((p) => (
-      normalizeLao(p.name).includes(q) ||
-      normalizeLao(p.category).includes(q) ||
-      normalizeLao(p.barcode).includes(q) ||
-      (p.units && p.units.some((u) => u.barcode && normalizeLao(u.barcode).includes(q)))
-    )).slice(0, 30);
-  }, [products, productSearch]);
+  // Note: Product filtering is handled inside MultiProductGRNForm
 
   // =========================================================================
   // 2.3. STATE & LIFECYCLE MANAGEMENT (CLEANUP & RESET)
@@ -233,6 +226,7 @@ export default function PurchasesView({
     setPaymentStatus('PAID');
     setPaidAmount('0');
     setNote('');
+    setReceivedBy(activeCashier?.full_name || 'Meii');
     setIsSubmittingGRN(false);
   };
 
@@ -251,6 +245,9 @@ export default function PurchasesView({
   const handleOpenCreateGRN = () => {
     resetGRNForm();
     setPoCode(generatePoCode());
+    if (activeCashier?.full_name) {
+      setReceivedBy(activeCashier.full_name);
+    }
     if (suppliers.length > 0 && !selectedSupplierId) {
       setSelectedSupplierId(suppliers[0].id);
     }
@@ -1292,8 +1289,8 @@ export default function PurchasesView({
                         <tr key={po.id} className="hover:bg-slate-50/80 transition-colors">
                           {/* ລະຫັດບິນ & ວັນທີ */}
                           <td className="py-2.5 px-4">
-                            <div className="font-mono font-bold text-slate-900 text-[12.5px]">{po.id}</div>
-                            <div className="text-[11px] text-slate-400 mt-0.5">{dateFormatted}</div>
+                            <div className="font-bold text-slate-900 text-[12.5px]">{po.id}</div>
+                            <div className="text-[11px] text-slate-500 mt-0.5">{dateFormatted}</div>
                           </td>
 
                           {/* ຮ້ານສົ່ງ */}

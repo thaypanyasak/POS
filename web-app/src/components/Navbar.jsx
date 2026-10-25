@@ -3,7 +3,7 @@ import {
   Storefront,
   Warehouse,
   Package,
-  ClockCounterClockwise,
+  Receipt,
   ChartBar,
   ChartPieSlice,
   Gear,
@@ -167,15 +167,38 @@ export default function Navbar({
 
                   {/* Left Icon + Text */}
                   <div className="flex items-center gap-3 min-w-0">
-                    <Icon
-                      size={22}
-                      weight={isActive ? 'bold' : 'bold'}
-                      className={`shrink-0 transition-colors ${
-                        isActive
-                          ? 'text-teal-700'
-                          : 'text-slate-500 group-hover:text-slate-800'
-                      }`}
-                    />
+                    <div className="relative inline-flex items-center justify-center shrink-0">
+                      <Icon
+                        size={22}
+                        weight="bold"
+                        className={`shrink-0 transition-colors ${
+                          isActive
+                            ? 'text-teal-700'
+                            : 'text-slate-500 group-hover:text-slate-800'
+                        }`}
+                      />
+
+                      {/* Collapsed Badge: Anchored with breathing room clearing icon strokes */}
+                      {collapsed && hasBadge && (
+                        <span className="absolute -top-2.5 -right-3.5 translate-x-1 -translate-y-0.3 z-10 flex items-center justify-center pointer-events-none">
+                          {item.id === 'history' && (
+                            <span
+                              className="absolute inset-0 rounded-full bg-red-600 opacity-50 animate-ping"
+                              style={{ animationDuration: '3s' }}
+                            />
+                          )}
+                          <span
+                            className={`relative flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-black font-sans tabular-nums leading-none text-white ring-2 ring-white ${
+                              item.id === 'history'
+                                ? 'bg-gradient-to-tr from-red-700 via-red-600 to-red-500 shadow-[0_2px_8px_rgba(220,38,38,0.45)]'
+                                : 'bg-gradient-to-tr from-teal-600 to-emerald-500 shadow-[0_2px_8px_rgba(13,148,136,0.35)]'
+                            }`}
+                          >
+                            {item.badge > 99 ? '99+' : item.badge}
+                          </span>
+                        </span>
+                      )}
+                    </div>
 
                     {!collapsed && (
                       <div className="text-left min-w-0 overflow-hidden">
@@ -193,19 +216,23 @@ export default function Navbar({
                     )}
                   </div>
 
-                  {/* Badge */}
-                  {hasBadge && (
-                    <span
-                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold font-mono shrink-0 shadow-2xs ${
-                        collapsed
-                          ? 'absolute -top-1 -right-1 bg-rose-500 text-white min-w-[18px] text-center border-2 border-white'
-                          : isActive
-                          ? 'bg-teal-600 text-white'
-                          : 'bg-rose-500 text-white'
+                  {/* Expanded Badge: Sleek capsule pill with slow pulse dot */}
+                  {!collapsed && hasBadge && (
+                    <div
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-black font-sans tabular-nums tracking-tight text-white shrink-0 shadow-xs ${
+                        item.id === 'history'
+                          ? 'bg-gradient-to-r from-red-600 to-red-500 shadow-[0_2px_8px_rgba(220,38,38,0.35)]'
+                          : 'bg-gradient-to-r from-teal-600 to-emerald-500 shadow-[0_2px_8px_rgba(13,148,136,0.3)]'
                       }`}
                     >
-                      {item.badge}
-                    </span>
+                      {item.id === 'history' && (
+                        <span
+                          className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"
+                          style={{ animationDuration: '2.5s' }}
+                        />
+                      )}
+                      <span>{item.badge > 99 ? '99+' : item.badge}</span>
+                    </div>
                   )}
                 </button>
               );
@@ -381,11 +408,25 @@ export default function Navbar({
                   : 'text-slate-400 hover:text-slate-600'
               }`}
             >
-              <div className="relative">
+              <div className="relative inline-flex items-center justify-center">
                 <Icon size={22} weight={isActive ? 'bold' : 'bold'} />
                 {hasBadge && (
-                  <span className="absolute -top-1 -right-2 px-1 min-w-[18px] h-4 rounded-full text-[11px] font-bold font-mono bg-rose-500 text-white flex items-center justify-center border border-white shadow-2xs">
-                    {item.badge}
+                  <span className="absolute -top-2.5 -right-3.5 translate-x-1 -translate-y-0.5 z-10 flex items-center justify-center pointer-events-none">
+                    {item.id === 'history' && (
+                      <span
+                        className="absolute inset-0 rounded-full bg-red-600 opacity-50 animate-ping"
+                        style={{ animationDuration: '3s' }}
+                      />
+                    )}
+                    <span
+                      className={`relative flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-black font-sans tabular-nums leading-none text-white ring-2 ring-white ${
+                        item.id === 'history'
+                          ? 'bg-gradient-to-tr from-red-700 via-red-600 to-red-500 shadow-[0_2px_8px_rgba(220,38,38,0.45)]'
+                          : 'bg-gradient-to-tr from-teal-600 to-emerald-500 shadow-[0_2px_8px_rgba(13,148,136,0.35)]'
+                      }`}
+                    >
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
                   </span>
                 )}
               </div>

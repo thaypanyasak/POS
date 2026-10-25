@@ -1419,10 +1419,11 @@ export default function App() {
         productToEdit?.barcode ||
         '885' + Math.floor(100000000 + Math.random() * 900000000);
 
-      // Resolve categoryId from state or rawCategories match
+      // Resolve categoryId strictly matching current newProdCategory name first
+      const matchedCat = rawCategories.find((c) => c.name === newProdCategory);
       const resolvedCatId =
-        newProdCategoryId ||
-        rawCategories.find((c) => c.name === newProdCategory)?.id ||
+        matchedCat?.id ||
+        (newProdCategory === productToEdit?.category ? (newProdCategoryId || productToEdit?.categoryId) : null) ||
         null;
 
       const updatedProduct = {
@@ -1432,6 +1433,7 @@ export default function App() {
         nameVi: newProdNameVi.trim() || null,
         category: newProdCategory,
         categoryId: resolvedCatId,
+        categories: resolvedCatId ? { id: resolvedCatId, name: newProdCategory } : null,
         barcode: primaryBarcode,
         imageUrl: finalImageUrl,
         baseUnit: actualBaseUnitName,
@@ -2939,6 +2941,8 @@ export default function App() {
         setNewProdNameVi={setNewProdNameVi}
         newProdCategory={newProdCategory}
         setNewProdCategory={setNewProdCategory}
+        newProdCategoryId={newProdCategoryId}
+        setNewProdCategoryId={setNewProdCategoryId}
         categoriesList={categoriesList}
         rawCategories={rawCategories}
         onCreateCategory={handleCreateCategory}

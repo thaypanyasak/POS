@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ArrowLeft,
   FloppyDisk,
@@ -12,6 +12,11 @@ import {
   WarningCircle,
   MagnifyingGlass,
   X,
+  User,
+  CaretDown,
+  ArrowsDownUp,
+  Funnel,
+  Check,
 } from '@phosphor-icons/react';
 import {
   formatKip,
@@ -28,6 +33,8 @@ import { queryClient } from '../../services/queryClient';
 import BarcodeScannerModal from '../BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../../hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep, playErrorBeep } from '../../utils/audioFeedback';
+import { useAuth } from '../../contexts/AuthContext';
+import { fetchActiveCashiers } from '../../services/staffService';
 
 export default function PurchaseEntryModal({
   isOpen,
@@ -38,13 +45,38 @@ export default function PurchaseEntryModal({
   onSuccess,
   onAlert,
 }) {
+  const { activeCashier, activeCashiersList } = useAuth();
+  const [staffList, setStaffList] = useState(activeCashiersList || []);
+
   // Box 1: Supplier & Receiver
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
-  const [receivedBy, setReceivedBy] = useState('Meii');
+  const [receivedBy, setReceivedBy] = useState(activeCashier?.full_name || 'Meii');
 
-  // Box 2: Selected Product & Multi-Tier Inputs
+  useEffect(() => {
+    if (activeCashiersList && activeCashiersList.length > 0) {
+      setStaffList(activeCashiersList);
+    } else {
+      fetchActiveCashiers().then((res) => {
+        if (res.data && res.data.length > 0) {
+          setStaffList(res.data);
+        }
+      });
+    }
+  }, [activeCashiersList]);
+
+  // Sync default receiver with current active user when modal opens
+  useEffect(() => {
+    if (isOpen && activeCashier?.full_name && (!receivedBy || receivedBy === 'Meii')) {
+      setReceivedBy(activeCashier.full_name);
+    }
+  }, [isOpen, activeCashier]);
+
+  // Box 2: Selected Product & Multi-Tier Inputs with Search & Infinite Scroll
   const [selectedProductId, setSelectedProductId] = useState('');
   const [productSearch, setProductSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const [displayLimit, setDisplayLimit] = useState(40);
   const [scannerOpen, setScannerOpen] = useState(false);
 
   // Dynamic Map of Quantities by Unit ID { [unitId]: number }
@@ -68,6 +100,9 @@ export default function PurchaseEntryModal({
   const resetGRNFormState = () => {
     setSelectedProductId('');
     setProductSearch('');
+    setSelectedCategory('ALL');
+    setIsProductDropdownOpen(false);
+    setDisplayLimit(40);
     setUnitQuantities({});
     setCostThb('0');
     setCostLak('0');
@@ -146,6 +181,7 @@ export default function PurchaseEntryModal({
   // Hydrate Product Data into Form When Product is Picked
   const handleSelectProduct = (prodId) => {
     setSelectedProductId(prodId);
+    setIsProductDropdownOpen(false);
     const prod = products.find((p) => p.id === prodId);
     if (!prod) return;
 
@@ -387,16 +423,87 @@ export default function PurchaseEntryModal({
 
   if (!isOpen) return null;
 
-  // Filter products for the searchable picker
-  const filteredProducts = products.filter((p) => {
+  // Extract all categories for quick filtering
+  const categories = useMemo(() => {
+    const cats = new Set();
+    products.forEach((p) => {
+      if (p.category && p.category.trim()) cats.add(p.category.trim());
+    });
+    return Array.from(cats).sort((a, b) => a.localeCompare(b));
+  }, [products]);
+
+  // Full product filtering across ALL products (matching name, category, barcode, and unit barcodes)
+  const allMatchingProducts = useMemo(() => {
     const q = normalizeLao(productSearch);
-    if (!q) return true;
-    return (
-      normalizeLao(p.name).includes(q) ||
-      normalizeLao(p.category).includes(q) ||
-      normalizeLao(p.barcode).includes(q)
-    );
-  });
+    return products.filter((p) => {
+      if (selectedCategory !== 'ALL' && (p.category || 'ທົ່ວໄປ') !== selectedCategory) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        normalizeLao(p.name).includes(q) ||
+        normalizeLao(p.category).includes(q) ||
+        normalizeLao(p.barcode).includes(q) ||
+        (p.units && p.units.some((u) => u.barcode && normalizeLao(u.barcode) === q))
+      );
+    });
+  }, [products, productSearch, selectedCategory]);
+
+  // Virtual / Infinite Scroll Slice: renders visible batch, loads more on scroll for 3000+ items
+  const displayedProducts = useMemo(() => {
+    return allMatchingProducts.slice(0, displayLimit);
+  }, [allMatchingProducts, displayLimit]);
+
+  // Reset display limit when search text, category or dropdown opens
+  useEffect(() => {
+    setDisplayLimit(40);
+  }, [productSearch, selectedCategory, isProductDropdownOpen]);
+
+  // Infinite Scroll Handler: Loads next 40 items when user scrolls near the bottom
+  const handleProductListScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollTop + clientHeight >= scrollHeight - 60) {
+      if (displayLimit < allMatchingProducts.length) {
+        setDisplayLimit((prev) => Math.min(prev + 40, allMatchingProducts.length));
+      }
+    }
+  };
+
+  // Keyboard Enter key support for instant product selection
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const trimmed = productSearch.trim().toLowerCase();
+      if (!trimmed) return;
+
+      // 1. Exact barcode search
+      const exactMatch = products.find((p) => {
+        if (p.barcode && p.barcode.toLowerCase() === trimmed) return true;
+        if (p.units && p.units.some((u) => u.barcode && u.barcode.toLowerCase() === trimmed)) return true;
+        return false;
+      });
+
+      if (exactMatch) {
+        handleSelectProduct(exactMatch.id);
+        setProductSearch('');
+        setIsProductDropdownOpen(false);
+        playSuccessBeep();
+        onAlert?.(`ເລືອກສິນຄ້າ "${exactMatch.name}" ສຳເລັດ!`, 'ສຳເລັດ', 'success');
+        return;
+      }
+
+      // 2. First matching product
+      if (allMatchingProducts.length > 0) {
+        handleSelectProduct(allMatchingProducts[0].id);
+        setProductSearch('');
+        setIsProductDropdownOpen(false);
+        playSuccessBeep();
+        onAlert?.(`ເລືອກສິນຄ້າ "${allMatchingProducts[0].name}" ສຳເລັດ!`, 'ສຳເລັດ', 'success');
+      } else {
+        onAlert?.(`ບໍ່ພົບສິນຄ້າ "${productSearch}"`, 'ແຈ້ງເຕືອນ', 'warning');
+      }
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col w-screen h-screen overflow-hidden animate-in fade-in duration-150 select-none font-sans">
@@ -503,15 +610,38 @@ export default function PurchaseEntryModal({
               {/* Right Column: Received by User */}
               <div>
                 <label className="text-xs font-bold text-slate-800 block mb-1.5">
-                  ຜູ້ຮັບສິນຄ້າເຂົ້າສາງ (Received by)
+                  ຜູ້ຮັບສິນຄ້າເຂົ້າສາງ (Received by) *
                 </label>
-                <input
-                  type="text"
-                  value={receivedBy}
-                  onChange={(e) => setReceivedBy(e.target.value)}
-                  placeholder="Meii"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs"
-                />
+                <div className="relative">
+                  <select
+                    value={receivedBy}
+                    onChange={(e) => setReceivedBy(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs appearance-none cursor-pointer"
+                  >
+                    <option value="">-- ເລືອກຜູ້ຮັບສິນຄ້າ --</option>
+                    {staffList && staffList.length > 0 ? (
+                      staffList.map((staff) => (
+                        <option key={staff.id || staff.full_name} value={staff.full_name}>
+                          {staff.full_name} {staff.role ? `(${staff.role === 'admin' ? 'ແອດມິນ' : staff.role === 'manager' ? 'ຜູ້ຈັດການ' : staff.role === 'cashier' ? 'ແຄດເຊຍ' : staff.role})` : ''}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="Meii">Meii (ແອດມິນ)</option>
+                    )}
+                    {receivedBy &&
+                      staffList &&
+                      !staffList.some((s) => s.full_name === receivedBy) &&
+                      receivedBy !== 'Meii' && (
+                        <option value={receivedBy}>{receivedBy}</option>
+                    )}
+                  </select>
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <User size={16} weight="duotone" />
+                  </div>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <CaretDown size={14} weight="bold" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -539,64 +669,227 @@ export default function PurchaseEntryModal({
             </div>
 
             {/* Product Selector with Camera Scan & Filter */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 relative">
               <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
                 <span>ເລືອກສິນຄ້າທີ່ຕ້ອງການຮັບເຂົ້າສາງ (Select Product) *</span>
                 <span className="text-[11px] font-normal text-slate-500">
-                  ຄົ້ນຫາຊື່ສິນຄ້າ, ໝວດໝູ່ ຫຼື ສະແກນ Barcode
+                  ພົບ {allMatchingProducts.length} / {products.length} ລາຍການ • ຄົ້ນຫາຊື່, ບາໂຄດ ຫຼື ໝວດໝູ່
                 </span>
               </label>
 
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-                {/* Search Text Filter */}
-                <div className="md:col-span-4 relative">
-                  <MagnifyingGlass size={15} className="absolute left-3 top-3 text-slate-400" />
-                  <input
-                    type="text"
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    placeholder="ພິມຊື່ ຫຼື ບາໂຄ້ດເພື່ອຄົ້ນຫາ..."
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-teal-500 shadow-2xs"
-                  />
-                  {productSearch && (
+              {/* Selected Product Header Card (Shown when product is selected) */}
+              {selectedProduct && (
+                <div className="p-3 bg-teal-50/70 border border-teal-200/90 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {selectedProduct.imageUrl || selectedProduct.image_url ? (
+                      <img
+                        src={selectedProduct.imageUrl || selectedProduct.image_url}
+                        alt={selectedProduct.name}
+                        className="w-12 h-12 rounded-xl object-cover border border-teal-200 shrink-0 shadow-2xs"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-teal-100/70 border border-teal-200 flex items-center justify-center text-teal-700 shrink-0">
+                        <Package size={22} weight="duotone" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-900 truncate">
+                          {selectedProduct.name}
+                        </span>
+                        <span className="px-2 py-0.5 bg-teal-100 text-teal-800 rounded-md text-[10px] font-bold">
+                          {selectedProduct.category || 'ທົ່ວໄປ'}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-2 mt-0.5">
+                        {selectedProduct.barcode && (
+                          <span className="font-mono">ບາໂຄດ: {selectedProduct.barcode}</span>
+                        )}
+                        <span>• ຫົວໜ່ວຍຫຼັກ: {selectedProduct.baseUnit || 'ອັນ'}</span>
+                        <span className="text-teal-700 font-bold font-mono">
+                          • ສະຕັອກ: {selectedProduct.currentStockBaseUnits || 0} {selectedProduct.baseUnit || 'ອັນ'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
-                      onClick={() => setProductSearch('')}
-                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      onClick={() => setIsProductDropdownOpen((prev) => !prev)}
+                      className="px-3 py-1.5 bg-white hover:bg-teal-100 text-teal-800 border border-teal-300 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 shadow-2xs"
                     >
-                      <X size={14} />
+                      <ArrowsDownUp size={14} weight="bold" />
+                      <span>{isProductDropdownOpen ? 'ເຊື່ອງລາຍການ' : 'ປ່ຽນສິນຄ້າ'}</span>
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => setScannerOpen(true)}
+                      className="p-2 bg-white hover:bg-teal-100 text-teal-800 border border-teal-300 rounded-xl transition-all active:scale-95 cursor-pointer shadow-2xs"
+                      title="ສະແກນ Barcode ດ້ວຍກ້ອງ"
+                    >
+                      <Camera size={16} weight="bold" />
+                    </button>
+                  </div>
                 </div>
+              )}
 
-                {/* Product Select Dropdown */}
-                <div className="md:col-span-7">
-                  <select
-                    value={selectedProductId}
-                    onChange={(e) => handleSelectProduct(e.target.value)}
-                    className="w-full px-3 py-2 bg-teal-50/50 hover:bg-teal-50 border border-teal-200 rounded-xl text-xs font-bold text-teal-950 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer shadow-2xs"
-                  >
-                    <option value="">-- ກົດເພື່ອເລືອກສິນຄ້າ ({filteredProducts.length} ລາຍການ) --</option>
-                    {filteredProducts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.category || 'ທົ່ວໄປ'}) {p.barcode ? `• Barcode: ${p.barcode}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* Search, Category Filter & Virtualized Infinite Scroll Dropdown Panel */}
+              {(!selectedProduct || isProductDropdownOpen) && (
+                <div className="flex flex-col gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                    {/* Category Filter Dropdown */}
+                    {categories.length > 0 && (
+                      <div className="md:col-span-3">
+                        <select
+                          value={selectedCategory}
+                          onChange={(e) => {
+                            setSelectedCategory(e.target.value);
+                            setIsProductDropdownOpen(true);
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500 shadow-2xs cursor-pointer"
+                        >
+                          <option value="ALL">ທຸກໝວດໝູ່ ({products.length})</option>
+                          {categories.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
-                {/* Barcode Camera Scanner Button */}
-                <div className="md:col-span-1">
-                  <button
-                    type="button"
-                    onClick={() => setScannerOpen(true)}
-                    className="w-full h-full min-h-[36px] bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-700 border border-slate-200 hover:border-teal-300 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-2xs"
-                    title="ສະແກນ Barcode ດ້ວຍກ້ອງ"
+                    {/* Search Input Bar */}
+                    <div className={categories.length > 0 ? 'md:col-span-8 relative' : 'md:col-span-11 relative'}>
+                      <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={productSearch}
+                        onFocus={() => setIsProductDropdownOpen(true)}
+                        onChange={(e) => {
+                          setProductSearch(e.target.value);
+                          setIsProductDropdownOpen(true);
+                        }}
+                        onKeyDown={handleSearchKeyDown}
+                        placeholder="ພິມຊື່ສິນຄ້າ, ບາໂຄດ ຫຼື ໝວດໝູ່ (ກົດ Enter ເພື່ອເລືອກ)..."
+                        className="w-full pl-9 pr-8 py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-teal-500 shadow-2xs"
+                      />
+                      {productSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setProductSearch('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Barcode Camera Scanner Button */}
+                    <div className="md:col-span-1">
+                      <button
+                        type="button"
+                        onClick={() => setScannerOpen(true)}
+                        className="w-full h-full min-h-[36px] bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-700 border border-slate-200 hover:border-teal-300 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                        title="ສະແກນ Barcode ດ້ວຍກ້ອງ"
+                      >
+                        <Camera size={18} weight="bold" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Infinite Scroll Virtualized Dropdown List Panel */}
+                  <div
+                    onScroll={handleProductListScroll}
+                    className="max-h-72 sm:max-h-80 overflow-y-auto bg-white border border-slate-200 rounded-2xl shadow-xl z-30 divide-y divide-slate-100 mt-1"
                   >
-                    <Camera size={18} weight="bold" />
-                  </button>
+                    <div className="sticky top-0 bg-slate-50/95 backdrop-blur-xs px-4 py-2 text-[11px] font-bold text-slate-500 border-b border-slate-100 flex items-center justify-between z-10 shadow-2xs">
+                      <span>ພົບ {allMatchingProducts.length} ລາຍການ</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-teal-700">ສະແດງ {displayedProducts.length} ລາຍການ</span>
+                        {selectedProduct && (
+                          <button
+                            type="button"
+                            onClick={() => setIsProductDropdownOpen(false)}
+                            className="text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {displayedProducts.length > 0 ? (
+                      <>
+                        {displayedProducts.map((p) => {
+                          const isSelected = selectedProductId === p.id;
+                          return (
+                            <div
+                              key={p.id}
+                              onClick={() => {
+                                playActionClickBeep?.('inventory');
+                                handleSelectProduct(p.id);
+                              }}
+                              className={`px-4 py-2.5 cursor-pointer flex items-center justify-between gap-3 transition-colors ${
+                                isSelected ? 'bg-teal-50 border-l-4 border-teal-600' : 'hover:bg-teal-50/60'
+                              }`}
+                            >
+                              <div className="min-w-0 flex items-center gap-3">
+                                {p.imageUrl || p.image_url ? (
+                                  <img
+                                    src={p.imageUrl || p.image_url}
+                                    alt={p.name}
+                                    className="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
+                                    <Package size={18} />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <div className="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5">
+                                    <span>{p.name}</span>
+                                    {isSelected && (
+                                      <span className="text-[10px] text-teal-700 font-bold bg-teal-100 px-1.5 py-0.2 rounded">
+                                        ເລືອກແລ້ວ
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
+                                    <span>ໝວດ: {p.category || 'ທົ່ວໄປ'}</span>
+                                    {p.barcode && <span>• ບາໂຄດ: {p.barcode}</span>}
+                                    <span>• ຫົວໜ່ວຍ: {p.baseUnit || 'ອັນ'}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10.5px] font-mono font-bold">
+                                  ສະຕັອກ: {p.currentStockBaseUnits || 0} {p.baseUnit || 'ອັນ'}
+                                </span>
+                                <span className="text-xs font-bold text-teal-700 hover:underline">
+                                  {isSelected ? 'ກຳລັງເລືອກ' : 'ເລືອກ'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {displayedProducts.length < allMatchingProducts.length && (
+                          <div className="p-3 text-center bg-slate-50 text-[11px] text-slate-500 font-medium border-t border-slate-100">
+                            ເລື່ອນລົງເພື່ອໂຫຼດຕື່ມ... (ກຳລັງສະແດງ {displayedProducts.length} / {allMatchingProducts.length})
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="p-6 text-center text-xs text-slate-500 flex flex-col items-center gap-1.5">
+                        <Package size={28} className="text-slate-300" />
+                        <span>ບໍ່ພົບສິນຄ້າທີ່ກົງກັບຂໍ້ມູນຄົ້ນຫາ</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {selectedProduct ? (

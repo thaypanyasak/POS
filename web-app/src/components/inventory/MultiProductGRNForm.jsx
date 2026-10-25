@@ -21,6 +21,8 @@ import {
   Link,
   LinkBreak,
   Lightning,
+  User,
+  CaretDown,
 } from '@phosphor-icons/react';
 import {
   formatKip,
@@ -37,6 +39,8 @@ import { useHardwareBarcodeScanner } from '../../hooks/useHardwareBarcodeScanner
 import { playSuccessBeep, playErrorBeep, playActionClickBeep, playUnitChangeBeep } from '../../utils/audioFeedback';
 import { updateExchangeRateInSupabase, fetchExchangeRate } from '../../services/supabase';
 import queryClient from '../../services/queryClient';
+import { useAuth } from '../../contexts/AuthContext';
+import { fetchActiveCashiers } from '../../services/staffService';
 
 /**
  * Editable Quantity Stepper with local state to allow deleting/backspacing to empty
@@ -196,10 +200,35 @@ export default function MultiProductGRNForm({
   onAlert,
 }) {
   const [productSearch, setProductSearch] = useState('');
+  const [selectedSearchCategory, setSelectedSearchCategory] = useState('ALL');
+  const [dropdownDisplayLimit, setDropdownDisplayLimit] = useState(40);
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [isEditingExchangeRate, setIsEditingExchangeRate] = useState(false);
   const [tempRate, setTempRate] = useState(String(currentExchangeRate || 690));
+
+  // Staff User Management Integration for Receiver (ຜູ້ຮັບສິນຄ້າ)
+  const { activeCashiersList, activeCashier } = useAuth() || {};
+  const [staffList, setStaffList] = useState(activeCashiersList || []);
+
+  useEffect(() => {
+    if (activeCashiersList && activeCashiersList.length > 0) {
+      setStaffList(activeCashiersList);
+    } else {
+      fetchActiveCashiers().then((res) => {
+        if (res.data && res.data.length > 0) {
+          setStaffList(res.data);
+        }
+      });
+    }
+  }, [activeCashiersList]);
+
+  // Sync default receiver with active cashier if new GRN and not yet explicitly changed
+  useEffect(() => {
+    if (!editingPoId && activeCashier?.full_name && (!receivedBy || receivedBy === 'Meii')) {
+      setReceivedBy?.(activeCashier.full_name);
+    }
+  }, [editingPoId, activeCashier]);
 
   // Auto-sync exchange rate from Supabase store_settings & queryClient
   useEffect(() => {
@@ -405,20 +434,51 @@ export default function MultiProductGRNForm({
     onSubmitGRN?.(payload);
   };
 
-  // Search filtering
-  const filteredProducts = useMemo(() => {
+  // Extract all categories for quick filtering
+  const categories = useMemo(() => {
+    const cats = new Set();
+    products.forEach((p) => {
+      if (p.category && p.category.trim()) cats.add(p.category.trim());
+    });
+    return Array.from(cats).sort((a, b) => a.localeCompare(b));
+  }, [products]);
+
+  // Full product search filtering across ALL products (matching name, category, barcode, and unit barcodes)
+  const allMatchingProducts = useMemo(() => {
     const q = normalizeLao(productSearch);
-    if (!q) return products.slice(0, 30);
-    return products
-      .filter(
-        (p) =>
-          normalizeLao(p.name).includes(q) ||
-          normalizeLao(p.category).includes(q) ||
-          normalizeLao(p.barcode).includes(q) ||
-          (p.units && p.units.some((u) => u.barcode && normalizeLao(u.barcode) === q))
-      )
-      .slice(0, 30);
-  }, [products, productSearch]);
+    return products.filter((p) => {
+      if (selectedSearchCategory !== 'ALL' && (p.category || 'ທົ່ວໄປ') !== selectedSearchCategory) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        normalizeLao(p.name).includes(q) ||
+        normalizeLao(p.category).includes(q) ||
+        normalizeLao(p.barcode).includes(q) ||
+        (p.units && p.units.some((u) => u.barcode && normalizeLao(u.barcode) === q))
+      );
+    });
+  }, [products, productSearch, selectedSearchCategory]);
+
+  // Virtual / Infinite Scroll Slice: renders visible batch, loads more on scroll for 3000+ items
+  const displayedProducts = useMemo(() => {
+    return allMatchingProducts.slice(0, dropdownDisplayLimit);
+  }, [allMatchingProducts, dropdownDisplayLimit]);
+
+  // Reset display limit when search text, category or dropdown opens
+  useEffect(() => {
+    setDropdownDisplayLimit(40);
+  }, [productSearch, selectedSearchCategory, isProductDropdownOpen]);
+
+  // Infinite Scroll Handler: Loads next 40 items when user scrolls near the bottom
+  const handleDropdownScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollTop + clientHeight >= scrollHeight - 60) {
+      if (dropdownDisplayLimit < allMatchingProducts.length) {
+        setDropdownDisplayLimit((prev) => Math.min(prev + 40, allMatchingProducts.length));
+      }
+    }
+  };
 
   function trimmedQ(q) {
     return q.trim();
@@ -447,12 +507,12 @@ export default function MultiProductGRNForm({
         return;
       }
 
-      // 2. First search match
-      if (filteredProducts.length > 0) {
-        onAddToCart(filteredProducts[0]);
+      // 2. First search match from allMatchingProducts
+      if (allMatchingProducts.length > 0) {
+        onAddToCart(allMatchingProducts[0]);
         setProductSearch('');
         setIsProductDropdownOpen(false);
-        onAlert?.(`ເພີ່ມ "${filteredProducts[0].name}" ເຂົ້າໃບຮັບສິນຄ້າແລ້ວ!`, 'ສຳເລັດ', 'success');
+        onAlert?.(`ເພີ່ມ "${allMatchingProducts[0].name}" ເຂົ້າໃບຮັບສິນຄ້າແລ້ວ!`, 'ສຳເລັດ', 'success');
       } else {
         onAlert?.(`ບໍ່ພົບສິນຄ້າ "${productSearch}"`, 'ແຈ້ງເຕືອນ', 'warning');
       }
@@ -666,15 +726,38 @@ export default function MultiProductGRNForm({
               {/* 3. Receiver Name */}
               <div>
                 <label className="text-xs font-bold text-slate-800 block mb-1">
-                  ຜູ້ຮັບສິນຄ້າເຂົ້າສາງ (Receiver)
+                  ຜູ້ຮັບສິນຄ້າເຂົ້າສາງ (Receiver) *
                 </label>
-                <input
-                  type="text"
-                  value={receivedBy}
-                  onChange={(e) => setReceivedBy(e.target.value)}
-                  placeholder="Meii"
-                  className="w-full px-3 py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs"
-                />
+                <div className="relative">
+                  <select
+                    value={receivedBy}
+                    onChange={(e) => setReceivedBy(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs appearance-none cursor-pointer"
+                  >
+                    <option value="">-- ເລືອກຜູ້ຮັບສິນຄ້າ --</option>
+                    {staffList && staffList.length > 0 ? (
+                      staffList.map((staff) => (
+                        <option key={staff.id || staff.full_name} value={staff.full_name}>
+                          {staff.full_name} {staff.role ? `(${staff.role === 'admin' ? 'ແອດມິນ' : staff.role === 'manager' ? 'ຜູ້ຈັດການ' : staff.role === 'cashier' ? 'ແຄດເຊຍ' : staff.role})` : ''}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="Meii">Meii (ແອດມິນ)</option>
+                    )}
+                    {receivedBy &&
+                      staffList &&
+                      !staffList.some((s) => s.full_name === receivedBy) &&
+                      receivedBy !== 'Meii' && (
+                        <option value={receivedBy}>{receivedBy}</option>
+                    )}
+                  </select>
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <User size={15} weight="duotone" />
+                  </div>
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <CaretDown size={13} weight="bold" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -699,8 +782,30 @@ export default function MultiProductGRNForm({
               </span>
             </div>
 
-            {/* Search Input Bar + Barcode Scanner Modal Button */}
-            <div className="flex items-center gap-2">
+            {/* Search Input Bar + Category Selector + Barcode Scanner Modal Button */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              {/* Category Filter Dropdown */}
+              {categories.length > 0 && (
+                <div className="sm:w-48 shrink-0">
+                  <select
+                    value={selectedSearchCategory}
+                    onChange={(e) => {
+                      setSelectedSearchCategory(e.target.value);
+                      setIsProductDropdownOpen(true);
+                    }}
+                    className="w-full px-3 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs cursor-pointer"
+                  >
+                    <option value="ALL">ທຸກໝວດໝູ່ ({products.length})</option>
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Search Input Bar */}
               <div className="relative flex-1">
                 <input
                   type="text"
@@ -723,7 +828,6 @@ export default function MultiProductGRNForm({
                     type="button"
                     onClick={() => {
                       setProductSearch('');
-                      setIsProductDropdownOpen(false);
                     }}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
                   >
@@ -732,6 +836,7 @@ export default function MultiProductGRNForm({
                 )}
               </div>
 
+              {/* Barcode Camera Scanner Button */}
               <button
                 type="button"
                 onClick={() => setScannerOpen(true)}
@@ -743,60 +848,91 @@ export default function MultiProductGRNForm({
               </button>
             </div>
 
-            {/* Suggestions Dropdown */}
-            {isProductDropdownOpen && filteredProducts.length > 0 && (
-              <div className="absolute left-4 right-4 top-full mt-1 max-h-64 overflow-y-auto bg-white border border-slate-200 rounded-2xl shadow-xl z-40 divide-y divide-slate-100">
-                {filteredProducts.map((p) => {
-                  const prodUnits = (p.units || []).filter((u) => u.isActive !== false);
-                  const sorted = [...prodUnits].sort((a, b) => (b.multiplier || 1) - (a.multiplier || 1));
-                  const largestUnit = sorted[0];
-
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => {
-                        playActionClickBeep('inventory');
-                        onAddToCart(p);
-                        setProductSearch('');
-                        setIsProductDropdownOpen(false);
-                      }}
-                      className="px-4 py-2.5 hover:bg-teal-50/70 cursor-pointer flex items-center justify-between gap-3 transition-colors"
+            {/* Suggestions Dropdown with Virtualized Infinite Scroll */}
+            {isProductDropdownOpen && (
+              <div
+                onScroll={handleDropdownScroll}
+                className="absolute left-4 right-4 top-full mt-1 max-h-72 sm:max-h-80 overflow-y-auto bg-white border border-slate-200 rounded-2xl shadow-xl z-40 divide-y divide-slate-100"
+              >
+                <div className="sticky top-0 bg-slate-50/95 backdrop-blur-xs px-4 py-2 text-[11px] font-bold text-slate-500 border-b border-slate-100 flex items-center justify-between z-10 shadow-2xs">
+                  <span>ພົບ {allMatchingProducts.length} ລາຍການ</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-teal-700">ສະແດງ {displayedProducts.length} ລາຍການ</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsProductDropdownOpen(false)}
+                      className="text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
                     >
-                      <div className="min-w-0 flex items-center gap-2.5">
-                        {p.imageUrl || p.image_url ? (
-                          <img
-                            src={p.imageUrl || p.image_url}
-                            alt={p.name}
-                            className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
-                            <Package size={16} />
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <span className="text-xs font-bold text-slate-900 block truncate">
-                            {p.name}
-                          </span>
-                          <span className="text-[11px] text-slate-400 block truncate">
-                            ໝວດ: {p.category || 'ທົ່ວໄປ'} {p.barcode ? `• Barcode: ${p.barcode}` : ''}
-                          </span>
-                        </div>
-                      </div>
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10.5px] font-mono font-bold">
-                          ສະຕັອກ: {p.currentStockBaseUnits || 0} {p.baseUnit}
-                        </span>
-                        {largestUnit && (
-                          <span className="text-[11px] font-mono font-bold text-teal-700">
-                            + ເພີ່ມ ({largestUnit.unitName})
-                          </span>
-                        )}
+                {displayedProducts.length > 0 ? (
+                  <>
+                    {displayedProducts.map((p) => {
+                      const prodUnits = (p.units || []).filter((u) => u.isActive !== false);
+                      const sorted = [...prodUnits].sort((a, b) => (b.multiplier || 1) - (a.multiplier || 1));
+                      const largestUnit = sorted[0];
+
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => {
+                            playActionClickBeep('inventory');
+                            onAddToCart(p);
+                            setProductSearch('');
+                            setIsProductDropdownOpen(false);
+                          }}
+                          className="px-4 py-2.5 hover:bg-teal-50/70 cursor-pointer flex items-center justify-between gap-3 transition-colors"
+                        >
+                          <div className="min-w-0 flex items-center gap-2.5">
+                            {p.imageUrl || p.image_url ? (
+                              <img
+                                src={p.imageUrl || p.image_url}
+                                alt={p.name}
+                                className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
+                                <Package size={16} />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <span className="text-xs font-bold text-slate-900 block truncate">
+                                {p.name}
+                              </span>
+                              <span className="text-[11px] text-slate-400 block truncate">
+                                ໝວດ: {p.category || 'ທົ່ວໄປ'} {p.barcode ? `• Barcode: ${p.barcode}` : ''}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10.5px] font-mono font-bold">
+                              ສະຕັອກ: {p.currentStockBaseUnits || 0} {p.baseUnit}
+                            </span>
+                            {largestUnit && (
+                              <span className="text-[11px] font-mono font-bold text-teal-700">
+                                + ເພີ່ມ ({largestUnit.unitName})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {displayedProducts.length < allMatchingProducts.length && (
+                      <div className="p-2.5 text-center bg-slate-50 text-[11px] text-slate-500 font-medium border-t border-slate-100">
+                        ເລື່ອນລົງເພື່ອໂຫຼດຕື່ມ... (ກຳລັງສະແດງ {displayedProducts.length} / {allMatchingProducts.length})
                       </div>
-                    </div>
-                  );
-                })}
+                    )}
+                  </>
+                ) : (
+                  <div className="p-4 text-center text-xs text-slate-500">
+                    ບໍ່ພົບສິນຄ້າທີ່ກົງກັບ "{productSearch}"
+                  </div>
+                )}
               </div>
             )}
           </div>

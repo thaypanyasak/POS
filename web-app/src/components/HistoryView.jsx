@@ -481,7 +481,7 @@ export default function HistoryView({
       <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-3 sm:mb-4 flex items-center justify-between gap-2.5 sm:gap-3 shrink-0 shadow-2xs">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0">
-            <ClockCounterClockwise size={20} className="sm:w-5 sm:h-5" weight="duotone" />
+            <Receipt size={20} className="sm:w-5 sm:h-5" weight="duotone" />
           </div>
           <div className="min-w-0">
             <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
@@ -859,8 +859,8 @@ export default function HistoryView({
               <CheckCircle size={15} weight="bold" />
               <span className="hidden sm:inline">ໝາຍວ່າອ່ານທັງໝົດ</span>
               <span className="sm:hidden">ອ່ານໝົດ</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-teal-800 text-white text-[10px] font-mono font-bold">
-                {unreadCount}
+              <span className="px-1.5 py-0.5 rounded-full bg-teal-800/90 text-white text-[10px] font-sans font-black tabular-nums shadow-xs">
+                {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             </button>
           )}
@@ -957,13 +957,13 @@ export default function HistoryView({
                     #{tx.receiptNumber}
                   </span>
                   {isOrderNew && (
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-600 text-white animate-pulse shadow-xs inline-flex items-center gap-1">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_2px_6px_rgba(5,150,105,0.3)] inline-flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-white" />
                       <span>ບິນໃໝ່</span>
                     </span>
                   )}
                   {isOrderUpdated && (
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white animate-pulse shadow-xs inline-flex items-center gap-1">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_2px_6px_rgba(245,158,11,0.3)] inline-flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-white" />
                       <span>ແກ້ໄຂໃໝ່</span>
                     </span>
@@ -1238,13 +1238,13 @@ export default function HistoryView({
                         #{tx.receiptNumber}
                       </span>
                       {isOrderNew && (
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-emerald-600 text-white animate-pulse shadow-2xs inline-flex items-center gap-1">
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_2px_6px_rgba(5,150,105,0.3)] inline-flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-white" />
                           <span>ບິນໃໝ່</span>
                         </span>
                       )}
                       {isOrderUpdated && (
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-500 text-white animate-pulse shadow-2xs inline-flex items-center gap-1">
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_2px_6px_rgba(245,158,11,0.3)] inline-flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-white" />
                           <span>ແກ້ໄຂໃໝ່</span>
                         </span>

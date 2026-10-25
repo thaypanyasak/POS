@@ -40,6 +40,8 @@ export default function ProductFormModal({
   setNewProdNameVi,
   newProdCategory,
   setNewProdCategory,
+  newProdCategoryId = '',
+  setNewProdCategoryId,
   categoriesList = [],
   rawCategories = [],
   onCreateCategory,
@@ -145,17 +147,26 @@ export default function ProductFormModal({
   // Default to first category from database when creating new product
   useEffect(() => {
     if (isOpen && !productToEdit && !newProdCategory && categoriesList && categoriesList.length > 0) {
-      setNewProdCategory(categoriesList[0]);
+      const firstCat = categoriesList[0];
+      setNewProdCategory(firstCat);
+      const matched = rawCategories.find((c) => c.name === firstCat);
+      if (setNewProdCategoryId) {
+        setNewProdCategoryId(matched?.id || '');
+      }
     }
-  }, [isOpen, productToEdit, newProdCategory, categoriesList, setNewProdCategory]);
+  }, [isOpen, productToEdit, newProdCategory, categoriesList, rawCategories, setNewProdCategory, setNewProdCategoryId]);
 
   const handleAddNewCategoryInline = async () => {
     if (!customCatInput.trim()) return;
     const clean = customCatInput.trim();
+    let newCatObj = null;
     if (onCreateCategory) {
-      await onCreateCategory(clean);
+      newCatObj = await onCreateCategory(clean);
     }
     setNewProdCategory(clean);
+    if (setNewProdCategoryId && newCatObj?.id) {
+      setNewProdCategoryId(newCatObj.id);
+    }
     setCustomCatInput('');
     setIsAddingNewCat(false);
   };
@@ -631,7 +642,14 @@ export default function ProductFormModal({
                 ) : (
                   <select
                     value={newProdCategory}
-                    onChange={(e) => setNewProdCategory(e.target.value)}
+                    onChange={(e) => {
+                      const selectedName = e.target.value;
+                      setNewProdCategory(selectedName);
+                      const matched = rawCategories.find((c) => c.name === selectedName);
+                      if (setNewProdCategoryId) {
+                        setNewProdCategoryId(matched?.id || '');
+                      }
+                    }}
                     className="w-full h-9 sm:h-10 px-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 focus:bg-white font-bold transition-all cursor-pointer"
                   >
                     {categoriesList.length === 0 ? (
