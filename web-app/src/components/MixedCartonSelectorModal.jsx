@@ -88,10 +88,49 @@ export default function MixedCartonSelectorModal({
 
   if (!isOpen || !bundle) return null;
 
-  const packageQty = Number(bundle.package_qty) || 24;
+  // Auto-resolve carton capacity from child product units (e.g. 12 packs/carton) if bundle spec is missing
+  const packageQty = useMemo(() => {
+    if (bundle?.package_qty && Number(bundle.package_qty) > 0) {
+      return Number(bundle.package_qty);
+    }
+    if (childProducts && childProducts.length > 0) {
+      for (const p of childProducts) {
+        const units = Array.isArray(p.units) ? p.units : [];
+        const cartonU = units.find(
+          (u) =>
+            u.tier === 3 ||
+            u.id?.endsWith('_carton') ||
+            ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].includes(u.unitName)
+        );
+        if (cartonU?.multiplier && Number(cartonU.multiplier) > 1) {
+          return Number(cartonU.multiplier);
+        }
+      }
+    }
+    return 12;
+  }, [bundle, childProducts]);
+
   const cartonPrice = resolvedCartonPrice;
   const unitName = bundle.unit_name || 'ແກັດ';
-  const baseUnitName = bundle.base_unit_name || 'ອັນ';
+
+  // Auto-resolve base/pack unit name (prefer 'ແພັກ' or tier 2 unit over generic 'ອັນ')
+  const baseUnitName = useMemo(() => {
+    if (bundle?.base_unit_name && bundle.base_unit_name !== 'ອັນ') {
+      return bundle.base_unit_name;
+    }
+    if (childProducts && childProducts.length > 0) {
+      for (const p of childProducts) {
+        const units = Array.isArray(p.units) ? p.units : [];
+        const packU = units.find(
+          (u) => u.tier === 2 || u.id?.endsWith('_pack') || ['ແພັກ', 'pack'].includes(u.unitName)
+        );
+        if (packU?.unitName) return packU.unitName;
+        const baseU = units.find((u) => u.isBaseUnit || Number(u.multiplier) === 1);
+        if (baseU?.unitName) return baseU.unitName;
+      }
+    }
+    return bundle?.base_unit_name || 'ແພັກ';
+  }, [bundle, childProducts]);
 
   // Total quantity picked across all flavors
   const totalPicked = Object.values(flavorQuantities).reduce((sum, q) => sum + (Number(q) || 0), 0);
@@ -103,19 +142,20 @@ export default function MixedCartonSelectorModal({
   // Carton portion gets the wholesale carton price
   const cartonTotalLak = cartonCount * cartonPrice;
 
-  // Loose portion: each loose unit gets its standard retail piece price
+  // Loose portion: each loose unit gets its standard retail pack/piece price
   let looseTotalLak = 0;
-  // If there are loose units, price the first looseCount units picked at their base retail price
+  // If there are loose units, price the first looseCount units picked at their retail pack price
   if (looseCount > 0) {
     let accountedLoose = 0;
     for (const p of childProducts) {
       const q = flavorQuantities[p.id] || 0;
       if (q > 0) {
-        // Find piece/base unit retail price
-        const pieceUnit =
+        // Find pack/piece unit retail price (prefer pack tier/unit, fallback to base)
+        const packOrPieceUnit =
+          (p.units || []).find((u) => u.tier === 2 || u.id?.endsWith('_pack') || ['ແພັກ', 'pack'].includes(u.unitName)) ||
           (p.units || []).find((u) => u.isBaseUnit || Number(u.multiplier) === 1 || u.tier === 1) ||
           (p.units || [])[0];
-        const piecePrice = Number(pieceUnit?.retailPrice ?? p.retailPrice ?? 0);
+        const piecePrice = Number(packOrPieceUnit?.retailPrice ?? p.retailPrice ?? 0);
         
         const loosePortion = Math.min(q, looseCount - accountedLoose);
         looseTotalLak += loosePortion * piecePrice;

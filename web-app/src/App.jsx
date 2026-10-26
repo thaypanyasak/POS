@@ -1946,6 +1946,23 @@ export default function App() {
           const effectivePrice = uPrice > 0 ? uPrice : (qty > 0 && rawLineTotal > 0 ? Math.round(rawLineTotal / qty) : 0);
           const baseTotal = effectivePrice * qty;
 
+          let bundleQty = qty;
+          let bundleUnitName = i.unit_name || 'ແພັກ';
+          let bundlePrice = effectivePrice;
+
+          if (isBundle && Array.isArray(bundleComps) && bundleComps.length > 0) {
+            const totalPieces = bundleComps.reduce((sum, c) => sum + (Number(c.quantity || c.qty) || 0), 0);
+            const foundB = (bundles || []).find((b) => b.id === i.product_id);
+            const pkgLimit = Number(foundB?.package_qty) || 12;
+            const packUnit = foundB?.base_unit_name || 'ແພັກ';
+
+            if (totalPieces > 0 && totalPieces < pkgLimit) {
+              bundleQty = totalPieces;
+              bundleUnitName = packUnit;
+              bundlePrice = rawLineTotal > 0 && bundleQty > 0 ? Math.round(rawLineTotal / bundleQty) : effectivePrice;
+            }
+          }
+
           const isCrateEligible = !isBundle && Boolean(
             i.hasCrateDeposit ||
             matchedProd?.hasCrateDeposit ||
@@ -1965,14 +1982,17 @@ export default function App() {
             name_vi: matchedProd?.name_vi || matchedProd?.nameVi || i.name_vi || '',
             nameVi: matchedProd?.name_vi || matchedProd?.nameVi || i.nameVi || '',
             unit: {
-              unitName: i.unit_name,
-              retailPrice: effectivePrice,
-              wholesalePrice: effectivePrice,
+              unitName: bundleUnitName,
+              retailPrice: bundlePrice,
+              wholesalePrice: bundlePrice,
             },
-            unitName: i.unit_name,
-            quantity: qty,
-            unitPrice: effectivePrice,
-            price: effectivePrice,
+            unitName: bundleUnitName,
+            quantity: bundleQty,
+            cartonQty: isBundle && bundleQty < 12 ? 0 : null,
+            looseQty: isBundle && bundleQty < 12 ? bundleQty : null,
+            baseUnitName: bundleUnitName,
+            unitPrice: bundlePrice,
+            price: bundlePrice,
             lineTotal: rawLineTotal,
             isBundle,
             bundleComponents: bundleComps,
@@ -2011,6 +2031,23 @@ export default function App() {
               const effectivePrice = uPrice > 0 ? uPrice : (qty > 0 && rawLineTotal > 0 ? Math.round(rawLineTotal / qty) : 0);
               const baseTotal = effectivePrice * qty;
 
+              let bundleQty = qty;
+              let bundleUnitName = i.unit_name || 'ແພັກ';
+              let bundlePrice = effectivePrice;
+
+              if (isBundle && Array.isArray(bundleComps) && bundleComps.length > 0) {
+                const totalPieces = bundleComps.reduce((sum, c) => sum + (Number(c.quantity || c.qty) || 0), 0);
+                const foundB = (bundles || []).find((b) => b.id === i.product_id);
+                const pkgLimit = Number(foundB?.package_qty) || 12;
+                const packUnit = foundB?.base_unit_name || 'ແພັກ';
+
+                if (totalPieces > 0 && totalPieces < pkgLimit) {
+                  bundleQty = totalPieces;
+                  bundleUnitName = packUnit;
+                  bundlePrice = rawLineTotal > 0 && bundleQty > 0 ? Math.round(rawLineTotal / bundleQty) : effectivePrice;
+                }
+              }
+
               const isCrateEligible = !isBundle && Boolean(
                 i.hasCrateDeposit ||
                 matchedProd?.hasCrateDeposit ||
@@ -2030,14 +2067,17 @@ export default function App() {
                 name_vi: matchedProd?.name_vi || matchedProd?.nameVi || i.name_vi || '',
                 nameVi: matchedProd?.name_vi || matchedProd?.nameVi || i.nameVi || '',
                 unit: {
-                  unitName: i.unit_name,
-                  retailPrice: effectivePrice,
-                  wholesalePrice: effectivePrice,
+                  unitName: bundleUnitName,
+                  retailPrice: bundlePrice,
+                  wholesalePrice: bundlePrice,
                 },
-                unitName: i.unit_name,
-                quantity: qty,
-                unitPrice: effectivePrice,
-                price: effectivePrice,
+                unitName: bundleUnitName,
+                quantity: bundleQty,
+                cartonQty: isBundle && bundleQty < 12 ? 0 : null,
+                looseQty: isBundle && bundleQty < 12 ? bundleQty : null,
+                baseUnitName: bundleUnitName,
+                unitPrice: bundlePrice,
+                price: bundlePrice,
                 lineTotal: rawLineTotal,
                 isBundle,
                 bundleComponents: bundleComps,
@@ -2053,6 +2093,9 @@ export default function App() {
           console.warn('Could not query items for transaction:', e);
         }
       }
+    }
+    if (products && products.length > 0) {
+      target.products = products;
     }
     setSelectedReceiptForView(target);
     setReceiptModalOpen(true);
@@ -2121,7 +2164,10 @@ export default function App() {
 
       const receiptItems = cart.map((it) => {
         if (it.isBundle) {
-          const isOnlyLoose = Number(it.cartonQty ?? 0) === 0 && Number(it.looseQty ?? 0) > 0;
+          const childPieces = (it.bundleComponents || []).reduce((sum, c) => sum + (Number(c.quantity || c.qty) || 0), 0);
+          const pkgLimit = Number(it.packageQty) || 12;
+          const isOnlyLoose = (Number(it.cartonQty ?? 0) === 0 && Number(it.looseQty ?? 0) > 0) ||
+            (childPieces > 0 && childPieces < pkgLimit);
           const isExactCarton = Number(it.cartonQty ?? 0) > 0 && Number(it.looseQty ?? 0) === 0;
           const bundleLineTotal = Number(it.lineTotal ?? it.subtotal ?? (it.cartonTotalLak || 0) + (it.looseTotalLak || 0));
           
@@ -2130,7 +2176,7 @@ export default function App() {
             : (it.unitName || 'ແກັດ');
             
           const bundleQty = isOnlyLoose
-            ? Number(it.looseQty)
+            ? (Number(it.looseQty) || childPieces || 1)
             : (isExactCarton ? Number(it.cartonQty) : (Number(it.quantity) || 1));
             
           const calculatedUnitPrice = bundleQty > 0 ? Math.round(bundleLineTotal / bundleQty) : bundleLineTotal;

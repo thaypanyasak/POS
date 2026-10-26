@@ -776,25 +776,102 @@ export default function ReceiptModal({
                 // Name resolution: In Vietnamese mode, prioritize name_vi / nameVi with multi-source lookup, fallback to Lao name
                 const prodName = resolveItemName(it, receiptLanguage);
 
-                // Strict Crate Deposit Eligibility: Bundles and non-crate products are NEVER eligible for crate deposits
-                const isBundleItem = Boolean(it.isBundle || it.is_bundle || it.bundleId || it.bundle_components || it.bundleComponents);
+                // Parse bundle child components (handling both raw array and stringified JSON from database)
+                const rawComps = it.bundle_components || it.bundleComponents;
+                const bundleComponents = typeof rawComps === 'string'
+                  ? (() => { try { return JSON.parse(rawComps); } catch (_) { return []; } })()
+                  : (Array.isArray(rawComps) ? rawComps : []);
 
-                const isOnlyLooseBundle = Boolean(
-                  isBundleItem &&
-                  Number(it.cartonQty ?? 0) === 0 &&
-                  Number(it.looseQty ?? 0) > 0
+                // Strict Crate Deposit Eligibility: Bundles and non-crate products are NEVER eligible for crate deposits
+                const isBundleItem = Boolean(it.isBundle || it.is_bundle || it.bundleId || (bundleComponents && bundleComponents.length > 0));
+
+                // Count total child pieces/packs
+                const totalComponentPieces = bundleComponents.reduce((sum, c) => sum + (Number(c.quantity || c.qty) || 0), 0);
+
+                // Detect packageQty and pack unit
+                let packageQty = Number(it.packageQty || it.package_qty) || 0;
+                let detectedBaseUnit = it.baseUnitName || '';
+
+                if (isBundleItem) {
+                  if (products && Array.isArray(products) && bundleComponents.length > 0) {
+                    for (const comp of bundleComponents) {
+                      const cId = comp.productId || comp.product_id;
+                      const cName = comp.productName || comp.product_name || comp.name;
+                      const matched = products.find(
+                        (p) => (cId && p.id === cId) || (cName && p.name && p.name.trim() === cName.trim())
+                      );
+                      if (matched) {
+                        const uList = Array.isArray(matched.units) ? matched.units : [];
+                        if (!packageQty) {
+                          const cartonU = uList.find(
+                            (u) => u.tier === 3 || u.id?.endsWith('_carton') || ['ແກັດ', 'ລັງ'].includes(u.unitName)
+                          );
+                          if (cartonU?.multiplier && Number(cartonU.multiplier) > 1) {
+                            packageQty = Number(cartonU.multiplier);
+                          }
+                        }
+                        if (!detectedBaseUnit) {
+                          const packU = uList.find(
+                            (u) => u.tier === 2 || u.id?.endsWith('_pack') || ['ແພັກ', 'pack'].includes(u.unitName)
+                          );
+                          if (packU?.unitName) {
+                            detectedBaseUnit = packU.unitName;
+                          } else {
+                            const baseU = uList.find((u) => u.isBaseUnit || Number(u.multiplier) === 1);
+                            if (baseU?.unitName) detectedBaseUnit = baseU.unitName;
+                          }
+                        }
+                      }
+                      if (packageQty && detectedBaseUnit) break;
+                    }
+                  }
+
+                  if (!packageQty || !detectedBaseUnit) {
+                    try {
+                      const cachedBundles = JSON.parse(localStorage.getItem('meiishop_bundles_cache') || '[]');
+                      const foundB = cachedBundles.find(
+                        (b) => (it.bundleId && b.id === it.bundleId) ||
+                               (it.productId && b.id === it.productId) ||
+                               (it.productName && b.name && b.name.trim() === it.productName.trim())
+                      );
+                      if (foundB) {
+                        if (!packageQty) packageQty = Number(foundB.package_qty) || 0;
+                        if (!detectedBaseUnit) detectedBaseUnit = foundB.base_unit_name || '';
+                      }
+                    } catch (_) {}
+                  }
+                }
+
+                if (!packageQty) packageQty = 12;
+                if (!detectedBaseUnit) detectedBaseUnit = 'ແພັກ';
+
+                const explicitCartonQty = it.cartonQty !== undefined && it.cartonQty !== null ? Number(it.cartonQty) : null;
+                const explicitLooseQty = it.looseQty !== undefined && it.looseQty !== null ? Number(it.looseQty) : null;
+
+                const isOnlyLooseBundle = isBundleItem && (
+                  (explicitCartonQty === 0 && explicitLooseQty > 0) ||
+                  (totalComponentPieces > 0 && (
+                    (explicitCartonQty === 0) ||
+                    (explicitCartonQty === null && totalComponentPieces < packageQty) ||
+                    (Number(it.quantity) === 1 && totalComponentPieces > 1 && totalComponentPieces < packageQty)
+                  ))
                 );
 
                 const rawUnitName = isOnlyLooseBundle
-                  ? (it.baseUnitName || 'ແພັກ')
+                  ? (detectedBaseUnit || 'ແພັກ')
                   : (it.unit?.unitName || it.unitName || it.unit_name || L.defaultUnitName);
                 const unitName = translateUnit(rawUnitName, receiptLanguage, Boolean(it.isHalfCarton));
 
                 let qty = it.quantity || 1;
-                if (isOnlyLooseBundle && Number(it.looseQty) > 0) {
-                  qty = Number(it.looseQty);
+                if (isOnlyLooseBundle) {
+                  if (totalComponentPieces > 0) {
+                    qty = totalComponentPieces;
+                  } else if (explicitLooseQty > 0) {
+                    qty = explicitLooseQty;
+                  }
                 }
 
+                const rawLineTotal = Number(it.lineTotal || it.line_total) || 0;
                 const rawPrice = Number(
                   it.customPrice ??
                   it.effectivePrice ??
@@ -806,10 +883,12 @@ export default function ReceiptModal({
                     ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
                     : (it.unit?.retailPrice ?? 0))
                 ) || 0;
-                const rawLineTotal = Number(it.lineTotal || it.line_total) || 0;
-                const price = (rawPrice > 0 && (!isOnlyLooseBundle || rawPrice * qty === rawLineTotal))
-                  ? rawPrice
-                  : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : rawPrice);
+
+                const price = isOnlyLooseBundle
+                  ? (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : (rawPrice > 0 ? rawPrice : 0))
+                  : (rawPrice > 0 && rawPrice * qty === rawLineTotal
+                      ? rawPrice
+                      : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : rawPrice));
                 const baseLineTotal = rawLineTotal > 0 ? rawLineTotal : price * qty;
                 const isCrateEligible = !isBundleItem && Boolean(
                   it.hasCrateDeposit ||
@@ -826,12 +905,6 @@ export default function ReceiptModal({
                 const hasMissingCrates = isCrateEligible && Boolean(
                   crateDepositTotal > 0 || it.noEmptyCrates || (Number(it.missingCratesCount) > 0)
                 );
-
-                // Parse bundle child components (handling both raw array and stringified JSON from database)
-                const rawComps = it.bundle_components || it.bundleComponents;
-                const bundleComponents = typeof rawComps === 'string'
-                  ? (() => { try { return JSON.parse(rawComps); } catch (_) { return []; } })()
-                  : (Array.isArray(rawComps) ? rawComps : []);
 
                 return (
                   <div key={i} className="receipt-item-row flex flex-col text-xs leading-[1.2]">

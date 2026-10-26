@@ -434,7 +434,7 @@ function resolveCanvasItemName(it, lang, receipt, defaultItemName = 'ສິນ�
   return rawLao;
 }
 
-function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = null) {
+function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = null, customProducts = null) {
   const L = LABELS[lang] || LABELS.lo;
   const FONTS = getFonts(lang);
   const allItems = receipt.items?.length > 0 ? receipt.items
@@ -636,26 +636,118 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
     const it = items[i];
     const prodName = resolveCanvasItemName(it, lang, receipt, L.defaultItemName);
 
-    // Loose bundle detection (e.g. 8 packs of 12-pack carton)
-    const isBundleItem = Boolean(it.isBundle || it.is_bundle || it.bundleId || it.bundle_components || it.bundleComponents);
-    const isOnlyLooseBundle = Boolean(
-      isBundleItem &&
-      Number(it.cartonQty ?? 0) === 0 &&
-      Number(it.looseQty ?? 0) > 0
+    // Mixed carton bundle flavor breakdown if applicable (matches Image 2 style)
+    let bundleComponents = it.bundle_components || it.bundleComponents;
+    if (typeof bundleComponents === 'string') {
+      try { bundleComponents = JSON.parse(bundleComponents); } catch (_) { bundleComponents = []; }
+    }
+    if (!Array.isArray(bundleComponents)) {
+      bundleComponents = [];
+    }
+
+    const isBundleItem = Boolean(it.isBundle || it.is_bundle || it.bundleId || bundleComponents.length > 0);
+
+    // Count total child pieces/packs
+    const totalComponentPieces = bundleComponents.reduce((sum, c) => sum + (Number(c.quantity || c.qty) || 0), 0);
+
+    // Detect packageQty and pack unit
+    let packageQty = Number(it.packageQty || it.package_qty) || 0;
+    let detectedBaseUnit = it.baseUnitName || '';
+
+    if (isBundleItem) {
+      let prodsPool = Array.isArray(customProducts) && customProducts.length > 0
+        ? customProducts
+        : (Array.isArray(receipt?.products) ? receipt.products : []);
+      if (prodsPool.length === 0) {
+        try {
+          const saved = typeof window !== 'undefined' ? localStorage.getItem('meiishop_products_v5') : null;
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) prodsPool = parsed;
+          }
+        } catch (_) {}
+      }
+      if (prodsPool.length > 0 && bundleComponents.length > 0) {
+        for (const comp of bundleComponents) {
+          const cId = comp.productId || comp.product_id;
+          const cName = comp.productName || comp.product_name || comp.name;
+          const matched = prodsPool.find(
+            (p) => (cId && p.id === cId) || (cName && p.name && p.name.trim() === cName.trim())
+          );
+          if (matched) {
+            const uList = Array.isArray(matched.units) ? matched.units : [];
+            if (!packageQty) {
+              const cartonU = uList.find(
+                (u) => u.tier === 3 || u.id?.endsWith('_carton') || ['ແກັດ', 'ລັງ'].includes(u.unitName)
+              );
+              if (cartonU?.multiplier && Number(cartonU.multiplier) > 1) {
+                packageQty = Number(cartonU.multiplier);
+              }
+            }
+            if (!detectedBaseUnit) {
+              const packU = uList.find(
+                (u) => u.tier === 2 || u.id?.endsWith('_pack') || ['ແພັກ', 'pack'].includes(u.unitName)
+              );
+              if (packU?.unitName) {
+                detectedBaseUnit = packU.unitName;
+              } else {
+                const baseU = uList.find((u) => u.isBaseUnit || Number(u.multiplier) === 1);
+                if (baseU?.unitName) detectedBaseUnit = baseU.unitName;
+              }
+            }
+          }
+          if (packageQty && detectedBaseUnit) break;
+        }
+      }
+
+      if (!packageQty || !detectedBaseUnit) {
+        try {
+          const cachedBundles = JSON.parse(localStorage.getItem('meiishop_bundles_cache') || '[]');
+          const foundB = cachedBundles.find(
+            (b) => (it.bundleId && b.id === it.bundleId) ||
+                   (it.productId && b.id === it.productId) ||
+                   (it.productName && b.name && b.name.trim() === it.productName.trim())
+          );
+          if (foundB) {
+            if (!packageQty) packageQty = Number(foundB.package_qty) || 0;
+            if (!detectedBaseUnit) detectedBaseUnit = foundB.base_unit_name || '';
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (!packageQty) packageQty = 12;
+    if (!detectedBaseUnit) detectedBaseUnit = 'ແພັກ';
+
+    const explicitCartonQty = it.cartonQty !== undefined && it.cartonQty !== null ? Number(it.cartonQty) : null;
+    const explicitLooseQty = it.looseQty !== undefined && it.looseQty !== null ? Number(it.looseQty) : null;
+
+    const isOnlyLooseBundle = isBundleItem && (
+      (explicitCartonQty === 0 && explicitLooseQty > 0) ||
+      (totalComponentPieces > 0 && (
+        (explicitCartonQty === 0) ||
+        (explicitCartonQty === null && totalComponentPieces < packageQty) ||
+        (Number(it.quantity) === 1 && totalComponentPieces > 1 && totalComponentPieces < packageQty)
+      ))
     );
 
     const rawUnit = isOnlyLooseBundle
-      ? (it.baseUnitName || 'ແພັກ')
+      ? (detectedBaseUnit || 'ແພັກ')
       : (it.unit?.unitName || it.unitName || it.unit_name || L.defaultUnitName);
     const unitName = translateUnit(rawUnit, lang, Boolean(it.isHalfCarton));
     const globalItemNum = startItemIndex + i + 1;
     const fullName = `${globalItemNum}. ${prodName} (${unitName})`;
 
     let qty = it.quantity || 1;
-    if (isOnlyLooseBundle && Number(it.looseQty) > 0) {
-      qty = Number(it.looseQty);
+    if (isOnlyLooseBundle) {
+      if (totalComponentPieces > 0) {
+        qty = totalComponentPieces;
+      } else if (explicitLooseQty > 0) {
+        qty = explicitLooseQty;
+      }
     }
 
+    const rawLineTotal = Number(it.lineTotal || it.line_total) || 0;
     const rawPrice = Number(
       it.customPrice ??
       it.effectivePrice ??
@@ -667,10 +759,12 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
         ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
         : (it.unit?.retailPrice ?? 0))
     ) || 0;
-    const rawLineTotal = Number(it.lineTotal || it.line_total) || 0;
-    const price = (rawPrice > 0 && (!isOnlyLooseBundle || rawPrice * qty === rawLineTotal))
-      ? rawPrice
-      : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : rawPrice);
+
+    const price = isOnlyLooseBundle
+      ? (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : (rawPrice > 0 ? rawPrice : 0))
+      : (rawPrice > 0 && rawPrice * qty === rawLineTotal
+          ? rawPrice
+          : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : rawPrice));
     const lineTotal = rawLineTotal > 0 ? rawLineTotal : price * qty;
 
     // Line 1: Number + Full Product Name + (Unit) across full printable width
@@ -689,10 +783,6 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
     y += 28;
 
     // Mixed carton bundle flavor breakdown if applicable (matches Image 2 style)
-    let bundleComponents = it.bundle_components || it.bundleComponents;
-    if (typeof bundleComponents === 'string') {
-      try { bundleComponents = JSON.parse(bundleComponents); } catch (_) { bundleComponents = []; }
-    }
     if (Array.isArray(bundleComponents) && bundleComponents.length > 0) {
       for (const comp of bundleComponents) {
         const rawCompName = comp.productName || comp.product_name || comp.name || '';
@@ -1014,6 +1104,7 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
 export async function renderReceiptCanvas(receipt, lang = 'lo', options = {}) {
   if (!receipt) throw new Error('Receipt data is missing');
   const pageInfo = options?.pageInfo || null;
+  const customProducts = options?.products || receipt?.products || null;
 
   // Pre-load fonts based on selected language
   if (lang === 'vi') {
@@ -1098,7 +1189,7 @@ export async function renderReceiptCanvas(receipt, lang = 'lo', options = {}) {
   }
 
   // Pass 1: Measure exact height with zero discrepancy
-  const exactHeight = layoutReceipt(null, receipt, lang, qrImg, pageInfo);
+  const exactHeight = layoutReceipt(null, receipt, lang, qrImg, pageInfo, customProducts);
 
   // Pass 2: Direct 1:1 Pixel Mapping on 576-dot Thermal Printhead
   // Rendering at exact 576px width eliminates 2X downsampling blur
@@ -1121,7 +1212,7 @@ export async function renderReceiptCanvas(receipt, lang = 'lo', options = {}) {
   ctx.textBaseline = 'top';
 
   // Execute actual drawing directly on 1:1 thermal grid
-  layoutReceipt(ctx, receipt, lang, qrImg, pageInfo);
+  layoutReceipt(ctx, receipt, lang, qrImg, pageInfo, customProducts);
 
   return canvas;
 }

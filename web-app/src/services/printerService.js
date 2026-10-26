@@ -281,7 +281,10 @@ export async function printReceiptSmart({
       }
 
       // 2. Render receipt to 1:1 Canvas (with pageInfo if multi-page split)
-      const canvas = await renderReceiptCanvas(receipt, language, { pageInfo });
+      const canvas = await renderReceiptCanvas(receipt, language, {
+        pageInfo,
+        products: products || receipt?.products || null,
+      });
 
       // 3. Convert Canvas to 1-bit ESC/POS raster bytes (threshold 195 for dense black strokes without white specks while keeping loops open)
       const shouldKick = kickCashDrawer !== null
