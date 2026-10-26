@@ -210,9 +210,14 @@ export default function MixedCartonSelectorModal({
         const piecePrice = Number(pieceUnit?.retailPrice ?? p.retailPrice ?? 0);
         return {
           productId: p.id,
+          product_id: p.id,
           productName: p.name,
+          product_name: p.name,
+          name_vi: p.name_vi || p.nameVi || '',
+          nameVi: p.name_vi || p.nameVi || '',
           quantity: qty,
           unitPrice: piecePrice,
+          unit_price: piecePrice,
           product: p,
         };
       })
@@ -221,6 +226,13 @@ export default function MixedCartonSelectorModal({
     const bundleChildImages = childProducts.map((p) => p.imageUrl || p.image_url).filter(Boolean);
     const isEditing = Boolean(editingCartItem);
 
+    const isOnlyLoose = cartonCount === 0 && looseCount > 0;
+    const isExactCarton = cartonCount > 0 && looseCount === 0;
+
+    const resolvedUnitName = isOnlyLoose ? baseUnitName : unitName;
+    const resolvedQty = isOnlyLoose ? looseCount : (isExactCarton ? cartonCount : 1);
+    const resolvedUnitPrice = resolvedQty > 0 ? Math.round(grandTotalLak / resolvedQty) : grandTotalLak;
+
     const bundleItem = {
       id: isEditing ? editingCartItem.id : `bundle_${bundle.id}_${Date.now()}`,
       isBundle: true,
@@ -228,19 +240,30 @@ export default function MixedCartonSelectorModal({
       bundleName: bundle.name,
       bundleNameVi: bundle.name_vi,
       packageQty,
-      unitName,
+      unitName: resolvedUnitName,
       baseUnitName,
       cartonQty: cartonCount,
       looseQty: looseCount,
       cartonPrice,
       loosePriceTotal: looseTotalLak,
-      unitPrice: cartonCount > 0 ? cartonPrice : (looseCount > 0 ? Math.round(looseTotalLak / looseCount) : cartonPrice),
+      unitPrice: resolvedUnitPrice,
+      price: resolvedUnitPrice,
+      unit: {
+        unitName: resolvedUnitName,
+        retailPrice: resolvedUnitPrice,
+        wholesalePrice: resolvedUnitPrice,
+      },
       lineTotal: grandTotalLak,
-      quantity: 1, // 1 bundle line item
+      quantity: resolvedQty,
       bundleComponents: selectedComponents,
+      bundle_components: selectedComponents,
       bundleChildImages,
       customPrice: null,
       overrideReason: '',
+      hasCrateDeposit: false,
+      noEmptyCrates: false,
+      missingCratesCount: 0,
+      crateDepositTotal: 0,
     };
 
     if (isEditing && onUpdateCartItem) {

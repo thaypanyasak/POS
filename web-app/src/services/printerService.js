@@ -115,9 +115,19 @@ export function formatReceiptForNative(receipt, language = 'lo') {
     const qty = Number(item.quantity ?? item.qty ?? 1);
     const price = Number(item.unit_price ?? item.price ?? 0);
     const total = Number(item.total_price ?? item.total ?? (qty * price));
-    const unit = item.unit || '';
-    const hasCrate = Boolean(item.hasCrateDeposit || item.missingCrateCount > 0);
-    const missingCrateCount = Number(item.missingCrateCount ?? (item.missingCrates || 0));
+    let bundleComponents = item.bundle_components || item.bundleComponents || null;
+    if (typeof bundleComponents === 'string') {
+      try { bundleComponents = JSON.parse(bundleComponents); } catch (_) { bundleComponents = null; }
+    }
+    const isBundle = Boolean(item.isBundle || item.is_bundle || (bundleComponents && bundleComponents.length > 0));
+    const isCrateEligible = !isBundle && Boolean(
+      item.hasCrateDeposit ||
+      item.product?.hasCrateDeposit ||
+      ((item.product?.category?.includes('ເບຍ') || item.product?.name?.includes('ເບຍ')) &&
+       (unit === 'ແກັດ' || unit === 'ລັງ'))
+    );
+    const hasCrate = isCrateEligible && Boolean(item.hasCrateDeposit || item.missingCrateCount > 0);
+    const missingCrateCount = isCrateEligible ? Number(item.missingCrateCount ?? (item.missingCrates || 0)) : 0;
     const feePerCrate = Number(item.feePerCrate || 30000);
 
     return {
@@ -126,6 +136,9 @@ export function formatReceiptForNative(receipt, language = 'lo') {
       unit,
       unit_price: price,
       total_price: total,
+      isBundle,
+      bundleComponents,
+      bundle_components: bundleComponents,
       hasCrateDeposit: hasCrate,
       missingCrateCount,
       feePerCrate,
@@ -188,6 +201,8 @@ export async function printReceiptSmart({
   allowFallback = false,
   method = null,
   products = null,
+  pageInfo = null,
+  kickCashDrawer = null,
 } = {}) {
   const isNative = Capacitor.isNativePlatform();
   const config = getPrinterConfig();
@@ -265,12 +280,16 @@ export async function printReceiptSmart({
         await ensureSaysetthaLoaded();
       }
 
-      // 2. Render receipt to 1:1 Canvas
-      const canvas = await renderReceiptCanvas(receipt, language);
+      // 2. Render receipt to 1:1 Canvas (with pageInfo if multi-page split)
+      const canvas = await renderReceiptCanvas(receipt, language, { pageInfo });
 
       // 3. Convert Canvas to 1-bit ESC/POS raster bytes (threshold 195 for dense black strokes without white specks while keeping loops open)
+      const shouldKick = kickCashDrawer !== null
+        ? kickCashDrawer
+        : (pageInfo ? (pageInfo.currentPage === 1 && config.drawerKick) : config.drawerKick);
+
       const escPosBytes = canvasToEscPosRaster(canvas, {
-        kickCashDrawer: config.drawerKick,
+        kickCashDrawer: shouldKick,
         cutPaper: config.autoCut,
         luminanceThreshold: 195,
         useDithering: false,
@@ -314,6 +333,8 @@ export async function printReceiptWithRetry({
   allowFallback = false,
   method = null,
   products = null,
+  pageInfo = null,
+  kickCashDrawer = null,
   maxRetries = 3,
   retryDelayMs = 1100,
   onRetryAttempt = null,
@@ -330,6 +351,8 @@ export async function printReceiptWithRetry({
         allowFallback,
         method,
         products,
+        pageInfo,
+        kickCashDrawer,
       });
       return res;
     } catch (err) {

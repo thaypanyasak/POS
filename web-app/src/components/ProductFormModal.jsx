@@ -22,6 +22,7 @@ import {
   Coins,
   Link,
   LinkBreak,
+  X,
 } from '@phosphor-icons/react';
 import { formatDots } from '../utils/formatters';
 import { compressProductImage, formatFileSize } from '../utils/imageCompressor';
@@ -327,9 +328,9 @@ export default function ProductFormModal({
   };
 
   const displayImage =
-    newProdImageUrl !== undefined && newProdImageUrl !== ''
+    typeof newProdImageUrl === 'string'
       ? newProdImageUrl
-      : productToEdit?.imageUrl || productToEdit?.image_url || '';
+      : (productToEdit?.imageUrl || productToEdit?.image_url || '');
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col w-screen h-screen overflow-hidden animate-in fade-in duration-150 select-none font-sans">
@@ -536,25 +537,39 @@ export default function ProductFormModal({
                   </div>
                 </div>
 
-                {/* Optional Web URL Input */}
-                {showUrlInput && (
-                  <div className="mt-0.5 pt-1.5 border-t border-slate-200 flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-slate-600">
-                      ຫຼື ປ້ອນລິ້ງຮູບພາບ (Image Web URL):
-                    </label>
+                {/* Image Web URL Input - Always visible in both create and edit mode */}
+                <div className="mt-0.5 pt-1.5 border-t border-slate-200 flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-slate-600">
+                    ຫຼື ປ້ອນລິ້ງຮູບພາບ (Image Web URL):
+                  </label>
+                  <div className="relative flex items-center">
                     <input
                       type="url"
-                      value={displayImage}
+                      value={newProdImageUrl ?? ''}
                       onChange={(e) => {
                         if (setNewProdImageUrl) setNewProdImageUrl(e.target.value);
                         if (setImageFileToUpload) setImageFileToUpload(null);
                         if (setImageCompressionStats) setImageCompressionStats(null);
                       }}
                       placeholder="https://images.unsplash.com/..."
-                      className="w-full h-8 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-teal-600 font-mono"
+                      className="w-full h-8 pl-2.5 pr-8 py-1 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-teal-600 font-mono"
                     />
+                    {Boolean(newProdImageUrl) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (setNewProdImageUrl) setNewProdImageUrl('');
+                          if (setImageFileToUpload) setImageFileToUpload(null);
+                          if (setImageCompressionStats) setImageCompressionStats(null);
+                        }}
+                        className="absolute right-1.5 w-5 h-5 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded cursor-pointer transition-colors active:scale-90"
+                        title="ລຶບລິ້ງຮູບ (Xóa URL)"
+                      >
+                        <X size={13} weight="bold" />
+                      </button>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
               {/* Product Name Input */}

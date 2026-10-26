@@ -1474,10 +1474,12 @@ export default function App() {
 
       const totalStock = trackStock ? calculatedStock : 0;
 
-      let finalImageUrl =
-        newProdImageUrl !== undefined && newProdImageUrl !== null && String(newProdImageUrl).trim() !== ''
-          ? String(newProdImageUrl).trim()
-          : (productToEdit?.imageUrl || productToEdit?.image_url || null);
+      let finalImageUrl = null;
+      if (typeof newProdImageUrl === 'string') {
+        finalImageUrl = newProdImageUrl.trim() || null;
+      } else if (productToEdit) {
+        finalImageUrl = productToEdit.imageUrl || productToEdit.image_url || null;
+      }
 
       // If user selected a new local image, upload the compressed blob to Supabase Storage
       if (imageFileToUpload) {
@@ -1927,15 +1929,34 @@ export default function App() {
           const matchedProd = products.find(
             (p) => (i.product_id && p.id === i.product_id) || (p.name && i.product_name && p.name.trim() === i.product_name.trim())
           );
+          let bundleComps = i.bundle_components || i.bundleComponents || null;
+          if (typeof bundleComps === 'string') {
+            try { bundleComps = JSON.parse(bundleComps); } catch (_) { bundleComps = null; }
+          }
+          const isBundle = Boolean(
+            i.is_bundle ||
+            i.isBundle ||
+            (bundleComps && bundleComps.length > 0) ||
+            i.product_id?.startsWith('bnd_') ||
+            i.product_id?.startsWith('bundle_')
+          );
           const uPrice = Number(i.unit_price) || 0;
           const qty = Number(i.quantity) || 1;
           const rawLineTotal = Number(i.line_total) || (uPrice * qty);
-          const baseTotal = uPrice * qty;
-          const diff = rawLineTotal > baseTotal ? (rawLineTotal - baseTotal) : 0;
+          const effectivePrice = uPrice > 0 ? uPrice : (qty > 0 && rawLineTotal > 0 ? Math.round(rawLineTotal / qty) : 0);
+          const baseTotal = effectivePrice * qty;
+
+          const isCrateEligible = !isBundle && Boolean(
+            i.hasCrateDeposit ||
+            matchedProd?.hasCrateDeposit ||
+            ((matchedProd?.category?.includes('ເບຍ') || matchedProd?.name?.includes('ເບຍ') || i.product_name?.includes('ເບຍ')) &&
+             (i.unit_name === 'ແກັດ' || i.unit_name === 'ລັງ'))
+          );
+          const diff = (isCrateEligible && rawLineTotal > baseTotal) ? (rawLineTotal - baseTotal) : 0;
           const fee = Number(matchedProd?.crateDepositFee) || 30000;
-          const crateDepositTotal = Number(i.crateDepositTotal) || (diff > 0 ? diff : 0);
-          const missingCount = Number(i.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0);
-          const hasMissingCrates = Boolean(i.noEmptyCrates || crateDepositTotal > 0 || (matchedProd?.hasCrateDeposit && diff > 0));
+          const crateDepositTotal = isCrateEligible ? (Number(i.crateDepositTotal) || (diff > 0 ? diff : 0)) : 0;
+          const missingCount = isCrateEligible ? (Number(i.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0)) : 0;
+          const hasMissingCrates = isCrateEligible && Boolean(i.noEmptyCrates || crateDepositTotal > 0);
 
           return {
             product: matchedProd || { name: i.product_name, id: i.product_id, name_vi: '' },
@@ -1945,12 +1966,17 @@ export default function App() {
             nameVi: matchedProd?.name_vi || matchedProd?.nameVi || i.nameVi || '',
             unit: {
               unitName: i.unit_name,
-              retailPrice: uPrice,
-              wholesalePrice: uPrice,
+              retailPrice: effectivePrice,
+              wholesalePrice: effectivePrice,
             },
             unitName: i.unit_name,
             quantity: qty,
+            unitPrice: effectivePrice,
+            price: effectivePrice,
             lineTotal: rawLineTotal,
+            isBundle,
+            bundleComponents: bundleComps,
+            bundle_components: bundleComps,
             noEmptyCrates: hasMissingCrates,
             missingCratesCount: missingCount,
             crateDepositFee: fee,
@@ -1968,15 +1994,34 @@ export default function App() {
               const matchedProd = products.find(
                 (p) => (i.product_id && p.id === i.product_id) || (p.name && i.product_name && p.name.trim() === i.product_name.trim())
               );
+              let bundleComps = i.bundle_components || i.bundleComponents || null;
+              if (typeof bundleComps === 'string') {
+                try { bundleComps = JSON.parse(bundleComps); } catch (_) { bundleComps = null; }
+              }
+              const isBundle = Boolean(
+                i.is_bundle ||
+                i.isBundle ||
+                (bundleComps && bundleComps.length > 0) ||
+                i.product_id?.startsWith('bnd_') ||
+                i.product_id?.startsWith('bundle_')
+              );
               const uPrice = Number(i.unit_price) || 0;
               const qty = Number(i.quantity) || 1;
               const rawLineTotal = Number(i.line_total) || (uPrice * qty);
-              const baseTotal = uPrice * qty;
-              const diff = rawLineTotal > baseTotal ? (rawLineTotal - baseTotal) : 0;
+              const effectivePrice = uPrice > 0 ? uPrice : (qty > 0 && rawLineTotal > 0 ? Math.round(rawLineTotal / qty) : 0);
+              const baseTotal = effectivePrice * qty;
+
+              const isCrateEligible = !isBundle && Boolean(
+                i.hasCrateDeposit ||
+                matchedProd?.hasCrateDeposit ||
+                ((matchedProd?.category?.includes('ເບຍ') || matchedProd?.name?.includes('ເບຍ') || i.product_name?.includes('ເບຍ')) &&
+                 (i.unit_name === 'ແກັດ' || i.unit_name === 'ລັງ'))
+              );
+              const diff = (isCrateEligible && rawLineTotal > baseTotal) ? (rawLineTotal - baseTotal) : 0;
               const fee = Number(matchedProd?.crateDepositFee) || 30000;
-              const crateDepositTotal = Number(i.crateDepositTotal) || (diff > 0 ? diff : 0);
-              const missingCount = Number(i.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0);
-              const hasMissingCrates = Boolean(i.noEmptyCrates || crateDepositTotal > 0 || (matchedProd?.hasCrateDeposit && diff > 0));
+              const crateDepositTotal = isCrateEligible ? (Number(i.crateDepositTotal) || (diff > 0 ? diff : 0)) : 0;
+              const missingCount = isCrateEligible ? (Number(i.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0)) : 0;
+              const hasMissingCrates = isCrateEligible && Boolean(i.noEmptyCrates || crateDepositTotal > 0);
 
               return {
                 product: matchedProd || { name: i.product_name, id: i.product_id, name_vi: '' },
@@ -1986,12 +2031,17 @@ export default function App() {
                 nameVi: matchedProd?.name_vi || matchedProd?.nameVi || i.nameVi || '',
                 unit: {
                   unitName: i.unit_name,
-                  retailPrice: uPrice,
-                  wholesalePrice: uPrice,
+                  retailPrice: effectivePrice,
+                  wholesalePrice: effectivePrice,
                 },
                 unitName: i.unit_name,
                 quantity: qty,
+                unitPrice: effectivePrice,
+                price: effectivePrice,
                 lineTotal: rawLineTotal,
+                isBundle,
+                bundleComponents: bundleComps,
+                bundle_components: bundleComps,
                 noEmptyCrates: hasMissingCrates,
                 missingCratesCount: missingCount,
                 crateDepositFee: fee,
@@ -2071,22 +2121,49 @@ export default function App() {
 
       const receiptItems = cart.map((it) => {
         if (it.isBundle) {
+          const isOnlyLoose = Number(it.cartonQty ?? 0) === 0 && Number(it.looseQty ?? 0) > 0;
+          const isExactCarton = Number(it.cartonQty ?? 0) > 0 && Number(it.looseQty ?? 0) === 0;
+          const bundleLineTotal = Number(it.lineTotal ?? it.subtotal ?? (it.cartonTotalLak || 0) + (it.looseTotalLak || 0));
+          
+          const bundleUnitName = isOnlyLoose
+            ? (it.baseUnitName || 'ແພັກ')
+            : (it.unitName || 'ແກັດ');
+            
+          const bundleQty = isOnlyLoose
+            ? Number(it.looseQty)
+            : (isExactCarton ? Number(it.cartonQty) : (Number(it.quantity) || 1));
+            
+          const calculatedUnitPrice = bundleQty > 0 ? Math.round(bundleLineTotal / bundleQty) : bundleLineTotal;
           const effectivePrice =
             it.customPrice !== undefined && it.customPrice !== null
-              ? Number(it.customPrice)
-              : (it.cartonPrice || it.unitPrice || 0);
+              ? Math.round(Number(it.customPrice) / (bundleQty > 0 ? bundleQty : 1))
+              : (Number(it.unitPrice) > 0 && (!isOnlyLoose || Number(it.unitPrice) * bundleQty === bundleLineTotal)
+                  ? Number(it.unitPrice)
+                  : calculatedUnitPrice);
+
           return {
             ...it,
             productId: it.bundleId || it.id,
             productName: it.bundleName || 'ນົມກ່ອງ ລວມລົດຊາດ',
             name_vi: it.bundleNameVi || '',
             nameVi: it.bundleNameVi || '',
-            unitName: it.unitName || 'ແກັດ',
+            unit: {
+              unitName: bundleUnitName,
+              retailPrice: effectivePrice,
+              wholesalePrice: effectivePrice,
+            },
+            unitName: bundleUnitName,
             unitPrice: effectivePrice,
+            price: effectivePrice,
             customPrice: it.customPrice,
-            lineTotal: it.lineTotal,
+            lineTotal: bundleLineTotal,
+            quantity: bundleQty,
             isBundle: true,
             bundleComponents: it.bundleComponents || [],
+            bundle_components: it.bundleComponents || [],
+            noEmptyCrates: false,
+            missingCratesCount: 0,
+            crateDepositTotal: 0,
           };
         }
 

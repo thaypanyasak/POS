@@ -620,17 +620,35 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
         )
       : null;
     const nameVi = matchedProd?.name_vi || matchedProd?.nameVi || i.name_vi || i.nameVi || '';
+    let bundleComps = i.bundle_components || i.bundleComponents || null;
+    if (typeof bundleComps === 'string') {
+      try { bundleComps = JSON.parse(bundleComps); } catch (_) { bundleComps = null; }
+    }
+    const isBundle = Boolean(
+      i.is_bundle ||
+      i.isBundle ||
+      (bundleComps && bundleComps.length > 0) ||
+      i.product_id?.startsWith('bnd_') ||
+      i.product_id?.startsWith('bundle_')
+    );
     const uPrice = Number(i.unit_price) || 0;
     const qty = Number(i.quantity) || 1;
     const rawLineTotal = Number(i.line_total) || uPrice * qty;
-    const baseTotal = uPrice * qty;
-    const diff = rawLineTotal > baseTotal ? rawLineTotal - baseTotal : 0;
+    const effectivePrice = uPrice > 0 ? uPrice : (qty > 0 && rawLineTotal > 0 ? Math.round(rawLineTotal / qty) : 0);
+    const baseTotal = effectivePrice * qty;
+
+    const isCrateEligible = !isBundle && Boolean(
+      i.hasCrateDeposit ||
+      matchedProd?.hasCrateDeposit ||
+      ((matchedProd?.category?.includes('ເບຍ') || matchedProd?.name?.includes('ເບຍ') || i.product_name?.includes('ເບຍ')) &&
+       (i.unit_name === 'ແກັດ' || i.unit_name === 'ລັງ'))
+    );
+    const diff = (isCrateEligible && rawLineTotal > baseTotal) ? (rawLineTotal - baseTotal) : 0;
     const fee = Number(matchedProd?.crateDepositFee) || 30000;
-    const crateDepositTotal = Number(i.crateDepositTotal) || (diff > 0 ? diff : 0);
-    const missingCount =
-      Number(i.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0);
-    const hasMissingCrates = Boolean(
-      i.noEmptyCrates || crateDepositTotal > 0 || (matchedProd?.hasCrateDeposit && diff > 0)
+    const crateDepositTotal = isCrateEligible ? (Number(i.crateDepositTotal) || (diff > 0 ? diff : 0)) : 0;
+    const missingCount = isCrateEligible ? (Number(i.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0)) : 0;
+    const hasMissingCrates = isCrateEligible && Boolean(
+      i.noEmptyCrates || crateDepositTotal > 0
     );
 
     return {
@@ -642,12 +660,17 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
       unit: {
         unitName: i.unit_name,
         multiplier: Number(i.multiplier) || 1,
-        retailPrice: uPrice,
-        wholesalePrice: uPrice,
+        retailPrice: effectivePrice,
+        wholesalePrice: effectivePrice,
       },
       unitName: i.unit_name,
       quantity: qty,
+      unitPrice: effectivePrice,
+      price: effectivePrice,
       lineTotal: rawLineTotal,
+      isBundle,
+      bundleComponents: bundleComps,
+      bundle_components: bundleComps,
       noEmptyCrates: hasMissingCrates,
       missingCratesCount: missingCount,
       crateDepositFee: fee,
@@ -1010,12 +1033,23 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
     }
 
     if (checkoutItems.length > 0) {
-      const { error: itemErr } = await supabase.from('sale_transaction_items').insert(checkoutItems.map(it => ({
+      const itemsPayload = checkoutItems.map(it => ({
         ...it,
         transaction_id: tx.id,
-      })));
+      }));
+      const { error: itemErr } = await supabase.from('sale_transaction_items').insert(itemsPayload);
       if (itemErr) {
-        console.error('Transaction items insert error:', itemErr);
+        console.warn('Transaction items insert notice:', itemErr.message);
+        // If bundle_components column has not been added to Supabase yet, retry without that field
+        if (itemErr.message?.includes('bundle_components') || itemErr.code === '42703') {
+          const strippedPayload = itemsPayload.map(({ bundle_components, ...rest }) => rest);
+          const { error: retryErr } = await supabase.from('sale_transaction_items').insert(strippedPayload);
+          if (retryErr) {
+            console.error('Fallback transaction items insert error:', retryErr);
+          }
+        } else {
+          console.error('Transaction items insert error:', itemErr);
+        }
       }
     }
 

@@ -434,11 +434,15 @@ function resolveCanvasItemName(it, lang, receipt, defaultItemName = 'ສິນ�
   return rawLao;
 }
 
-function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null) {
+function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = null) {
   const L = LABELS[lang] || LABELS.lo;
   const FONTS = getFonts(lang);
-  const items = receipt.items?.length > 0 ? receipt.items
+  const allItems = receipt.items?.length > 0 ? receipt.items
     : (receipt.sale_transaction_items?.length > 0 ? receipt.sale_transaction_items : []);
+  const isMultiPage = Boolean(pageInfo && Number(pageInfo.totalPages) > 1);
+  const items = isMultiPage ? allItems.slice(pageInfo.startIndex, pageInfo.endIndex) : allItems;
+  const startItemIndex = isMultiPage ? Number(pageInfo.startIndex || 0) : 0;
+  const isLastPage = !isMultiPage || Number(pageInfo.currentPage) === Number(pageInfo.totalPages);
   const isQuotation = Boolean(receipt.isQuotation);
   const isCancelled = !isQuotation && (receipt.status === 'cancelled' || receipt.isCancelled);
   const pm = String(receipt.paymentMethod || receipt.payment_method || 'cash').toLowerCase();
@@ -550,7 +554,12 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null) {
   const bannerHeight = 72; // Spacious banner height for 32px font
   const bannerMidY = bannerTopY + (bannerHeight / 2); // Exact middle
 
-  const titleText = isQuotation ? L.quotationTitle : L.receiptTitle;
+  let titleText = isQuotation ? L.quotationTitle : L.receiptTitle;
+  if (isMultiPage) {
+    titleText += lang === 'vi'
+      ? ` (Trang ${pageInfo.currentPage}/${pageInfo.totalPages})`
+      : ` (ໜ້າ ${pageInfo.currentPage}/${pageInfo.totalPages})`;
+  }
 
   if (isDraw) {
     ctx.textBaseline = 'middle';
@@ -627,22 +636,42 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null) {
     const it = items[i];
     const prodName = resolveCanvasItemName(it, lang, receipt, L.defaultItemName);
 
-    const rawUnit = it.unit?.unitName || it.unitName || it.unit_name || L.defaultUnitName;
-    const unitName = translateUnit(rawUnit, lang, Boolean(it.isHalfCarton));
-    const fullName = `${i + 1}. ${prodName} (${unitName})`;
+    // Loose bundle detection (e.g. 8 packs of 12-pack carton)
+    const isBundleItem = Boolean(it.isBundle || it.is_bundle || it.bundleId || it.bundle_components || it.bundleComponents);
+    const isOnlyLooseBundle = Boolean(
+      isBundleItem &&
+      Number(it.cartonQty ?? 0) === 0 &&
+      Number(it.looseQty ?? 0) > 0
+    );
 
-    const price = Number(
+    const rawUnit = isOnlyLooseBundle
+      ? (it.baseUnitName || 'ແພັກ')
+      : (it.unit?.unitName || it.unitName || it.unit_name || L.defaultUnitName);
+    const unitName = translateUnit(rawUnit, lang, Boolean(it.isHalfCarton));
+    const globalItemNum = startItemIndex + i + 1;
+    const fullName = `${globalItemNum}. ${prodName} (${unitName})`;
+
+    let qty = it.quantity || 1;
+    if (isOnlyLooseBundle && Number(it.looseQty) > 0) {
+      qty = Number(it.looseQty);
+    }
+
+    const rawPrice = Number(
       it.customPrice ??
       it.effectivePrice ??
       it.effectiveUnitPrice ??
       it.unitPrice ??
       it.unit_price ??
+      it.price ??
       (receipt.isWholesale
         ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
         : (it.unit?.retailPrice ?? 0))
     ) || 0;
-    const qty = it.quantity || 1;
-    const lineTotal = price * qty;
+    const rawLineTotal = Number(it.lineTotal || it.line_total) || 0;
+    const price = (rawPrice > 0 && (!isOnlyLooseBundle || rawPrice * qty === rawLineTotal))
+      ? rawPrice
+      : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : rawPrice);
+    const lineTotal = rawLineTotal > 0 ? rawLineTotal : price * qty;
 
     // Line 1: Number + Full Product Name + (Unit) across full printable width
     measureCtx.font = FONTS.ITEM_NAME;
@@ -659,28 +688,48 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null) {
     drawRight(totalStr, K80.RIGHT_EDGE, y, FONTS.ITEM_TOTAL);
     y += 28;
 
-    // Mixed carton bundle flavor breakdown if applicable
-    const bundleComponents = it.bundle_components || it.bundleComponents;
+    // Mixed carton bundle flavor breakdown if applicable (matches Image 2 style)
+    let bundleComponents = it.bundle_components || it.bundleComponents;
+    if (typeof bundleComponents === 'string') {
+      try { bundleComponents = JSON.parse(bundleComponents); } catch (_) { bundleComponents = []; }
+    }
     if (Array.isArray(bundleComponents) && bundleComponents.length > 0) {
       for (const comp of bundleComponents) {
-        const compName = comp.productName || comp.product_name || comp.name || '';
-        const compQty = comp.quantity || comp.qty || 0;
+        const rawCompName = comp.productName || comp.product_name || comp.name || '';
+        const compName = (lang === 'vi' && (comp.name_vi || comp.nameVi)) ? (comp.name_vi || comp.nameVi) : rawCompName;
+        const compQty = comp.quantity || comp.qty || 1;
         if (compQty > 0) {
-          const compStr = `↳ ${compName} x${compQty}`;
-          drawLeft(compStr, indentX + 10, y, FONTS.CRATE_LABEL);
-          y += 24;
+          const compPrefix = `- ${compName}`;
+          const compQtyStr = `x${compQty}`;
+          measureCtx.font = FONTS.CRATE_LABEL;
+          const rightColWidth = 55;
+          const maxNameWidth = K80.PRINTABLE_WIDTH - (indentX + 10 - K80.LEFT_MARGIN) - rightColWidth;
+          const compLines = wrapText(measureCtx, compPrefix, maxNameWidth);
+          for (let cIdx = 0; cIdx < compLines.length; cIdx++) {
+            drawLeft(compLines[cIdx], indentX + 10, y, FONTS.CRATE_LABEL);
+            if (cIdx === 0) {
+              drawRight(compQtyStr, K80.RIGHT_EDGE, y, FONTS.ITEM_NUM);
+            }
+            y += 24;
+          }
         }
       }
     }
 
-    // Crate deposit sub-row if applicable
+    // Strict Crate Deposit Eligibility: Bundles and non-crate products are NEVER eligible for crate deposits
+    const isCrateEligible = !isBundleItem && Boolean(
+      it.hasCrateDeposit ||
+      it.product?.hasCrateDeposit ||
+      ((it.product?.category?.includes('ເບຍ') || it.product?.name?.includes('ເບຍ') || it.productName?.includes('ເບຍ')) &&
+       (it.unit?.unitName === 'ແກັດ' || it.unit?.unitName === 'ລັງ' || it.unitName === 'ແກັດ' || it.unitName === 'ລັງ'))
+    );
+
     const feePerCrate = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
-    const rawLineTotal = Number(it.lineTotal || it.line_total) || 0;
-    const diffTotal = (rawLineTotal > lineTotal) ? (rawLineTotal - lineTotal) : 0;
-    const explicitCrateTotal = Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * feePerCrate) : 0);
-    const crateTotal = explicitCrateTotal > 0 ? explicitCrateTotal : diffTotal;
-    const missingCount = Number(it.missingCratesCount) || (crateTotal > 0 ? Math.round(crateTotal / feePerCrate) : (it.noEmptyCrates ? qty : 0));
-    const hasMissingCrates = Boolean(
+    const diffTotal = (isCrateEligible && rawLineTotal > lineTotal) ? (rawLineTotal - lineTotal) : 0;
+    const explicitCrateTotal = isCrateEligible ? (Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * feePerCrate) : 0)) : 0;
+    const crateTotal = isCrateEligible ? (explicitCrateTotal > 0 ? explicitCrateTotal : diffTotal) : 0;
+    const missingCount = isCrateEligible ? (Number(it.missingCratesCount) || (crateTotal > 0 ? Math.round(crateTotal / feePerCrate) : (it.noEmptyCrates ? qty : 0))) : 0;
+    const hasMissingCrates = isCrateEligible && Boolean(
       crateTotal > 0 || it.noEmptyCrates || (Number(it.missingCratesCount) > 0)
     );
 
@@ -698,23 +747,50 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null) {
   drawDashedLine(y);
   y += 14;
 
-  // 7. TOTALS SECTION
-  const calculatedTotal = items.reduce((sum, it) => {
+  // Intermediate Page Footer: continuation notice only (omits totals, barcode & signatures)
+  if (isMultiPage && !isLastPage) {
+    const contText = lang === 'vi'
+      ? `--- (Còn tiếp sang trang ${Number(pageInfo.currentPage) + 1}/${pageInfo.totalPages}) ---`
+      : `--- (ຍັງມີຕໍ່ໜ້າ ${Number(pageInfo.currentPage) + 1}/${pageInfo.totalPages}) ---`;
+    drawCenter(contText, y, FONTS.FOOTER_BOLD);
+    y += 36;
+
+    return Math.ceil(y);
+  }
+
+  // 7. TOTALS SECTION (Drawn on final page or single-page receipts)
+  if (isMultiPage) {
+    const finalNotice = lang === 'vi'
+      ? `(Hóa đơn gồm ${pageInfo.totalPages} trang - Tổng ${allItems.length} món)`
+      : `(ໃບບິນທັງໝົດ ${pageInfo.totalPages} ໜ້າ - ລວມ ${allItems.length} ລາຍການ)`;
+    drawCenter(finalNotice, y, FONTS.META_BOLD);
+    y += 28;
+  }
+
+  const calculatedTotal = allItems.reduce((sum, it) => {
     const rawLTotal = Number(it.lineTotal || it.line_total);
-    if (rawLTotal > 0) return sum + rawLTotal;
-    const price = Number(
+    const rawPrice = Number(
       it.customPrice ??
       it.effectivePrice ??
       it.effectiveUnitPrice ??
       it.unitPrice ??
       it.unit_price ??
+      it.price ??
       (receipt.isWholesale
         ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
         : (it.unit?.retailPrice ?? 0))
     ) || 0;
     const qty = Number(it.quantity) || 1;
+    const price = rawPrice > 0 ? rawPrice : (rawLTotal > 0 && qty > 0 ? Math.round(rawLTotal / qty) : 0);
+    const isBundleItem = Boolean(it.isBundle || it.is_bundle || it.bundleId || it.bundle_components || it.bundleComponents);
+    const isCrateEligible = !isBundleItem && Boolean(
+      it.hasCrateDeposit ||
+      it.product?.hasCrateDeposit ||
+      ((it.product?.category?.includes('ເບຍ') || it.product?.name?.includes('ເບຍ') || it.productName?.includes('ເບຍ')) &&
+       (it.unit?.unitName === 'ແກັດ' || it.unit?.unitName === 'ລັງ' || it.unitName === 'ແກັດ' || it.unitName === 'ລັງ'))
+    );
     const fee = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
-    const explicit = Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * fee) : 0);
+    const explicit = isCrateEligible ? (Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * fee) : 0)) : 0;
     return sum + (price * qty) + explicit;
   }, 0);
 
@@ -935,8 +1011,9 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null) {
 }
 
 // ─── Public API: Render Full Receipt Canvas ───────────────────────────────────
-export async function renderReceiptCanvas(receipt, lang = 'lo') {
+export async function renderReceiptCanvas(receipt, lang = 'lo', options = {}) {
   if (!receipt) throw new Error('Receipt data is missing');
+  const pageInfo = options?.pageInfo || null;
 
   // Pre-load fonts based on selected language
   if (lang === 'vi') {
@@ -1021,7 +1098,7 @@ export async function renderReceiptCanvas(receipt, lang = 'lo') {
   }
 
   // Pass 1: Measure exact height with zero discrepancy
-  const exactHeight = layoutReceipt(null, receipt, lang, qrImg);
+  const exactHeight = layoutReceipt(null, receipt, lang, qrImg, pageInfo);
 
   // Pass 2: Direct 1:1 Pixel Mapping on 576-dot Thermal Printhead
   // Rendering at exact 576px width eliminates 2X downsampling blur
@@ -1044,7 +1121,7 @@ export async function renderReceiptCanvas(receipt, lang = 'lo') {
   ctx.textBaseline = 'top';
 
   // Execute actual drawing directly on 1:1 thermal grid
-  layoutReceipt(ctx, receipt, lang, qrImg);
+  layoutReceipt(ctx, receipt, lang, qrImg, pageInfo);
 
   return canvas;
 }

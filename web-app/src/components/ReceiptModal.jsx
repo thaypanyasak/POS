@@ -9,6 +9,9 @@ import {
   CircleNotch,
   CheckCircle,
   WarningCircle,
+  Scissors,
+  CaretLeft,
+  CaretRight,
 } from '@phosphor-icons/react';
 import { formatKip } from '../utils/formatters';
 import {
@@ -64,6 +67,82 @@ export default function ReceiptModal({
 
   const [isPrinting, setIsPrinting] = useState(false);
   const [printFeedback, setPrintFeedback] = useState(null);
+
+  // Multi-page split options for large orders (e.g. 100 items -> multiple slips)
+  const [itemsPerPage, setItemsPerPage] = useState(0); // 0 = ໃບດຽວ (default single slip)
+  const [isCustomPerPage, setIsCustomPerPage] = useState(false);
+  const [customInputValue, setCustomInputValue] = useState('15');
+  const [previewPage, setPreviewPage] = useState(1);
+  const [printProgressText, setPrintProgressText] = useState(null);
+
+  const handlePerPageSelect = (e) => {
+    playUnitChangeBeep('receipt');
+    const val = e.target.value;
+    if (val === 'custom') {
+      setIsCustomPerPage(true);
+      const parsed = parseInt(customInputValue, 10);
+      const valid = !isNaN(parsed) && parsed > 0 ? parsed : 15;
+      setItemsPerPage(valid);
+      setCustomInputValue(String(valid));
+      setPreviewPage(1);
+    } else {
+      setIsCustomPerPage(false);
+      setItemsPerPage(Number(val));
+      setPreviewPage(1);
+    }
+  };
+
+  const handleCustomInputChange = (e) => {
+    const val = e.target.value;
+    setCustomInputValue(val);
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      setItemsPerPage(parsed);
+      setPreviewPage(1);
+    }
+  };
+
+  const totalItemsCount = receiptItems.length;
+  const isSplitActive = itemsPerPage > 0 && totalItemsCount > itemsPerPage;
+  const totalPages = isSplitActive ? Math.ceil(totalItemsCount / itemsPerPage) : 1;
+  const activePage = Math.min(previewPage, totalPages);
+
+  const getPageInfo = (pageNum) => {
+    if (!isSplitActive) return null;
+    const p = Math.max(1, Math.min(pageNum, totalPages));
+    const start = (p - 1) * itemsPerPage;
+    const end = Math.min(start + itemsPerPage, totalItemsCount);
+    const sliceItems = receiptItems.slice(start, end);
+    const pageSubtotal = sliceItems.reduce((sum, it) => {
+      const rawPrice = Number(it.customPrice ?? it.effectivePrice ?? it.unitPrice ?? it.price ?? 0);
+      const qty = Number(it.quantity) || 1;
+      const rawTotal = Number(it.lineTotal || it.line_total) || (rawPrice * qty);
+      const isBundleItem = Boolean(it.isBundle || it.is_bundle || it.bundleId || it.bundle_components || it.bundleComponents);
+      const isCrateEligible = !isBundleItem && Boolean(
+        it.hasCrateDeposit ||
+        it.product?.hasCrateDeposit ||
+        ((it.product?.category?.includes('ເບຍ') || it.product?.name?.includes('ເບຍ') || it.productName?.includes('ເບຍ')) &&
+         (it.unit?.unitName === 'ແກັດ' || it.unit?.unitName === 'ລັງ' || it.unitName === 'ແກັດ' || it.unitName === 'ລັງ'))
+      );
+      const fee = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
+      const explicit = isCrateEligible ? (Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * fee) : 0)) : 0;
+      return sum + rawTotal + explicit;
+    }, 0);
+    return {
+      currentPage: p,
+      totalPages,
+      startIndex: start,
+      endIndex: end,
+      items: sliceItems,
+      isFirstPage: p === 1,
+      isLastPage: p === totalPages,
+      pageSubtotal,
+    };
+  };
+
+  const currentPageInfo = getPageInfo(activePage);
+  const displayedItems = isSplitActive ? currentPageInfo.items : receiptItems;
+  const displayedStartIdx = isSplitActive ? currentPageInfo.startIndex : 0;
 
   const handleSelectPrintMethod = (method) => {
     setPrintMethod(method);
@@ -300,10 +379,11 @@ export default function ReceiptModal({
     return rawLao;
   };
 
-  const handlePrint = async (overrideMethod = null) => {
+  const handlePrint = async (overrideMethod = null, singlePageNum = null) => {
     if (isPrinting) return;
     setIsPrinting(true);
     setPrintFeedback(null);
+    setPrintProgressText(null);
 
     const activeMethod = overrideMethod || printMethod;
 
@@ -314,28 +394,83 @@ export default function ReceiptModal({
         res = await printViaNativeSpooler('thermal-receipt-print-area', receiptLanguage);
       } else {
         // Multi-device Socket Print with Silent Auto-Retry (Max 3 attempts, 1.1s delay + jitter)
-        res = await printReceiptWithRetry({
-          elementId: 'thermal-receipt-print-area',
-          receipt: {
-            ...receipt,
+        if (isSplitActive && totalPages > 1 && singlePageNum === null) {
+          // Print all pages sequentially with auto-cutting after each page
+          for (let p = 1; p <= totalPages; p++) {
+            const pInfo = getPageInfo(p);
+            const msg = receiptLanguage === 'vi'
+              ? `Đang in tờ ${p}/${totalPages}...`
+              : `ກຳລັງພິມໜ້າ ${p}/${totalPages}...`;
+            setPrintProgressText(msg);
+
+            res = await printReceiptWithRetry({
+              elementId: 'thermal-receipt-print-area',
+              receipt: {
+                ...receipt,
+                products: (products && products.length > 0) ? products : receipt.products,
+              },
+              language: receiptLanguage,
+              allowFallback: false,
+              method: 'socket',
+              products: (products && products.length > 0) ? products : receipt.products,
+              pageInfo: pInfo,
+              kickCashDrawer: p === 1,
+              maxRetries: 2,
+              retryDelayMs: 1000,
+            });
+
+            // Pause 600ms between pages to let cutter complete cut and feed
+            if (p < totalPages) {
+              await new Promise((resolve) => setTimeout(resolve, 600));
+            }
+          }
+        } else if (isSplitActive && totalPages > 1 && singlePageNum !== null) {
+          // Print single selected page
+          const pInfo = getPageInfo(singlePageNum);
+          res = await printReceiptWithRetry({
+            elementId: 'thermal-receipt-print-area',
+            receipt: {
+              ...receipt,
+              products: (products && products.length > 0) ? products : receipt.products,
+            },
+            language: receiptLanguage,
+            allowFallback: false,
+            method: 'socket',
             products: (products && products.length > 0) ? products : receipt.products,
-          },
-          language: receiptLanguage,
-          allowFallback: false,
-          method: 'socket',
-          products: (products && products.length > 0) ? products : receipt.products,
-          maxRetries: 3,
-          retryDelayMs: 1100,
-          onRetryAttempt: (attempt, max) => {
-            console.log(`[ReceiptModal] Retrying print attempt ${attempt}/${max} due to printer collision...`);
-          },
-        });
+            pageInfo: pInfo,
+            kickCashDrawer: false,
+            maxRetries: 2,
+            retryDelayMs: 1000,
+          });
+        } else {
+          // Standard single-page print
+          res = await printReceiptWithRetry({
+            elementId: 'thermal-receipt-print-area',
+            receipt: {
+              ...receipt,
+              products: (products && products.length > 0) ? products : receipt.products,
+            },
+            language: receiptLanguage,
+            allowFallback: false,
+            method: 'socket',
+            products: (products && products.length > 0) ? products : receipt.products,
+            maxRetries: 3,
+            retryDelayMs: 1100,
+            onRetryAttempt: (attempt, max) => {
+              console.log(`[ReceiptModal] Retrying print attempt ${attempt}/${max} due to printer collision...`);
+            },
+          });
+        }
       }
 
       if (res && res.success) {
+        const successMsg = isSplitActive && totalPages > 1 && singlePageNum === null
+          ? (receiptLanguage === 'vi' ? `In thành công toàn bộ ${totalPages} tờ hóa đơn!` : `ພິມສຳເລັດທັງໝົດ ${totalPages} ໃບ!`)
+          : (res.message || (receiptLanguage === 'vi' ? 'In hóa đơn thành công!' : 'ພິມໃບບິນສຳເລັດແລ້ວ!'));
+
         setPrintFeedback({
           type: 'success',
-          message: res.message || 'ພິມໃບບິນສຳເລັດແລ້ວ!',
+          message: successMsg,
         });
         playSuccessBeep();
 
@@ -365,12 +500,13 @@ export default function ReceiptModal({
       setTimeout(() => setPrintFeedback(null), 6000);
     } finally {
       setIsPrinting(false);
+      setPrintProgressText(null);
     }
   };
 
   const modalContent = (
     <div className="fixed inset-0 z-[120] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 print:static print:inset-auto print:p-0 print:bg-transparent print:backdrop-blur-none print:block">
-      <div className="bg-slate-100 rounded-3xl max-w-[390px] w-full p-2.5 sm:p-3 shadow-2xl flex flex-col max-h-[85dvh] sm:max-h-[90vh] animate-in zoom-in-95 duration-200 relative print:static print:max-h-none print:h-auto print:overflow-visible print:p-0 print:shadow-none print:border-none print:bg-white print:w-full print:max-w-none">
+      <div className="bg-slate-100 rounded-3xl max-w-[480px] sm:max-w-[500px] w-full p-2.5 sm:p-3 shadow-2xl flex flex-col max-h-[85dvh] sm:max-h-[90vh] animate-in zoom-in-95 duration-200 relative print:static print:max-h-none print:h-auto print:overflow-visible print:p-0 print:shadow-none print:border-none print:bg-white print:w-full print:max-w-none">
         {/* Print Feedback Toast inside modal */}
         {printFeedback && (
           <div
@@ -384,24 +520,59 @@ export default function ReceiptModal({
           </div>
         )}
 
-        {/* Top Toolbar: Language Selector & Close — Exact match with design reference */}
-        <div className="flex items-center justify-between gap-1.5 pb-2 bg-white p-2 rounded-2xl no-print shrink-0 shadow-2xs">
-          {/* Left: Language Toggle */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 shrink-0">
+        {/* Top Toolbar: Slip Option on Left, Language Switch Centered, Close on Right */}
+        <div className="relative flex items-center justify-between gap-2 bg-white px-3 py-2 rounded-2xl no-print shrink-0 shadow-2xs min-h-[44px]">
+          {/* Left: Slip Pagination Options */}
+          <div className="flex items-center gap-1.5 shrink-0 z-10">
+            <select
+              value={isCustomPerPage ? 'custom' : itemsPerPage}
+              onChange={handlePerPageSelect}
+              className="bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:border-teal-600 cursor-pointer shadow-2xs"
+              title="ເລືອກຈຳນວນລາຍການຕໍ່ໃບບິນ"
+            >
+              <option value={0}>ໃບດຽວ</option>
+              <option value={10}>10 / ໃບ</option>
+              <option value={20}>20 / ໃບ</option>
+              <option value={30}>30 / ໃບ</option>
+              <option value={40}>40 / ໃບ</option>
+              <option value={50}>50 / ໃບ</option>
+              <option value="custom">ປ້ອນເອງ</option>
+            </select>
+
+            {isCustomPerPage && (
+              <div className="flex items-center gap-1 shrink-0 animate-in fade-in duration-150">
+                <input
+                  type="number"
+                  min="1"
+                  max="999"
+                  autoFocus
+                  value={customInputValue}
+                  onChange={handleCustomInputChange}
+                  className="w-14 px-1.5 py-0.5 text-center font-black text-xs bg-white border-2 border-teal-600 rounded-lg text-slate-900 focus:outline-none shadow-2xs"
+                  placeholder="SL"
+                  title="ປ້ອນຈຳນວນລາຍການຕໍ່ໃບ"
+                />
+                <span className="text-[11px] font-bold text-slate-600">/ ໃບ</span>
+              </div>
+            )}
+          </div>
+
+          {/* Center: Language Switcher (LA / VN) - Perfectly Centered */}
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 shrink-0 z-10">
             <button
               type="button"
               onClick={() => {
                 playUnitChangeBeep('receipt');
                 setReceiptLanguage('lo');
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
                 receiptLanguage === 'lo'
                   ? 'bg-teal-600 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
               title="ພາສາລາວ"
             >
-              <span>LA ພາສາລາວ</span>
+              LA
             </button>
             <button
               type="button"
@@ -409,14 +580,14 @@ export default function ReceiptModal({
                 playUnitChangeBeep('receipt');
                 setReceiptLanguage('vi');
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
                 receiptLanguage === 'vi'
                   ? 'bg-teal-600 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
               title="Tiếng Việt"
             >
-              <span>VN Tiếng Việt</span>
+              VN
             </button>
           </div>
 
@@ -427,14 +598,59 @@ export default function ReceiptModal({
               playModalCloseBeep('receipt');
               onClose();
             }}
-            className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+            className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer shrink-0 z-10"
+            title={receiptLanguage === 'vi' ? 'Đóng' : 'ປິດ'}
           >
             <X size={20} />
           </button>
         </div>
 
+        {/* Page Navigation Sub-Bar (Shown when multi-slip is active and totalPages > 1) */}
+        {isSplitActive && totalPages > 1 && (
+          <div className="flex items-center justify-between px-3 py-1.5 bg-teal-50 border border-teal-200 rounded-2xl shrink-0 shadow-2xs no-print text-xs">
+            <div className="flex items-center gap-1.5 text-teal-900 font-bold text-[11px] truncate">
+              <Scissors size={14} weight="bold" className="text-teal-700 shrink-0" />
+              <span className="truncate">
+                {receiptLanguage === 'vi'
+                  ? `Chia làm ${totalPages} tờ (${itemsPerPage} món/tờ)`
+                  : `ແບ່ງເປັນ ${totalPages} ໃບ (${itemsPerPage} ລາຍການ/ໃບ)`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1 bg-white p-0.5 rounded-xl border border-teal-300 shadow-2xs shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  playUnitChangeBeep('receipt');
+                  setPreviewPage((p) => Math.max(1, p - 1));
+                }}
+                disabled={activePage === 1}
+                className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-700 hover:bg-teal-50 hover:text-teal-900 disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed transition-all"
+                title={receiptLanguage === 'vi' ? 'Trang trước' : 'ໜ້າກ່ອນ'}
+              >
+                <CaretLeft size={13} weight="bold" />
+              </button>
+              <span className="px-1.5 text-[11px] font-black text-teal-800 tabular-nums">
+                {receiptLanguage === 'vi' ? `Trang ${activePage}/${totalPages}` : `ໜ້າ ${activePage}/${totalPages}`}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  playUnitChangeBeep('receipt');
+                  setPreviewPage((p) => Math.min(totalPages, p + 1));
+                }}
+                disabled={activePage === totalPages}
+                className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-700 hover:bg-teal-50 hover:text-teal-900 disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed transition-all"
+                title={receiptLanguage === 'vi' ? 'Trang sau' : 'ໜ້າຕໍ່ໄປ'}
+              >
+                <CaretRight size={13} weight="bold" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Scrollable Receipt Area — Smooth scrolling on mobile without hiding buttons */}
-        <div className="flex-1 overflow-y-auto overscroll-contain min-h-0 pr-0.5 rounded-2xl">
+        <div className="flex-1 overflow-y-auto overscroll-contain min-h-0 pr-0.5 rounded-2xl flex flex-col items-center">
           {/* Authentic Thermal Receipt Paper Container — Uses Noto Sans Lao for Preview */}
           <div
             id="thermal-receipt-print-area"
@@ -443,7 +659,7 @@ export default function ReceiptModal({
               ? "'Segoe UI', 'Tahoma', 'Noto Sans Lao', sans-serif"
               : "'Noto Sans Lao', 'Outfit', sans-serif",
           }}
-          className={`bg-white mx-auto px-4 pt-4 pb-2 border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto paper-80mm w-full max-w-full rounded-2xl ${
+          className={`bg-white mx-auto px-4 pt-4 pb-2 border border-slate-200 shadow-sm text-slate-900 print:p-0 print:border-none print:shadow-none print:overflow-visible print:max-h-none print:h-auto paper-80mm w-full max-w-[360px] rounded-2xl ${
             receiptLanguage === 'vi' ? 'font-vietnam' : 'font-lao'
           }`}
         >
@@ -464,8 +680,13 @@ export default function ReceiptModal({
           </div>
 
           {/* Receipt Title Banner (Spacious Padding between borders) */}
-          <div className="py-3.5 my-2 border-y-2 border-slate-900 text-center font-black text-sm flex items-center justify-center leading-none uppercase">
-            {isQuotation ? L.quotationTitle : L.receiptTitle}
+          <div className="py-3.5 my-2 border-y-2 border-slate-900 text-center font-black text-sm flex items-center justify-center leading-none uppercase gap-1.5">
+            <span>{isQuotation ? L.quotationTitle : L.receiptTitle}</span>
+            {isSplitActive && totalPages > 1 && (
+              <span className="text-teal-700 font-extrabold text-xs normal-case">
+                ({receiptLanguage === 'vi' ? `Trang ${activePage}/${totalPages}` : `ໜ້າ ${activePage}/${totalPages}`})
+              </span>
+            )}
           </div>
 
           {/* Quotation Warning Banner */}
@@ -549,34 +770,68 @@ export default function ReceiptModal({
 
           {/* Item Rows - Modern 2-Line Layout (Item Name on line 1, indented Qty x Price & Total on line 2) */}
           <div className="flex flex-col gap-3.5 pb-2">
-            {receiptItems.length > 0 ? (
-              receiptItems.map((it, i) => {
+            {displayedItems.length > 0 ? (
+              displayedItems.map((it, idx) => {
+                const i = displayedStartIdx + idx;
                 // Name resolution: In Vietnamese mode, prioritize name_vi / nameVi with multi-source lookup, fallback to Lao name
                 const prodName = resolveItemName(it, receiptLanguage);
 
-                const rawUnitName = it.unit?.unitName || it.unitName || it.unit_name || L.defaultUnitName;
+                // Strict Crate Deposit Eligibility: Bundles and non-crate products are NEVER eligible for crate deposits
+                const isBundleItem = Boolean(it.isBundle || it.is_bundle || it.bundleId || it.bundle_components || it.bundleComponents);
+
+                const isOnlyLooseBundle = Boolean(
+                  isBundleItem &&
+                  Number(it.cartonQty ?? 0) === 0 &&
+                  Number(it.looseQty ?? 0) > 0
+                );
+
+                const rawUnitName = isOnlyLooseBundle
+                  ? (it.baseUnitName || 'ແພັກ')
+                  : (it.unit?.unitName || it.unitName || it.unit_name || L.defaultUnitName);
                 const unitName = translateUnit(rawUnitName, receiptLanguage, Boolean(it.isHalfCarton));
-                const price = Number(
+
+                let qty = it.quantity || 1;
+                if (isOnlyLooseBundle && Number(it.looseQty) > 0) {
+                  qty = Number(it.looseQty);
+                }
+
+                const rawPrice = Number(
                   it.customPrice ??
                   it.effectivePrice ??
                   it.effectiveUnitPrice ??
                   it.unitPrice ??
                   it.unit_price ??
+                  it.price ??
                   (receipt.isWholesale
                     ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
                     : (it.unit?.retailPrice ?? 0))
                 ) || 0;
-                const qty = it.quantity || 1;
-                const baseLineTotal = price * qty;
-                const feePerCrate = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
                 const rawLineTotal = Number(it.lineTotal || it.line_total) || 0;
-                const diffTotal = (rawLineTotal > baseLineTotal) ? (rawLineTotal - baseLineTotal) : 0;
-                const explicitCrateTotal = Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * feePerCrate) : 0);
-                const crateDepositTotal = explicitCrateTotal > 0 ? explicitCrateTotal : diffTotal;
-                const missingCount = Number(it.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / feePerCrate) : (it.noEmptyCrates ? qty : 0));
-                const hasMissingCrates = Boolean(
+                const price = (rawPrice > 0 && (!isOnlyLooseBundle || rawPrice * qty === rawLineTotal))
+                  ? rawPrice
+                  : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : rawPrice);
+                const baseLineTotal = rawLineTotal > 0 ? rawLineTotal : price * qty;
+                const isCrateEligible = !isBundleItem && Boolean(
+                  it.hasCrateDeposit ||
+                  it.product?.hasCrateDeposit ||
+                  ((it.product?.category?.includes('ເບຍ') || it.product?.name?.includes('ເບຍ') || it.productName?.includes('ເບຍ')) &&
+                   (it.unit?.unitName === 'ແກັດ' || it.unit?.unitName === 'ລັງ' || it.unitName === 'ແກັດ' || it.unitName === 'ລັງ'))
+                );
+
+                const feePerCrate = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
+                const diffTotal = (isCrateEligible && rawLineTotal > baseLineTotal) ? (rawLineTotal - baseLineTotal) : 0;
+                const explicitCrateTotal = isCrateEligible ? (Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * feePerCrate) : 0)) : 0;
+                const crateDepositTotal = isCrateEligible ? (explicitCrateTotal > 0 ? explicitCrateTotal : diffTotal) : 0;
+                const missingCount = isCrateEligible ? (Number(it.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / feePerCrate) : (it.noEmptyCrates ? qty : 0))) : 0;
+                const hasMissingCrates = isCrateEligible && Boolean(
                   crateDepositTotal > 0 || it.noEmptyCrates || (Number(it.missingCratesCount) > 0)
                 );
+
+                // Parse bundle child components (handling both raw array and stringified JSON from database)
+                const rawComps = it.bundle_components || it.bundleComponents;
+                const bundleComponents = typeof rawComps === 'string'
+                  ? (() => { try { return JSON.parse(rawComps); } catch (_) { return []; } })()
+                  : (Array.isArray(rawComps) ? rawComps : []);
 
                 return (
                   <div key={i} className="receipt-item-row flex flex-col text-xs leading-[1.2]">
@@ -596,14 +851,20 @@ export default function ReceiptModal({
                     </div>
 
                     {/* Bundle child flavor breakdown */}
-                    {(it.bundle_components || it.bundleComponents) && (it.bundle_components || it.bundleComponents).length > 0 && (
+                    {bundleComponents.length > 0 && (
                       <div className="pl-4 pt-0.5 space-y-0.5 text-[10.5px] text-slate-600">
-                        {(it.bundle_components || it.bundleComponents).map((comp, cIdx) => (
-                          <div key={cIdx} className="flex justify-between items-center italic">
-                            <span className="truncate">- {comp.product_name || comp.productName}</span>
-                            <span className="font-mono font-bold text-slate-800 shrink-0">x{comp.quantity}</span>
-                          </div>
-                        ))}
+                        {bundleComponents.map((comp, cIdx) => {
+                          const cRawLao = comp.product_name || comp.productName || comp.name || '';
+                          const cNameVi = comp.name_vi || comp.nameVi || comp.product?.name_vi || comp.product?.nameVi || '';
+                          const cDisplayName = (receiptLanguage === 'vi' && cNameVi) ? cNameVi : cRawLao;
+                          const cQty = comp.quantity || comp.qty || 1;
+                          return (
+                            <div key={cIdx} className="flex justify-between items-center italic">
+                              <span className="truncate">- {cDisplayName}</span>
+                              <span className="font-mono font-bold text-slate-800 shrink-0">x{cQty}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
 
@@ -629,24 +890,42 @@ export default function ReceiptModal({
           </div>
           <div className="border-b border-dashed border-slate-300 mb-1.5"></div>
 
-          {/* Totals Summary */}
-          {(() => {
-            const calculatedTotal = receiptItems.reduce((sum, it) => {
+          {/* Intermediate Page Footer vs Final Page Complete Totals */}
+          {isSplitActive && !currentPageInfo?.isLastPage ? (
+            <div className="py-2.5 text-center">
+              <div className="text-xs font-bold text-teal-800 py-2.5 px-3 bg-teal-50 rounded-xl border border-teal-200 shadow-2xs">
+                {receiptLanguage === 'vi'
+                  ? `--- (Còn tiếp sang trang ${activePage + 1}/${totalPages}) ---`
+                  : `--- (ຍັງມີຕໍ່ໜ້າ ${activePage + 1}/${totalPages}) ---`}
+              </div>
+            </div>
+          ) : (
+            <>
+              {(() => {
+                const calculatedTotal = receiptItems.reduce((sum, it) => {
               const rawLTotal = Number(it.lineTotal || it.line_total);
-              if (rawLTotal > 0) return sum + rawLTotal;
-              const price = Number(
+              const rawPrice = Number(
                 it.customPrice ??
                 it.effectivePrice ??
                 it.effectiveUnitPrice ??
                 it.unitPrice ??
                 it.unit_price ??
+                it.price ??
                 (receipt.isWholesale
                   ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
                   : (it.unit?.retailPrice ?? 0))
               ) || 0;
               const qty = Number(it.quantity) || 1;
+              const price = rawPrice > 0 ? rawPrice : (rawLTotal > 0 && qty > 0 ? Math.round(rawLTotal / qty) : 0);
+              const isBundleItem = Boolean(it.isBundle || it.is_bundle || it.bundleId || it.bundle_components || it.bundleComponents);
+              const isCrateEligible = !isBundleItem && Boolean(
+                it.hasCrateDeposit ||
+                it.product?.hasCrateDeposit ||
+                ((it.product?.category?.includes('ເບຍ') || it.product?.name?.includes('ເບຍ') || it.productName?.includes('ເບຍ')) &&
+                 (it.unit?.unitName === 'ແກັດ' || it.unit?.unitName === 'ລັງ' || it.unitName === 'ແກັດ' || it.unitName === 'ລັງ'))
+              );
               const fee = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
-              const explicit = Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * fee) : 0);
+              const explicit = isCrateEligible ? (Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * fee) : 0)) : 0;
               return sum + (price * qty) + explicit;
             }, 0);
 
@@ -804,6 +1083,8 @@ export default function ReceiptModal({
               </div>
             );
           })()}
+        </>
+      )}
         </div>
         </div>
 
@@ -859,7 +1140,24 @@ export default function ReceiptModal({
             {L.btnClose}
           </button>
 
-          {/* Primary Print Button (ພິມໃບບິນ) */}
+          {/* Secondary Button: Print Single Current Page (when multi-page split is active) */}
+          {isSplitActive && totalPages > 1 && (
+            <button
+              type="button"
+              onClick={() => {
+                playModalConfirmBeep('receipt');
+                handlePrint(null, activePage);
+              }}
+              disabled={isPrinting}
+              className="py-2.5 px-2.5 bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 disabled:opacity-60 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 active:scale-95 shadow-2xs"
+              title={receiptLanguage === 'vi' ? `Chỉ in riêng tờ ${activePage}` : `ພິມສະເພາະໜ້າ ${activePage}`}
+            >
+              <Printer size={14} weight="bold" />
+              <span>{receiptLanguage === 'vi' ? `Tờ ${activePage}` : `ໜ້າ ${activePage}`}</span>
+            </button>
+          )}
+
+          {/* Primary Print Button */}
           <button
             type="button"
             onClick={() => {
@@ -874,7 +1172,13 @@ export default function ReceiptModal({
             ) : (
               <Printer size={16} weight="bold" className="shrink-0" />
             )}
-            <span className="truncate">{isPrinting ? L.btnPrintProgress : (isQuotation ? L.btnPrintQuotation : L.btnPrint)}</span>
+            <span className="truncate">
+              {isPrinting
+                ? (printProgressText || L.btnPrintProgress)
+                : isSplitActive && totalPages > 1
+                ? (receiptLanguage === 'vi' ? `In toàn bộ (${totalPages} tờ)` : `ພິມທັງໝົດ (${totalPages} ໃບ)`)
+                : (isQuotation ? L.btnPrintQuotation : L.btnPrint)}
+            </span>
           </button>
         </div>
       </div>

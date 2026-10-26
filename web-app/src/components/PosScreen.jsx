@@ -239,20 +239,10 @@ export default function PosScreen({
     }
   };
 
-  // Mixed Carton Bundles filter for POS catalog
+  // Mixed Carton Bundles filter for POS catalog: Only display in the 'ລວມ' category tab
   const matchingBundles = useMemo(() => {
     if (!bundles || bundles.length === 0) return [];
-    if (activeCategory === 'ລວມ' || activeCategory === '📦 ລວມ') {
-      if (!searchQuery?.trim()) return bundles;
-      const q = normalizeLao(searchQuery.trim());
-      return bundles.filter(
-        (b) =>
-          normalizeLao(b.name).includes(q) ||
-          normalizeLao(b.name_vi || '').includes(q) ||
-          (b.barcode && b.barcode.toLowerCase().includes(q.toLowerCase()))
-      );
-    }
-    if (activeCategory === 'ທັງໝົດ') {
+    if (activeCategory === 'ລວມ' || activeCategory === '📦 ລວມ' || activeCategory?.includes('ລວມ')) {
       if (!searchQuery?.trim()) return bundles;
       const q = normalizeLao(searchQuery.trim());
       return bundles.filter(
