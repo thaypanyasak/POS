@@ -16,12 +16,15 @@ fetchPrinterConfigFromDb().catch(() => {});
 ensurePhetsarathLoaded().catch(() => {});
 
 import { AuthProvider } from './contexts/AuthContext'
+import ErrorBoundary from './components/common/ErrorBoundary'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )
 

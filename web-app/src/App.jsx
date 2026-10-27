@@ -53,6 +53,14 @@ import LoginScreen from './components/auth/LoginScreen';
 import AuthLoadingSplash from './components/auth/AuthLoadingSplash';
 import { useAuth, useAuthRole } from './contexts/AuthContext';
 import { useOrderRealtime } from './hooks/useOrderRealtime';
+import { safeSetItem, safeGetJSON, cleanupLegacyStorage } from './utils/safeStorage';
+import OfflineSyncBanner from './components/common/OfflineSyncBanner';
+import {
+  getOfflineQueue,
+  addToOfflineQueue,
+  syncOfflineQueue,
+  isDeviceOnline,
+} from './services/offlineSyncService';
 
 import { formatDots, parseDots, parseCurrencyInput, formatCompoundStock, getEffectiveUnitPrice, PRICE_TIERS, normalizeLao } from './utils/formatters';
 import { useHardwareBarcodeScanner } from './hooks/useHardwareBarcodeScanner';
@@ -130,6 +138,9 @@ export default function App() {
   });
 
   const [isCloudSynced, setIsCloudSynced] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => isDeviceOnline());
+  const [offlineQueue, setOfflineQueue] = useState(() => getOfflineQueue());
+  const [isSyncingOffline, setIsSyncingOffline] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [isSavingDb, setIsSavingDb] = useState(false);
   const [dbSavingMessage, setDbSavingMessage] = useState('');
@@ -264,10 +275,8 @@ export default function App() {
         }
         return o;
       });
-      try {
-        localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(updated));
-        localStorage.setItem('meiishop_pos_active_order_id_v1', activeOrderId);
-      } catch (_) {}
+      safeSetItem('meiishop_pos_active_orders_v1', updated);
+      safeSetItem('meiishop_pos_active_order_id_v1', activeOrderId);
       return updated;
     });
   }, [cart, customerName, globalPriceTier, activeOrderId]);
@@ -296,10 +305,8 @@ export default function App() {
     setCart(targetOrder.cart || []);
     setCustomerName(targetOrder.customerName || 'ລູກຄ້າທົ່ວໄປ');
     setGlobalPriceTier(targetOrder.priceTier || 1);
-    try {
-      localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(updatedOrders));
-      localStorage.setItem('meiishop_pos_active_order_id_v1', targetOrderId);
-    } catch (_) {}
+    safeSetItem('meiishop_pos_active_orders_v1', updatedOrders);
+    safeSetItem('meiishop_pos_active_order_id_v1', targetOrderId);
     playActionClickBeep();
   };
 
@@ -338,10 +345,8 @@ export default function App() {
     setCustomerName('ລູກຄ້າທົ່ວໄປ');
     setGlobalPriceTier(1);
 
-    try {
-      localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(updatedOrders));
-      localStorage.setItem('meiishop_pos_active_order_id_v1', newId);
-    } catch (_) {}
+    safeSetItem('meiishop_pos_active_orders_v1', updatedOrders);
+    safeSetItem('meiishop_pos_active_order_id_v1', newId);
     playSuccessBeep('pos');
   };
 
@@ -371,17 +376,14 @@ export default function App() {
     setCustomerName(nextActive.customerName || 'ລູກຄ້າທົ່ວໄປ');
     setGlobalPriceTier(nextActive.priceTier || 1);
 
-    try {
-      localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(remainingOrders));
-      localStorage.setItem('meiishop_pos_active_order_id_v1', nextActive.id);
-    } catch (_) {}
+    safeSetItem('meiishop_pos_active_orders_v1', remainingOrders);
+    safeSetItem('meiishop_pos_active_order_id_v1', nextActive.id);
     playUnitChangeBeep();
   };
 
   // Transactions History (Supabase Live Sync with cache)
   const [transactions, setTransactions] = useState(() => {
-    const saved = localStorage.getItem('meiishop_transactions_v7');
-    return saved ? JSON.parse(saved) : [];
+    return safeGetJSON('meiishop_transactions_v7', []);
   });
 
   // Modals
@@ -649,16 +651,20 @@ export default function App() {
         setProducts(realProds);
         setIsCloudSynced(true);
       } else {
-        // If DB returned nothing or error, do not show any mock data
-        setProducts([]);
+        // If DB returned null (offline / network error), preserve local cached products!
         setIsCloudSynced(false);
       }
 
       const cloudTxs = await fetchTransactionsFromSupabase();
       if (cloudTxs) {
-        setTransactions(cloudTxs);
-      } else {
-        setTransactions([]);
+        // Merge with pending offline queue so offline transactions remain visible in history
+        const pendingQueue = getOfflineQueue();
+        const pendingIds = new Set(pendingQueue.map((item) => item.id));
+        const mergedTxs = [
+          ...pendingQueue.map((item) => ({ ...item.receipt, isOfflinePending: true })),
+          ...cloudTxs.filter((tx) => !pendingIds.has(tx.id)),
+        ];
+        setTransactions(mergedTxs);
       }
 
       // Fetch suppliers & purchase orders
@@ -679,14 +685,14 @@ export default function App() {
           setRawCategories(cloudCats);
           const names = cloudCats.map((c) => c.name).filter(Boolean);
           setCategoriesList(names);
-          localStorage.setItem('meiishop_categories_cache', JSON.stringify(names));
+          safeSetItem('meiishop_categories_cache', names);
         } else if (realProds && realProds.length > 0) {
           // If table was empty, gather distinct categories from actual products
           const fromProds = Array.from(new Set(realProds.map((p) => p.category).filter(Boolean)));
           if (fromProds.length > 0) {
             setRawCategories(fromProds.map((name, i) => ({ id: `cat_${i}`, name })));
             setCategoriesList(fromProds);
-            localStorage.setItem('meiishop_categories_cache', JSON.stringify(fromProds));
+            safeSetItem('meiishop_categories_cache', fromProds);
           }
         }
       } catch (catErr) {
@@ -804,13 +810,84 @@ export default function App() {
     };
   }, []);
 
-  // Save changes to localStorage as cache
+  // Automatic startup cleanup for obsolete localStorage keys
   useEffect(() => {
-    localStorage.setItem('meiishop_products_v5', JSON.stringify(products));
+    cleanupLegacyStorage();
+  }, []);
+
+  // Offline queue synchronization handler
+  const handleSyncOfflineQueue = useCallback(async () => {
+    if (!navigator.onLine || isSyncingOffline) return;
+    setIsSyncingOffline(true);
+    try {
+      const res = await syncOfflineQueue(createSaleTransactionInSupabase);
+      if (res.syncedCount > 0) {
+        const syncedIdSet = new Set(res.syncedIds || []);
+        setTransactions((prev) =>
+          prev.map((t) => (syncedIdSet.has(t.id) ? { ...t, isOfflinePending: false } : t))
+        );
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['products'] }),
+          queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+          queryClient.invalidateQueries({ queryKey: ['sale_transactions'] }),
+          queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        ]);
+        playSuccessBeep();
+        openAlert(
+          `ຊິ້ງຂໍ້ມູນບິນອອບລາຍຂຶ້ນ Cloud ສຳເລັດແລ້ວ (${res.syncedCount} ບິນ)!`,
+          'ສຳເລັດ',
+          'success'
+        );
+      }
+    } catch (err) {
+      console.warn('[OfflineSync] handleSyncOfflineQueue exception:', err);
+    } finally {
+      setIsSyncingOffline(false);
+    }
+  }, [isSyncingOffline]);
+
+  // Online / Offline and queue change event listeners
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      handleSyncOfflineQueue();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+    const handleQueueChange = (e) => {
+      setOfflineQueue(e.detail?.queue || getOfflineQueue());
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('meiishop_offline_queue_changed', handleQueueChange);
+
+    // Initial check on mount
+    if (typeof navigator !== 'undefined' && navigator.onLine && getOfflineQueue().length > 0) {
+      handleSyncOfflineQueue();
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('meiishop_offline_queue_changed', handleQueueChange);
+    };
+  }, [handleSyncOfflineQueue]);
+
+  // Save changes to localStorage as cache with quota-safe limits
+  useEffect(() => {
+    safeSetItem('meiishop_products_v5', products);
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem('meiishop_transactions_v7', JSON.stringify(transactions));
+    // Only cache top 30 transactions without heavy attached catalog references to guarantee quota safety
+    const slimTransactions = (transactions || []).slice(0, 30).map((t) => {
+      const { products: _discard, ...slimTx } = t;
+      return slimTx;
+    });
+    safeSetItem('meiishop_transactions_v7', slimTransactions);
   }, [transactions]);
 
   // Dual Currency 2-Way Reactive Sync for Product Form (Card 2)
@@ -2307,16 +2384,13 @@ export default function App() {
         grossProfitLak,
         gross_profit_thb: grossProfitThb,
         grossProfitThb,
-        products, // Point-in-time reference for bilingual product name lookups
       };
 
       // Cache local tx metadata for rich offline/receipt re-rendering with crate deposit and debt info
-      try {
-        localStorage.setItem(`meiishop_tx_meta_${txId}`, JSON.stringify({
-          items: receiptItems,
-          receipt,
-        }));
-      } catch (_) {}
+      safeSetItem(`meiishop_tx_meta_${txId}`, {
+        items: receiptItems,
+        receiptNumber: receiptNo,
+      });
 
       if (editingOldTransaction) {
         // Track local echo to avoid redundant notification
@@ -2387,28 +2461,75 @@ export default function App() {
           };
         });
 
-        // REAL SUPABASE DATABASE API CALL:
-        localEchoIdsRef.current.add(receipt.id);
-        const res = await createSaleTransactionInSupabase(receipt, stockDeductions);
-        if (!res.success) {
-          openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກລົງຖານຂໍ້ມູນ:\n' + res.error, 'ຂໍ້ຜິດພາດ', 'error');
-          return;
+        // Online / Offline resilient checkout execution:
+        let isSavedOnline = false;
+        if (navigator.onLine) {
+          localEchoIdsRef.current.add(receipt.id);
+          const res = await createSaleTransactionInSupabase(receipt, stockDeductions);
+          if (res.success) {
+            isSavedOnline = true;
+          } else {
+            const errStr = String(res.error || '').toLowerCase();
+            const isNetworkFailure =
+              !navigator.onLine ||
+              errStr.includes('fetch') ||
+              errStr.includes('network') ||
+              errStr.includes('failed to fetch') ||
+              errStr.includes('timeout') ||
+              errStr.includes('offline');
+
+            if (!isNetworkFailure) {
+              // Business logic failure (e.g. out of stock)!
+              openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກລົງຖານຂໍ້ມູນ:\n' + res.error, 'ຂໍ້ຜິດພາດ', 'error');
+              return;
+            }
+          }
         }
 
-        setProducts(updatedProducts);
-        setTransactions([receipt, ...transactions]);
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['products'] }),
-          queryClient.invalidateQueries({ queryKey: ['transactions'] }),
-          queryClient.invalidateQueries({ queryKey: ['sale_transactions'] }),
-          queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
-          queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-        ]);
-      }
+        if (!isSavedOnline) {
+          // OFFLINE MODE: Save to offline queue for automatic sync when network restores
+          addToOfflineQueue({
+            id: receipt.id,
+            receipt: { ...receipt, isOfflinePending: true },
+            stockDeductions,
+          });
 
-      setSelectedReceiptForView(receipt);
-      setCheckoutModalOpen(false);
-      setReceiptModalOpen(true);
+          const offlineReceipt = { ...receipt, isOfflinePending: true };
+          setProducts(updatedProducts);
+          setTransactions([offlineReceipt, ...transactions]);
+
+          setSelectedReceiptForView({
+            ...offlineReceipt,
+            products: products && products.length > 0 ? products : undefined,
+          });
+          setCheckoutModalOpen(false);
+          setReceiptModalOpen(true);
+          playSuccessBeep();
+
+          openAlert(
+            `ບັນທຶກບິນອອບລາຍ #${receiptNo} ສຳເລັດ! ລະບົບຈະຊິ້ງຂຶ້ນ Cloud ອັດຕະໂນມັດເມື່ອມີເນັດ`,
+            'ໂໝດອອບລາຍ (Offline)',
+            'success'
+          );
+        } else {
+          setProducts(updatedProducts);
+          setTransactions([receipt, ...transactions]);
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['products'] }),
+            queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+            queryClient.invalidateQueries({ queryKey: ['sale_transactions'] }),
+            queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+          ]);
+
+          setSelectedReceiptForView({
+            ...receipt,
+            products: products && products.length > 0 ? products : undefined,
+          });
+          setCheckoutModalOpen(false);
+          setReceiptModalOpen(true);
+        }
+      }
 
       // Auto-cleanup finished order in Multi-Order Tab system
       if (posOrders.length > 1) {
@@ -2420,10 +2541,8 @@ export default function App() {
         setCart(nextOrder.cart || []);
         setCustomerName(nextOrder.customerName || 'ລູກຄ້າທົ່ວໄປ');
         setGlobalPriceTier(nextOrder.priceTier || 1);
-        try {
-          localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(remainingOrders));
-          localStorage.setItem('meiishop_pos_active_order_id_v1', nextOrder.id);
-        } catch (_) {}
+        safeSetItem('meiishop_pos_active_orders_v1', remainingOrders);
+        safeSetItem('meiishop_pos_active_order_id_v1', nextOrder.id);
       } else {
         // Only 1 order open, reset it cleanly
         setCart([]);
@@ -2433,10 +2552,8 @@ export default function App() {
           { id: activeOrderId, label: posOrders[0]?.label || 'Order 1', cart: [], customerName: 'ລູກຄ້າທົ່ວໄປ', priceTier: 1, createdAt: Date.now() }
         ];
         setPosOrders(resetOrders);
-        try {
-          localStorage.setItem('meiishop_pos_active_orders_v1', JSON.stringify(resetOrders));
-          localStorage.setItem('meiishop_pos_active_order_id_v1', activeOrderId);
-        } catch (_) {}
+        safeSetItem('meiishop_pos_active_orders_v1', resetOrders);
+        safeSetItem('meiishop_pos_active_order_id_v1', activeOrderId);
       }
     } catch (err) {
       console.error('Checkout payment error:', err);
@@ -2794,7 +2911,7 @@ export default function App() {
       setRawCategories(updatedRaw);
       const updatedNames = updatedRaw.map((c) => c.name).filter(Boolean);
       setCategoriesList(updatedNames);
-      localStorage.setItem('meiishop_categories_cache', JSON.stringify(updatedNames));
+      safeSetItem('meiishop_categories_cache', updatedNames);
       return newCatObj;
     } else {
       openAlert('ເກີດຂໍ້ຜິດພາດໃນການເພີ່ມໝວດໝູ່: ' + (res.error || ''), 'ຂໍ້ຜິດພາດ', 'error');
@@ -2812,7 +2929,7 @@ export default function App() {
       // 2. Update categoriesList state
       const updatedNames = updatedRaw.map((c) => c.name).filter(Boolean);
       setCategoriesList(updatedNames);
-      localStorage.setItem('meiishop_categories_cache', JSON.stringify(updatedNames));
+      safeSetItem('meiishop_categories_cache', updatedNames);
 
       // 3. Immediately cascade to local products state so 100% of products refresh instantly
       setProducts((prev) =>
@@ -2846,7 +2963,7 @@ export default function App() {
       setRawCategories(updatedRaw);
       const updatedNames = updatedRaw.map((c) => c.name).filter(Boolean);
       setCategoriesList(updatedNames);
-      localStorage.setItem('meiishop_categories_cache', JSON.stringify(updatedNames));
+      safeSetItem('meiishop_categories_cache', updatedNames);
       return res;
     } else {
       return res;
@@ -3029,6 +3146,7 @@ export default function App() {
         cartCount={cart.length}
         unreadOrdersCount={unreadOrderIds.size}
         exchangeRate={exchangeRate}
+        offlineQueueCount={offlineQueue.length}
       />
 
       {/* 2. MAIN VIEW AREA */}
@@ -3037,6 +3155,13 @@ export default function App() {
           ? 'pb-0 md:!pb-0'
           : 'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:!pb-0'
       } touch-scroll-container`}>
+        {/* Offline Sync Banner placed at the top of content */}
+        <OfflineSyncBanner
+          isOnline={isOnline}
+          pendingCount={offlineQueue.length}
+          isSyncing={isSyncingOffline}
+          onSyncNow={handleSyncOfflineQueue}
+        />
         {activeMainTab === 'pos' && (
           <PosScreen
             categories={categories}

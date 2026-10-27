@@ -35,6 +35,7 @@ export default function Navbar({
   cartCount = 0,
   unreadOrdersCount = 0,
   exchangeRate = 0,
+  offlineQueueCount = 0,
   isCollapsed,
   setIsCollapsed,
 }) {
@@ -310,9 +311,31 @@ export default function Navbar({
                 </span>
               </div>
 
-             
-
-              
+              {/* Cloud / Offline Sync Status Widget */}
+              <div className="flex items-center justify-between px-3 py-1.5 bg-white rounded-xl border border-slate-200/80 text-xs shadow-2xs">
+                <div className="flex items-center gap-1.5 text-slate-600 font-bold">
+                  {isCloudSynced && offlineQueueCount === 0 ? (
+                    <CloudCheck size={16} className="text-emerald-500" weight="bold" />
+                  ) : (
+                    <CloudSlash size={16} className="text-amber-500" weight="bold" />
+                  )}
+                  <span className="text-[11px]">ສະຖານະ:</span>
+                </div>
+                {offlineQueueCount > 0 ? (
+                  <span className="font-bold text-[10.5px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    <span>ລໍຖ້າ {offlineQueueCount} ບິນ</span>
+                  </span>
+                ) : isCloudSynced ? (
+                  <span className="font-bold text-[10.5px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md border border-emerald-200">
+                    ອອນລາຍ
+                  </span>
+                ) : (
+                  <span className="font-bold text-[10.5px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded-md border border-rose-200">
+                    ອອບລາຍ
+                  </span>
+                )}
+              </div>
 
               {/* Nút thu gọn Sidebar ở chân trang */}
               <button
@@ -352,8 +375,6 @@ export default function Navbar({
                 <SignOut size={13} weight="bold" />
               </button>
 
-              
-
               {/* Rate Icon */}
               <div
                 className="flex flex-col items-center justify-center py-1 cursor-pointer"
@@ -366,7 +387,25 @@ export default function Navbar({
                 </span>
               </div>
 
-              
+              {/* Cloud Sync Status Icon in collapsed mode */}
+              <div
+                className="flex flex-col items-center justify-center py-1 cursor-pointer"
+                onClick={toggleCollapsed}
+                title={offlineQueueCount > 0 ? `ລໍຖ້າຊິ້ງ ${offlineQueueCount} ບິນ` : (isCloudSynced ? 'ເຊື່ອມຕໍ່ Cloud ແລ້ວ' : 'ໂໝດອອບລາຍ')}
+              >
+                {offlineQueueCount > 0 ? (
+                  <div className="relative">
+                    <CloudSlash size={20} className="text-amber-500" weight="bold" />
+                    <span className="absolute -top-1 -right-2 px-1 rounded-full bg-amber-500 text-white text-[8px] font-black">
+                      {offlineQueueCount}
+                    </span>
+                  </div>
+                ) : isCloudSynced ? (
+                  <CloudCheck size={20} className="text-emerald-500" weight="bold" />
+                ) : (
+                  <CloudSlash size={20} className="text-rose-500" weight="bold" />
+                )}
+              </div>
 
               {/* Nút mở rộng Sidebar ở chân trang */}
               <button

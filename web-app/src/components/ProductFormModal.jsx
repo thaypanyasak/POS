@@ -21,10 +21,9 @@ import {
   Gear,
   Coins,
   Link,
-  LinkBreak,
   X,
 } from '@phosphor-icons/react';
-import { formatDots } from '../utils/formatters';
+import { formatDots, sanitizeImageUrl } from '../utils/formatters';
 import { compressProductImage, formatFileSize } from '../utils/imageCompressor';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
@@ -547,9 +546,16 @@ export default function ProductFormModal({
                       type="url"
                       value={newProdImageUrl ?? ''}
                       onChange={(e) => {
-                        if (setNewProdImageUrl) setNewProdImageUrl(e.target.value);
+                        const sanitized = sanitizeImageUrl(e.target.value);
+                        if (setNewProdImageUrl) setNewProdImageUrl(sanitized);
                         if (setImageFileToUpload) setImageFileToUpload(null);
                         if (setImageCompressionStats) setImageCompressionStats(null);
+                      }}
+                      onBlur={(e) => {
+                        const sanitized = sanitizeImageUrl(e.target.value);
+                        if (setNewProdImageUrl && sanitized !== e.target.value) {
+                          setNewProdImageUrl(sanitized);
+                        }
                       }}
                       placeholder="https://images.unsplash.com/..."
                       className="w-full h-8 pl-2.5 pr-8 py-1 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-teal-600 font-mono"

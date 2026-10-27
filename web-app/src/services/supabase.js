@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { universalStorage } from './authStorage';
+import { sanitizeImageUrl } from '../utils/formatters';
 
 const SUPABASE_URL = 'https://qanphpmphnipyuwcadwz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_zQw2L3JfnT-5o_-tJgZaIA_WETQFTPq';
@@ -320,7 +321,7 @@ export async function fetchProductsFromSupabase() {
         categoryId: resolvedCategoryId,
         categories: p.categories || null,
         barcode: p.barcode || '',
-        imageUrl: p.image_url || null,
+        imageUrl: sanitizeImageUrl(p.image_url) || null,
         baseUnit: resolvedBaseUnit,
         costPerBaseUnit: baseCostKip,
         costBaht: Number(costBaht) || 0,
@@ -381,7 +382,7 @@ export async function saveProductToSupabase(product) {
       name_vi: product.name_vi ?? product.nameVi ?? null,
       category: product.category,
       barcode: product.barcode || null,
-      image_url: product.imageUrl || null,
+      image_url: sanitizeImageUrl(product.imageUrl || product.image_url) || null,
       base_unit: product.baseUnit,
       cost_per_base_unit: product.costPerBaseUnit || 0,
       current_stock_base_units: currentStock,
@@ -2566,6 +2567,7 @@ export async function fetchProductBundlesFromSupabase() {
 
     const bundles = (bundlesData || []).map((b) => ({
       ...b,
+      image_url: sanitizeImageUrl(b.image_url) || null,
       itemIds: (b.product_bundle_items || []).map((item) => item.product_id),
     }));
 
@@ -2599,7 +2601,7 @@ export async function saveProductBundleToSupabase(bundle, childProductIds = []) 
       price_lak: Number(bundle.price_lak || bundle.priceLak) || 0,
       price_thb: Number(bundle.price_thb || bundle.priceThb) || 0,
       barcode: bundle.barcode || null,
-      image_url: bundle.image_url || bundle.imageUrl || null,
+      image_url: sanitizeImageUrl(bundle.image_url || bundle.imageUrl) || null,
       is_active: bundle.is_active !== false,
       updated_at: new Date().toISOString(),
     };

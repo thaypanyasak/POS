@@ -10,6 +10,45 @@ export const formatBaht = (val) => {
 };
 
 /**
+ * Sanitizes image URLs to automatically fix accidental duplicate pastes
+ * e.g. "https://abc.com/img.jpghttps://abc.com/img.jpg" -> "https://abc.com/img.jpg"
+ * or "https://abc.com/img.jpg https://abc.com/img.jpg" -> "https://abc.com/img.jpg"
+ * Does NOT affect query parameters like "?url=https://..." or modify identical URLs shared across distinct products.
+ */
+export const sanitizeImageUrl = (url) => {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+
+  // 1) Accidental exact duplicate concatenation (e.g. "https://site.com/1https://site.com/1")
+  if (trimmed.length % 2 === 0) {
+    const half = trimmed.slice(0, trimmed.length / 2);
+    if (half + half === trimmed && /^https?:\/\//i.test(half)) {
+      return half;
+    }
+  }
+
+  // 2) Accidental whitespace or newline separated duplicate URLs: "https://...  https://..."
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length > 1 && parts.every((p) => /^https?:\/\//i.test(p))) {
+    return parts[parts.length - 1];
+  }
+
+  // 3) Accidental direct concatenation without separator: e.g. "...&i=0https://..." or "...jpghttps://..."
+  // Only triggers if the second https?:// is NOT immediately preceded by a query delimiter (=, ?, &, /)
+  const doublePasteMatch = trimmed.match(/^(https?:\/\/[^\s]+?)(https?:\/\/[^\s]+)$/i);
+  if (doublePasteMatch) {
+    const [, first, second] = doublePasteMatch;
+    if (!/[=?&/]$/.test(first)) {
+      if (first === second) return first;
+      return second;
+    }
+  }
+
+  return trimmed;
+};
+
+/**
  * Calculates whole carton (nguyên thùng / ແກັດ / ລັງ) cost in Kip and Baht
  */
 export const getCartonUnitInfo = (product, exchangeRate = 0) => {

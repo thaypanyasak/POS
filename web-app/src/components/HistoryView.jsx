@@ -1033,6 +1033,12 @@ export default function HistoryView({
                   >
                     #{tx.receiptNumber}
                   </span>
+                  {Boolean(tx.isOfflinePending) && (
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white shadow-xs inline-flex items-center gap-1" title="ບິນນີ້ຖືກບັນທຶກຕອນບໍ່ມີເນັດ, ລະບົບຈະຊິ້ງຂຶ້ນ Cloud ອັດຕະໂນມັດເມື່ອມີເນັດ">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                      <span>ອອບລາຍ</span>
+                    </span>
+                  )}
                   {isOrderNew && (
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_2px_6px_rgba(5,150,105,0.3)] inline-flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-white" />
@@ -1425,6 +1431,12 @@ export default function HistoryView({
                         <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_2px_6px_rgba(5,150,105,0.3)] inline-flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-white" />
                           <span>ບິນໃໝ່</span>
+                        </span>
+                      )}
+                      {Boolean(tx.isOfflinePending) && (
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-500 text-white shadow-xs inline-flex items-center gap-1" title="ບິນນີ້ຖືກບັນທຶກຕອນບໍ່ມີເນັດ, ລະບົບຈະຊິ້ງຂຶ້ນ Cloud ອັດຕະໂນມັດເມື່ອມີເນັດ">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                          <span>ອອບລາຍ</span>
                         </span>
                       )}
                       {isOrderUpdated && (
