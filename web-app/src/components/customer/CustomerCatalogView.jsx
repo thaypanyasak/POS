@@ -27,16 +27,11 @@ export default function CustomerCatalogView({
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   const hotlineNumbers = ['020 56468780', '020 52228432'];
+  const whatsappNumber = '020 52228432';
+  const whatsappInternational = '8562052228432';
   const storeAddress = 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ';
 
-  const rawPhone = hotlineNumbers[0].replace(/\D/g, '');
-  const internationalPhone = rawPhone.startsWith('020')
-    ? '85620' + rawPhone.slice(3)
-    : rawPhone.startsWith('20')
-    ? '856' + rawPhone
-    : rawPhone;
-
-  const defaultWhatsappUrl = `https://wa.me/${internationalPhone}?text=${encodeURIComponent(
+  const defaultWhatsappUrl = `https://wa.me/${whatsappInternational}?text=${encodeURIComponent(
     'ສະບາຍດີ ຮ້ານ ສົມສັກ! ຂ້ອຍຕ້ອງການສອບຖາມ ຫຼື ສັ່ງເຄື່ອງ...'
   )}`;
 
@@ -64,17 +59,15 @@ export default function CustomerCatalogView({
         }
       }
 
-      // 2. Search Query Filter (bilingual Lao & Vietnamese + barcode)
+      // 2. Search Query Filter (Lao name + barcode)
       if (!normQuery) return true;
 
       const normName = normalizeLao((p.name || '').toLowerCase());
-      const normNameVi = normalizeLao((p.name_vi || p.nameVi || '').toLowerCase());
       const barcode = (p.barcode || '').toLowerCase();
       const cat = normalizeLao((p.category || '').toLowerCase());
 
       return (
         normName.includes(normQuery) ||
-        normNameVi.includes(normQuery) ||
         barcode.includes(normQuery) ||
         cat.includes(normQuery)
       );
@@ -105,7 +98,7 @@ export default function CustomerCatalogView({
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="Open Store" />
               </div>
               <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium truncate">
-                ສິນຄ້າຂາຍຍ່ອຍ ແລະ ຂາຍສົ່ງ • Bán lẻ & Bán sỉ
+                ສິນຄ້າຂາຍຍ່ອຍ ແລະ ຂາຍສົ່ງ
               </p>
             </div>
           </div>
@@ -118,7 +111,7 @@ export default function CustomerCatalogView({
               target="_blank"
               rel="noopener noreferrer"
               className="h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1 border border-emerald-200 shadow-2xs transition-all active:scale-95"
-              title="ສັ່ງຜ່ານ WhatsApp (Chat qua WhatsApp)"
+              title="ສັ່ງຜ່ານ WhatsApp"
             >
               <WhatsappLogo size={15} weight="fill" className="text-emerald-600" />
               <span className="hidden sm:inline">WhatsApp</span>
@@ -128,7 +121,7 @@ export default function CustomerCatalogView({
             <a
               href={`tel:${hotlineNumbers[0].replace(/\s+/g, '')}`}
               className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold flex items-center gap-1.5 border border-teal-200/80 shadow-2xs transition-all active:scale-95"
-              title="ໂທຫາຮ້ານ (Gọi cho quán)"
+              title="ໂທຫາຮ້ານ"
             >
               <Phone size={14} weight="bold" className="text-teal-600" />
               <span className="hidden md:inline font-mono">{hotlineNumbers[0]}</span>
@@ -142,7 +135,7 @@ export default function CustomerCatalogView({
                 onClick={onRefresh}
                 disabled={isLoading}
                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer transition-colors active:scale-95 shadow-2xs"
-                title="ໂຫຼດຂໍ້ມູນໃໝ່ (Làm mới)"
+                title="ໂຫຼດຂໍ້ມູນໃໝ່"
               >
                 <ArrowClockwise
                   size={16}
@@ -155,13 +148,13 @@ export default function CustomerCatalogView({
         </div>
       </header>
 
-      {/* 2. HERO / STORE ANNOUNCEMENT BANNER (Solid Color, No Gradient, No Emojis) */}
+      {/* 2. HERO / STORE ANNOUNCEMENT BANNER (Solid Color, No Gradient, No Emojis, Pure Lao) */}
       <section className="max-w-6xl mx-auto w-full px-3 sm:px-6 pt-3 sm:pt-4 shrink-0">
         <div className="rounded-2xl sm:rounded-3xl bg-teal-900 text-white p-4 sm:p-6 shadow-sm border border-teal-800">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
             <div className="space-y-1.5 max-w-xl">
               <div className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-teal-800 text-[11px] font-bold text-teal-100 border border-teal-700">
-                <span>ເມນູສິນຄ້າ & ລາຄາຂາຍລ່າສຸດ (Bảng giá cập nhật)</span>
+                <span>ເມນູສິນຄ້າ & ລາຄາຂາຍລ່າສຸດ</span>
               </div>
               <h2 className="text-base sm:text-2xl font-black tracking-tight leading-tight text-white">
                 ຍິນດີຕ້ອນຮັບສູ່ ຮ້ານ ສົມສັກ
@@ -179,23 +172,30 @@ export default function CustomerCatalogView({
               </div>
             </div>
 
-            {/* Hotline & WhatsApp Actions */}
+            {/* Hotline & WhatsApp Actions: Both numbers clearly accessible */}
             <div className="flex items-center gap-2 pt-1 md:pt-0 flex-wrap">
               <a
                 href={defaultWhatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-transform active:scale-95"
+                className="h-10 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-transform active:scale-95"
               >
                 <WhatsappLogo size={16} weight="fill" />
-                <span>WhatsApp</span>
+                <span>WhatsApp: {whatsappNumber}</span>
               </a>
               <a
                 href={`tel:${hotlineNumbers[0].replace(/\s+/g, '')}`}
-                className="h-10 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-2 shadow-xs transition-transform active:scale-95"
+                className="h-10 px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-xs transition-transform active:scale-95"
               >
-                <Phone size={16} weight="bold" />
-                <span>ສັ່ງເຄື່ອງ: {hotlineNumbers[0]}</span>
+                <Phone size={15} weight="bold" />
+                <span>{hotlineNumbers[0]}</span>
+              </a>
+              <a
+                href={`tel:${hotlineNumbers[1].replace(/\s+/g, '')}`}
+                className="h-10 px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-xs transition-transform active:scale-95"
+              >
+                <Phone size={15} weight="bold" />
+                <span>{hotlineNumbers[1]}</span>
               </a>
             </div>
           </div>
@@ -216,7 +216,7 @@ export default function CustomerCatalogView({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ຄົ້ນຫາສິນຄ້າ (ຊື່ລາວ, ຫວຽດ, ບາໂຄດ)..."
+              placeholder="ຄົ້ນຫາສິນຄ້າ ຫຼື ບາໂຄດ..."
               className="w-full h-10 sm:h-11 pl-10 pr-9 bg-white border border-slate-200/90 rounded-2xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-500/10 shadow-2xs font-medium"
             />
             {searchQuery && (
@@ -311,7 +311,7 @@ export default function CustomerCatalogView({
               <Package size={32} weight="duotone" />
             </div>
             <h3 className="text-base font-bold text-slate-800">
-              ບໍ່ພົບສິນຄ້າທີ່ຄົ້ນຫາ (Không tìm thấy sản phẩm)
+              ບໍ່ພົບສິນຄ້າທີ່ຄົ້ນຫາ
             </h3>
             <p className="text-xs text-slate-500 max-w-sm">
               ກະລຸນາກວດສອບຄຳຄົ້ນຫາ ຫຼື ເລືອກໝວດໝູ່ "ທັງໝົດ" ເພື່ອເບິ່ງສິນຄ້າທັງໝົດຂອງຮ້ານ.
@@ -379,16 +379,11 @@ export default function CustomerCatalogView({
                       )}
                     </div>
 
-                    {/* Titles */}
+                    {/* Titles: Pure Lao only */}
                     <div className="p-3 pb-1">
                       <h4 className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-2 leading-tight group-hover:text-teal-700 transition-colors">
                         {p.name}
                       </h4>
-                      {(p.name_vi || p.nameVi) && (
-                        <p className="text-[10.5px] text-slate-400 font-medium truncate mt-0.5">
-                          {p.name_vi || p.nameVi}
-                        </p>
-                      )}
                     </div>
                   </div>
 
@@ -472,11 +467,6 @@ export default function CustomerCatalogView({
                       <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate group-hover:text-teal-700 transition-colors">
                         {p.name}
                       </h4>
-                      {(p.name_vi || p.nameVi) && (
-                        <p className="text-[11px] text-slate-400 font-medium truncate">
-                          {p.name_vi || p.nameVi}
-                        </p>
-                      )}
                       {p.category && (
                         <span className="inline-block mt-1 px-2 py-0.5 rounded-md text-[9.5px] font-bold bg-slate-100 text-slate-600">
                           {p.category}
@@ -515,6 +505,15 @@ export default function CustomerCatalogView({
           </div>
 
           <div className="flex items-center justify-center gap-3 text-slate-600 font-mono font-bold flex-wrap">
+            <a
+              href={defaultWhatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-emerald-700 hover:underline flex items-center gap-1 font-sans"
+            >
+              <WhatsappLogo size={14} weight="fill" className="text-emerald-600" />
+              <span>WhatsApp: {whatsappNumber}</span>
+            </a>
             {hotlineNumbers.map((phone) => (
               <a
                 key={phone}
@@ -539,6 +538,7 @@ export default function CustomerCatalogView({
         isOpen={Boolean(selectedProduct)}
         onClose={() => setSelectedProduct(null)}
         hotlineNumbers={hotlineNumbers}
+        whatsappNumber={whatsappNumber}
       />
     </div>
   );

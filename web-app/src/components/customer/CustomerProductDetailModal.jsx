@@ -14,23 +14,16 @@ export default function CustomerProductDetailModal({
   isOpen,
   onClose,
   hotlineNumbers = ['020 56468780', '020 52228432'],
+  whatsappNumber = '020 52228432',
 }) {
   if (!isOpen || !product) return null;
 
   const sortedUnits = getSortedUnits(product);
-
   const cleanImageUrl = sanitizeImageUrl(product.imageUrl || product.image_url);
-  const rawPhone = hotlineNumbers[0].replace(/\D/g, '');
-  const internationalPhone = rawPhone.startsWith('020')
-    ? '85620' + rawPhone.slice(3)
-    : rawPhone.startsWith('20')
-    ? '856' + rawPhone
-    : rawPhone;
 
+  const whatsappInternational = '8562052228432';
   const whatsappMessage = encodeURIComponent(
-    `ສະບາຍດີ ຮ້ານ ສົມສັກ! ຂ້ອຍສົນໃຈສັ່ງຊື້ສິນຄ້າ: ${product.name} ${
-      product.name_vi ? `(${product.name_vi})` : ''
-    }`
+    `ສະບາຍດີ ຮ້ານ ສົມສັກ! ຂ້ອຍສົນໃຈສັ່ງຊື້ສິນຄ້າ: ${product.name}`
   );
 
   return (
@@ -41,7 +34,7 @@ export default function CustomerProductDetailModal({
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
             <span className="text-xs font-black text-slate-700 tracking-tight uppercase">
-              ລາຍລະອຽດສິນຄ້າ (Chi tiết sản phẩm)
+              ລາຍລະອຽດສິນຄ້າ
             </span>
           </div>
 
@@ -49,7 +42,7 @@ export default function CustomerProductDetailModal({
             type="button"
             onClick={onClose}
             className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-600 flex items-center justify-center cursor-pointer transition-colors active:scale-95"
-            title="ປິດ (Đóng)"
+            title="ປິດ"
           >
             <X size={16} weight="bold" />
           </button>
@@ -85,16 +78,11 @@ export default function CustomerProductDetailModal({
             )}
           </div>
 
-          {/* Names */}
+          {/* Names: Pure Lao only */}
           <div>
             <h2 className="text-lg sm:text-xl font-black text-slate-900 leading-snug">
               {product.name}
             </h2>
-            {(product.name_vi || product.nameVi) && (
-              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
-                {product.name_vi || product.nameVi}
-              </p>
-            )}
           </div>
 
           {/* Pricing Tiers Table */}
@@ -102,7 +90,7 @@ export default function CustomerProductDetailModal({
             <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
               <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                 <Tag size={15} weight="bold" className="text-teal-600" />
-                <span>ຕາຕະລາງລາຄາຂາຍ (Bảng giá theo quy cách)</span>
+                <span>ຕາຕະລາງລາຄາຂາຍ</span>
               </span>
               <span className="text-[11px] text-slate-400 font-medium">ລາຄາກີບ (LAK)</span>
             </div>
@@ -146,7 +134,7 @@ export default function CustomerProductDetailModal({
               </div>
             ) : (
               <div className="p-3 text-center text-xs text-slate-500">
-                ກຳລັງອັບເດດລາຄາ (Đang cập nhật giá)
+                ກຳລັງອັບເດດລາຄາ
               </div>
             )}
           </div>
@@ -160,27 +148,36 @@ export default function CustomerProductDetailModal({
           </div>
         </div>
 
-        {/* Footer Actions: WhatsApp & Direct Call */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-2">
+        {/* Footer Actions: WhatsApp & Direct Calls */}
+        <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-col gap-2">
           {/* WhatsApp Direct Message */}
           <a
-            href={`https://wa.me/${internationalPhone}?text=${whatsappMessage}`}
+            href={`https://wa.me/${whatsappInternational}?text=${whatsappMessage}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 h-11 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
+            className="w-full h-11 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
           >
             <WhatsappLogo size={18} weight="fill" />
-            <span>ສັ່ງຜ່ານ WhatsApp</span>
+            <span>ສັ່ງຜ່ານ WhatsApp ({whatsappNumber})</span>
           </a>
 
-          {/* Phone Call */}
-          <a
-            href={`tel:${hotlineNumbers[0].replace(/\s+/g, '')}`}
-            className="flex-1 h-11 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-98 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
-          >
-            <Phone size={16} weight="bold" />
-            <span>ໂທ {hotlineNumbers[0]}</span>
-          </a>
+          {/* Direct Phone Calls */}
+          <div className="flex items-center gap-2">
+            <a
+              href={`tel:${hotlineNumbers[0].replace(/\s+/g, '')}`}
+              className="flex-1 h-10 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-98 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all"
+            >
+              <Phone size={15} weight="bold" />
+              <span>ໂທ {hotlineNumbers[0]}</span>
+            </a>
+            <a
+              href={`tel:${hotlineNumbers[1].replace(/\s+/g, '')}`}
+              className="flex-1 h-10 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-98 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all"
+            >
+              <Phone size={15} weight="bold" />
+              <span>ໂທ {hotlineNumbers[1]}</span>
+            </a>
+          </div>
         </div>
       </div>
     </div>
