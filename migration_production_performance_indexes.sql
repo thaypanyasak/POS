@@ -5,6 +5,13 @@
 -- và bấm RUN để kích hoạt. Lệnh này KHÔNG làm thay đổi cấu trúc bảng hay dữ liệu cũ.
 -- ============================================================================
 
+-- 0. Phòng hộ: Đảm bảo các cột tối ưu luôn sẵn sàng (nếu chưa có thì tự thêm)
+ALTER TABLE IF EXISTS public.sale_transactions 
+ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'PAID';
+
+ALTER TABLE IF EXISTS public.products 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 -- 1. Tối ưu khóa ngoại giữa Hóa đơn và Chi tiết món hàng (TRÁNH FULL TABLE SCAN)
 -- Khi bảng sale_transaction_items lên tới 50.000 - 500.000 dòng, index này giúp
 -- việc nạp chi tiết hóa đơn (receipt items) từ 2-3 giây giảm xuống dưới 10 mili-giây.
