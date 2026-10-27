@@ -595,10 +595,12 @@ export default function App() {
     });
   };
 
-  // Layer 2 Security: Real-time Two-Way URL Hash Sync & Direct Route Guard
+  // Layer 2 Security: Real-time Two-Way URL Hash Sync & Direct Route Guard (Staff POS Only)
   useEffect(() => {
+    if (appMode !== 'pos') return;
     const handleHashChange = () => {
       if (typeof window === 'undefined') return;
+      if (isCustomerLink()) return; // Never intercept customer menu
       const raw = window.location.hash.replace(/^#\/?/, '').trim();
       if (!raw) return;
 
@@ -618,14 +620,25 @@ export default function App() {
 
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [canAccessRoute]);
+  }, [canAccessRoute, appMode]);
 
-  // Keep URL hash updated with activeMainTab state
+  // Keep URL hash updated with activeMainTab state (Staff POS Only)
   useEffect(() => {
+    if (appMode !== 'pos') return;
     if (typeof window !== 'undefined' && window.location.hash !== `#${activeMainTab}`) {
       window.location.hash = `#${activeMainTab}`;
     }
-  }, [activeMainTab]);
+  }, [activeMainTab, appMode]);
+
+  // Ensure clean URL without #pos when visiting /menu
+  useEffect(() => {
+    if (appMode === 'customer' && typeof window !== 'undefined') {
+      const path = (window.location.pathname || '').toLowerCase();
+      if ((path === '/menu' || path.startsWith('/menu/')) && window.location.hash) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+  }, [appMode]);
 
   const [categoriesList, setCategoriesList] = useState(() => {
     try {

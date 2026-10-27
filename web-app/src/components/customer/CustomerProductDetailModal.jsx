@@ -4,8 +4,6 @@ import {
   Phone,
   WhatsappLogo,
   Package,
-  CheckCircle,
-  WarningCircle,
   Tag,
   Info,
 } from '@phosphor-icons/react';
@@ -20,9 +18,6 @@ export default function CustomerProductDetailModal({
   if (!isOpen || !product) return null;
 
   const sortedUnits = getSortedUnits(product);
-  const isOutOfStock =
-    product.trackStock !== false &&
-    Number(product.currentStockBaseUnits || product.stockPieces || 0) <= 0;
 
   const cleanImageUrl = sanitizeImageUrl(product.imageUrl || product.image_url);
   const rawPhone = hotlineNumbers[0].replace(/\D/g, '');
@@ -80,21 +75,6 @@ export default function CustomerProductDetailModal({
                 <span className="text-xs">ຮູບພາບສິນຄ້າ</span>
               </div>
             )}
-
-            {/* In stock / Out of stock pill */}
-            <div className="absolute top-3 left-3">
-              {isOutOfStock ? (
-                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs inline-flex items-center gap-1">
-                  <WarningCircle size={13} weight="bold" />
-                  <span>ສິນຄ້າໝົດຊົ່ວຄາວ (Hết hàng)</span>
-                </span>
-              ) : (
-                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs inline-flex items-center gap-1">
-                  <CheckCircle size={13} weight="bold" />
-                  <span>ມີສິນຄ້າພ້ອມສົ່ງ (Còn hàng)</span>
-                </span>
-              )}
-            </div>
 
             {product.category && (
               <div className="absolute top-3 right-3">

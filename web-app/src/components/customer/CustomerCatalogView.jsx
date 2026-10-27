@@ -9,14 +9,7 @@ import {
   SquaresFour,
   ListDashes,
   Package,
-  CheckCircle,
-  WarningCircle,
-  Tag,
   ArrowClockwise,
-  Lock,
-  Sparkle,
-  ArrowsDownUp,
-  Funnel,
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao, getSortedUnits, sanitizeImageUrl } from '../../utils/formatters';
 import CustomerProductDetailModal from './CustomerProductDetailModal';
@@ -32,8 +25,6 @@ export default function CustomerCatalogView({
   const [activeCategory, setActiveCategory] = useState('ທັງໝົດ');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [onlyInStock, setOnlyInStock] = useState(false);
-  const [sortBy, setSortBy] = useState('default'); // 'default' | 'price-asc' | 'price-desc' | 'name-asc'
 
   const hotlineNumbers = ['020 56468780', '020 52228432'];
   const storeAddress = 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ';
@@ -61,27 +52,19 @@ export default function CustomerCatalogView({
     return list;
   }, [categories]);
 
-  // Filtered & Sorted products based on search, category, stock, and sorting criteria
+  // Filtered products: displays all products (no stock filtering), only category & search query
   const processedProducts = useMemo(() => {
     const normQuery = normalizeLao(searchQuery.trim().toLowerCase());
 
-    let list = (products || []).filter((p) => {
-      // 1. Stock Filter
-      if (onlyInStock) {
-        const isOutOfStock =
-          p.trackStock !== false &&
-          Number(p.currentStockBaseUnits || p.stockPieces || 0) <= 0;
-        if (isOutOfStock) return false;
-      }
-
-      // 2. Category Filter
+    return (products || []).filter((p) => {
+      // 1. Category Filter
       if (activeCategory !== 'ທັງໝົດ') {
         if (p.category !== activeCategory) {
           return false;
         }
       }
 
-      // 3. Search Query Filter (bilingual Lao & Vietnamese + barcode)
+      // 2. Search Query Filter (bilingual Lao & Vietnamese + barcode)
       if (!normQuery) return true;
 
       const normName = normalizeLao((p.name || '').toLowerCase());
@@ -96,36 +79,23 @@ export default function CustomerCatalogView({
         cat.includes(normQuery)
       );
     });
-
-    // 4. Sort logic
-    if (sortBy === 'price-asc' || sortBy === 'price-desc') {
-      list = [...list].sort((a, b) => {
-        const uA = getSortedUnits(a);
-        const uB = getSortedUnits(b);
-        const priceA = Number(uA[uA.length - 1]?.retailPrice || a.retailPrice || 0);
-        const priceB = Number(uB[uB.length - 1]?.retailPrice || b.retailPrice || 0);
-        return sortBy === 'price-asc' ? priceA - priceB : priceB - priceA;
-      });
-    } else if (sortBy === 'name-asc') {
-      list = [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'lo'));
-    }
-
-    return list;
-  }, [products, searchQuery, activeCategory, onlyInStock, sortBy]);
+  }, [products, searchQuery, activeCategory]);
 
   return (
     <div
       className="fixed inset-0 w-full h-full h-dvh overflow-y-auto touch-scroll-container bg-slate-50 text-slate-900 font-sans flex flex-col selection:bg-teal-500/20 selection:text-teal-900 pb-12 z-10"
       style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }}
     >
-      {/* 1. TOP NAVBAR (Glassmorphism & Fixed on Scroll) */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
+      {/* 1. TOP NAVBAR */}
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs shrink-0">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2.5">
-          {/* Brand Info */}
+          {/* Brand Info with logo.svg */}
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-teal-700 via-teal-600 to-emerald-500 flex items-center justify-center text-white shadow-xs shrink-0">
-              <Package size={22} weight="duotone" />
-            </div>
+            <img
+              src="/logo.svg"
+              alt="MeiiShop Logo"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl shadow-xs shrink-0 object-contain"
+            />
 
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
@@ -185,45 +155,44 @@ export default function CustomerCatalogView({
         </div>
       </header>
 
-      {/* 2. HERO / STORE ANNOUNCEMENT BANNER */}
-      <section className="max-w-6xl mx-auto w-full px-3 sm:px-6 pt-3 sm:pt-4">
-        <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-teal-800 via-teal-700 to-emerald-700 text-white p-4 sm:p-6 shadow-md border border-teal-600/50">
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="space-y-1 sm:space-y-1.5 max-w-xl">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-xs text-[10.5px] font-bold text-teal-100 border border-white/20">
-                <Sparkle size={12} weight="fill" className="text-amber-300" />
+      {/* 2. HERO / STORE ANNOUNCEMENT BANNER (Solid Color, No Gradient, No Emojis) */}
+      <section className="max-w-6xl mx-auto w-full px-3 sm:px-6 pt-3 sm:pt-4 shrink-0">
+        <div className="rounded-2xl sm:rounded-3xl bg-teal-900 text-white p-4 sm:p-6 shadow-sm border border-teal-800">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
+            <div className="space-y-1.5 max-w-xl">
+              <div className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-teal-800 text-[11px] font-bold text-teal-100 border border-teal-700">
                 <span>ເມນູສິນຄ້າ & ລາຄາຂາຍລ່າສຸດ (Bảng giá cập nhật)</span>
               </div>
-              <h2 className="text-base sm:text-2xl font-black tracking-tight leading-tight">
+              <h2 className="text-base sm:text-2xl font-black tracking-tight leading-tight text-white">
                 ຍິນດີຕ້ອນຮັບສູ່ ຮ້ານ ສົມສັກ
               </h2>
-              <div className="flex items-center gap-2 text-xs sm:text-sm text-teal-100/90 flex-wrap">
+              <div className="flex items-center gap-2 text-xs sm:text-sm text-teal-200/90 flex-wrap">
                 <span className="flex items-center gap-1">
-                  <MapPin size={14} weight="bold" className="text-teal-300" />
+                  <MapPin size={14} weight="bold" className="text-teal-300 shrink-0" />
                   <span>{storeAddress}</span>
                 </span>
-                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline text-teal-500">•</span>
                 <span className="flex items-center gap-1">
-                  <Clock size={14} weight="bold" className="text-teal-300" />
+                  <Clock size={14} weight="bold" className="text-teal-300 shrink-0" />
                   <span>ເປີດທຸກມື້ 07:00 - 21:00</span>
                 </span>
               </div>
             </div>
 
-            {/* Quick Hotline Calling / WhatsApp Pill */}
+            {/* Hotline & WhatsApp Actions */}
             <div className="flex items-center gap-2 pt-1 md:pt-0 flex-wrap">
               <a
                 href={defaultWhatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="h-10 px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-sm transition-transform active:scale-95"
+                className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-transform active:scale-95"
               >
                 <WhatsappLogo size={16} weight="fill" />
                 <span>WhatsApp</span>
               </a>
               <a
                 href={`tel:${hotlineNumbers[0].replace(/\s+/g, '')}`}
-                className="h-10 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-2 shadow-sm transition-transform active:scale-95"
+                className="h-10 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-2 shadow-xs transition-transform active:scale-95"
               >
                 <Phone size={16} weight="bold" />
                 <span>ສັ່ງເຄື່ອງ: {hotlineNumbers[0]}</span>
@@ -234,7 +203,7 @@ export default function CustomerCatalogView({
       </section>
 
       {/* 3. STICKY SEARCH & CATEGORY FILTER BAR */}
-      <section className="sticky top-14 sm:top-16 z-30 bg-slate-50/95 backdrop-blur-md pt-3 pb-2.5 max-w-6xl mx-auto w-full px-3 sm:px-6 space-y-2 border-b border-slate-200/60">
+      <section className="sticky top-14 sm:top-16 z-30 bg-slate-50/95 backdrop-blur-md pt-3 pb-2.5 max-w-6xl mx-auto w-full px-3 sm:px-6 space-y-2 border-b border-slate-200/60 shrink-0">
         {/* Search Bar & View Mode Toggle */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
@@ -311,42 +280,6 @@ export default function CustomerCatalogView({
             );
           })}
         </div>
-
-        {/* Secondary Filter Bar: In-stock filter & Sort selector */}
-        <div className="flex items-center justify-between gap-2 pt-0.5 text-xs">
-          {/* In-Stock Toggle */}
-          <button
-            type="button"
-            onClick={() => setOnlyInStock(!onlyInStock)}
-            className={`h-7 px-2.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
-              onlyInStock
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-100'
-            }`}
-          >
-            <CheckCircle
-              size={13}
-              weight={onlyInStock ? 'fill' : 'regular'}
-              className={onlyInStock ? 'text-emerald-600' : 'text-slate-400'}
-            />
-            <span>ສະເພາະສິນຄ້າທີ່ມີ (Chỉ hiện còn hàng)</span>
-          </button>
-
-          {/* Sort Selector */}
-          <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500">
-            <ArrowsDownUp size={12} weight="bold" className="text-slate-400" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="bg-white border border-slate-200 rounded-lg h-7 px-2 text-[11px] font-bold text-slate-700 focus:outline-none focus:border-teal-500 cursor-pointer shadow-2xs"
-            >
-              <option value="default">ມາດຕະຖານ (Mặc định)</option>
-              <option value="price-asc">ລາຄາ: ຕ່ຳຫາສູງ (Giá tăng)</option>
-              <option value="price-desc">ລາຄາ: ສູງຫາຕ່ຳ (Giá giảm)</option>
-              <option value="name-asc">ຊື່: ກ-ຮ (Tên A-Z)</option>
-            </select>
-          </div>
-        </div>
       </section>
 
       {/* 4. MAIN PRODUCT LIST / GRID */}
@@ -357,17 +290,16 @@ export default function CustomerCatalogView({
             ພົບ <span className="text-teal-700 font-black font-mono">{processedProducts.length}</span> ສິນຄ້າ
             {activeCategory !== 'ທັງໝົດ' && <span> ໃນໝວດ "{activeCategory}"</span>}
           </span>
-          {(searchQuery || onlyInStock || activeCategory !== 'ທັງໝົດ') && (
+          {(searchQuery || activeCategory !== 'ທັງໝົດ') && (
             <button
               type="button"
               onClick={() => {
                 setSearchQuery('');
                 setActiveCategory('ທັງໝົດ');
-                setOnlyInStock(false);
               }}
               className="text-teal-600 hover:underline cursor-pointer"
             >
-              ລ້າງຕົວກັ່ນຕອງທັງໝົດ
+              ລ້າງຕົວກັ່ນຕອງ
             </button>
           )}
         </div>
@@ -389,7 +321,6 @@ export default function CustomerCatalogView({
               onClick={() => {
                 setSearchQuery('');
                 setActiveCategory('ທັງໝົດ');
-                setOnlyInStock(false);
               }}
               className="mt-2 h-9 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all active:scale-95 shadow-2xs cursor-pointer"
             >
@@ -413,10 +344,6 @@ export default function CustomerCatalogView({
               const packUnit = sortedUnits.find(
                 (u) => u.tier === 2 || u.id?.endsWith('_pack') || ['ແພັກ', 'ມັດ'].includes(u.unitName)
               );
-
-              const isOutOfStock =
-                p.trackStock !== false &&
-                Number(p.currentStockBaseUnits || p.stockPieces || 0) <= 0;
 
               const cleanImageUrl = sanitizeImageUrl(p.imageUrl || p.image_url);
 
@@ -443,17 +370,6 @@ export default function CustomerCatalogView({
                         <div className="text-slate-300">
                           <Package size={44} weight="duotone" />
                         </div>
-                      )}
-
-                      {/* Stock Pill on photo */}
-                      {isOutOfStock ? (
-                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
-                          ສິນຄ້າໝົດ
-                        </span>
-                      ) : (
-                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                          ມີສິນຄ້າ
-                        </span>
                       )}
 
                       {p.category && (
@@ -590,7 +506,7 @@ export default function CustomerCatalogView({
       </main>
 
       {/* 5. FOOTER */}
-      <footer className="mt-8 border-t border-slate-200 bg-white py-8 text-center text-xs text-slate-500 space-y-3">
+      <footer className="mt-8 border-t border-slate-200 bg-white py-8 text-center text-xs text-slate-500 space-y-3 shrink-0">
         <div className="max-w-6xl mx-auto px-4 flex flex-col items-center justify-center space-y-2">
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-800">ຮ້ານ ສົມສັກ (MeiiShop)</span>
