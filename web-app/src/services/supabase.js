@@ -41,6 +41,9 @@ export function saveProductMetaLocal(product) {
   }
 }
 
+// Cache memory danh mục để tránh gọi SELECT categories thừa khi thêm/sửa sản phẩm
+const categoryNameToIdCache = new Map();
+
 export function getProductMetaLocal(productId) {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -451,16 +454,22 @@ export async function saveProductToSupabase(product) {
 
     let targetCategoryId = product.categoryId || null;
     if (!targetCategoryId && product.category) {
-      try {
-        const { data: matchedCat } = await supabase
-          .from('categories')
-          .select('id')
-          .eq('name', product.category)
-          .maybeSingle();
-        if (matchedCat?.id) {
-          targetCategoryId = matchedCat.id;
-        }
-      } catch (_) {}
+      const cleanCatName = String(product.category).trim();
+      if (categoryNameToIdCache.has(cleanCatName)) {
+        targetCategoryId = categoryNameToIdCache.get(cleanCatName);
+      } else {
+        try {
+          const { data: matchedCat } = await supabase
+            .from('categories')
+            .select('id')
+            .eq('name', cleanCatName)
+            .maybeSingle();
+          if (matchedCat?.id) {
+            targetCategoryId = matchedCat.id;
+            categoryNameToIdCache.set(cleanCatName, targetCategoryId);
+          }
+        } catch (_) {}
+      }
     }
     prodPayload.category_id = targetCategoryId;
     const finalCostThb = product.cost_thb ?? product.costBaht;
@@ -1114,18 +1123,19 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
     }
 
     if (stockDeductions && stockDeductions.length > 0) {
-      for (const d of stockDeductions) {
-        if (d.productId) {
-          const { error: sErr } = await supabase
-            .from('products')
-            .update({
-              current_stock_base_units: d.newStock,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', d.productId);
-
-          if (sErr) console.warn('Stock update warning for', d.productId, sErr);
-        }
+      const validDeductions = stockDeductions.filter((d) => Boolean(d.productId));
+      if (validDeductions.length > 0) {
+        await Promise.all(
+          validDeductions.map((d) =>
+            supabase
+              .from('products')
+              .update({
+                current_stock_base_units: d.newStock,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', d.productId)
+          )
+        );
       }
     }
 
@@ -1137,7 +1147,44 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
 }
 
 // Backward compatibility alias
-export const syncSaleTransactionToSupabase = createSaleTransactionInSupabase;
+/**
+ * Phục hồi kho hàng theo lô song song (Batched Parallel Stock Restoration)
+ * Gom tất cả sản phẩm cần hoàn kho vào 1 truy vấn SELECT và chạy UPDATE đồng thời.
+ */
+async function restoreProductStockBatch(itemsToRestore = []) {
+  if (!itemsToRestore || itemsToRestore.length === 0) return;
+  const validItems = itemsToRestore.filter((item) => Boolean(item.productId && item.unitsToRestore));
+  if (validItems.length === 0) return;
+
+  const prodIds = [...new Set(validItems.map((it) => it.productId))];
+  const { data: dbProducts, error } = await supabase
+    .from('products')
+    .select('id, current_stock_base_units, track_stock')
+    .in('id', prodIds);
+
+  if (error || !dbProducts || dbProducts.length === 0) return;
+
+  const updatePromises = dbProducts
+    .filter((p) => p && p.track_stock !== false)
+    .map((p) => {
+      const totalUnits = validItems
+        .filter((it) => it.productId === p.id)
+        .reduce((sum, it) => sum + Number(it.unitsToRestore || 0), 0);
+      const currentStock = Number(p.current_stock_base_units) || 0;
+      const newStock = currentStock + totalUnits;
+      return supabase
+        .from('products')
+        .update({
+          current_stock_base_units: newStock,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', p.id);
+    });
+
+  if (updatePromises.length > 0) {
+    await Promise.all(updatePromises);
+  }
+}
 
 /**
  * 7. Void / Cancel a Sale Transaction in Supabase and restore product stock
@@ -1208,29 +1255,9 @@ export async function cancelTransactionInSupabase(txId, itemsToRestore = [], ori
       console.warn('cancelTransactionInSupabase update warning:', txErr);
     }
 
-    // Restore product stock in Supabase products table
+    // Restore product stock in Supabase products table (Batched in parallel)
     if (itemsToRestore && itemsToRestore.length > 0) {
-      for (const item of itemsToRestore) {
-        if (item.productId && item.unitsToRestore) {
-          const { data: p } = await supabase
-            .from('products')
-            .select('current_stock_base_units, track_stock')
-            .eq('id', item.productId)
-            .single();
-
-          if (p && p.track_stock !== false) {
-            const currentStock = Number(p.current_stock_base_units) || 0;
-            const newStock = currentStock + Number(item.unitsToRestore);
-            await supabase
-              .from('products')
-              .update({
-                current_stock_base_units: newStock,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', item.productId);
-          }
-        }
-      }
+      await restoreProductStockBatch(itemsToRestore);
     }
 
     // Update localStorage metadata
@@ -1287,29 +1314,9 @@ export async function deleteTransactionFromSupabase(txId, itemsToRestore = []) {
       return { success: false, error: txErr.message || JSON.stringify(txErr) };
     }
 
-    // 3. Restore product stock if items provided
+    // 3. Restore product stock if items provided (Batched in parallel)
     if (itemsToRestore && itemsToRestore.length > 0) {
-      for (const item of itemsToRestore) {
-        if (item.productId && item.unitsToRestore) {
-          const { data: p } = await supabase
-            .from('products')
-            .select('current_stock_base_units, track_stock')
-            .eq('id', item.productId)
-            .single();
-
-          if (p && p.track_stock !== false) {
-            const currentStock = Number(p.current_stock_base_units) || 0;
-            const newStock = currentStock + Number(item.unitsToRestore);
-            await supabase
-              .from('products')
-              .update({
-                current_stock_base_units: newStock,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', item.productId);
-          }
-        }
-      }
+      await restoreProductStockBatch(itemsToRestore);
     }
 
     return { success: true };
@@ -1359,6 +1366,11 @@ export async function fetchCategoriesFromSupabase() {
       // If table doesn't exist yet, return null without crashing
       return null;
     }
+    if (data && Array.isArray(data)) {
+      data.forEach((c) => {
+        if (c.name && c.id) categoryNameToIdCache.set(c.name.trim(), c.id);
+      });
+    }
     return data;
   } catch (e) {
     console.warn('fetchCategoriesFromSupabase warning:', e);
@@ -1383,6 +1395,10 @@ export async function createCategoryInSupabase(name, sortOrder = 0) {
     if (error) {
       console.warn('createCategoryInSupabase error:', error);
       return { success: false, error: error.message || JSON.stringify(error) };
+    }
+
+    if (data?.id) {
+      categoryNameToIdCache.set(cleanName, data.id);
     }
 
     return { success: true, data };
@@ -1415,23 +1431,20 @@ export async function updateCategoryInSupabase(id, newName, oldName = null) {
       return { success: false, error: error.message || JSON.stringify(error) };
     }
 
-    // 2. Cascade update to products table (supports both category_id if present and category text)
-    if (oldName) {
-      await supabase
-        .from('products')
-        .update({ category: cleanName })
-        .eq('category', oldName);
-    }
+    categoryNameToIdCache.set(cleanName, id);
+    if (oldName) categoryNameToIdCache.delete(oldName);
 
-    // Attempt category_id update gracefully if column exists
-    try {
-      await supabase
-        .from('products')
-        .update({ category: cleanName })
-        .eq('category_id', id);
-    } catch {
-      // ignore if category_id column doesn't exist yet
+    // 2. Cascade update to products table in parallel
+    const cascadeUpdates = [];
+    if (oldName) {
+      cascadeUpdates.push(
+        supabase.from('products').update({ category: cleanName }).eq('category', oldName)
+      );
     }
+    cascadeUpdates.push(
+      supabase.from('products').update({ category: cleanName }).eq('category_id', id)
+    );
+    await Promise.allSettled(cascadeUpdates);
 
     return { success: true, data };
   } catch (e) {
@@ -1670,43 +1683,40 @@ async function fallbackProcessMultiProductGRN(payload) {
 
     if (oldPo) {
       const oldItems = oldPo.purchase_order_items || [];
+      const oldProdDeltas = new Map();
       if (oldItems.length > 0) {
         for (const oldIt of oldItems) {
           const pid = oldIt.product_id;
           const units = Number(oldIt.imported_base_units) || 0;
           if (pid && units > 0) {
-            const { data: dbProd } = await supabase
-              .from('products')
-              .select('current_stock_base_units')
-              .eq('id', pid)
-              .maybeSingle();
-            if (dbProd) {
-              const curStock = Number(dbProd.current_stock_base_units) || 0;
-              await supabase
-                .from('products')
-                .update({
-                  current_stock_base_units: curStock - units,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', pid);
-            }
+            oldProdDeltas.set(pid, (oldProdDeltas.get(pid) || 0) + units);
           }
         }
       } else if (oldPo.product_id && Number(oldPo.imported_base_units) > 0) {
-        const { data: dbProd } = await supabase
+        oldProdDeltas.set(oldPo.product_id, Number(oldPo.imported_base_units));
+      }
+
+      if (oldProdDeltas.size > 0) {
+        const prodIds = Array.from(oldProdDeltas.keys());
+        const { data: dbProducts } = await supabase
           .from('products')
-          .select('current_stock_base_units')
-          .eq('id', oldPo.product_id)
-          .maybeSingle();
-        if (dbProd) {
-          const curStock = Number(dbProd.current_stock_base_units) || 0;
-          await supabase
-            .from('products')
-            .update({
-              current_stock_base_units: curStock - Number(oldPo.imported_base_units),
-              updated_at: new Date().toISOString(),
+          .select('id, current_stock_base_units')
+          .in('id', prodIds);
+
+        if (dbProducts && dbProducts.length > 0) {
+          await Promise.all(
+            dbProducts.map((p) => {
+              const curStock = Number(p.current_stock_base_units) || 0;
+              const unitsToRevert = oldProdDeltas.get(p.id) || 0;
+              return supabase
+                .from('products')
+                .update({
+                  current_stock_base_units: curStock - unitsToRevert,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', p.id);
             })
-            .eq('id', oldPo.product_id);
+          );
         }
       }
 
@@ -1788,20 +1798,39 @@ async function fallbackProcessMultiProductGRN(payload) {
 
       await supabase.from('purchase_order_items').insert(itemsPayload);
 
-      // 5. Cascade stock, track_stock, and cost to products table
+      // 5. Cascade stock, track_stock, and cost to products table (Batched in parallel)
+      const uniqueProdIds = [...new Set(items.map((it) => it.product_id).filter(Boolean))];
+      const { data: dbProducts } = uniqueProdIds.length > 0
+        ? await supabase.from('products').select('id, current_stock_base_units, cost_per_base_unit').in('id', uniqueProdIds)
+        : { data: [] };
+
+      const dbProdMap = new Map((dbProducts || []).map((p) => [p.id, p]));
+      const productAggregates = new Map();
+      const unitOverridesList = [];
+
       for (const it of items) {
         const prodId = it.product_id;
         if (!prodId) continue;
+        const prev = productAggregates.get(prodId) || { addedUnits: 0, costLak: 0, costThb: 0, costPerBase: 0 };
+        prev.addedUnits += Number(it.base_units_added || 0);
+        if (Number(it.cost_lak_entered) > 0) prev.costLak = Number(it.cost_lak_entered);
+        if (Number(it.cost_thb_entered) > 0) prev.costThb = Number(it.cost_thb_entered);
+        if (Number(it.cost_per_base_unit) > 0) prev.costPerBase = Number(it.cost_per_base_unit);
+        productAggregates.set(prodId, prev);
 
-        const { data: dbProd } = await supabase
-          .from('products')
-          .select('current_stock_base_units, cost_per_base_unit')
-          .eq('id', prodId)
-          .single();
+        if (it.retail_price_overrides && typeof it.retail_price_overrides === 'object') {
+          for (const [unitId, price] of Object.entries(it.retail_price_overrides)) {
+            if (Number(price) > 0) {
+              unitOverridesList.push({ unitId, price: Number(price) });
+            }
+          }
+        }
+      }
 
+      const prodUpdatePromises = Array.from(productAggregates.entries()).map(([prodId, agg]) => {
+        const dbProd = dbProdMap.get(prodId);
         const currentStock = Number(dbProd?.current_stock_base_units || 0);
-        const addedUnits = Number(it.base_units_added || 0);
-        const newStock = currentStock + addedUnits;
+        const newStock = currentStock + agg.addedUnits;
 
         const prodUpdate = {
           current_stock_base_units: newStock,
@@ -1809,27 +1838,29 @@ async function fallbackProcessMultiProductGRN(payload) {
           updated_at: new Date().toISOString(),
         };
 
-        if (Number(it.cost_lak_entered) > 0) prodUpdate.cost_lak = Number(it.cost_lak_entered);
-        if (Number(it.cost_thb_entered) > 0) prodUpdate.cost_thb = Number(it.cost_thb_entered);
-        if (Number(it.cost_per_base_unit) > 0) prodUpdate.cost_per_base_unit = Number(it.cost_per_base_unit);
+        if (agg.costLak > 0) prodUpdate.cost_lak = agg.costLak;
+        if (agg.costThb > 0) prodUpdate.cost_thb = agg.costThb;
+        if (agg.costPerBase > 0) prodUpdate.cost_per_base_unit = agg.costPerBase;
 
-        await supabase.from('products').update(prodUpdate).eq('id', prodId);
-
-        // Update local metadata
         saveProductMetaLocal({
           id: prodId,
-          costBaht: Number(it.cost_thb_entered) || 0,
-          costKip: Number(it.cost_lak_entered) || 0,
+          costBaht: agg.costThb,
+          costKip: agg.costLak,
         });
 
-        // 6. Update product_units retail_price_overrides
-        if (it.retail_price_overrides && typeof it.retail_price_overrides === 'object') {
-          for (const [unitId, price] of Object.entries(it.retail_price_overrides)) {
-            if (Number(price) > 0) {
-              await supabase.from('product_units').update({ retail_price: Number(price) }).eq('id', unitId);
-            }
-          }
-        }
+        return supabase.from('products').update(prodUpdate).eq('id', prodId);
+      });
+
+      if (unitOverridesList.length > 0) {
+        unitOverridesList.forEach(({ unitId, price }) => {
+          prodUpdatePromises.push(
+            supabase.from('product_units').update({ retail_price: price }).eq('id', unitId)
+          );
+        });
+      }
+
+      if (prodUpdatePromises.length > 0) {
+        await Promise.all(prodUpdatePromises);
       }
     }
 
@@ -2185,31 +2216,38 @@ export async function updateExistingSaleTransactionInSupabase(
       }
     }
 
-    // 3. Apply net stock changes to database for tracked products
-    for (const [prodId, delta] of stockDeltas.entries()) {
-      if (delta !== 0) {
-        const { data: p } = await supabase
-          .from('products')
-          .select('current_stock_base_units, track_stock')
-          .eq('id', prodId)
-          .single();
+    // 3. Apply net stock changes to database for tracked products (Batched in parallel)
+    const activeDeltas = Array.from(stockDeltas.entries()).filter(([_, delta]) => delta !== 0);
+    const prodIdsToFetch = activeDeltas.map(([id]) => id);
 
-        if (p && p.track_stock !== false) {
+    // Concurrently fetch all changed products and delete old items in 1 parallel roundtrip!
+    const [productsRes] = await Promise.all([
+      prodIdsToFetch.length > 0
+        ? supabase.from('products').select('id, current_stock_base_units, track_stock').in('id', prodIdsToFetch)
+        : Promise.resolve({ data: [] }),
+      supabase.from('sale_transaction_items').delete().eq('transaction_id', txId),
+    ]);
+
+    if (productsRes.data && productsRes.data.length > 0) {
+      const stockUpdates = productsRes.data
+        .filter((p) => p && p.track_stock !== false)
+        .map((p) => {
+          const delta = stockDeltas.get(p.id) || 0;
           const currentStock = Number(p.current_stock_base_units) || 0;
           const updatedStock = currentStock + delta;
-          await supabase
+          return supabase
             .from('products')
             .update({
               current_stock_base_units: updatedStock,
               updated_at: new Date().toISOString(),
             })
-            .eq('id', prodId);
-        }
+            .eq('id', p.id);
+        });
+
+      if (stockUpdates.length > 0) {
+        await Promise.all(stockUpdates);
       }
     }
-
-    // 4. Delete old sale_transaction_items
-    await supabase.from('sale_transaction_items').delete().eq('transaction_id', txId);
 
     // Step 4: Insert new sale_transaction_items
     if (newCartItems && newCartItems.length > 0) {
