@@ -55,6 +55,7 @@ import { useAuth, useAuthRole } from './contexts/AuthContext';
 import { useOrderRealtime } from './hooks/useOrderRealtime';
 import { safeSetItem, safeGetJSON, cleanupLegacyStorage } from './utils/safeStorage';
 import OfflineSyncBanner from './components/common/OfflineSyncBanner';
+import CustomerCatalogView from './components/customer/CustomerCatalogView';
 import {
   getOfflineQueue,
   addToOfflineQueue,
@@ -91,6 +92,62 @@ export default function App() {
     } catch (_) {}
     return 'pos';
   });
+
+  // Application View Mode: 'pos' (Default for App & Web) | 'customer' (Only when explicitly accessing #menu or #catalog)
+  const isCustomerLink = () => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const hash = (window.location.hash || '').toLowerCase();
+      const path = (window.location.pathname || '').toLowerCase();
+      return (
+        hash.includes('menu') ||
+        hash.includes('catalog') ||
+        hash.includes('customer') ||
+        path === '/menu' ||
+        path.startsWith('/menu/') ||
+        path === '/catalog' ||
+        path.startsWith('/catalog/')
+      );
+    } catch (_) {
+      return false;
+    }
+  };
+
+  const [appMode, setAppMode] = useState(() => {
+    return isCustomerLink() ? 'customer' : 'pos';
+  });
+
+  useEffect(() => {
+    const handleHash = () => {
+      if (isCustomerLink()) {
+        setAppMode('customer');
+      } else {
+        setAppMode('pos');
+      }
+    };
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
+
+  // Unlock native scrolling on html, body, and root for Customer Catalog mode
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const rootEl = document.getElementById('root');
+    if (appMode === 'customer') {
+      document.documentElement.style.overflow = 'auto';
+      document.body.style.overflow = 'auto';
+      if (rootEl) rootEl.style.overflow = 'auto';
+    } else {
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+      if (rootEl) rootEl.style.overflow = 'hidden';
+    }
+    return () => {
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+      if (rootEl) rootEl.style.overflow = 'hidden';
+    };
+  }, [appMode]);
 
   const handleTabChange = (tabId) => {
     if (!canAccessRoute(tabId)) {
@@ -3120,12 +3177,26 @@ export default function App() {
 
   const isNativeApp = Capacitor.isNativePlatform();
 
-  // While validating session on startup, show high-end loading splash screen
+  // 1. Dedicated Customer Catalog View (Only when accessing #menu or /menu)
+  // Completely standalone: no auth check, no redirect to login, no redirect to POS
+  if (appMode === 'customer') {
+    return (
+      <CustomerCatalogView
+        products={products}
+        categories={categoriesList}
+        bundles={bundles}
+        isLoading={isLoadingProducts || isRefreshing}
+        onRefresh={handleRefreshAllFromSupabase}
+      />
+    );
+  }
+
+  // While validating session on startup for Staff POS, show high-end loading splash screen
   if (isLoading) {
     return <AuthLoadingSplash />;
   }
 
-  // If not logged in / logged out, show LoginScreen (do not stay in POS)
+  // 2. Default POS Flow (iPad Native App & Staff Web): If not authenticated, show Staff Login Screen
   if (!activeCashier && !user) {
     return <LoginScreen />;
   }
