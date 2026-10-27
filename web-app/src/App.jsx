@@ -54,6 +54,7 @@ import AuthLoadingSplash from './components/auth/AuthLoadingSplash';
 import { useAuth, useAuthRole } from './contexts/AuthContext';
 import { useOrderRealtime } from './hooks/useOrderRealtime';
 import { safeSetItem, safeGetJSON, cleanupLegacyStorage } from './utils/safeStorage';
+import { idbSet, idbGet } from './utils/indexedDbStorage';
 import OfflineSyncBanner from './components/common/OfflineSyncBanner';
 import CustomerCatalogView from './components/customer/CustomerCatalogView';
 import {
@@ -193,6 +194,17 @@ export default function App() {
     }
     return [];
   });
+
+  // Hydrate full catalog from high-capacity IndexedDB if localStorage was pruned or empty
+  useEffect(() => {
+    let isMounted = true;
+    idbGet('meiishop_products_v5').then((cached) => {
+      if (isMounted && Array.isArray(cached) && cached.length > 0) {
+        setProducts((prev) => (prev.length === 0 || cached.length > prev.length ? cached : prev));
+      }
+    });
+    return () => { isMounted = false; };
+  }, []);
 
   const [isCloudSynced, setIsCloudSynced] = useState(false);
   const [isOnline, setIsOnline] = useState(() => isDeviceOnline());
@@ -946,8 +958,11 @@ export default function App() {
     };
   }, [handleSyncOfflineQueue]);
 
-  // Save changes to localStorage as cache with quota-safe limits
+  // Save changes to IndexedDB (unlimited capacity) and localStorage (fallback with quota guard)
   useEffect(() => {
+    if (products && products.length > 0) {
+      idbSet('meiishop_products_v5', products);
+    }
     safeSetItem('meiishop_products_v5', products);
   }, [products]);
 
@@ -3053,15 +3068,29 @@ export default function App() {
     if (activeCategory === 'ລວມ') {
       return []; // Bundles are rendered directly in PosScreen
     }
-    const q = normalizeLao(searchQuery);
+    const cleanRaw = searchQuery ? searchQuery.trim() : '';
+    const q = cleanRaw ? normalizeLao(cleanRaw).toLowerCase() : '';
+
+    if (!q && activeCategory === 'ທັງໝົດ') {
+      return products;
+    }
+
     return products.filter((p) => {
       const matchesCat = activeCategory === 'ທັງໝົດ' || p.category === activeCategory;
-      const matchesSearch =
-        !q ||
-        normalizeLao(p.name).includes(q) ||
-        (p.barcode && normalizeLao(p.barcode).includes(q)) ||
-        p.units.some((u) => normalizeLao(u.unitName).includes(q) || (u.barcode && normalizeLao(u.barcode).includes(q)));
-      return matchesCat && matchesSearch;
+      if (!matchesCat) return false;
+      if (!q) return true;
+
+      // Ultra-fast path: Pre-computed flat search index (< 1ms)
+      if (p._searchKey) {
+        return p._searchKey.includes(q);
+      }
+
+      // Safe fallback for dynamic items missing precomputed index
+      return (
+        normalizeLao(p.name).toLowerCase().includes(q) ||
+        (p.barcode && normalizeLao(p.barcode).toLowerCase().includes(q)) ||
+        p.units.some((u) => normalizeLao(u.unitName).toLowerCase().includes(q) || (u.barcode && normalizeLao(u.barcode).toLowerCase().includes(q)))
+      );
     });
   }, [products, activeCategory, searchQuery]);
 

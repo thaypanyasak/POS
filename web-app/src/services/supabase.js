@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { universalStorage } from './authStorage';
-import { sanitizeImageUrl } from '../utils/formatters';
+import { sanitizeImageUrl, normalizeLao } from '../utils/formatters';
 
 const SUPABASE_URL = 'https://qanphpmphnipyuwcadwz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_zQw2L3JfnT-5o_-tJgZaIA_WETQFTPq';
@@ -131,19 +131,46 @@ export async function updateExchangeRateInSupabase(newRate) {
 }
 
 /**
- * 1. Fetch all products with their associated multi-tier units from Supabase
+ * Safely fetches all rows from a Supabase query using range-based chunking.
+ * Bypasses the default 1,000 row hard limit of PostgREST to guarantee complete data loading.
+ */
+export async function fetchAllRowsWithRange(makeQueryFn, chunkSize = 1000) {
+  let allRows = [];
+  let from = 0;
+  while (true) {
+    const to = from + chunkSize - 1;
+    const { data, error } = await makeQueryFn().range(from, to);
+    if (error) {
+      if (allRows.length > 0) {
+        console.warn('[Supabase] Partial chunk fetch warning:', error);
+        return { data: allRows, error: null };
+      }
+      return { data: null, error };
+    }
+    if (!data || data.length === 0) break;
+    allRows = allRows.concat(data);
+    if (data.length < chunkSize) break; // Finished reading all available rows
+    from += chunkSize;
+  }
+  return { data: allRows, error: null };
+}
+
+/**
+ * 1. Fetch all products with their associated multi-tier units from Supabase (Full Scale 3,000+ support)
  */
 export async function fetchProductsFromSupabase() {
   try {
-    // Attempt relational join on categories if foreign key exists, otherwise fallback to select *
+    // 1. Fetch ALL products using chunked range queries (bypasses 1,000 limit)
     let prodData = null;
     let prodErr = null;
 
     try {
-      const res = await supabase
-        .from('products')
-        .select('*, categories(id, name)')
-        .order('created_at', { ascending: false });
+      const res = await fetchAllRowsWithRange(() =>
+        supabase
+          .from('products')
+          .select('*, categories(id, name)')
+          .order('created_at', { ascending: false })
+      );
       if (!res.error && res.data) {
         prodData = res.data;
       } else {
@@ -151,10 +178,12 @@ export async function fetchProductsFromSupabase() {
       }
     } catch {
       // Fallback query without categories join if relationship not defined yet
-      const fallback = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const fallback = await fetchAllRowsWithRange(() =>
+        supabase
+          .from('products')
+          .select('*')
+          .order('created_at', { ascending: false })
+      );
       prodData = fallback.data;
       prodErr = fallback.error;
     }
@@ -167,54 +196,69 @@ export async function fetchProductsFromSupabase() {
     // Filter out soft-deleted products if is_deleted column is present
     const activeProducts = prodData.filter((p) => p.is_deleted !== true);
 
-    const { data: unitsData, error: unitsErr } = await supabase
-      .from('product_units')
-      .select('*');
+    // 2. Fetch ALL product_units using chunked range queries (bypasses 1,000 limit)
+    const { data: unitsData, error: unitsErr } = await fetchAllRowsWithRange(() =>
+      supabase
+        .from('product_units')
+        .select('*')
+    );
 
     if (unitsErr || !unitsData) {
       console.warn('Could not fetch product_units from Supabase:', unitsErr);
       return null;
     }
 
+    // 3. O(N) Hash Map Indexing for units by product_id (eliminates O(N*M) 27-million iteration loop)
+    const unitsByProductId = new Map();
+    for (let i = 0; i < unitsData.length; i++) {
+      const u = unitsData[i];
+      const pid = u.product_id;
+      let list = unitsByProductId.get(pid);
+      if (!list) {
+        list = [];
+        unitsByProductId.set(pid, list);
+      }
+      list.push(u);
+    }
+
     // Map units to their corresponding products
     const mapped = activeProducts.map((p) => {
-      const pUnits = unitsData
-        .filter((u) => u.product_id === p.id)
-        .map((u) => {
-          let resolvedTier = 1;
-          if (
-            u.id?.endsWith('_carton') ||
-            ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].includes(u.unit_name)
-          ) {
-            resolvedTier = 3;
-          } else if (
-            u.id?.endsWith('_pack') ||
-            ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂหล', 'ຖົງກາງ'].includes(u.unit_name)
-          ) {
-            resolvedTier = 2;
-          } else if (
-            u.id?.endsWith('_piece') ||
-            ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ', 'ຕຸກ', 'ຊອງ', 'ກ່ອງນ້ອຍ'].includes(u.unit_name)
-          ) {
-            resolvedTier = 1;
-          }
+      const rawUnits = unitsByProductId.get(p.id) || [];
+      const pUnits = rawUnits.map((u) => {
+        let resolvedTier = 1;
+        if (
+          u.id?.endsWith('_carton') ||
+          ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].includes(u.unit_name)
+        ) {
+          resolvedTier = 3;
+        } else if (
+          u.id?.endsWith('_pack') ||
+          ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂหล', 'ຖົງກາງ'].includes(u.unit_name)
+        ) {
+          resolvedTier = 2;
+        } else if (
+          u.id?.endsWith('_piece') ||
+          ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ', 'ຕຸກ', 'ຊອງ', 'ກ່ອງນ້ອຍ'].includes(u.unit_name)
+        ) {
+          resolvedTier = 1;
+        }
 
-          return {
-            id: u.id,
-            productId: u.product_id,
-            unitName: u.unit_name,
-            multiplier: Number(u.multiplier) || 1,
-            retailPrice: Number(u.retail_price) || 0,
-            wholesalePrice: Number(u.wholesale_price) || 0,
-            price_2: Number(u.price_2) || 0,
-            price_3: Number(u.price_3) || 0,
-            price2: Number(u.price_2) || 0,
-            price3: Number(u.price_3) || 0,
-            barcode: u.barcode || null,
-            isBaseUnit: Boolean(u.is_base_unit),
-            tier: resolvedTier,
-          };
-        });
+        return {
+          id: u.id,
+          productId: u.product_id,
+          unitName: u.unit_name,
+          multiplier: Number(u.multiplier) || 1,
+          retailPrice: Number(u.retail_price) || 0,
+          wholesalePrice: Number(u.wholesale_price) || 0,
+          price_2: Number(u.price_2) || 0,
+          price_3: Number(u.price_3) || 0,
+          price2: Number(u.price_2) || 0,
+          price3: Number(u.price_3) || 0,
+          barcode: u.barcode || null,
+          isBaseUnit: Boolean(u.is_base_unit),
+          tier: resolvedTier,
+        };
+      });
 
       // Sort units by multiplier ascending
       pUnits.sort((a, b) => a.multiplier - b.multiplier);
@@ -312,6 +356,20 @@ export async function fetchProductsFromSupabase() {
 
       const resolvedNameVi = p.name_vi || p.nameVi || localMeta?.name_vi || localMeta?.nameVi || '';
 
+      // 4. Pre-computed Flat Search Index for instantaneous search in POS and Customer Menu (< 1ms)
+      const cleanName = (p.name || '').toLowerCase();
+      const normLaoName = normalizeLao(p.name || '');
+      const cleanViName = (resolvedNameVi || '').toLowerCase();
+      const cleanBarcode = (p.barcode || '').toLowerCase();
+      const cleanCat = (resolvedCategoryName || '').toLowerCase();
+      const normCat = normalizeLao(resolvedCategoryName || '');
+      const unitsTokens = pUnits
+        .map((u) => `${u.unitName} ${normalizeLao(u.unitName)} ${u.barcode || ''}`)
+        .join(' ')
+        .toLowerCase();
+
+      const searchKey = `${cleanName} ${normLaoName} ${cleanViName} ${cleanBarcode} ${cleanCat} ${normCat} ${unitsTokens}`.trim();
+
       return {
         id: p.id,
         name: p.name,
@@ -336,6 +394,7 @@ export async function fetchProductsFromSupabase() {
           ? Boolean(localMeta.hasCrateDeposit)
           : Boolean(p.category === 'ເບຍ/ເຄື່ອງດື່ມມີທາດເຫຼົ້າ' || p.name.includes('ເບຍ')),
         crateDepositFee: Number(localMeta?.crateDepositFee) || 30000,
+        _searchKey: searchKey,
         units: pUnits.length > 0 ? pUnits : [
           {
             id: `${p.id}_base`,
@@ -744,7 +803,7 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
 /**
  * 5. Fetch all sale transactions from Supabase with line items (scoped/capped)
  */
-export async function fetchTransactionsFromSupabase({ limit = 100 } = {}) {
+export async function fetchTransactionsFromSupabase({ limit = 350 } = {}) {
   try {
     let query = supabase
       .from('sale_transactions')

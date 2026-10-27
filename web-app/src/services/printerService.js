@@ -34,6 +34,25 @@ export {
 // ─── K80 Constants ───────────────────────────────────────────────────────────
 export const PRINT_WIDTH_DOTS = 576; // 80mm K80 = 576 thermal dots
 
+let _cachedPrinterProductsRaw = null;
+let _cachedPrinterProductsPool = null;
+
+function getPrinterCachedProductsPool() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return [];
+    const saved = localStorage.getItem('meiishop_products_v5');
+    if (!saved) return [];
+    if (saved === _cachedPrinterProductsRaw && _cachedPrinterProductsPool) {
+      return _cachedPrinterProductsPool;
+    }
+    _cachedPrinterProductsRaw = saved;
+    _cachedPrinterProductsPool = JSON.parse(saved);
+    return Array.isArray(_cachedPrinterProductsPool) ? _cachedPrinterProductsPool : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 /**
  * Format any receipt object into the standardized structure
  */
@@ -88,20 +107,17 @@ export function formatReceiptForNative(receipt, language = 'lo') {
             name = String(matchVi).trim();
           }
         }
-        // Fallback to localStorage cache
+        // Fallback to cached products pool (parsed once into RAM, not repeatedly per item)
         if (!name) {
           try {
-            const raw = typeof window !== 'undefined' ? localStorage.getItem('meiishop_products_v5') : null;
-            if (raw) {
-              const pool = JSON.parse(raw);
-              if (Array.isArray(pool)) {
-                const match = pool.find(
-                  (p) => (prodId && p.id === prodId) || (rawLao && p.name && p.name.trim() === rawLao.trim())
-                );
-                const matchVi = match?.name_vi || match?.nameVi || match?.name_vietnam || match?.name_vn;
-                if (matchVi && String(matchVi).trim()) {
-                  name = String(matchVi).trim();
-                }
+            const pool = getPrinterCachedProductsPool();
+            if (Array.isArray(pool) && pool.length > 0) {
+              const match = pool.find(
+                (p) => (prodId && p.id === prodId) || (rawLao && p.name && p.name.trim() === rawLao.trim())
+              );
+              const matchVi = match?.name_vi || match?.nameVi || match?.name_vietnam || match?.name_vn;
+              if (matchVi && String(matchVi).trim()) {
+                name = String(matchVi).trim();
               }
             }
           } catch (_) {}

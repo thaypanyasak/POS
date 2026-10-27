@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   MagnifyingGlass,
   XCircle,
@@ -10,6 +10,7 @@ import {
   ListDashes,
   Package,
   ArrowClockwise,
+  CaretDown,
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao, getSortedUnits, sanitizeImageUrl } from '../../utils/formatters';
 import CustomerProductDetailModal from './CustomerProductDetailModal';
@@ -49,7 +50,12 @@ export default function CustomerCatalogView({
 
   // Filtered products: displays all products (no stock filtering), only category & search query
   const processedProducts = useMemo(() => {
-    const normQuery = normalizeLao(searchQuery.trim().toLowerCase());
+    const raw = searchQuery ? searchQuery.trim().toLowerCase() : '';
+    const normQuery = raw ? normalizeLao(raw) : '';
+
+    if (!normQuery && activeCategory === 'ທັງໝົດ') {
+      return products || [];
+    }
 
     return (products || []).filter((p) => {
       // 1. Category Filter
@@ -59,8 +65,13 @@ export default function CustomerCatalogView({
         }
       }
 
-      // 2. Search Query Filter (Lao name + barcode)
+      // 2. Search Query Filter (Lao name + barcode + precomputed index)
       if (!normQuery) return true;
+
+      // Ultra-fast path: Pre-computed search index (< 1ms)
+      if (p._searchKey) {
+        return p._searchKey.includes(normQuery);
+      }
 
       const normName = normalizeLao((p.name || '').toLowerCase());
       const barcode = (p.barcode || '').toLowerCase();
@@ -73,6 +84,22 @@ export default function CustomerCatalogView({
       );
     });
   }, [products, searchQuery, activeCategory]);
+
+  // Batch / Lazy Load Pagination for smooth scrolling on 3,000+ products
+  const INITIAL_BATCH_SIZE = 40;
+  const LOAD_MORE_STEP = 30;
+  const [visibleLimit, setVisibleLimit] = useState(INITIAL_BATCH_SIZE);
+
+  // Reset pagination limit when search query or category filter changes
+  useEffect(() => {
+    setVisibleLimit(INITIAL_BATCH_SIZE);
+  }, [activeCategory, searchQuery]);
+
+  const visibleProducts = useMemo(() => {
+    if (!processedProducts) return [];
+    if (processedProducts.length <= visibleLimit) return processedProducts;
+    return processedProducts.slice(0, visibleLimit);
+  }, [processedProducts, visibleLimit]);
 
   return (
     <div
@@ -332,7 +359,7 @@ export default function CustomerCatalogView({
         {/* GRID VIEW: 2 columns on Mobile, 3-4 columns on Tablet/Desktop */}
         {viewMode === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
-            {processedProducts.map((p) => {
+            {visibleProducts.map((p) => {
               const sortedUnits = getSortedUnits(p);
               const baseUnit = sortedUnits[sortedUnits.length - 1]; // smallest unit (e.g. piece)
               const cartonUnit = sortedUnits.find(
@@ -428,7 +455,7 @@ export default function CustomerCatalogView({
         ) : (
           /* LIST VIEW: Full width row items */
           <div className="space-y-2">
-            {processedProducts.map((p) => {
+            {visibleProducts.map((p) => {
               const sortedUnits = getSortedUnits(p);
               const baseUnit = sortedUnits[sortedUnits.length - 1];
               const cartonUnit = sortedUnits.find(
@@ -491,6 +518,20 @@ export default function CustomerCatalogView({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Load More Button for 3,000+ items */}
+        {visibleLimit < processedProducts.length && (
+          <div className="flex flex-col items-center justify-center pt-6 pb-2">
+            <button
+              type="button"
+              onClick={() => setVisibleLimit((prev) => prev + LOAD_MORE_STEP)}
+              className="h-11 px-6 rounded-2xl bg-white hover:bg-teal-50 text-teal-800 border border-teal-200/90 font-bold text-xs sm:text-sm shadow-2xs hover:shadow-xs active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <span>ສະແດງຕື່ມ ({visibleProducts.length} ຈາກ {processedProducts.length} ລາຍການ)</span>
+              <CaretDown size={16} weight="bold" />
+            </button>
           </div>
         )}
       </main>

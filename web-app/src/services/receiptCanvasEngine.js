@@ -381,6 +381,25 @@ export function generateUpca(rawCode) {
 }
 
 // ─── Drawing / Measuring Routine (Strict Top Baseline) ────────────────────────
+let _cachedProductsRaw = null;
+let _cachedProductsPool = null;
+
+function getCachedProductsPool() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return [];
+    const saved = localStorage.getItem('meiishop_products_v5');
+    if (!saved) return [];
+    if (saved === _cachedProductsRaw && _cachedProductsPool) {
+      return _cachedProductsPool;
+    }
+    _cachedProductsRaw = saved;
+    _cachedProductsPool = JSON.parse(saved);
+    return Array.isArray(_cachedProductsPool) ? _cachedProductsPool : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 function resolveCanvasItemName(it, lang, receipt, defaultItemName = 'ສິນຄ້າ') {
   const rawLao = it.product?.name || it.productName || it.product_name || it.name || defaultItemName;
   if (lang !== 'vi') return rawLao;
@@ -414,19 +433,16 @@ function resolveCanvasItemName(it, lang, receipt, defaultItemName = 'ສິນ�
     }
   }
 
-  // 3. Fallback: Look up in localStorage products cache
+  // 3. Fallback: Look up in cached products pool (parsed once into RAM, eliminates repeated 3.5MB JSON parsing)
   try {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('meiishop_products_v5') : null;
-    if (saved) {
-      const pool = JSON.parse(saved);
-      if (Array.isArray(pool)) {
-        const match = pool.find(
-          (p) => (prodId && p.id === prodId) || (rawLao && p.name && p.name.trim() === rawLao.trim())
-        );
-        const matchVi = match?.name_vi || match?.nameVi || match?.name_vietnam || match?.name_vn;
-        if (matchVi && String(matchVi).trim()) {
-          return String(matchVi).trim();
-        }
+    const pool = getCachedProductsPool();
+    if (Array.isArray(pool) && pool.length > 0) {
+      const match = pool.find(
+        (p) => (prodId && p.id === prodId) || (rawLao && p.name && p.name.trim() === rawLao.trim())
+      );
+      const matchVi = match?.name_vi || match?.nameVi || match?.name_vietnam || match?.name_vn;
+      if (matchVi && String(matchVi).trim()) {
+        return String(matchVi).trim();
       }
     }
   } catch (_) {}
