@@ -108,7 +108,7 @@ export default function DynamicDailyRevenueChart({ transactions = [], startDate,
       </div>
 
       {/* SVG Daily Chart */}
-      <div className="w-full overflow-x-auto pb-1">
+      <div className="w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-y pb-1">
         <div
           style={{ minWidth: `${Math.max(chartData.items.length * 28, 600)}px` }}
           className="h-56 relative flex items-end pt-4 pb-6 px-2"

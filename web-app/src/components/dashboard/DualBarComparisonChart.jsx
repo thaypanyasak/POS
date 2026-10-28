@@ -158,7 +158,7 @@ export default function DualBarComparisonChart({
       </div>
 
       {/* SVG Dual-Bar Chart Canvas */}
-      <div className="w-full overflow-x-auto pb-2">
+      <div className="w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-y pb-2">
         <div className="min-w-[800px] h-64 relative flex items-end pt-6 pb-6 px-2">
           {/* Grid lines */}
           <div className="absolute inset-x-0 top-6 bottom-6 flex flex-col justify-between pointer-events-none opacity-20">

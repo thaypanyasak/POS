@@ -520,14 +520,15 @@ export default function HistoryView({
 
   return (
     <main
-      className="flex-1 w-full p-4 sm:p-6 overflow-y-auto font-sans min-h-0 pb-4 sm:pb-6 touch-pan-y"
+      className="flex-1 w-full max-w-full p-3 sm:p-5 md:p-6 overflow-y-auto overflow-x-hidden font-sans min-h-0 pb-4 sm:pb-6 touch-pan-y"
       style={{
-        paddingRight: 'max(1rem, env(safe-area-inset-right, 0px))',
+        paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
         paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
+        overscrollBehaviorX: 'none',
       }}
     >
-      {/* Top Header Bar (Standardized matching GRN) */}
-      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-3 sm:mb-4 flex items-center justify-between gap-2.5 sm:gap-3 shrink-0 shadow-2xs">
+      {/* Top Header Bar (Standardized matching GRN & Products) */}
+      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 -mx-3 sm:-mx-5 md:-mx-6 -mt-3 sm:-mt-5 md:-mt-6 mb-3 sm:mb-4 flex items-center justify-between gap-2.5 sm:gap-3 shrink-0 shadow-2xs">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0">
             <Receipt size={20} className="sm:w-5 sm:h-5" weight="duotone" />
@@ -1327,8 +1328,8 @@ export default function HistoryView({
       )}
 
       {/* 4. TABLET & DESKTOP VIEW (>= 768px): Data Table */}
-      <div className="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-xs mb-3 overflow-hidden">
-        <div className="w-full overflow-x-auto overscroll-x-contain touch-pan-y">
+      <div className="hidden md:block w-full max-w-full bg-white rounded-2xl border border-slate-200 shadow-xs mb-3 overflow-hidden">
+        <div className="w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-y">
           <table className={`w-full text-left text-xs border-separate border-spacing-0 ${activeTab === 'debt' ? 'min-w-[840px]' : 'min-w-[700px]'}`}>
           <thead>
             <tr className="sticky top-0 z-10 text-slate-700 font-extrabold [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">

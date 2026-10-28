@@ -179,8 +179,10 @@ button, a, input, select, textarea, [role="button"] {
 /* GPU hardware accelerated container & touch scroll isolation for 60fps-120fps */
 .touch-scroll-container {
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+  overscroll-behavior-x: none;
   transform: translate3d(0, 0, 0);
   -webkit-transform: translate3d(0, 0, 0);
   will-change: scroll-position;

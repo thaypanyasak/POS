@@ -434,14 +434,15 @@ export default function StaffManagementView() {
 
   return (
     <main
-      className="flex-1 w-full p-4 sm:p-6 overflow-y-auto font-sans min-h-0 pb-24 touch-pan-y"
+      className="flex-1 w-full max-w-full p-3 sm:p-5 md:p-6 overflow-y-auto overflow-x-hidden font-sans min-h-0 pb-24 touch-pan-y"
       style={{
-        paddingRight: 'max(1rem, env(safe-area-inset-right, 0px))',
+        paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
         paddingBottom: 'max(5.5rem, calc(4.5rem + env(safe-area-inset-bottom, 0px)))',
+        overscrollBehaviorX: 'none',
       }}
     >
       {/* 1. Header Toolbar */}
-      <div className="bg-white border-b border-slate-200/80 px-4 sm:px-6 py-3 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 flex items-center justify-between gap-3 shadow-2xs">
+      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 -mx-3 sm:-mx-5 md:-mx-6 -mt-3 sm:-mt-5 md:-mt-6 mb-4 flex items-center justify-between gap-2.5 sm:gap-3 shadow-2xs">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700 shrink-0">
             <Users size={20} weight="duotone" />
@@ -644,8 +645,8 @@ export default function StaffManagementView() {
       </div>
 
       {/* 4. Staff Data Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden mb-6">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden mb-6 w-full max-w-full">
+        <div className="w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-y">
           <table className="w-full text-left text-xs border-collapse min-w-[760px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-extrabold uppercase tracking-wider text-[11px]">

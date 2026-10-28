@@ -480,10 +480,11 @@ export default function ProductsView({
 
   return (
     <main
-      className="flex-1 w-full p-3 sm:p-5 md:p-6 overflow-y-auto font-sans min-h-0 pb-4 sm:pb-6 touch-pan-y"
+      className="flex-1 w-full max-w-full p-3 sm:p-5 md:p-6 overflow-y-auto overflow-x-hidden font-sans min-h-0 pb-4 sm:pb-6 touch-pan-y"
       style={{
         paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
         paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
+        overscrollBehaviorX: 'none',
       }}
     >
       {/* 1. Header Toolbar: Standardized responsive header matching GRN */}
