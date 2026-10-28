@@ -740,11 +740,6 @@ export default function PosScreen({
             {cart.length} ລາຍການ
           </span>
         </div>
-        {cart.length > 0 && (
-          <span className="text-slate-500 font-medium text-[11px]">
-            ລວມ <span className="font-extrabold text-slate-800 font-mono text-xs">{cart.reduce((s, it) => s + (Number(it.quantity) || 1), 0)}</span> ອັນ
-          </span>
-        )}
       </div>
 
       {/* 3. High-Density Cart Item List (BẮT BUỘC flex-1 VÀ overflow-y-auto để cuộn độc lập) */}
@@ -1604,7 +1599,7 @@ export default function PosScreen({
             </span>
             {cart.length > 0 && (
               <span className="text-[11px] font-bold text-teal-700">
-                {cart.length} ລາຍການ ({cart.reduce((s, it) => s + (Number(it.quantity) || 1), 0)} ອັນ)
+                {cart.length} ລາຍການ
               </span>
             )}
           </div>
