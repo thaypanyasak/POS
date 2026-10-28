@@ -362,7 +362,6 @@ export default function HistoryView({
     playActionClickBeep('history');
     setPageSize(newSize);
     setCurrentPage(1);
-    scrollToTableTop();
   };
 
   // Auto-reset currentPage to 1 when filters or search query change

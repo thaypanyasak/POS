@@ -234,7 +234,6 @@ export default function PurchasesView({
     playActionClickBeep('inventory');
     setPoPageSize(newSize);
     setPoCurrentPage(1);
-    scrollToTableTop();
   };
 
   // Auto-reset currentPage to 1 when filter or search changes
