@@ -752,7 +752,19 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
       : (it.unit?.unitName || it.unitName || it.unit_name || L.defaultUnitName);
     const unitName = translateUnit(rawUnit, lang, Boolean(it.isHalfCarton));
     const globalItemNum = startItemIndex + i + 1;
-    const fullName = `${globalItemNum}. ${prodName} (${unitName})`;
+
+    // Detect half-carton item to optimize display (remove (½...) from line 1 and put "ເຄິ່ງແກັດ" on line 2)
+    const isHalfCartonItem = Boolean(
+      it.isHalfCarton ||
+      (rawUnit && (rawUnit.includes('½') || rawUnit.includes('1/2'))) ||
+      (unitName && (unitName.includes('½') || unitName.includes('1/2'))) ||
+      (it.unitName && (it.unitName.includes('½') || it.unitName.includes('1/2')))
+    );
+
+    const cleanProdName = prodName.replace(/\s*\((½|1\/2)[^)]*\)/gi, '').trim();
+    const fullName = isHalfCartonItem
+      ? `${globalItemNum}. ${cleanProdName}`
+      : `${globalItemNum}. ${prodName} (${unitName})`;
 
     let qty = it.quantity || 1;
     if (isOnlyLooseBundle) {
@@ -783,7 +795,7 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
           : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : rawPrice));
     const lineTotal = rawLineTotal > 0 ? rawLineTotal : price * qty;
 
-    // Line 1: Number + Full Product Name + (Unit) across full printable width
+    // Line 1: Number + Full Product Name (across full printable width)
     measureCtx.font = FONTS.ITEM_NAME;
     const nameLines = wrapText(measureCtx, fullName, K80.PRINTABLE_WIDTH);
     for (const nLine of nameLines) {
@@ -791,8 +803,11 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
       y += 28; // Compact line-height (1.2)
     }
 
-    // Line 2: Indented "Qty x Price" on Left, "Line Total" on Right
-    const qtyPriceStr = `${qty} x ${fmtNum(price)}`;
+    // Line 2: Indented "Qty x Price" (or "ເຄິ່ງແກັດ" for half-cartons) on Left, "Line Total" on Right
+    const halfLabel = lang === 'vi' ? 'Nửa thùng' : 'ເຄິ່ງແກັດ';
+    const qtyPriceStr = isHalfCartonItem
+      ? `${Number(qty) > 1 ? `${qty} ` : ''}${halfLabel}`
+      : `${qty} x ${fmtNum(price)}`;
     const totalStr = fmtNum(lineTotal);
     drawLeft(qtyPriceStr, indentX, y, FONTS.ITEM_NUM);
     drawRight(totalStr, K80.RIGHT_EDGE, y, FONTS.ITEM_TOTAL);
@@ -869,8 +884,9 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
     const finalNotice = lang === 'vi'
       ? `(Hóa đơn gồm ${pageInfo.totalPages} trang - Tổng ${allItems.length} món)`
       : `(ໃບບິນທັງໝົດ ${pageInfo.totalPages} ໜ້າ - ລວມ ${allItems.length} ລາຍການ)`;
+    y += 14; // Separation from items above
     drawCenter(finalNotice, y, FONTS.META_BOLD);
-    y += 28;
+    y += 44; // Ample spacing so it never sticks to Subtotal
   }
 
   const calculatedTotal = allItems.reduce((sum, it) => {
@@ -1038,8 +1054,8 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
       ctx.fillText(rightSignLabel, sigColRightX, y);
     }
 
-    // Generous 100px space for hand signature (per user request)
-    y += 100;
+    // Generous 150px space for hand signature (increased from 100px for comfortable signing height)
+    y += 150;
 
     // Dotted lines strictly under each respective column (180px wide to fill column width)
     const drawSignDottedLine = (centerX, width = 180, lineY) => {

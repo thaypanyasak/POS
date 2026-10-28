@@ -12,6 +12,7 @@ import {
   Scissors,
   CaretLeft,
   CaretRight,
+  FileImage,
 } from '@phosphor-icons/react';
 import { formatKip } from '../utils/formatters';
 import {
@@ -21,7 +22,7 @@ import {
   getPrinterConfig,
 } from '../services/printerService';
 import { markOrderAsPrintedInSupabase } from '../services/supabase';
-import { generateBarcode128 } from '../services/receiptCanvasEngine';
+import { generateBarcode128, renderReceiptCanvas } from '../services/receiptCanvasEngine';
 import { Capacitor } from '@capacitor/core';
 import {
   playSuccessBeep,
@@ -29,6 +30,7 @@ import {
   playModalCloseBeep,
   playModalConfirmBeep,
   playUnitChangeBeep,
+  playActionClickBeep,
 } from '../utils/audioFeedback';
 
 export default function ReceiptModal({
@@ -67,6 +69,7 @@ export default function ReceiptModal({
 
   const [isPrinting, setIsPrinting] = useState(false);
   const [printFeedback, setPrintFeedback] = useState(null);
+  const [isSavingImage, setIsSavingImage] = useState(false);
 
   // Multi-page split options for large orders (e.g. 100 items -> multiple slips)
   const [itemsPerPage, setItemsPerPage] = useState(0); // 0 = ໃບດຽວ (default single slip)
@@ -504,6 +507,76 @@ export default function ReceiptModal({
     }
   };
 
+  // Save Receipt Canvas as Image (Saves directly to iPhone Photos / Photo Library via Web Share API)
+  const handleSaveReceiptImage = async () => {
+    if (isSavingImage) return;
+    setIsSavingImage(true);
+    try {
+      playActionClickBeep('receipt');
+      const pageNum = isSplitActive && totalPages > 1 ? activePage : null;
+      const canvas = await renderReceiptCanvas(receipt, receiptLanguage, {
+        itemsPerPage: isSplitActive ? itemsPerPage : 0,
+        page: pageNum,
+        products,
+      });
+
+      if (!canvas) {
+        throw new Error('Could not render receipt canvas');
+      }
+
+      const fileName = `bill_${receipt.receiptNumber || 'INV'}${pageNum ? `_p${pageNum}` : ''}.png`;
+
+      // Convert canvas to blob
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('Blob conversion failed');
+
+      const file = new File([blob], fileName, { type: 'image/png' });
+
+      // If Web Share API with files is supported (e.g. iPhone Safari / Capacitor WKWebView)
+      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `ໃບບິນ #${receipt.receiptNumber || ''}`,
+        });
+        playSuccessBeep('receipt');
+        setPrintFeedback({
+          type: 'success',
+          message: receiptLanguage === 'vi' ? 'Đã mở bảng lưu ảnh vào iPhone!' : 'ບັນທຶກຮູບພາບລົງ iPhone ສຳເລັດ!',
+        });
+        setTimeout(() => setPrintFeedback(null), 4000);
+        return;
+      }
+
+      // Fallback: Direct browser image download
+      const dataUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      playSuccessBeep('receipt');
+      setPrintFeedback({
+        type: 'success',
+        message: receiptLanguage === 'vi' ? 'Đã tải ảnh hóa đơn về máy!' : 'ບັນທຶກຮູບພາບໃບບິນສຳເລັດ!',
+      });
+      setTimeout(() => setPrintFeedback(null), 4000);
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Save receipt image error:', err);
+        playErrorBeep();
+        setPrintFeedback({
+          type: 'error',
+          message: receiptLanguage === 'vi' ? 'Lỗi khi lưu ảnh: ' + err.message : 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກຮູບ!',
+        });
+        setTimeout(() => setPrintFeedback(null), 4000);
+      }
+    } finally {
+      setIsSavingImage(false);
+    }
+  };
+
   const modalContent = (
     <div className="fixed inset-0 z-[120] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 print:static print:inset-auto print:p-0 print:bg-transparent print:backdrop-blur-none print:block">
       <div className="bg-slate-100 rounded-3xl max-w-[480px] sm:max-w-[500px] w-full p-2.5 sm:p-3 shadow-2xl flex flex-col max-h-[85dvh] sm:max-h-[90vh] animate-in zoom-in-95 duration-200 relative print:static print:max-h-none print:h-auto print:overflow-visible print:p-0 print:shadow-none print:border-none print:bg-white print:w-full print:max-w-none">
@@ -906,17 +979,32 @@ export default function ReceiptModal({
                   crateDepositTotal > 0 || it.noEmptyCrates || (Number(it.missingCratesCount) > 0)
                 );
 
+                // Detect half-carton item to optimize display (remove (½...) from line 1 and put "ເຄິ່ງແກັດ" on line 2)
+                const isHalfCartonItem = Boolean(
+                  it.isHalfCarton ||
+                  (rawUnitName && (rawUnitName.includes('½') || rawUnitName.includes('1/2'))) ||
+                  (unitName && (unitName.includes('½') || unitName.includes('1/2'))) ||
+                  (it.unitName && (it.unitName.includes('½') || it.unitName.includes('1/2')))
+                );
+                const cleanProdName = prodName.replace(/\s*\((½|1\/2)[^)]*\)/gi, '').trim();
+                const halfLabel = receiptLanguage === 'vi' ? 'Nửa thùng' : 'ເຄິ່ງແກັດ';
+
                 return (
                   <div key={i} className="receipt-item-row flex flex-col text-xs leading-[1.2]">
-                    {/* Line 1: Number + Full Product Name + (Unit) */}
+                    {/* Line 1: Number + Full Product Name (No (½ ...) for half-cartons) */}
                     <div className="font-bold text-slate-900 text-left break-words">
-                      {i + 1}. {prodName} <span className="font-medium text-slate-600 text-[11px]">({unitName})</span>
+                      {i + 1}. {cleanProdName}
+                      {!isHalfCartonItem && (
+                        <span className="font-medium text-slate-600 text-[11px]"> ({unitName})</span>
+                      )}
                     </div>
 
-                    {/* Line 2: Qty x Unit Price (indented ~12px / 3 characters) on Left, Line Total on Right */}
+                    {/* Line 2: Qty x Unit Price (or "ເຄິ່ງແກັດ" for half-cartons) on Left, Line Total on Right */}
                     <div className="flex justify-between items-center pl-3 pt-0.5 text-slate-800">
                       <span className="font-sans font-normal text-slate-700 text-[11px]">
-                        {qty} x {formatKip(price).replace(' ₭', '')}
+                        {isHalfCartonItem
+                          ? `${Number(qty) > 1 ? `${qty} ` : ''}${halfLabel}`
+                          : `${qty} x ${formatKip(price).replace(' ₭', '')}`}
                       </span>
                       <span className="font-sans font-semibold text-slate-800 text-xs tracking-tight">
                         {formatKip(baseLineTotal).replace(' ₭', '')}
@@ -974,6 +1062,14 @@ export default function ReceiptModal({
             </div>
           ) : (
             <>
+              {/* Multi-page slip notice on final page with clear separation from Subtotal */}
+              {isSplitActive && totalPages > 1 && (
+                <div className="mt-3 mb-2 pt-2 border-t border-dashed border-slate-300 text-center text-[11px] font-bold text-slate-600">
+                  {receiptLanguage === 'vi'
+                    ? `(Hóa đơn gồm ${totalPages} trang - Tổng ${receiptItems.length} món)`
+                    : `(ໃບບິນທັງໝົດ ${totalPages} ໜ້າ - ລວມ ${receiptItems.length} ລາຍການ)`}
+                </div>
+              )}
               {(() => {
                 const calculatedTotal = receiptItems.reduce((sum, it) => {
               const rawLTotal = Number(it.lineTotal || it.line_total);
@@ -1104,16 +1200,16 @@ export default function ReceiptModal({
                 <p className="font-bold text-slate-800 leading-normal pt-0.5">
                   {(receipt.paymentMethod === 'debt' || receipt.isDebt) ? L.signDebtor : L.signCustomer}
                 </p>
-                {/* Generous space for hand signature */}
-                <div className="h-14"></div>
+                {/* Generous space for hand signature (increased height to h-24 for comfortable signing) */}
+                <div className="h-24"></div>
                 <div className="w-32 sm:w-36 border-b-2 border-dotted border-slate-400"></div>
               </div>
               <div className="flex flex-col items-center">
                 <p className="font-bold text-slate-800 leading-normal pt-0.5">
                   {(receipt.paymentMethod === 'debt' || receipt.isDebt) ? L.signSeller : L.signCashier}
                 </p>
-                {/* Generous space for hand signature */}
-                <div className="h-14"></div>
+                {/* Generous space for hand signature (increased height to h-24 for comfortable signing) */}
+                <div className="h-24"></div>
                 <div className="w-32 sm:w-36 border-b-2 border-dotted border-slate-400"></div>
               </div>
             </div>
@@ -1201,6 +1297,22 @@ export default function ReceiptModal({
             )
           )}
 
+          {/* Save Image Button (Save to iPhone Photos / Download) */}
+          <button
+            type="button"
+            onClick={handleSaveReceiptImage}
+            disabled={isSavingImage || isPrinting}
+            className="py-2.5 px-3 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 disabled:opacity-60 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer shrink-0"
+            title={receiptLanguage === 'vi' ? 'Lưu hóa đơn thành ảnh vào iPhone' : 'ບັນທຶກຮູບໃບບິນລົງ Photos'}
+          >
+            {isSavingImage ? (
+              <CircleNotch size={15} className="animate-spin text-teal-600 shrink-0" />
+            ) : (
+              <FileImage size={15} weight="bold" className="text-teal-600 shrink-0" />
+            )}
+            <span>{receiptLanguage === 'vi' ? 'Lưu ảnh' : 'ບັນທຶກຮູບ'}</span>
+          </button>
+
           {/* Close Window Button */}
           <button
             type="button"
@@ -1208,7 +1320,7 @@ export default function ReceiptModal({
               playModalCloseBeep('receipt');
               onClose();
             }}
-            className="py-2.5 px-3.5 rounded-xl text-xs font-bold bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 shadow-2xs transition-all cursor-pointer active:scale-95 shrink-0"
+            className="py-2.5 px-3 rounded-xl text-xs font-bold bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 shadow-2xs transition-all cursor-pointer active:scale-95 shrink-0"
           >
             {L.btnClose}
           </button>

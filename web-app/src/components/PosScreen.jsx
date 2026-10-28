@@ -731,6 +731,22 @@ export default function PosScreen({
         </div>
       </div>
 
+      {/* 2.5 Cart Item Count Bar */}
+      <div className="px-3 py-1.5 bg-slate-100/90 border-b border-slate-200 flex items-center justify-between text-[11px] font-bold text-slate-600 shrink-0 select-none">
+        <div className="flex items-center gap-1.5">
+          <ShoppingCart size={13} weight="bold" className="text-teal-600" />
+          <span>ລາຍການໃນກະຕ່າ:</span>
+          <span className="px-2 py-0.5 rounded-full bg-teal-600 text-white font-mono font-extrabold text-[11px] shadow-2xs">
+            {cart.length} ລາຍການ
+          </span>
+        </div>
+        {cart.length > 0 && (
+          <span className="text-slate-500 font-medium text-[11px]">
+            ລວມ <span className="font-extrabold text-slate-800 font-mono text-xs">{cart.reduce((s, it) => s + (Number(it.quantity) || 1), 0)}</span> ອັນ
+          </span>
+        )}
+      </div>
+
       {/* 3. High-Density Cart Item List (BẮT BUỘC flex-1 VÀ overflow-y-auto để cuộn độc lập) */}
       <div className="flex-1 overflow-y-auto overscroll-contain p-2 space-y-2 min-h-0">
         {cart.map((item) => {
@@ -1580,11 +1596,18 @@ export default function PosScreen({
           paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))'
         }}
       >
-        {/* Hàng tổng tiền: Thu nhỏ font chữ, hiển thị trên 1 hàng ngang duy nhất */}
+        {/* Hàng tổng tiền: Thu nhỏ font chữ, hiển thị kèm tổng số mục sản phẩm */}
         <div className="flex items-baseline justify-between mb-2">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            ຍອດລວມ (TOTAL):
-          </span>
+          <div className="flex flex-col">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              ຍອດລວມ (TOTAL):
+            </span>
+            {cart.length > 0 && (
+              <span className="text-[11px] font-bold text-teal-700">
+                {cart.length} ລາຍການ ({cart.reduce((s, it) => s + (Number(it.quantity) || 1), 0)} ອັນ)
+              </span>
+            )}
+          </div>
           <div className="flex items-baseline gap-1">
             <span className="text-lg sm:text-xl font-bold text-slate-900 font-mono tracking-tight tabular-nums">
               {formatDots(cartSubtotal)}
