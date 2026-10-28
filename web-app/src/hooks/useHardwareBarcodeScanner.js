@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import { playSuccessBeep } from '../utils/audioFeedback';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, NotificationType } from '@capacitor/haptics';
-import { Keyboard } from '@capacitor/keyboard';
 
 /**
  * Universal Hardware Barcode Scanner Listener Hook
@@ -165,16 +164,6 @@ export function useHardwareBarcodeScanner({
 
         if (cleanActiveInput) {
           cleanActiveInputElement(currentBuffer);
-        }
-
-        // On POS search bar only: dismiss on-screen keyboard so cart is visible
-        const activeEl = document.activeElement;
-        if (activeEl && activeEl.getAttribute('data-barcode-clear') === 'true') {
-          if (Capacitor.isNativePlatform()) {
-            try {
-              Keyboard.hide();
-            } catch (_) {}
-          }
         }
 
         triggerFeedback();
