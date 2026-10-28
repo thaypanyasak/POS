@@ -534,6 +534,7 @@ export default function ReceiptModal({
             itemsPerPage,
             page: p,
             products,
+            forImageExport: true,
           });
           if (canvas) {
             const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
@@ -589,6 +590,7 @@ export default function ReceiptModal({
         itemsPerPage: isSplitActive ? itemsPerPage : 0,
         page: pageNum,
         products,
+        forImageExport: true,
       });
 
       if (!canvas) {
@@ -1086,7 +1088,7 @@ export default function ReceiptModal({
 
                     {/* Line 2: Qty x Unit Price (or "ເຄິ່ງແກັດ" for half-cartons) on Left, Line Total on Right */}
                     <div className="flex justify-between items-center pl-3 pt-0.5 text-slate-800">
-                      <span className="font-sans font-normal text-slate-700 text-[11px]">
+                      <span className={isHalfCartonItem ? "font-bold text-slate-800 text-xs" : "font-sans font-normal text-slate-700 text-[11px]"}>
                         {isHalfCartonItem
                           ? `${Number(qty) > 1 ? `${qty} ` : ''}${halfLabel}`
                           : `${qty} x ${formatKip(price).replace(' ₭', '')}`}

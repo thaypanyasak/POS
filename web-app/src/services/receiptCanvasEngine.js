@@ -53,8 +53,8 @@ export function getFonts(lang = 'lo') {
     ? '"Segoe UI", "Tahoma", "Saysettha OT", "Saysettha", -apple-system, BlinkMacSystemFont, Arial, sans-serif'
     : '"Saysettha OT", "Saysettha", sans-serif';
   const numFont = isVi
-    ? '"Segoe UI", "Tahoma", "Outfit", -apple-system, sans-serif'
-    : '"Outfit", "Segoe UI", -apple-system, sans-serif';
+    ? '"Segoe UI", "Tahoma", "Outfit", "Saysettha OT", "Saysettha", -apple-system, sans-serif'
+    : '"Outfit", "Saysettha OT", "Saysettha", "Segoe UI", -apple-system, sans-serif';
 
   return {
     STORE_NAME: `bold 44px ${textFont}`,
@@ -70,6 +70,7 @@ export function getFonts(lang = 'lo') {
     ITEM_NAME: isVi ? `600 24px ${textFont}` : `24px ${textFont}`,
     ITEM_UNIT: isVi ? `600 21px ${textFont}` : `21px ${textFont}`,
     ITEM_NUM: isVi ? `600 22px ${numFont}` : `22px ${numFont}`,
+    ITEM_SUB_TEXT: isVi ? `600 23px ${textFont}` : `23px ${textFont}`,
     ITEM_TOTAL: isVi ? `600 22px ${numFont}` : `500 22px ${numFont}`,
     CRATE_LABEL: isVi ? `600 21px ${textFont}` : `21px ${textFont}`,
     CRATE_NUM: `21px ${numFont}`,
@@ -809,7 +810,8 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
       ? `${Number(qty) > 1 ? `${qty} ` : ''}${halfLabel}`
       : `${qty} x ${fmtNum(price)}`;
     const totalStr = fmtNum(lineTotal);
-    drawLeft(qtyPriceStr, indentX, y, FONTS.ITEM_NUM);
+    const line2Font = isHalfCartonItem ? FONTS.ITEM_SUB_TEXT : FONTS.ITEM_NUM;
+    drawLeft(qtyPriceStr, indentX, y, line2Font);
     drawRight(totalStr, K80.RIGHT_EDGE, y, FONTS.ITEM_TOTAL);
     y += 28;
 
@@ -1265,6 +1267,24 @@ export async function renderReceiptCanvas(receipt, lang = 'lo', options = {}) {
 
   // Execute actual drawing directly on 1:1 thermal grid
   layoutReceipt(ctx, receipt, lang, qrImg, pageInfo, customProducts);
+
+  // If exporting as an image file (e.g. for saving to iPhone Photos or downloading):
+  // Wrap the 576-dot receipt with generous white paper margins (32px left/right, 36px top/bottom)
+  // so the receipt never touches the outer image border or frame!
+  // Physical thermal printing (options.forImageExport: false / undefined) stays 100% untouched at exact 576 dots!
+  if (options?.forImageExport) {
+    const padX = Number(options?.paddingX ?? 32);
+    const padY = Number(options?.paddingY ?? 36);
+    const framedCanvas = document.createElement('canvas');
+    framedCanvas.width = canvas.width + (padX * 2);
+    framedCanvas.height = canvas.height + (padY * 2);
+
+    const fCtx = framedCanvas.getContext('2d');
+    fCtx.fillStyle = '#ffffff';
+    fCtx.fillRect(0, 0, framedCanvas.width, framedCanvas.height);
+    fCtx.drawImage(canvas, padX, padY);
+    return framedCanvas;
+  }
 
   return canvas;
 }
