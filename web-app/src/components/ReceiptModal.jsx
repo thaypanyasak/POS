@@ -1341,7 +1341,7 @@ export default function ReceiptModal({
                 </p>
                 {/* Generous space for hand signature (increased height to h-24 for comfortable signing) */}
                 <div className="h-24"></div>
-                <div className="w-28 sm:w-32 border-b-2 border-dotted border-slate-400"></div>
+                <div className="w-32 sm:w-36 border-b-2 border-dotted border-slate-400"></div>
               </div>
               <div className="flex flex-col items-center">
                 <p className="font-bold text-slate-800 leading-normal pt-0.5">
@@ -1349,7 +1349,7 @@ export default function ReceiptModal({
                 </p>
                 {/* Generous space for hand signature (increased height to h-24 for comfortable signing) */}
                 <div className="h-24"></div>
-                <div className="w-28 sm:w-32 border-b-2 border-dotted border-slate-400"></div>
+                <div className="w-32 sm:w-36 border-b-2 border-dotted border-slate-400"></div>
               </div>
             </div>
           )}
