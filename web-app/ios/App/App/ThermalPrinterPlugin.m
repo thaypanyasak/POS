@@ -4,4 +4,5 @@
 CAP_PLUGIN(ThermalPrinterPlugin, "ThermalPrinter",
     CAP_PLUGIN_METHOD(printReceipt, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(testPrint, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(saveImageToPhotos, CAPPluginReturnPromise);
 )

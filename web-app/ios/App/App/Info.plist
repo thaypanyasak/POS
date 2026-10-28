@@ -66,6 +66,10 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>ແອັບຕ້ອງການເຂົ້າເຖິງກ້ອງຖ່າຍຮູບເພື່ອສະແກນບາໂຄດສິນຄ້າ</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>ແອັບ MeiiShop POS ຕ້ອງການບັນທຶກຮູບພາບໃບບິນລົງໃນ Photo Library ຂອງເຄື່ອງ</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ແອັບ MeiiShop POS ຕ້ອງການເຂົ້າເຖິງ Photo Library ເພື່ອບັນທຶກໃບບິນ</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>ແອັບ MeiiShop POS ຕ້ອງການເຂົ້າເຖິງເຄືອຂ່າຍພາຍໃນ (Local Network) ເພື່ອເຊື່ອມຕໍ່ ແລະ ສັ່ງພິມໃບບິນໄປຍັງເຄື່ອງພິມໃບບິນຄວາມຮ້ອນ (LAN/Wi-Fi Thermal Printer).</string>
 	<key>NSBonjourServices</key>

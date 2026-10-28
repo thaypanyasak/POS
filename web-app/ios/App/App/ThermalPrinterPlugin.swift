@@ -20,7 +20,8 @@ public class ThermalPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "ThermalPrinter"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "printReceipt", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "testPrint", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "testPrint", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "saveImageToPhotos", returnType: CAPPluginReturnPromise)
     ]
 
     // Physical K80 dimensions (576 thermal dots = 72 bytes/line)
@@ -758,6 +759,50 @@ public class ThermalPrinterPlugin: CAPPlugin, CAPBridgedPlugin {
             return isVi ? "Ghi nợ (Tồn nợ)" : "ຕິດໜີ້ (Debt)"
         default:
             return isVi ? "Chuyển khoản" : "ໂອນບັນຊີ"
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MARK: - Plugin Method: saveImageToPhotos
+    // Saves base64 PNG/JPEG image(s) directly into Apple Photos (Camera Roll)
+    // ─────────────────────────────────────────────────────────────────────────
+    @objc func saveImageToPhotos(_ call: CAPPluginCall) {
+        var base64List: [String] = []
+        if let single = call.getString("base64") {
+            base64List.append(single)
+        } else if let array = call.getArray("images", String.self) {
+            base64List = array
+        }
+
+        if base64List.isEmpty {
+            call.reject("ບໍ່ພົບຂໍ້ມູນຮູບພາບ (No image data provided)")
+            return
+        }
+
+        DispatchQueue.main.async {
+            var savedCount = 0
+
+            for b64 in base64List {
+                let clean = b64.replacingOccurrences(of: "data:image/png;base64,", with: "")
+                               .replacingOccurrences(of: "data:image/jpeg;base64,", with: "")
+                               .replacingOccurrences(of: "data:image/jpg;base64,", with: "")
+                               .trimmingCharacters(in: .whitespacesAndNewlines)
+                if let data = Data(base64Encoded: clean, options: .ignoreUnknownCharacters),
+                   let img = UIImage(data: data) {
+                    UIImageWriteToSavedPhotosAlbum(img, nil, nil, nil)
+                    savedCount += 1
+                }
+            }
+
+            if savedCount > 0 {
+                call.resolve([
+                    "success": true,
+                    "savedCount": savedCount,
+                    "message": "ບັນທຶກ \(savedCount) ຮູບລົງ Photos ສຳເລັດແລ້ວ!"
+                ])
+            } else {
+                call.reject("ບໍ່ສາມາດແປງຂໍ້ມູນຮູບພາບ Base64 ໄດ້")
+            }
         }
     }
 }

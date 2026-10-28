@@ -62,9 +62,21 @@ export interface PrintResult {
   message?: string;
 }
 
+export interface SaveImageOptions {
+  base64?: string;
+  images?: string[];
+}
+
+export interface SaveImageResult {
+  success: boolean;
+  savedCount?: number;
+  message?: string;
+}
+
 export interface ThermalPrinterPlugin {
   printReceipt(options: PrintOptions): Promise<PrintResult>;
   testPrint(options: TestPrintOptions): Promise<PrintResult>;
+  saveImageToPhotos(options: SaveImageOptions): Promise<SaveImageResult>;
 }
 
 const ThermalPrinter = registerPlugin<ThermalPrinterPlugin>('ThermalPrinter', {

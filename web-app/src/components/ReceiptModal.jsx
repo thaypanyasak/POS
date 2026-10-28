@@ -24,6 +24,7 @@ import {
 import { markOrderAsPrintedInSupabase } from '../services/supabase';
 import { generateBarcode128, renderReceiptCanvas } from '../services/receiptCanvasEngine';
 import { Capacitor } from '@capacitor/core';
+import { ThermalPrinter } from '../plugins/thermalPrinter';
 import {
   playSuccessBeep,
   playErrorBeep,
@@ -507,24 +508,27 @@ export default function ReceiptModal({
     }
   };
 
-  // Save Receipt Canvas as Image (Supports single page or all pages for multi-page receipts)
+  // Save Receipt Canvas as Image (Direct native save to Photos on iPad app, Web Share on Safari)
   const handleSaveReceiptImage = async (saveAllParam = true) => {
     if (isSavingImage) return;
     setIsSavingImage(true);
     try {
       playActionClickBeep('receipt');
 
+      const isNativeApp = Boolean(Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform());
+      const isIOSPlatform = (Capacitor && Capacitor.getPlatform && Capacitor.getPlatform() === 'ios') || isNativeApp;
       const isIOS = typeof navigator !== 'undefined' && (
         /iPad|iPhone|iPod/.test(navigator.userAgent) ||
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
-        Capacitor.getPlatform() === 'ios'
+        isIOSPlatform
       );
 
       // If called with an event object or boolean, normalize to boolean
       const saveAll = typeof saveAllParam === 'boolean' ? saveAllParam : true;
 
-      // Multi-page batch save: save all pages at once
+      // ─── Case 1: Multi-page batch save (All pages at once) ───
       if (saveAll && isSplitActive && totalPages > 1) {
+        const base64List = [];
         const filesToShare = [];
 
         for (let p = 1; p <= totalPages; p++) {
@@ -537,6 +541,9 @@ export default function ReceiptModal({
             forImageExport: true,
           });
           if (canvas) {
+            const dataUrl = canvas.toDataURL('image/png');
+            base64List.push(dataUrl);
+
             const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
             if (blob) {
               const fileName = `bill_${receipt.receiptNumber || 'INV'}_p${p}.png`;
@@ -545,9 +552,29 @@ export default function ReceiptModal({
           }
         }
 
-        if (filesToShare.length === 0) throw new Error('Could not render receipt pages');
+        if (base64List.length === 0) throw new Error('Could not render receipt pages');
 
-        // On iOS (iPhone / iPad): Share all files at once -> User taps "Save X Images" in 1 tap!
+        // A. If running inside Native iPad/iPhone App: Save DIRECTLY into Apple Photos! (Zero share sheet!)
+        if (isNativeApp && isIOSPlatform) {
+          try {
+            const res = await ThermalPrinter.saveImageToPhotos({ images: base64List });
+            if (res && res.success) {
+              playSuccessBeep('receipt');
+              setPrintFeedback({
+                type: 'success',
+                message: receiptLanguage === 'vi'
+                  ? `Đã lưu toàn bộ ${totalPages} ảnh thẳng vào app Photos của iPad!`
+                  : `ບັນທຶກທັງໝົດ ${totalPages} ຮູບລົງແອັບ Photos ຂອງ iPad ສຳເລັດແລ້ວ!`,
+              });
+              setTimeout(() => setPrintFeedback(null), 4500);
+              return;
+            }
+          } catch (nativeErr) {
+            console.warn('[ReceiptModal] Native save to Photos failed, falling back:', nativeErr);
+          }
+        }
+
+        // B. On Web Safari / iOS browser: Use Web Share API (user taps "Save Image" to Photos)
         if (isIOS && navigator.canShare && navigator.canShare({ files: filesToShare })) {
           await navigator.share({
             files: filesToShare,
@@ -556,13 +583,15 @@ export default function ReceiptModal({
           playSuccessBeep('receipt');
           setPrintFeedback({
             type: 'success',
-            message: receiptLanguage === 'vi' ? `Đã mở bảng lưu cả ${totalPages} ảnh vào iPhone!` : `ບັນທຶກທັງໝົດ ${totalPages} ຮູບລົງ iPhone ສຳເລັດ!`,
+            message: receiptLanguage === 'vi'
+              ? `Đã mở bảng lưu: Chọn "Lưu ${totalPages} hình ảnh" (Save Images) để lưu vào Photos!`
+              : `ເລືອກ "ບັນທຶກ ${totalPages} ຮູບພາບ" (Save Images) ເພື່ອບັນທຶກລົງ Photos!`,
           });
-          setTimeout(() => setPrintFeedback(null), 4000);
+          setTimeout(() => setPrintFeedback(null), 4500);
           return;
         }
 
-        // On Desktop / Web: Download all files sequentially
+        // C. On Desktop / Web: Download all files sequentially
         for (const file of filesToShare) {
           const a = document.createElement('a');
           a.href = URL.createObjectURL(file);
@@ -582,7 +611,7 @@ export default function ReceiptModal({
         return;
       }
 
-      // Single page save (current active page or single slip)
+      // ─── Case 2: Single page save (current active page or single slip) ───
       const pageNum = isSplitActive && totalPages > 1 ? activePage : null;
       const pInfo = isSplitActive && totalPages > 1 ? getPageInfo(activePage) : null;
       const canvas = await renderReceiptCanvas(receipt, receiptLanguage, {
@@ -597,6 +626,28 @@ export default function ReceiptModal({
         throw new Error('Could not render receipt canvas');
       }
 
+      const dataUrl = canvas.toDataURL('image/png');
+
+      // A. If running inside Native iPad/iPhone App: Save DIRECTLY into Apple Photos! (Zero share sheet!)
+      if (isNativeApp && isIOSPlatform) {
+        try {
+          const res = await ThermalPrinter.saveImageToPhotos({ base64: dataUrl });
+          if (res && res.success) {
+            playSuccessBeep('receipt');
+            setPrintFeedback({
+              type: 'success',
+              message: receiptLanguage === 'vi'
+                ? 'Đã lưu hóa đơn thẳng vào app Photos của iPad!'
+                : 'ບັນທຶກຮູບໃບບິນລົງແອັບ Photos ຂອງ iPad ສຳເລັດແລ້ວ!',
+            });
+            setTimeout(() => setPrintFeedback(null), 4500);
+            return;
+          }
+        } catch (nativeErr) {
+          console.warn('[ReceiptModal] Native save to Photos failed, falling back:', nativeErr);
+        }
+      }
+
       const fileName = `bill_${receipt.receiptNumber || 'INV'}${pageNum ? `_p${pageNum}` : ''}.png`;
 
       // Convert canvas to blob
@@ -605,7 +656,7 @@ export default function ReceiptModal({
 
       const file = new File([blob], fileName, { type: 'image/png' });
 
-      // On iOS (iPhone / iPad): Use Web Share API so iOS native modal opens with "Save Image" to Photos
+      // B. On Web Safari / iOS browser: Use Web Share API (user taps "Save Image" to Photos)
       if (isIOS && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
@@ -614,14 +665,15 @@ export default function ReceiptModal({
         playSuccessBeep('receipt');
         setPrintFeedback({
           type: 'success',
-          message: receiptLanguage === 'vi' ? 'Đã mở bảng lưu ảnh vào iPhone!' : 'ບັນທຶກຮູບພາບລົງ iPhone ສຳເລັດ!',
+          message: receiptLanguage === 'vi'
+            ? 'Đã mở bảng lưu: Chọn "Lưu hình ảnh" (Save Image) để lưu vào Photos!'
+            : 'ເລືອກ "ບັນທຶກຮູບພາບ" (Save Image) ເພື່ອບັນທຶກລົງແອັບ Photos!',
         });
-        setTimeout(() => setPrintFeedback(null), 4000);
+        setTimeout(() => setPrintFeedback(null), 4500);
         return;
       }
 
-      // Fallback: Direct browser image download
-      const dataUrl = canvas.toDataURL('image/png');
+      // C. Fallback: Direct browser image download
       const a = document.createElement('a');
       a.href = dataUrl;
       a.download = fileName;
