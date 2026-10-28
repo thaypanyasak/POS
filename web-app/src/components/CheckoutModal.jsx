@@ -15,6 +15,8 @@ import {
 } from '@phosphor-icons/react';
 import { formatKip, formatDots, parseDots, getEffectiveUnitPrice } from '../utils/formatters';
 import { playModalCloseBeep, playModalConfirmBeep, playUnitChangeBeep } from '../utils/audioFeedback';
+import { Capacitor } from '@capacitor/core';
+import { Keyboard } from '@capacitor/keyboard';
 
 export default function CheckoutModal({
   isOpen,
@@ -105,6 +107,9 @@ export default function CheckoutModal({
           <button
             onClick={() => {
               playModalCloseBeep();
+              if (Capacitor.isNativePlatform()) {
+                Keyboard.hide().catch(() => {});
+              }
               onClose();
             }}
             className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
@@ -122,6 +127,11 @@ export default function CheckoutModal({
               type="text"
               value={customerName || ''}
               onChange={(e) => setCustomerName && setCustomerName(e.target.value)}
+              onFocus={() => {
+                if (Capacitor.isNativePlatform()) {
+                  Keyboard.show().catch(() => {});
+                }
+              }}
               placeholder="ຊື່ລູກຄ້າ ຫຼື ເບີໂທຕິດຕໍ່..."
               className="font-bold text-slate-900 bg-transparent hover:bg-white focus:bg-white border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none px-1.5 py-0.5 rounded text-xs flex-1 min-w-0"
             />
@@ -444,6 +454,11 @@ export default function CheckoutModal({
                   type="text"
                   value={debtNote}
                   onChange={(e) => setDebtNote && setDebtNote(e.target.value)}
+                  onFocus={() => {
+                    if (Capacitor.isNativePlatform()) {
+                      Keyboard.show().catch(() => {});
+                    }
+                  }}
                   placeholder="ເຊັ່ນ: ນັດຈ່າຍທ້າຍເດືອນ, ອ້າຍສົມສັກ 020 5555 1234..."
                   className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-rose-300 focus:ring-1 focus:ring-rose-200 focus:outline-none shadow-2xs"
                 />
@@ -458,6 +473,9 @@ export default function CheckoutModal({
             type="button"
             onClick={() => {
               playModalCloseBeep();
+              if (Capacitor.isNativePlatform()) {
+                Keyboard.hide().catch(() => {});
+              }
               onClose();
             }}
             className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-all cursor-pointer"

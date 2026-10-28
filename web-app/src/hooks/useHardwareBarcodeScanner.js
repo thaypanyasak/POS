@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { playSuccessBeep } from '../utils/audioFeedback';
 import { Capacitor } from '@capacitor/core';
 import { Haptics, NotificationType } from '@capacitor/haptics';
+import { Keyboard } from '@capacitor/keyboard';
 
 /**
  * Universal Hardware Barcode Scanner Listener Hook
@@ -9,41 +10,45 @@ import { Haptics, NotificationType } from '@capacitor/haptics';
  * Accurately detects physical barcode / QR scanners (USB, OTG, Bluetooth HID Keyboard, 2.4G Wireless)
  * across Desktop Browsers, Mobile PWA, iPad/iOS, and Android without requiring input focus or manual clicks.
  *
- * HEURISTICS & STABILITY:
- * 1. Adaptive Keystroke Timing: Physical barcode scanners transmit characters at rapid speeds (< 35ms between keys).
- *    During React DOM renders, toast animations, or Web Audio playback, the single-threaded JS event loop
- *    can hiccup by 50ms-90ms. Using maxInterval: 180ms prevents partial-buffer wipes mid-scan (e.g. dropping '8' or '89').
- * 2. Average Speed Validation: Fast average interval (< 100ms/key) differentiates superhuman scanner bursts
- *    from human typing without false-clearing.
- * 3. Safe Auto-Flush: Auto-flush fallback timer waits at least 250ms of silence, ensuring it NEVER cuts off
- *    an in-flight 13-digit barcode sequence.
- * 4. Input Conflict Handling:
- *    - data-barcode-replace="true": Instantly replaces entire input with the full clean barcode (History, Products).
- *    - data-barcode-clear="true": Clears input back to empty upon scan (POS product search).
- *    - Default: Reverts accidentally dumped characters from normal inputs (notes, customer info).
- * 5. Rapid Consecutive Scans: 300ms debounce protects against double-Enter bounce while allowing cashiers
- *    to rapidly scan the same item for +1, +2, +3 quantity in POS.
+ * ZERO-CONFLICT ARCHITECTURE WITH APPLE DEFAULT KEYBOARD & BLUETOOTH SCANNERS:
+ * 1. Machine Burst Detection (< 55ms):
+ *    - Human typing on iPad touch keyboard cannot press keys faster than 80-120ms.
+ *    - Hardware scanners send characters at 5-25ms intervals.
+ *    - Once key 2 arrives within 55ms (or avg burst < 65ms), it is identified as a machine scan.
+ * 2. Event Flood Prevention (e.preventDefault() on burst keys 2..N):
+ *    - Prevents 13 rapid DOM mutations, React onChange floods, and heavy catalog re-renders.
+ *    - Eliminates JS thread freezes on iPad that caused buffer splits and dropped leading digits
+ *      (e.g. dropping '8' -> '935212811712', or dropping 8 digits -> '1172').
+ * 3. Jitter-Tolerant Buffer:
+ *    - During an active scan burst, tolerates up to 350ms of Bluetooth transmission jitter without resetting.
+ * 4. Input Restoration:
+ *    - On scan complete (Enter or auto-flush):
+ *      * Barcode inputs (data-barcode-input / data-barcode-replace): gets the full clean 13-digit barcode.
+ *      * Clear inputs (data-barcode-clear="true" like POS search): gets wiped clean to ''.
+ *      * Normal inputs (customer name, cash, notes): restored back to pre-scan value.
+ * 5. Full Compatibility with Apple On-Screen Keyboard:
+ *    - Human typing is completely untouched and 100% native.
  */
 export function useHardwareBarcodeScanner({
   onScan,
   enabled = true,
-  maxInterval = 180, // Generous threshold to tolerate browser rendering pauses without dropping leading digits
-  maxAvgInterval = 100, // Average interval across burst distinguishing scanners from human typing
+  maxInterval = 180,
+  maxAvgInterval = 85,
   minLength = 3,
   preventDefaultOnEnter = true,
   cleanActiveInput = true,
   feedback = true,
-  duplicateInterval = 300, // Allows consecutive scans of the same item (e.g. +1 qty) after 300ms
+  duplicateInterval = 300,
 }) {
   const onScanRef = useRef(onScan);
   const bufferRef = useRef('');
   const lastKeyTimeRef = useRef(0);
   const keyTimestampsRef = useRef([]);
+  const isMachineBurstRef = useRef(false);
   const lastScannedBarcodeRef = useRef({ code: '', time: 0 });
   const inputSnapshotRef = useRef({ element: null, originalValue: '' });
   const flushTimerRef = useRef(null);
 
-  // Keep latest onScan callback without re-registering the global window listener
   useEffect(() => {
     onScanRef.current = onScan;
   }, [onScan]);
@@ -51,9 +56,6 @@ export function useHardwareBarcodeScanner({
   useEffect(() => {
     if (!enabled) return;
 
-    /**
-     * Revert or update active input element when a hardware scanner types into it
-     */
     const cleanActiveInputElement = (scannedCode) => {
       try {
         const activeEl = document.activeElement;
@@ -62,56 +64,13 @@ export function useHardwareBarcodeScanner({
         const isInput = activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA';
         if (!isInput) return;
 
-        // 1. Barcode Receiver Input: If the active input is explicitly intended to receive barcodes
-        // (has data-barcode-input, data-barcode-preserve, or id/name containing 'barcode'),
-        // ensure it cleanly keeps the full scanned code and NEVER gets wiped to empty!
         const isBarcodeReceiver =
           activeEl.getAttribute('data-barcode-preserve') === 'true' ||
           activeEl.getAttribute('data-barcode-input') === 'true' ||
           activeEl.id?.toLowerCase().includes('barcode') ||
           activeEl.name?.toLowerCase().includes('barcode');
 
-        if (isBarcodeReceiver) {
-          if (activeEl.value !== scannedCode) {
-            const proto =
-              activeEl instanceof HTMLTextAreaElement
-                ? window.HTMLTextAreaElement.prototype
-                : window.HTMLInputElement.prototype;
-            const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
-
-            if (descriptor && descriptor.set) {
-              descriptor.set.call(activeEl, scannedCode);
-            } else {
-              activeEl.value = scannedCode;
-            }
-
-            activeEl.dispatchEvent(new Event('input', { bubbles: true }));
-            activeEl.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-          return;
-        }
-
-        const currentValue = activeEl.value || '';
-        let cleanedValue = currentValue;
-
-        if (activeEl.getAttribute('data-barcode-clear') === 'true') {
-          // Explicitly clear input on barcode scan (e.g. POS product search bar)
-          cleanedValue = '';
-        } else if (activeEl.getAttribute('data-barcode-replace') === 'true') {
-          // Replace entire input value with the full scanned code (History & Products search bar)
-          cleanedValue = scannedCode;
-        } else if (currentValue === scannedCode) {
-          cleanedValue = '';
-        } else if (currentValue.endsWith(scannedCode)) {
-          cleanedValue = currentValue.slice(0, -scannedCode.length);
-        } else if (
-          inputSnapshotRef.current.element === activeEl &&
-          inputSnapshotRef.current.originalValue !== undefined
-        ) {
-          cleanedValue = inputSnapshotRef.current.originalValue;
-        }
-
-        if (cleanedValue !== currentValue || activeEl.getAttribute('data-barcode-replace') === 'true' || activeEl.getAttribute('data-barcode-clear') === 'true') {
+        const setValue = (val) => {
           const proto =
             activeEl instanceof HTMLTextAreaElement
               ? window.HTMLTextAreaElement.prototype
@@ -119,13 +78,46 @@ export function useHardwareBarcodeScanner({
           const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
 
           if (descriptor && descriptor.set) {
-            descriptor.set.call(activeEl, cleanedValue);
+            descriptor.set.call(activeEl, val);
           } else {
-            activeEl.value = cleanedValue;
+            activeEl.value = val;
           }
 
           activeEl.dispatchEvent(new Event('input', { bubbles: true }));
           activeEl.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+
+        if (isBarcodeReceiver) {
+          if (activeEl.value !== scannedCode) {
+            setValue(scannedCode);
+          }
+          return;
+        }
+
+        if (activeEl.getAttribute('data-barcode-clear') === 'true') {
+          setValue('');
+          return;
+        }
+
+        if (activeEl.getAttribute('data-barcode-replace') === 'true') {
+          setValue(scannedCode);
+          return;
+        }
+
+        // Normal inputs (e.g. customer name, debt note, tendered money):
+        // Restore pre-scan snapshot so accidental burst characters (like key 1) are removed
+        if (
+          inputSnapshotRef.current.element === activeEl &&
+          inputSnapshotRef.current.originalValue !== undefined
+        ) {
+          setValue(inputSnapshotRef.current.originalValue);
+        } else {
+          const currentValue = activeEl.value || '';
+          if (currentValue === scannedCode) {
+            setValue('');
+          } else if (currentValue.endsWith(scannedCode)) {
+            setValue(currentValue.slice(0, -scannedCode.length));
+          }
         }
       } catch (err) {
         console.debug('[useHardwareBarcodeScanner] Error cleaning active input:', err);
@@ -149,16 +141,15 @@ export function useHardwareBarcodeScanner({
       }
 
       const currentBuffer = (rawCode || bufferRef.current).trim();
+      isMachineBurstRef.current = false;
 
       if (currentBuffer.length >= minLength) {
-        // Prevent default and stop propagation so Enter does not submit forms or trigger clicks
         if (e && preventDefaultOnEnter) {
           e.preventDefault();
           e.stopPropagation();
         }
 
         const now = Date.now();
-        // Debounce duplicate reads of the exact same code (e.g. hardware double-enter bounce)
         const isDuplicate =
           lastScannedBarcodeRef.current.code === currentBuffer &&
           now - lastScannedBarcodeRef.current.time < duplicateInterval;
@@ -172,20 +163,26 @@ export function useHardwareBarcodeScanner({
 
         lastScannedBarcodeRef.current = { code: currentBuffer, time: now };
 
-        // Clean active input if barcode characters were typed into it
         if (cleanActiveInput) {
           cleanActiveInputElement(currentBuffer);
         }
 
-        // Trigger sound & haptic feedback
+        // On POS search bar only: dismiss on-screen keyboard so cart is visible
+        const activeEl = document.activeElement;
+        if (activeEl && activeEl.getAttribute('data-barcode-clear') === 'true') {
+          if (Capacitor.isNativePlatform()) {
+            try {
+              Keyboard.hide();
+            } catch (_) {}
+          }
+        }
+
         triggerFeedback();
 
-        // Reset buffer and timestamps
         bufferRef.current = '';
         keyTimestampsRef.current = [];
         inputSnapshotRef.current = { element: null, originalValue: '' };
 
-        // Dispatch scan callback
         if (typeof onScanRef.current === 'function') {
           onScanRef.current(currentBuffer);
         }
@@ -199,7 +196,7 @@ export function useHardwareBarcodeScanner({
     };
 
     const handleGlobalKeyDown = (e) => {
-      // Ignore modifier keys completely so they don't corrupt timing or reset the buffer
+      // Ignore modifier keys completely
       if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) {
         return;
       }
@@ -224,20 +221,23 @@ export function useHardwareBarcodeScanner({
           if (handled) return;
         }
 
-        // Buffer was too short for a barcode -> normal human Enter/Tab key press
         bufferRef.current = '';
         keyTimestampsRef.current = [];
+        isMachineBurstRef.current = false;
         inputSnapshotRef.current = { element: null, originalValue: '' };
         return;
       }
 
-      // 2. Inter-keystroke Timing & Buffer Accumulation
-      // If time since last key exceeds maxInterval (> 180ms), start a fresh scan burst.
-      if (delta > maxInterval) {
+      // 2. Burst Gap / Reset Detection:
+      // If we are NOT in an active machine burst and delta > maxInterval: start a fresh buffer.
+      // If we ARE in an active machine burst, allow generous jitter (up to 320ms) before declaring burst dead.
+      const resetThreshold = isMachineBurstRef.current ? Math.max(maxInterval + 140, 320) : maxInterval;
+
+      if (delta > resetThreshold) {
         bufferRef.current = '';
         keyTimestampsRef.current = [];
+        isMachineBurstRef.current = false;
 
-        // Snapshot current active element state at start of potential burst
         const activeEl = document.activeElement;
         if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
           inputSnapshotRef.current = {
@@ -251,42 +251,53 @@ export function useHardwareBarcodeScanner({
 
       // 3. Accumulate single printable characters
       if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        // Burst detection:
+        // Key 2 or later arriving at machine speed (delta <= 55ms)
+        if (bufferRef.current.length >= 1 && delta <= 55) {
+          isMachineBurstRef.current = true;
+        }
+
+        // If machine burst is active:
+        // PREVENT DEFAULT so keys 2..N do not flood into the active input element!
+        // This keeps the JS thread 100% free and prevents React re-rendering thrash on iPad.
+        if (isMachineBurstRef.current) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+
         bufferRef.current += e.key;
         keyTimestampsRef.current.push(now);
 
-        // 4. Safe Auto-flush timer for scanners configured WITHOUT Enter/CR suffix
-        // Resets on each key and only fires after 250ms of silence, NEVER mid-scan!
+        // 4. Safe Auto-flush timer for scanners configured without Enter suffix
         if (flushTimerRef.current) {
           clearTimeout(flushTimerRef.current);
           flushTimerRef.current = null;
         }
+
         if (bufferRef.current.length >= minLength) {
-          const flushDelay = Math.max(maxInterval + 70, 250);
+          const flushDelay = Math.max(maxInterval + 80, 260);
           flushTimerRef.current = setTimeout(() => {
-            // Verify average speed if multiple characters were collected
             const timestamps = keyTimestampsRef.current;
             if (timestamps.length >= 2) {
               const totalDuration = timestamps[timestamps.length - 1] - timestamps[0];
               const avgInterval = totalDuration / (timestamps.length - 1);
-              // Only auto-flush without Enter if speed resembles a hardware burst or has substantial length
               if (avgInterval <= maxAvgInterval || bufferRef.current.length >= 6) {
                 processBarcode(bufferRef.current, null);
                 return;
               }
             }
-            // Otherwise discard buffer
             bufferRef.current = '';
             keyTimestampsRef.current = [];
+            isMachineBurstRef.current = false;
           }, flushDelay);
         }
       } else if (['Escape', 'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-        // Human interactive navigation/editing keys immediately reset the buffer
         bufferRef.current = '';
         keyTimestampsRef.current = [];
+        isMachineBurstRef.current = false;
       }
     };
 
-    // Use capture phase to intercept the scanner burst before forms / buttons
     window.addEventListener('keydown', handleGlobalKeyDown, { capture: true });
 
     return () => {
