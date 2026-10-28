@@ -643,32 +643,34 @@ export default function ProductsView({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ, ໝວດໝູ່ ຫຼື ສະແກນບາໂຄດ..."
-              className="w-full pl-9 pr-32 py-2.5 sm:py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium shadow-2xs min-h-[44px] sm:min-h-0"
+              className="w-full pl-9 pr-36 py-2.5 sm:py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium shadow-2xs min-h-[44px] sm:min-h-0"
             />
 
-            {/* Quick Clear 'X' Button */}
-            {searchTerm.length > 0 && (
+            {/* Action Buttons: Quick Clear 'X' and Camera Scan */}
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              {searchTerm.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="w-7 h-7 sm:w-7.5 sm:h-7.5 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white rounded-lg flex items-center justify-center shrink-0 cursor-pointer shadow-sm active:scale-95 transition-all"
+                  title="ລຶບການຄົ້ນຫາ (Xóa tất cả)"
+                >
+                  <X size={16} weight="bold" />
+                </button>
+              )}
+
+              {/* Barcode / Camera Button inside Search Bar */}
               <button
                 type="button"
-                onClick={handleClearSearch}
-                className="absolute right-22 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-all cursor-pointer flex items-center justify-center active:scale-90"
-                title="ລຶບການຄົ້ນຫາ (Clear search)"
+                onClick={() => setScannerOpen(true)}
+                className="h-7 sm:h-7.5 px-2.5 rounded-lg bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center gap-1 active:scale-95"
+                title="ເປີດກ້ອງສະແກນບາໂຄດສິນຄ້າ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
               >
-                <XCircle size={17} weight="fill" />
+                <Barcode size={15} weight="bold" />
+                <span className="text-[10.5px] font-bold">ສະແກນ</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Hardware Scanner Ready" />
               </button>
-            )}
-
-            {/* Barcode / Camera Button inside Search Bar */}
-            <button
-              type="button"
-              onClick={() => setScannerOpen(true)}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1.5 sm:py-1 rounded-lg bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center gap-1 active:scale-95"
-              title="ເປີດກ້ອງສະແກນບາໂຄດສິນຄ້າ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
-            >
-              <Barcode size={15} weight="bold" />
-              <span className="text-[10.5px] font-bold">ສະແກນ</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Hardware Scanner Ready"></span>
-            </button>
+            </div>
           </div>
 
           {/* Searchable Category Select Dropdown */}
