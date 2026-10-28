@@ -1059,8 +1059,8 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
     // Generous 150px space for hand signature (increased from 100px for comfortable signing height)
     y += 150;
 
-    // Dotted lines strictly under each respective column (180px wide to fill column width)
-    const drawSignDottedLine = (centerX, width = 180, lineY) => {
+    // Dotted lines strictly under each respective column (compact width 110px so the two signers are clearly separated)
+    const drawSignDottedLine = (centerX, width = 110, lineY) => {
       if (isDraw) {
         ctx.beginPath();
         ctx.setLineDash([3, 4]); // 3px dot, 4px space
@@ -1073,8 +1073,8 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
       }
     };
 
-    drawSignDottedLine(sigColLeftX, 180, y);
-    drawSignDottedLine(sigColRightX, 180, y);
+    drawSignDottedLine(sigColLeftX, 110, y);
+    drawSignDottedLine(sigColRightX, 110, y);
     y += 36; // Breathing room below signature dots before barcode
   }
 
