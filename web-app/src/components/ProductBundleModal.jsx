@@ -19,6 +19,7 @@ import {
 } from '@phosphor-icons/react';
 import { formatKip, formatBaht, normalizeLao } from '../utils/formatters';
 import { playActionClickBeep, playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
+import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
 
 /**
  * Helper to safely extract carton specification & wholesale price from a product record
@@ -148,6 +149,48 @@ export default function ProductBundleModal({
     });
     return Array.from(set).sort();
   }, [products]);
+
+  // Duplicate barcode detection across other bundles and products
+  const duplicateInfo = useMemo(() => {
+    if (!barcode || !String(barcode).trim()) return null;
+    const clean = String(barcode).trim().toLowerCase();
+
+    // 1. Check other bundles
+    const matchedBundle = (bundles || []).find(
+      (b) => b.id !== selectedBundleId && b.barcode && String(b.barcode).trim().toLowerCase() === clean
+    );
+    if (matchedBundle) {
+      return { type: 'bundle', name: matchedBundle.name || 'ກຸ່ມສິນຄ້າອື່ນ' };
+    }
+
+    // 2. Check individual products & units
+    const matchedProduct = (products || []).find(
+      (p) =>
+        (p.barcode && String(p.barcode).trim().toLowerCase() === clean) ||
+        (p.units && p.units.some((u) => u.barcode && String(u.barcode).trim().toLowerCase() === clean))
+    );
+    if (matchedProduct) {
+      return { type: 'product', name: matchedProduct.name || 'ສິນຄ້າດ່ຽວ' };
+    }
+
+    return null;
+  }, [barcode, bundles, selectedBundleId, products]);
+
+  // Hardware barcode scanner support inside bundle editor modal
+  useHardwareBarcodeScanner({
+    onScan: (scannedCode) => {
+      if (!scannedCode) return;
+      const clean = String(scannedCode).trim();
+      setBarcode(clean);
+      playSuccessBeep();
+    },
+    enabled: isOpen && selectedBundleId !== null,
+    maxInterval: 180,
+    duplicateInterval: 300,
+    minLength: 3,
+    preventDefaultOnEnter: true,
+    cleanActiveInput: true,
+  });
 
   // Load bundle into form when selectedBundleId changes
   useEffect(() => {
@@ -338,6 +381,11 @@ export default function ProductBundleModal({
     }
     if (selectedProductIds.length === 0) {
       showToast('error', 'ກະລຸນາເລືອກຢ່າງໜ້ອຍ 1 ລົດຊາດ/ສີ ສິນຄ້າເພື່ອປະກອບເຂົ້າກຸ່ມ!');
+      playErrorBeep();
+      return;
+    }
+    if (duplicateInfo) {
+      showToast('error', `⚠️ ບາໂຄດ "${barcode}" ຖືກໃຊ້ແລ້ວໃນ "${duplicateInfo.name}"! ກະລຸນາປ່ຽນບາໂຄດໃໝ່.`);
       playErrorBeep();
       return;
     }
@@ -592,16 +640,39 @@ export default function ProductBundleModal({
                   <Barcode size={14} className="text-teal-600" />
                   <span>ບາຣ໌ໂຄດລັງ (Barcode vỏ thùng)</span>
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={barcode}
-                    onChange={(e) => setBarcode(e.target.value)}
-                    placeholder="ຍິງບາຣ໌ໂຄດທີ່ຕິດຢູ່ນອກລັງ..."
-                    className="w-full pl-8 sm:pl-9 pr-2.5 sm:pr-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500 transition-all"
-                  />
-                  <Barcode size={16} className="absolute left-2.5 top-2 sm:top-2.5 text-slate-400 pointer-events-none" />
+                <div className="flex items-center gap-1.5">
+                  <div className="relative flex-1 min-w-0">
+                    <input
+                      id="bundle-barcode-input"
+                      data-barcode-input="true"
+                      type="text"
+                      value={barcode}
+                      onChange={(e) => setBarcode(e.target.value)}
+                      placeholder="ຍິງບາຣ໌ໂຄດທີ່ຕິດຢູ່ນອກລັງ..."
+                      className="w-full pl-8 sm:pl-9 pr-2.5 sm:pr-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl text-xs font-mono font-bold text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500 transition-all"
+                    />
+                    <Barcode size={16} className="absolute left-2.5 top-2 sm:top-2.5 text-slate-400 pointer-events-none" />
+                  </div>
+                  {barcode && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBarcode('');
+                        document.getElementById('bundle-barcode-input')?.focus();
+                      }}
+                      className="w-8.5 h-8.5 sm:w-9 sm:h-9 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 cursor-pointer shadow-sm active:scale-95 transition-all"
+                      title="ລຶບທັງໝົດ (Xóa tất cả)"
+                    >
+                      <X size={18} weight="bold" />
+                    </button>
+                  )}
                 </div>
+                {duplicateInfo && (
+                  <div className="mt-1.5 p-2 bg-rose-50 border border-rose-300 rounded-lg sm:rounded-xl flex items-center gap-1.5 text-[10.5px] text-rose-900 font-bold shadow-2xs">
+                    <WarningCircle size={15} weight="fill" className="text-rose-600 shrink-0" />
+                    <span>⚠️ ບາໂຄດນີ້ມີໃນລະບົບແລ້ວ: "{duplicateInfo.name}" ({duplicateInfo.type === 'bundle' ? 'ກຸ່ມສິນຄ້າ' : 'ສິນຄ້າ'})</span>
+                  </div>
+                )}
               </div>
             </div>
 

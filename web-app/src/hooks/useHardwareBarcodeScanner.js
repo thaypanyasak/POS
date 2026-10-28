@@ -62,8 +62,32 @@ export function useHardwareBarcodeScanner({
         const isInput = activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA';
         if (!isInput) return;
 
-        // Skip cleaning if the input explicitly marks itself as a raw barcode receiver
-        if (activeEl.getAttribute('data-barcode-preserve') === 'true') {
+        // 1. Barcode Receiver Input: If the active input is explicitly intended to receive barcodes
+        // (has data-barcode-input, data-barcode-preserve, or id/name containing 'barcode'),
+        // ensure it cleanly keeps the full scanned code and NEVER gets wiped to empty!
+        const isBarcodeReceiver =
+          activeEl.getAttribute('data-barcode-preserve') === 'true' ||
+          activeEl.getAttribute('data-barcode-input') === 'true' ||
+          activeEl.id?.toLowerCase().includes('barcode') ||
+          activeEl.name?.toLowerCase().includes('barcode');
+
+        if (isBarcodeReceiver) {
+          if (activeEl.value !== scannedCode) {
+            const proto =
+              activeEl instanceof HTMLTextAreaElement
+                ? window.HTMLTextAreaElement.prototype
+                : window.HTMLInputElement.prototype;
+            const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+
+            if (descriptor && descriptor.set) {
+              descriptor.set.call(activeEl, scannedCode);
+            } else {
+              activeEl.value = scannedCode;
+            }
+
+            activeEl.dispatchEvent(new Event('input', { bubbles: true }));
+            activeEl.dispatchEvent(new Event('change', { bubbles: true }));
+          }
           return;
         }
 

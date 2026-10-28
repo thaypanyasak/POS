@@ -259,14 +259,27 @@ export default function ProductFormModal({
   const handleScanBarcodeSuccess = (scannedCode) => {
     if (!scannedCode) return;
     const clean = String(scannedCode).trim();
-    if (scannerTarget === 'carton' && setCartonBarcode) {
-      setCartonBarcode(clean);
-    } else if (scannerTarget === 'pack' && setPackBarcode) {
-      setPackBarcode(clean);
-    } else if (scannerTarget === 'piece' && setPieceBarcode) {
-      setPieceBarcode(clean);
-    } else if (setNewProdBarcode) {
-      setNewProdBarcode(clean);
+    const activeEl = document.activeElement;
+    const activeId = activeEl ? activeEl.id : '';
+
+    if (scannerTarget === 'carton' || activeId === 'carton-barcode-input') {
+      setCartonBarcode?.(clean);
+    } else if (scannerTarget === 'pack' || activeId === 'pack-barcode-input') {
+      setPackBarcode?.(clean);
+    } else if (scannerTarget === 'piece' || activeId === 'piece-barcode-input') {
+      setPieceBarcode?.(clean);
+    } else {
+      if (enablePiece && setPieceBarcode) {
+        setPieceBarcode(clean);
+      } else if (enableCarton && setCartonBarcode) {
+        setCartonBarcode(clean);
+      } else if (enablePack && setPackBarcode) {
+        setPackBarcode(clean);
+      } else if (setPieceBarcode) {
+        setPieceBarcode(clean);
+      } else if (setNewProdBarcode) {
+        setNewProdBarcode(clean);
+      }
     }
     setScannerOpen(false);
   };
@@ -1055,18 +1068,35 @@ export default function ProductFormModal({
                           <span>ສະແກນກ້ອງ</span>
                         </button>
                       </div>
-                      <input
-                        type="text"
-                        value={cartonBarcode}
-                        onChange={(e) => setCartonBarcode && setCartonBarcode(e.target.value)}
-                        placeholder="ຍິງບາໂຄດເທິງລັງ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"
-                        className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40"
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          id="carton-barcode-input"
+                          data-barcode-input="true"
+                          type="text"
+                          value={cartonBarcode}
+                          onChange={(e) => setCartonBarcode && setCartonBarcode(e.target.value)}
+                          placeholder="ຍິງບາໂຄດເທິງລັງ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"
+                          className="flex-1 min-w-0 h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40"
+                        />
+                        {cartonBarcode && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCartonBarcode?.('');
+                              document.getElementById('carton-barcode-input')?.focus();
+                            }}
+                            className="w-8.5 h-8.5 sm:w-9 sm:h-9 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white rounded-lg flex items-center justify-center shrink-0 cursor-pointer shadow-sm active:scale-95 transition-all"
+                            title="ລຶບທັງໝົດ (Xóa tất cả)"
+                          >
+                            <X size={18} weight="bold" />
+                          </button>
+                        )}
+                      </div>
                       {checkBarcodeDuplicate(cartonBarcode) && (
-                        <p className="text-[9.5px] text-amber-800 font-bold mt-1 flex items-center gap-1">
-                          <WarningCircle size={11} weight="fill" className="text-amber-600 shrink-0" />
-                          <span>⚠️ ບາໂຄດນີ້ມີໃນລະບົບແລ້ວ: "{checkBarcodeDuplicate(cartonBarcode)?.name}"</span>
-                        </p>
+                        <div className="mt-1.5 p-2 bg-rose-50 border border-rose-300 rounded-lg flex items-center gap-1.5 text-[10.5px] text-rose-900 font-bold shadow-2xs">
+                          <WarningCircle size={15} weight="fill" className="text-rose-600 shrink-0" />
+                          <span>ບາໂຄດນີ້ມີໃນລະບົບແລ້ວ: "{checkBarcodeDuplicate(cartonBarcode)?.name}"</span>
+                        </div>
                       )}
                     </div>
 
@@ -1266,18 +1296,35 @@ export default function ProductFormModal({
                           <span>ສະແກນກ້ອງ</span>
                         </button>
                       </div>
-                      <input
-                        type="text"
-                        value={packBarcode}
-                        onChange={(e) => setPackBarcode && setPackBarcode(e.target.value)}
-                        placeholder="ຍິງບາໂຄດເທິງແພັກ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"
-                        className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          id="pack-barcode-input"
+                          data-barcode-input="true"
+                          type="text"
+                          value={packBarcode}
+                          onChange={(e) => setPackBarcode && setPackBarcode(e.target.value)}
+                          placeholder="ຍິງບາໂຄດເທິງແພັກ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"
+                          className="flex-1 min-w-0 h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                        />
+                        {packBarcode && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPackBarcode?.('');
+                              document.getElementById('pack-barcode-input')?.focus();
+                            }}
+                            className="w-8.5 h-8.5 sm:w-9 sm:h-9 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white rounded-lg flex items-center justify-center shrink-0 cursor-pointer shadow-sm active:scale-95 transition-all"
+                            title="ລຶບທັງໝົດ (Xóa tất cả)"
+                          >
+                            <X size={18} weight="bold" />
+                          </button>
+                        )}
+                      </div>
                       {checkBarcodeDuplicate(packBarcode) && (
-                        <p className="text-[9.5px] text-amber-800 font-bold mt-1 flex items-center gap-1">
-                          <WarningCircle size={11} weight="fill" className="text-amber-600 shrink-0" />
-                          <span>⚠️ ບາໂຄດນີ້ມີໃນລະບົບແລ້ວ: "{checkBarcodeDuplicate(packBarcode)?.name}"</span>
-                        </p>
+                        <div className="mt-1.5 p-2 bg-rose-50 border border-rose-300 rounded-lg flex items-center gap-1.5 text-[10.5px] text-rose-900 font-bold shadow-2xs">
+                          <WarningCircle size={15} weight="fill" className="text-rose-600 shrink-0" />
+                          <span>ບາໂຄດນີ້ມີໃນລະບົບແລ້ວ: "{checkBarcodeDuplicate(packBarcode)?.name}"</span>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1414,18 +1461,35 @@ export default function ProductFormModal({
                           <span>ສະແກນກ້ອງ</span>
                         </button>
                       </div>
-                      <input
-                        type="text"
-                        value={pieceBarcode}
-                        onChange={(e) => setPieceBarcode && setPieceBarcode(e.target.value)}
-                        placeholder="ຍິງບາໂຄດເທິງຊອງ/ກະປ໋ອງ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"
-                        className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          id="piece-barcode-input"
+                          data-barcode-input="true"
+                          type="text"
+                          value={pieceBarcode}
+                          onChange={(e) => setPieceBarcode && setPieceBarcode(e.target.value)}
+                          placeholder="ຍິງບາໂຄດເທິງຊອງ/ກະປ໋ອງ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"
+                          className="flex-1 min-w-0 h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                        />
+                        {pieceBarcode && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPieceBarcode?.('');
+                              document.getElementById('piece-barcode-input')?.focus();
+                            }}
+                            className="w-8.5 h-8.5 sm:w-9 sm:h-9 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white rounded-lg flex items-center justify-center shrink-0 cursor-pointer shadow-sm active:scale-95 transition-all"
+                            title="ລຶບທັງໝົດ (Xóa tất cả)"
+                          >
+                            <X size={18} weight="bold" />
+                          </button>
+                        )}
+                      </div>
                       {checkBarcodeDuplicate(pieceBarcode) && (
-                        <p className="text-[9.5px] text-amber-800 font-bold mt-1 flex items-center gap-1">
-                          <WarningCircle size={11} weight="fill" className="text-amber-600 shrink-0" />
-                          <span>⚠️ ບາໂຄດນີ້ມີໃນລະບົບແລ້ວ: "{checkBarcodeDuplicate(pieceBarcode)?.name}"</span>
-                        </p>
+                        <div className="mt-1.5 p-2 bg-rose-50 border border-rose-300 rounded-lg flex items-center gap-1.5 text-[10.5px] text-rose-900 font-bold shadow-2xs">
+                          <WarningCircle size={15} weight="fill" className="text-rose-600 shrink-0" />
+                          <span>ບາໂຄດນີ້ມີໃນລະບົບແລ້ວ: "{checkBarcodeDuplicate(pieceBarcode)?.name}"</span>
+                        </div>
                       )}
                     </div>
                   </div>
