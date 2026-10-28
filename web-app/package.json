@@ -14,6 +14,7 @@
     "ota:deploy": "vite build && npx @capgo/cli@latest bundle upload --channel=production --auto-bump=minor --apikey=7d88a2a7-471f-4175-be14-30353ccb8ee3"
   },
   "dependencies": {
+    "@capacitor-community/media": "^9.1.0",
     "@capacitor/cli": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/haptics": "^8.0.2",

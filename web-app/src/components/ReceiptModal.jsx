@@ -24,6 +24,7 @@ import {
 import { markOrderAsPrintedInSupabase } from '../services/supabase';
 import { generateBarcode128, renderReceiptCanvas } from '../services/receiptCanvasEngine';
 import { Capacitor } from '@capacitor/core';
+import { Media } from '@capacitor-community/media';
 import { ThermalPrinter } from '../plugins/thermalPrinter';
 import {
   playSuccessBeep,
@@ -557,8 +558,26 @@ export default function ReceiptModal({
         // A. If running inside Native iPad/iPhone App: Save DIRECTLY into Apple Photos! (Zero share sheet!)
         if (isNativeApp && isIOSPlatform) {
           try {
-            const res = await ThermalPrinter.saveImageToPhotos({ images: base64List });
-            if (res && res.success) {
+            let mediaSaved = false;
+            // 1. Try official Capacitor Community Media plugin
+            try {
+              for (const b64 of base64List) {
+                await Media.savePhoto({ path: b64 });
+              }
+              mediaSaved = true;
+            } catch (mediaErr) {
+              console.warn('[ReceiptModal] @capacitor-community/media savePhoto failed, falling back to ThermalPrinter:', mediaErr);
+            }
+
+            // 2. Fallback to ThermalPrinter.saveImageToPhotos
+            if (!mediaSaved) {
+              const res = await ThermalPrinter.saveImageToPhotos({ images: base64List });
+              if (res && res.success) {
+                mediaSaved = true;
+              }
+            }
+
+            if (mediaSaved) {
               playSuccessBeep('receipt');
               setPrintFeedback({
                 type: 'success',
@@ -570,7 +589,7 @@ export default function ReceiptModal({
               return;
             }
           } catch (nativeErr) {
-            console.warn('[ReceiptModal] Native save to Photos failed, falling back:', nativeErr);
+            console.warn('[ReceiptModal] Native save to Photos failed, falling back to Share Sheet:', nativeErr);
           }
         }
 
@@ -631,8 +650,24 @@ export default function ReceiptModal({
       // A. If running inside Native iPad/iPhone App: Save DIRECTLY into Apple Photos! (Zero share sheet!)
       if (isNativeApp && isIOSPlatform) {
         try {
-          const res = await ThermalPrinter.saveImageToPhotos({ base64: dataUrl });
-          if (res && res.success) {
+          let mediaSaved = false;
+          // 1. Try official Capacitor Community Media plugin
+          try {
+            await Media.savePhoto({ path: dataUrl });
+            mediaSaved = true;
+          } catch (mediaErr) {
+            console.warn('[ReceiptModal] @capacitor-community/media savePhoto failed, falling back to ThermalPrinter:', mediaErr);
+          }
+
+          // 2. Fallback to ThermalPrinter.saveImageToPhotos
+          if (!mediaSaved) {
+            const res = await ThermalPrinter.saveImageToPhotos({ base64: dataUrl });
+            if (res && res.success) {
+              mediaSaved = true;
+            }
+          }
+
+          if (mediaSaved) {
             playSuccessBeep('receipt');
             setPrintFeedback({
               type: 'success',
@@ -644,7 +679,7 @@ export default function ReceiptModal({
             return;
           }
         } catch (nativeErr) {
-          console.warn('[ReceiptModal] Native save to Photos failed, falling back:', nativeErr);
+          console.warn('[ReceiptModal] Native save to Photos failed, falling back to Share Sheet:', nativeErr);
         }
       }
 
