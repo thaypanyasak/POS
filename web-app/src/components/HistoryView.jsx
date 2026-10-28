@@ -493,7 +493,8 @@ export default function HistoryView({
   useHardwareBarcodeScanner({
     onScan: handleScanBarcode,
     enabled: true,
-    maxInterval: 75,
+    maxInterval: 180,
+    duplicateInterval: 300,
     minLength: 3,
     preventDefaultOnEnter: true,
     cleanActiveInput: true,

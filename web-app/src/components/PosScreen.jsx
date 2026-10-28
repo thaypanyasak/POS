@@ -333,14 +333,15 @@ export default function PosScreen({
   };
 
   // Global Hardware Barcode Scanner Listener (USB / OTG / Bluetooth HID Keyboard)
-  // Auto-detects rapid keystrokes (< 50ms) ending in Enter without requiring focus
+  // Auto-detects rapid keystrokes ending in Enter without requiring focus
   useHardwareBarcodeScanner({
     onScan: handleScanBarcode,
     enabled: true,
-    maxInterval: 50,
+    maxInterval: 180,
     minLength: 3,
     preventDefaultOnEnter: true,
     cleanActiveInput: true,
+    duplicateInterval: 250,
   });
 
   const handleSearchKeyDown = (e) => {
@@ -1693,6 +1694,8 @@ export default function PosScreen({
               />
               <input
                 ref={searchInputRef}
+                id="pos-search-input"
+                data-barcode-clear="true"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

@@ -278,7 +278,8 @@ export default function ProductFormModal({
       playSuccessBeep();
     },
     enabled: isOpen,
-    maxInterval: 50,
+    maxInterval: 180,
+    duplicateInterval: 300,
     minLength: 3,
     preventDefaultOnEnter: true,
     cleanActiveInput: true,

@@ -446,6 +446,17 @@ export default function ProductsView({
     }
   };
 
+  // Global Hardware Barcode Scanner Listener (USB / OTG / Bluetooth HID Keyboard)
+  useHardwareBarcodeScanner({
+    onScan: handleScanBarcode,
+    enabled: true,
+    maxInterval: 180,
+    minLength: 3,
+    preventDefaultOnEnter: true,
+    cleanActiveInput: true,
+    duplicateInterval: 300,
+  });
+
   // Auto-close category dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event) {
