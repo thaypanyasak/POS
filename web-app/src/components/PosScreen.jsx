@@ -1593,16 +1593,9 @@ export default function PosScreen({
       >
         {/* Hàng tổng tiền: Thu nhỏ font chữ, hiển thị kèm tổng số mục sản phẩm */}
         <div className="flex items-baseline justify-between mb-2">
-          <div className="flex flex-col">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              ຍອດລວມ (TOTAL):
-            </span>
-            {cart.length > 0 && (
-              <span className="text-[11px] font-bold text-teal-700">
-                {cart.length} ລາຍການ
-              </span>
-            )}
-          </div>
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            ຍອດລວມ (TOTAL):
+          </span>
           <div className="flex items-baseline gap-1">
             <span className="text-lg sm:text-xl font-bold text-slate-900 font-mono tracking-tight tabular-nums">
               {formatDots(cartSubtotal)}
