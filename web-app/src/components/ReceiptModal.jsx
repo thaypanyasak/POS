@@ -532,8 +532,14 @@ export default function ReceiptModal({
 
       const file = new File([blob], fileName, { type: 'image/png' });
 
-      // If Web Share API with files is supported (e.g. iPhone Safari / Capacitor WKWebView)
-      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+      const isIOS = typeof navigator !== 'undefined' && (
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+        Capacitor.getPlatform() === 'ios'
+      );
+
+      // On iOS (iPhone / iPad): Use Web Share API so iOS native modal opens with "Save Image" to Photos
+      if (isIOS && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: `ໃບບິນ #${receipt.receiptNumber || ''}`,
