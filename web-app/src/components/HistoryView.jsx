@@ -81,14 +81,48 @@ export default function HistoryView({
   // Customer Debt Recovery Modal state
   const [debtModalTx, setDebtModalTx] = useState(null);
 
-  // Tab count calculations
+  // 1. Transactions filtered strictly by the currently selected date range (today, yesterday, 7days, all, custom)
+  const dateFilteredTransactions = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+    const endOfYesterday = new Date(startOfToday.getTime() - 1);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    let list = transactions;
+    if (dateFilter === 'today') {
+      list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) >= startOfToday);
+    } else if (dateFilter === 'yesterday') {
+      list = list.filter((tx) => {
+        const d = new Date(tx.createdAt || tx.created_at);
+        return d >= startOfYesterday && d <= endOfYesterday;
+      });
+    } else if (dateFilter === '7days') {
+      list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) >= sevenDaysAgo);
+    } else if (dateFilter === 'custom') {
+      if (startDate) {
+        const s = new Date(startDate);
+        s.setHours(0, 0, 0, 0);
+        list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) >= s);
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        e.setHours(23, 59, 59, 999);
+        list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) <= e);
+      }
+    }
+    return list;
+  }, [transactions, dateFilter, startDate, endDate]);
+
+  // 2. Tab count calculations (Badges on tabs: ທັງໝົດ, ເງິນສົດ, ເງິນໂອນ, ຕິດໜີ້, ຍົກເລີກແລ້ວ)
+  // Strictly filtered by the currently selected date range (ມື້ນີ້, ທັງໝົດ, ມື້ວານ, 7 ມື້...)
   const counts = useMemo(() => {
     let cash = 0;
     let transfer = 0;
     let debt = 0;
     let cancelled = 0;
 
-    transactions.forEach((tx) => {
+    dateFilteredTransactions.forEach((tx) => {
       const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
       if (isCancelled) {
         cancelled++;
@@ -108,22 +142,19 @@ export default function HistoryView({
       if (isDebtOrder) {
         debt++;
       } else if (
-        method === 'cash' ||
-        method === 'ເງິນສົດ'
-      ) {
-        cash++;
-      } else if (
         method === 'transfer' ||
         method === 'qrtransfer' ||
         method === 'onepay' ||
         method === 'qr'
       ) {
         transfer++;
+      } else {
+        cash++;
       }
     });
 
-    return { cash, transfer, debt, cancelled, total: transactions.length };
-  }, [transactions]);
+    return { cash, transfer, debt, cancelled, total: dateFilteredTransactions.length };
+  }, [dateFilteredTransactions]);
 
   // Counts of transactions for each date pill button
   const dateCounts = useMemo(() => {
@@ -156,35 +187,6 @@ export default function HistoryView({
 
   // Dynamic statistics calculated specifically for the CURRENTLY SELECTED timeframe
   const selectedPeriodStats = useMemo(() => {
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
-    const endOfYesterday = new Date(startOfToday.getTime() - 1);
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-    let list = transactions;
-    if (dateFilter === 'today') {
-      list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) >= startOfToday);
-    } else if (dateFilter === 'yesterday') {
-      list = list.filter((tx) => {
-        const d = new Date(tx.createdAt || tx.created_at);
-        return d >= startOfYesterday && d <= endOfYesterday;
-      });
-    } else if (dateFilter === '7days') {
-      list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) >= sevenDaysAgo);
-    } else if (dateFilter === 'custom') {
-      if (startDate) {
-        const s = new Date(startDate);
-        s.setHours(0, 0, 0, 0);
-        list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) >= s);
-      }
-      if (endDate) {
-        const e = new Date(endDate);
-        e.setHours(23, 59, 59, 999);
-        list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) <= e);
-      }
-    }
-
     let totalBills = 0;
     let totalRevenue = 0;
     let cashBills = 0;
@@ -194,7 +196,7 @@ export default function HistoryView({
     let debtBills = 0;
     let debtAmount = 0;
 
-    list.forEach((tx) => {
+    dateFilteredTransactions.forEach((tx) => {
       totalBills++; // Count all transactions in this timeframe
 
       const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
@@ -211,9 +213,6 @@ export default function HistoryView({
       if (isDebt) {
         debtBills++;
         debtAmount += remainingDebt;
-      } else if (method === 'cash' || method === 'ເງິນສົດ') {
-        cashBills++;
-        cashRevenue += rev;
       } else if (method === 'transfer' || method === 'qrtransfer' || method === 'onepay' || method === 'qr') {
         transferBills++;
         transferRevenue += rev;
@@ -233,7 +232,7 @@ export default function HistoryView({
       debtBills,
       debtAmount,
     };
-  }, [transactions, dateFilter, startDate, endDate]);
+  }, [dateFilteredTransactions]);
 
   const selectedPeriodLabel = useMemo(() => {
     if (dateFilter === 'today') return 'ມື້ນີ້';
@@ -252,9 +251,9 @@ export default function HistoryView({
 
   const unreadCount = unreadOrderIds ? unreadOrderIds.size : 0;
 
-  // Filtering pipeline: Tab Filter -> Date Filter -> Search Filter
+  // Filtering pipeline: Date Filter (dateFilteredTransactions) -> Tab Filter -> Search Filter
   const filteredTransactions = useMemo(() => {
-    let list = transactions;
+    let list = dateFilteredTransactions;
 
     // 1. Primary Tab Filtering
     if (activeTab === 'cash') {
@@ -265,7 +264,12 @@ export default function HistoryView({
         const status = (tx.paymentStatus || '').toUpperCase();
         const debt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
         const isDebt = status === 'DEBT' || status === 'PARTIAL' || debt > 0 || method === 'debt';
-        return !isDebt && (method === 'cash' || method === 'ເງິນສົດ');
+        const isTransfer =
+          method === 'transfer' ||
+          method === 'qrtransfer' ||
+          method === 'onepay' ||
+          method === 'qr';
+        return !isDebt && !isTransfer;
       });
     } else if (activeTab === 'transfer') {
       list = list.filter((tx) => {
@@ -294,35 +298,6 @@ export default function HistoryView({
       });
     } else if (activeTab === 'cancelled') {
       list = list.filter((tx) => tx.status === 'cancelled' || tx.isCancelled);
-    }
-
-    // 2. Date Range Filtering
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
-    const endOfYesterday = new Date(startOfToday.getTime() - 1);
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-    if (dateFilter === 'today') {
-      list = list.filter((tx) => new Date(tx.createdAt) >= startOfToday);
-    } else if (dateFilter === 'yesterday') {
-      list = list.filter((tx) => {
-        const d = new Date(tx.createdAt);
-        return d >= startOfYesterday && d <= endOfYesterday;
-      });
-    } else if (dateFilter === '7days') {
-      list = list.filter((tx) => new Date(tx.createdAt) >= sevenDaysAgo);
-    } else if (dateFilter === 'custom') {
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        list = list.filter((tx) => new Date(tx.createdAt) >= start);
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        list = list.filter((tx) => new Date(tx.createdAt) <= end);
-      }
     }
 
     // 3. Search query filter: Mã bill, tên khách hàng, hình thức thanh toán VÀ tên sản phẩm / barcode / đơn vị trong bill
@@ -365,7 +340,7 @@ export default function HistoryView({
 
       return matchItem;
     });
-  }, [transactions, activeTab, dateFilter, startDate, endDate, searchTerm]);
+  }, [dateFilteredTransactions, activeTab, searchTerm]);
 
   // Configurable Pagination States (Default 50, with 20 | 50 | 100 | 200 | ALL options)
   const [pageSize, setPageSize] = useState(50);
