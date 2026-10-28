@@ -703,7 +703,7 @@ export default function App() {
   const [crateDepositFee, setCrateDepositFee] = useState('30.000');
 
   // Stock Tracking Toggle & Initial Stock
-  const [trackStock, setTrackStock] = useState(true);
+  const [trackStock, setTrackStock] = useState(false);
   const [stockCartons, setStockCartons] = useState('0');
   const [stockPacks, setStockPacks] = useState('0');
   const [stockPieces, setStockPieces] = useState('0');
@@ -1057,8 +1057,8 @@ export default function App() {
     setLastModifiedCostField(null);
     setHasCrateDeposit(true);
     setCrateDepositFee('30.000');
-    setTrackStock(true);
-    setStockCartons('10');
+    setTrackStock(false);
+    setStockCartons('0');
     setStockPacks('0');
     setStockPieces('0');
   };
@@ -1083,9 +1083,9 @@ export default function App() {
     setNewProdCostKip(lak > 0 ? formatDots(lak) : '');
     setLastModifiedCostField(null);
     setHasCrateDeposit(false);
-    setTrackStock(true);
-    setStockCartons('10');
-    setStockPacks('2');
+    setTrackStock(false);
+    setStockCartons('0');
+    setStockPacks('0');
     setStockPieces('0');
   };
 
@@ -1107,8 +1107,8 @@ export default function App() {
     setNewProdCostKip(lak > 0 ? formatDots(lak) : '');
     setLastModifiedCostField(null);
     setHasCrateDeposit(false);
-    setTrackStock(true);
-    setStockCartons('10');
+    setTrackStock(false);
+    setStockCartons('0');
     setStockPacks('0');
     setStockPieces('0');
   };
@@ -1130,10 +1130,10 @@ export default function App() {
     setNewProdCostKip(lak > 0 ? formatDots(lak) : '');
     setLastModifiedCostField(null);
     setHasCrateDeposit(false);
-    setTrackStock(true);
-    setStockCartons('5');
+    setTrackStock(false);
+    setStockCartons('0');
     setStockPacks('0');
-    setStockPieces('10');
+    setStockPieces('0');
   };
 
   // Preset 5: Retail piece only (Tier 1 ON, Tier 2 & 3 OFF)
@@ -1150,10 +1150,10 @@ export default function App() {
     setNewProdCostKip(lak > 0 ? formatDots(lak) : '');
     setLastModifiedCostField(null);
     setHasCrateDeposit(false);
-    setTrackStock(true);
+    setTrackStock(false);
     setStockCartons('0');
     setStockPacks('0');
-    setStockPieces('20');
+    setStockPieces('0');
   };
 
   // Open New Product Modal with clean reset
@@ -1200,7 +1200,7 @@ export default function App() {
     setHasCrateDeposit(false);
     setCrateDepositFee('30.000');
 
-    setTrackStock(true);
+    setTrackStock(false);
     setStockCartons('0');
     setStockPacks('0');
     setStockPieces('0');

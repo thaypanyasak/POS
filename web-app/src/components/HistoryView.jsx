@@ -866,19 +866,19 @@ export default function HistoryView({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="ຄົ້ນຫາເລກບິນ, ລູກຄ້າ, ສິນຄ້າ..."
-              className="w-full pl-8 pr-20 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium"
+              className="w-full h-9 pl-8 pr-20 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium"
             />
 
-            {/* Action Buttons: Quick Clear 'X' and Camera Scan */}
-            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+            {/* Action Buttons: Quick Clear 'X' and Camera Scan - Compact height with breathing room */}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
               {searchTerm && (
                 <button
                   type="button"
                   onClick={handleClearSearch}
-                  className="w-7 h-7 sm:w-7.5 sm:h-7.5 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white rounded-lg flex items-center justify-center shrink-0 cursor-pointer shadow-sm active:scale-95 transition-all"
+                  className="w-6 h-6 sm:w-6.5 sm:h-6.5 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white rounded-md flex items-center justify-center shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all"
                   title="ລຶບການຄົ້ນຫາ (Xóa tất cả)"
                 >
-                  <X size={15} weight="bold" />
+                  <X size={13} weight="bold" />
                 </button>
               )}
 
@@ -889,11 +889,11 @@ export default function HistoryView({
                   playActionClickBeep();
                   setScannerOpen(true);
                 }}
-                className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center justify-center relative active:scale-95"
+                className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-md bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center justify-center relative active:scale-95"
                 title="ເປີດກ້ອງສະແກນບາໂຄດບິນ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
               >
-                <Barcode size={16} weight="bold" />
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse absolute top-1 right-1" title="Hardware Scanner Ready" />
+                <Barcode size={15} weight="bold" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse absolute top-0.5 right-0.5" title="Hardware Scanner Ready" />
               </button>
             </div>
           </div>
