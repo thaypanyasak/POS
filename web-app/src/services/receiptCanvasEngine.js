@@ -1135,7 +1135,27 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
 // ─── Public API: Render Full Receipt Canvas ───────────────────────────────────
 export async function renderReceiptCanvas(receipt, lang = 'lo', options = {}) {
   if (!receipt) throw new Error('Receipt data is missing');
-  const pageInfo = options?.pageInfo || null;
+  let pageInfo = options?.pageInfo || null;
+
+  // Auto-derive pageInfo if caller passed { itemsPerPage, page }
+  if (!pageInfo && options?.itemsPerPage > 0) {
+    const allItems = receipt.items?.length > 0 ? receipt.items : (receipt.sale_transaction_items || []);
+    const totalCount = allItems.length;
+    const itemsPerPage = Number(options.itemsPerPage);
+    const totalPages = Math.max(1, Math.ceil(totalCount / itemsPerPage));
+    const p = Math.max(1, Math.min(Number(options.page) || 1, totalPages));
+    const start = (p - 1) * itemsPerPage;
+    const end = Math.min(start + itemsPerPage, totalCount);
+    pageInfo = {
+      currentPage: p,
+      totalPages,
+      startIndex: start,
+      endIndex: end,
+      isFirstPage: p === 1,
+      isLastPage: p === totalPages,
+    };
+  }
+
   const customProducts = options?.products || receipt?.products || null;
 
   // Pre-load fonts based on selected language

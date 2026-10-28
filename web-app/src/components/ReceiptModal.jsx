@@ -507,14 +507,85 @@ export default function ReceiptModal({
     }
   };
 
-  // Save Receipt Canvas as Image (Saves directly to iPhone Photos / Photo Library via Web Share API)
-  const handleSaveReceiptImage = async () => {
+  // Save Receipt Canvas as Image (Supports single page or all pages for multi-page receipts)
+  const handleSaveReceiptImage = async (saveAllParam = true) => {
     if (isSavingImage) return;
     setIsSavingImage(true);
     try {
       playActionClickBeep('receipt');
+
+      const isIOS = typeof navigator !== 'undefined' && (
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+        Capacitor.getPlatform() === 'ios'
+      );
+
+      // If called with an event object or boolean, normalize to boolean
+      const saveAll = typeof saveAllParam === 'boolean' ? saveAllParam : true;
+
+      // Multi-page batch save: save all pages at once
+      if (saveAll && isSplitActive && totalPages > 1) {
+        const filesToShare = [];
+
+        for (let p = 1; p <= totalPages; p++) {
+          const pInfo = getPageInfo(p);
+          const canvas = await renderReceiptCanvas(receipt, receiptLanguage, {
+            pageInfo: pInfo,
+            itemsPerPage,
+            page: p,
+            products,
+          });
+          if (canvas) {
+            const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+            if (blob) {
+              const fileName = `bill_${receipt.receiptNumber || 'INV'}_p${p}.png`;
+              filesToShare.push(new File([blob], fileName, { type: 'image/png' }));
+            }
+          }
+        }
+
+        if (filesToShare.length === 0) throw new Error('Could not render receipt pages');
+
+        // On iOS (iPhone / iPad): Share all files at once -> User taps "Save X Images" in 1 tap!
+        if (isIOS && navigator.canShare && navigator.canShare({ files: filesToShare })) {
+          await navigator.share({
+            files: filesToShare,
+            title: `ໃບບິນ #${receipt.receiptNumber || ''} (${totalPages} ໜ້າ)`,
+          });
+          playSuccessBeep('receipt');
+          setPrintFeedback({
+            type: 'success',
+            message: receiptLanguage === 'vi' ? `Đã mở bảng lưu cả ${totalPages} ảnh vào iPhone!` : `ບັນທຶກທັງໝົດ ${totalPages} ຮູບລົງ iPhone ສຳເລັດ!`,
+          });
+          setTimeout(() => setPrintFeedback(null), 4000);
+          return;
+        }
+
+        // On Desktop / Web: Download all files sequentially
+        for (const file of filesToShare) {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(file);
+          a.download = file.name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          await new Promise((r) => setTimeout(r, 200));
+        }
+
+        playSuccessBeep('receipt');
+        setPrintFeedback({
+          type: 'success',
+          message: receiptLanguage === 'vi' ? `Đã tải toàn bộ ${totalPages} ảnh hóa đơn về máy!` : `ບັນທຶກທັງໝົດ ${totalPages} ຮູບໃບບິນສຳເລັດ!`,
+        });
+        setTimeout(() => setPrintFeedback(null), 4000);
+        return;
+      }
+
+      // Single page save (current active page or single slip)
       const pageNum = isSplitActive && totalPages > 1 ? activePage : null;
+      const pInfo = isSplitActive && totalPages > 1 ? getPageInfo(activePage) : null;
       const canvas = await renderReceiptCanvas(receipt, receiptLanguage, {
+        pageInfo: pInfo,
         itemsPerPage: isSplitActive ? itemsPerPage : 0,
         page: pageNum,
         products,
@@ -531,12 +602,6 @@ export default function ReceiptModal({
       if (!blob) throw new Error('Blob conversion failed');
 
       const file = new File([blob], fileName, { type: 'image/png' });
-
-      const isIOS = typeof navigator !== 'undefined' && (
-        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
-        Capacitor.getPlatform() === 'ios'
-      );
 
       // On iOS (iPhone / iPad): Use Web Share API so iOS native modal opens with "Save Image" to Photos
       if (isIOS && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -723,6 +788,20 @@ export default function ReceiptModal({
                 title={receiptLanguage === 'vi' ? 'Trang sau' : 'ໜ້າຕໍ່ໄປ'}
               >
                 <CaretRight size={13} weight="bold" />
+              </button>
+
+              <div className="w-[1px] h-3.5 bg-teal-200 mx-0.5" />
+
+              {/* Quick Save Current Page Image */}
+              <button
+                type="button"
+                onClick={() => handleSaveReceiptImage(false)}
+                disabled={isSavingImage || isPrinting}
+                className="px-1.5 h-6 flex items-center gap-1 rounded-lg text-teal-800 hover:bg-teal-100/70 text-[10px] font-bold transition-all cursor-pointer"
+                title={receiptLanguage === 'vi' ? `Lưu riêng ảnh trang ${activePage}` : `ບັນທຶກສະເພາະຮູບໜ້າ ${activePage}`}
+              >
+                <FileImage size={12} weight="bold" className="text-teal-700" />
+                <span>{receiptLanguage === 'vi' ? `Lưu tờ ${activePage}` : `ຮູບໜ້າ ${activePage}`}</span>
               </button>
             </div>
           </div>
@@ -1306,17 +1385,25 @@ export default function ReceiptModal({
           {/* Save Image Button (Save to iPhone Photos / Download) */}
           <button
             type="button"
-            onClick={handleSaveReceiptImage}
+            onClick={() => handleSaveReceiptImage(true)}
             disabled={isSavingImage || isPrinting}
             className="py-2.5 px-3 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 disabled:opacity-60 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer shrink-0"
-            title={receiptLanguage === 'vi' ? 'Lưu hóa đơn thành ảnh vào iPhone' : 'ບັນທຶກຮູບໃບບິນລົງ Photos'}
+            title={
+              receiptLanguage === 'vi'
+                ? (isSplitActive && totalPages > 1 ? `Lưu cả ${totalPages} tờ thành ảnh vào iPhone/máy tính` : 'Lưu hóa đơn thành ảnh vào iPhone')
+                : (isSplitActive && totalPages > 1 ? `ບັນທຶກທັງໝົດ ${totalPages} ຮູບລົງ iPhone/ເຄື່ອງ` : 'ບັນທຶກຮູບໃບບິນລົງ Photos')
+            }
           >
             {isSavingImage ? (
               <CircleNotch size={15} className="animate-spin text-teal-600 shrink-0" />
             ) : (
               <FileImage size={15} weight="bold" className="text-teal-600 shrink-0" />
             )}
-            <span>{receiptLanguage === 'vi' ? 'Lưu ảnh' : 'ບັນທຶກຮູບ'}</span>
+            <span>
+              {isSplitActive && totalPages > 1
+                ? (receiptLanguage === 'vi' ? `Lưu cả ${totalPages} tờ` : `ບັນທຶກທັງໝົດ (${totalPages} ໃບ)`)
+                : (receiptLanguage === 'vi' ? 'Lưu ảnh' : 'ບັນທຶກຮູບ')}
+            </span>
           </button>
 
           {/* Close Window Button */}
