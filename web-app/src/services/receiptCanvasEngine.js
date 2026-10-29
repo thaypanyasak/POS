@@ -27,17 +27,17 @@
 // ─── 80mm K80 Physical Constants ──────────────────────────────────────────────
 export const K80 = {
   CANVAS_WIDTH: 576,    // Physical print dots (72 bytes * 8)
-  LEFT_MARGIN: 2,       // Edge-to-edge left (0.25mm safe tolerance to use 100% width)
-  RIGHT_EDGE: 574,      // Edge-to-edge right (576 - 2 = 574 dots)
-  PRINTABLE_WIDTH: 572, // 574 - 2 = 572 (Full utilization of 576 dots)
+  LEFT_MARGIN: 16,      // Clean 16px margin from left edge
+  RIGHT_EDGE: 560,      // Clean 16px margin from right edge (576 - 16 = 560 dots)
+  PRINTABLE_WIDTH: 544, // 560 - 16 = 544 (Safe printable area within 576 dots)
   CENTER_X: 288,        // Symmetry center (576 / 2)
 
-  // 4-Column Grid (Spread across full 576 dots)
-  COL_NAME_X: 2,        // Column 1: Item Name (starts right at left edge)
+  // 4-Column Grid (Spread across safe printable width)
+  COL_NAME_X: 16,       // Column 1: Item Name (starts at left margin)
   COL_NAME_MAX_W: 280,  // Max width 280px (wrap if longer)
   COL_QTY_X: 310,       // Column 2: Qty (centered at 310px)
-  COL_PRICE_X: 435,     // Column 3: Unit Price (right-aligned at 435px)
-  COL_TOTAL_X: 574,     // Column 4: Line Total (right-aligned at 574px)
+  COL_PRICE_X: 430,     // Column 3: Unit Price (right-aligned at 430px)
+  COL_TOTAL_X: 560,     // Column 4: Line Total (right-aligned at 560px)
 };
 
 import { ensureSaysetthaLoaded } from '../utils/saysetthaFont';
@@ -578,12 +578,23 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
       : ` (ໜ້າ ${pageInfo.currentPage}/${pageInfo.totalPages})`;
   }
 
+  if (measureCtx) measureCtx.font = FONTS.TITLE;
+  const titleLines = measureCtx ? wrapText(measureCtx, titleText, K80.PRINTABLE_WIDTH) : [titleText];
+
   if (isDraw) {
     ctx.textBaseline = 'middle';
     ctx.font = FONTS.TITLE;
     ctx.textAlign = 'center';
-    // Shift up 2.5px optically so the base characters sit dead center between borders
-    ctx.fillText(titleText, K80.CENTER_X, bannerMidY - 2.5);
+    if (titleLines.length <= 1) {
+      // Shift up 2.5px optically so the base characters sit dead center between borders
+      ctx.fillText(titleText, K80.CENTER_X, bannerMidY - 2.5);
+    } else {
+      const lineStep = 32;
+      const startTitleY = bannerMidY - ((titleLines.length - 1) * lineStep / 2) - 2;
+      titleLines.forEach((tLine, tIdx) => {
+        ctx.fillText(tLine, K80.CENTER_X, startTitleY + (tIdx * lineStep));
+      });
+    }
     ctx.textBaseline = 'top'; // Reset baseline
   }
 
@@ -778,22 +789,23 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
 
     const rawLineTotal = Number(it.lineTotal || it.line_total) || 0;
     const rawPrice = Number(
-      it.customPrice ??
-      it.effectivePrice ??
-      it.effectiveUnitPrice ??
-      it.unitPrice ??
-      it.unit_price ??
-      it.price ??
-      (receipt.isWholesale
-        ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
-        : (it.unit?.retailPrice ?? 0))
+      (it.customPrice !== undefined && it.customPrice !== null && Number(it.customPrice) > 0)
+        ? it.customPrice
+        : (it.effectivePrice ||
+           it.effectiveUnitPrice ||
+           it.unitPrice ||
+           it.unit_price ||
+           it.price ||
+           (receipt.isWholesale
+             ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
+             : (it.unit?.retailPrice ?? 0)))
     ) || 0;
 
     const price = isOnlyLooseBundle
       ? (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : (rawPrice > 0 ? rawPrice : 0))
-      : (rawPrice > 0 && rawPrice * qty === rawLineTotal
+      : (rawPrice > 0
           ? rawPrice
-          : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : rawPrice));
+          : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : 0));
     const lineTotal = rawLineTotal > 0 ? rawLineTotal : price * qty;
 
     // Line 1: Number + Full Product Name (across full printable width)
@@ -894,15 +906,16 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
   const calculatedTotal = allItems.reduce((sum, it) => {
     const rawLTotal = Number(it.lineTotal || it.line_total);
     const rawPrice = Number(
-      it.customPrice ??
-      it.effectivePrice ??
-      it.effectiveUnitPrice ??
-      it.unitPrice ??
-      it.unit_price ??
-      it.price ??
-      (receipt.isWholesale
-        ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
-        : (it.unit?.retailPrice ?? 0))
+      (it.customPrice !== undefined && it.customPrice !== null && Number(it.customPrice) > 0)
+        ? it.customPrice
+        : (it.effectivePrice ||
+           it.effectiveUnitPrice ||
+           it.unitPrice ||
+           it.unit_price ||
+           it.price ||
+           (receipt.isWholesale
+             ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
+             : (it.unit?.retailPrice ?? 0)))
     ) || 0;
     const qty = Number(it.quantity) || 1;
     const price = rawPrice > 0 ? rawPrice : (rawLTotal > 0 && qty > 0 ? Math.round(rawLTotal / qty) : 0);
@@ -1033,8 +1046,14 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
     y += qrSize + 16;
 
     // Account holder name under QR Code
-    drawCenter('ທ່ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)', y, FONTS.QR_NAME);
-    y += 36;
+    const qrAccountText = 'ທ່ານ ສົມສັກ ( ນ. ຄຳຈູ່ ດັ່ງຈະເລີນ ຂາຍເບຍ)';
+    if (measureCtx) measureCtx.font = FONTS.QR_NAME;
+    const qrAccLines = measureCtx ? wrapText(measureCtx, qrAccountText, K80.PRINTABLE_WIDTH) : [qrAccountText];
+    for (const qLine of qrAccLines) {
+      drawCenter(qLine, y, FONTS.QR_NAME);
+      y += 30;
+    }
+    y += 6;
   }
 
   // 10. SIGNATURES SECTION (Only for real sales / debts; omitted for quotation per user request)
@@ -1111,10 +1130,14 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
 
   // 12. FOOTER (Multi-line Thank You & Inspection / Return Policy)
   const thankYouLines = Array.isArray(L.thankYou) ? L.thankYou : [L.thankYou];
+  if (measureCtx) measureCtx.font = FONTS.FOOTER_BOLD;
   for (const tLine of thankYouLines) {
     if (tLine) {
-      drawCenter(tLine, y, FONTS.FOOTER_BOLD);
-      y += 34;
+      const wrappedT = measureCtx ? wrapText(measureCtx, tLine, K80.PRINTABLE_WIDTH) : [tLine];
+      for (const line of wrappedT) {
+        drawCenter(line, y, FONTS.FOOTER_BOLD);
+        y += 34;
+      }
     }
   }
   y += 4;
@@ -1122,10 +1145,14 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
   const policyLines = isQuotation
     ? (Array.isArray(L.quotationTerms) ? L.quotationTerms : [L.quotationTerms])
     : (Array.isArray(L.returnPolicy) ? L.returnPolicy : [L.returnPolicy]);
+  if (measureCtx) measureCtx.font = FONTS.FOOTER;
   for (const pLine of policyLines) {
     if (pLine) {
-      drawCenter(pLine, y, FONTS.FOOTER);
-      y += 30;
+      const wrappedP = measureCtx ? wrapText(measureCtx, pLine, K80.PRINTABLE_WIDTH) : [pLine];
+      for (const line of wrappedP) {
+        drawCenter(line, y, FONTS.FOOTER);
+        y += 30;
+      }
     }
   }
   // User: phần dưới từ chữ ສິນຄ້າສາມາດປ່ຽນ ຫຼື .... tới cuối trang nó dư khoảng trống nhiều quá bỏ khoảng trống đó đi để tiết kiệm giấy

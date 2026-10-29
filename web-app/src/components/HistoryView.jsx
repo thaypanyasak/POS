@@ -24,6 +24,7 @@ import {
   ChartBar,
   CaretLeft,
   CaretRight,
+  Bell,
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
@@ -68,8 +69,8 @@ export default function HistoryView({
   // 3 Primary Tabs: 'cash' | 'transfer' | 'debt' + 'all' | 'cancelled'
   const [activeTab, setActiveTab] = useState('all');
   
-  // Date range filters: 'today' | 'yesterday' | '7days' | 'all' | 'custom' (default 'today' for fast performance at counter)
-  const [dateFilter, setDateFilter] = useState('today');
+  // Date range filters: 'today' | 'yesterday' | '7days' | 'all' | 'custom' (default 'all' to show all bills immediately)
+  const [dateFilter, setDateFilter] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -121,40 +122,47 @@ export default function HistoryView({
     let transfer = 0;
     let debt = 0;
     let cancelled = 0;
+    let notices = 0;
 
     dateFilteredTransactions.forEach((tx) => {
       const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
       if (isCancelled) {
         cancelled++;
-        return;
-      }
-
-      const method = (tx.paymentMethod || '').toLowerCase();
-      const status = (tx.paymentStatus || '').toUpperCase();
-      const remainingDebt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
-
-      const isDebtOrder =
-        status === 'DEBT' ||
-        status === 'PARTIAL' ||
-        remainingDebt > 0 ||
-        method === 'debt';
-
-      if (isDebtOrder) {
-        debt++;
-      } else if (
-        method === 'transfer' ||
-        method === 'qrtransfer' ||
-        method === 'onepay' ||
-        method === 'qr'
-      ) {
-        transfer++;
       } else {
-        cash++;
+        const method = (tx.paymentMethod || '').toLowerCase();
+        const status = (tx.paymentStatus || '').toUpperCase();
+        const remainingDebt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
+
+        const isDebtOrder =
+          status === 'DEBT' ||
+          status === 'PARTIAL' ||
+          remainingDebt > 0 ||
+          method === 'debt';
+
+        if (isDebtOrder) {
+          debt++;
+        } else if (
+          method === 'transfer' ||
+          method === 'qrtransfer' ||
+          method === 'onepay' ||
+          method === 'qr'
+        ) {
+          transfer++;
+        } else {
+          cash++;
+        }
       }
+
+      const hasNotice = Boolean(
+        (unreadOrderIds && unreadOrderIds.has(tx.id)) ||
+        (updatedOrderIds && updatedOrderIds.has(tx.id)) ||
+        (realtimeHighlights && realtimeHighlights[tx.id])
+      );
+      if (hasNotice) notices++;
     });
 
-    return { cash, transfer, debt, cancelled, total: dateFilteredTransactions.length };
-  }, [dateFilteredTransactions]);
+    return { cash, transfer, debt, cancelled, notices, total: dateFilteredTransactions.length };
+  }, [dateFilteredTransactions, unreadOrderIds, updatedOrderIds, realtimeHighlights]);
 
   // Counts of transactions for each date pill button
   const dateCounts = useMemo(() => {
@@ -298,22 +306,35 @@ export default function HistoryView({
       });
     } else if (activeTab === 'cancelled') {
       list = list.filter((tx) => tx.status === 'cancelled' || tx.isCancelled);
+    } else if (activeTab === 'notifications') {
+      list = list.filter((tx) =>
+        (unreadOrderIds && unreadOrderIds.has(tx.id)) ||
+        (updatedOrderIds && updatedOrderIds.has(tx.id)) ||
+        (realtimeHighlights && realtimeHighlights[tx.id])
+      );
     }
 
     // 3. Search query filter: Mã bill, tên khách hàng, hình thức thanh toán VÀ tên sản phẩm / barcode / đơn vị trong bill
-    // 3. Search query filter: Mã bill, tên khách hàng, hình thức thanh toán VÀ tên sản phẩm / barcode / đơn vị trong bill
     const rawSearch = String(searchTerm || '').replace(/[\r\n\t]/g, '').trim();
     if (!rawSearch) return list;
-    const cleanQ = normalizeLao(rawSearch).replace(/^#/, '');
+
+    // Normalize slashes to hyphens so INV/0644095 matches INV-0644095
+    const normalizedSearch = rawSearch.replace(/[\/\\]/g, '-');
+    const cleanQ = normalizeLao(normalizedSearch).replace(/^#/, '');
     if (!cleanQ) return list;
 
-    return list.filter((tx) => {
+    // If searching by barcode / code and not found in date-filtered list, search across all transactions
+    const searchPool = (dateFilter !== 'all' && rawSearch.length >= 3) ? transactions : list;
+
+    return searchPool.filter((tx) => {
       // 3.1. Tìm theo thông tin chung của đơn hàng (receiptNumber, receipt_number, id, customerName, ...)
-      const txNum = normalizeLao(tx.receiptNumber || tx.receipt_number || '').replace(/^#/, '');
+      const rawNum = tx.receiptNumber || tx.receipt_number || '';
+      const txNum = normalizeLao(rawNum).replace(/^#/, '').replace(/[\/\\]/g, '-');
       const txId = normalizeLao(tx.id || '').replace(/^#/, '');
       const matchBasic =
         (txNum && (txNum === cleanQ || txNum.includes(cleanQ) || cleanQ.includes(txNum))) ||
         (txId && (txId === cleanQ || txId.includes(cleanQ) || cleanQ.includes(txId))) ||
+        (cleanQ.length >= 4 && txNum && txNum.endsWith(cleanQ)) ||
         normalizeLao(tx.customerName).includes(cleanQ) ||
         normalizeLao(tx.paymentMethod).includes(cleanQ) ||
         normalizeLao(tx.status).includes(cleanQ) ||
@@ -340,7 +361,7 @@ export default function HistoryView({
 
       return matchItem;
     });
-  }, [dateFilteredTransactions, activeTab, searchTerm]);
+  }, [dateFilteredTransactions, activeTab, searchTerm, transactions, unreadOrderIds, updatedOrderIds, realtimeHighlights, dateFilter]);
 
   // Configurable Pagination States (Default 50, with 20 | 50 | 100 | 200 | ALL options)
   const [pageSize, setPageSize] = useState(50);
@@ -418,8 +439,22 @@ export default function HistoryView({
   // Replaces the search term without requiring manual clear or backspace
   const handleScanBarcode = (barcode) => {
     if (!barcode) return;
-    const cleanCode = String(barcode).replace(/[\r\n\t\x00-\x1F\x7F]/g, '').trim();
+    let cleanCode = String(barcode).replace(/[\r\n\t\x00-\x1F\x7F]/g, '').trim();
     if (!cleanCode) return;
+
+    // 0. Auto-fix common scanner artifacts (e.g. INV/0644095 -> INV-0644095)
+    cleanCode = cleanCode.replace(/^inv[\/\\]/i, 'INV-');
+
+    // If scanner only captured digits e.g. 0644095, resolve to INV-0644095
+    if (/^\d{6,8}$/.test(cleanCode)) {
+      const foundTx = transactions.find((t) => {
+        const num = (t.receiptNumber || t.receipt_number || '').trim();
+        return num === `INV-${cleanCode}` || num.endsWith(cleanCode);
+      });
+      if (foundTx) {
+        cleanCode = foundTx.receiptNumber || foundTx.receipt_number || `INV-${cleanCode}`;
+      }
+    }
 
     // 1. Immediately reset date and tab filters to 'all' so scanned bill is always visible
     setDateFilter('all');
@@ -493,8 +528,8 @@ export default function HistoryView({
   useHardwareBarcodeScanner({
     onScan: handleScanBarcode,
     enabled: true,
-    maxInterval: 180,
-    duplicateInterval: 300,
+    maxInterval: 50,
+    duplicateInterval: 250,
     minLength: 3,
     preventDefaultOnEnter: true,
     cleanActiveInput: true,
@@ -834,7 +869,7 @@ export default function HistoryView({
             </span>
           </button>
 
-          {/* Tab 5: ຍົກເລີກແລ້ວ */}
+          {/* Tab 5: ຍົກເລີກ */}
           <button
             type="button"
             onClick={() => {
@@ -847,7 +882,33 @@ export default function HistoryView({
                 : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
             }`}
           >
-            <span>ຍົກເລີກແລ້ວ ({counts.cancelled})</span>
+            <span>ຍົກເລີກ ({counts.cancelled})</span>
+          </button>
+
+          {/* Tab 6: ແຈ້ງເຕືອນ (Đơn mới / Sửa mới) */}
+          <button
+            type="button"
+            onClick={() => {
+              playUnitChangeBeep('history');
+              setActiveTab('notifications');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
+              activeTab === 'notifications'
+                ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                : counts.notices > 0
+                ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100/70'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <Bell size={15} weight="bold" />
+            <span>ແຈ້ງເຕືອນ</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                activeTab === 'notifications' ? 'bg-amber-700 text-amber-100' : 'bg-amber-200 text-amber-900'
+              }`}
+            >
+              {counts.notices}
+            </span>
           </button>
         </div>
 

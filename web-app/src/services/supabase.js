@@ -736,6 +736,8 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
       quantity: qty,
       unitPrice: effectivePrice,
       price: effectivePrice,
+      customPrice: effectivePrice,
+      effectivePrice: effectivePrice,
       lineTotal: rawLineTotal,
       isBundle,
       bundleComponents: bundleComps,
@@ -2221,12 +2223,16 @@ export async function updateExistingSaleTransactionInSupabase(
     const prodIdsToFetch = activeDeltas.map(([id]) => id);
 
     // Concurrently fetch all changed products and delete old items in 1 parallel roundtrip!
-    const [productsRes] = await Promise.all([
+    const [productsRes, deleteRes] = await Promise.all([
       prodIdsToFetch.length > 0
         ? supabase.from('products').select('id, current_stock_base_units, track_stock').in('id', prodIdsToFetch)
         : Promise.resolve({ data: [] }),
       supabase.from('sale_transaction_items').delete().eq('transaction_id', txId),
     ]);
+
+    if (deleteRes?.error) {
+      console.error('Error deleting old sale_transaction_items:', deleteRes.error);
+    }
 
     if (productsRes.data && productsRes.data.length > 0) {
       const stockUpdates = productsRes.data
@@ -2252,16 +2258,17 @@ export async function updateExistingSaleTransactionInSupabase(
     // Step 4: Insert new sale_transaction_items
     if (newCartItems && newCartItems.length > 0) {
       const itemsPayload = newCartItems.map((item) => {
-        const prodId = item.product?.id || item.productId || 'p_custom';
-        const unitPrice = Number(
-          item.customPrice !== undefined
-            ? item.customPrice
-            : newTxData.isWholesale
-            ? item.unit?.wholesalePrice
-            : item.unit?.retailPrice
-        ) || 0;
+        const prodId = item.product?.id || item.productId || item.product_id || 'p_custom';
+        const rawCustom = item.customPrice !== undefined && item.customPrice !== null ? Number(item.customPrice) : null;
+        const rawEffective = item.effectivePrice !== undefined && item.effectivePrice !== null ? Number(item.effectivePrice) : null;
+        const rawUnitPrice = item.unitPrice !== undefined && item.unitPrice !== null ? Number(item.unitPrice) : null;
+        const tierPrice = newTxData.isWholesale
+          ? (item.unit?.wholesalePrice ?? item.unit?.retailPrice)
+          : (item.unit?.retailPrice ?? 0);
+        const unitPrice = Number(rawCustom ?? rawEffective ?? rawUnitPrice ?? tierPrice ?? 0) || 0;
         const qty = Number(item.quantity) || 1;
-        const lineTotal = Number(item.lineTotal || (unitPrice * qty));
+        const rawLine = Number(item.lineTotal || item.line_total);
+        const lineTotal = rawLine > 0 ? rawLine : (unitPrice * qty);
         const fullMult = Number(item.effectiveMultiplier ?? item.unit?.multiplier) || 1;
         const multiplier = item.isHalfCarton ? fullMult / 2 : fullMult;
         const baseCost = Number(item.product?.costPerBaseUnit) || 0;
@@ -2286,7 +2293,11 @@ export async function updateExistingSaleTransactionInSupabase(
         };
       });
 
-      await supabase.from('sale_transaction_items').insert(itemsPayload);
+      const { error: insErr } = await supabase.from('sale_transaction_items').insert(itemsPayload);
+      if (insErr) {
+        console.error('Error inserting new sale_transaction_items:', insErr);
+        return { success: false, error: insErr.message };
+      }
     }
 
     // Step 5: Update sale_transactions header

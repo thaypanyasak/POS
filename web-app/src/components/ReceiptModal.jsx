@@ -1120,22 +1120,23 @@ export default function ReceiptModal({
 
                 const rawLineTotal = Number(it.lineTotal || it.line_total) || 0;
                 const rawPrice = Number(
-                  it.customPrice ??
-                  it.effectivePrice ??
-                  it.effectiveUnitPrice ??
-                  it.unitPrice ??
-                  it.unit_price ??
-                  it.price ??
-                  (receipt.isWholesale
-                    ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
-                    : (it.unit?.retailPrice ?? 0))
+                  (it.customPrice !== undefined && it.customPrice !== null && Number(it.customPrice) > 0)
+                    ? it.customPrice
+                    : (it.effectivePrice ||
+                       it.effectiveUnitPrice ||
+                       it.unitPrice ||
+                       it.unit_price ||
+                       it.price ||
+                       (receipt.isWholesale
+                         ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
+                         : (it.unit?.retailPrice ?? 0)))
                 ) || 0;
 
                 const price = isOnlyLooseBundle
                   ? (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : (rawPrice > 0 ? rawPrice : 0))
-                  : (rawPrice > 0 && rawPrice * qty === rawLineTotal
+                  : (rawPrice > 0
                       ? rawPrice
-                      : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : rawPrice));
+                      : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : 0));
                 const baseLineTotal = rawLineTotal > 0 ? rawLineTotal : price * qty;
                 const isCrateEligible = !isBundleItem && Boolean(
                   it.hasCrateDeposit ||
@@ -1248,15 +1249,16 @@ export default function ReceiptModal({
                 const calculatedTotal = receiptItems.reduce((sum, it) => {
               const rawLTotal = Number(it.lineTotal || it.line_total);
               const rawPrice = Number(
-                it.customPrice ??
-                it.effectivePrice ??
-                it.effectiveUnitPrice ??
-                it.unitPrice ??
-                it.unit_price ??
-                it.price ??
-                (receipt.isWholesale
-                  ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
-                  : (it.unit?.retailPrice ?? 0))
+                (it.customPrice !== undefined && it.customPrice !== null && Number(it.customPrice) > 0)
+                  ? it.customPrice
+                  : (it.effectivePrice ||
+                     it.effectiveUnitPrice ||
+                     it.unitPrice ||
+                     it.unit_price ||
+                     it.price ||
+                     (receipt.isWholesale
+                       ? (it.unit?.wholesalePrice ?? it.unit?.retailPrice ?? 0)
+                       : (it.unit?.retailPrice ?? 0)))
               ) || 0;
               const qty = Number(it.quantity) || 1;
               const price = rawPrice > 0 ? rawPrice : (rawLTotal > 0 && qty > 0 ? Math.round(rawLTotal / qty) : 0);

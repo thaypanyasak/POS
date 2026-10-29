@@ -2396,8 +2396,14 @@ export default function App() {
           productName: it.product?.name || it.productName,
           name_vi: it.product?.name_vi || it.product?.nameVi || it.name_vi || it.nameVi || '',
           nameVi: it.product?.name_vi || it.product?.nameVi || it.name_vi || it.nameVi || '',
+          unit: {
+            ...(it.unit || {}),
+            retailPrice: effectivePrice,
+            wholesalePrice: effectivePrice,
+          },
           customPrice: effectivePrice,
           unitPrice: effectivePrice,
+          effectivePrice,
           effectiveMultiplier,
           isHalfCarton: Boolean(it.isHalfCarton),
           selectedPriceTier: it.selectedPriceTier || 1,
@@ -2487,7 +2493,7 @@ export default function App() {
           editingOldTransaction.id,
           editingOldTransaction.items || editingOldTransaction.sale_transaction_items || [],
           receipt,
-          cart
+          receiptItems
         );
 
         if (!res.success) {
@@ -2671,19 +2677,20 @@ export default function App() {
 
       const unitName = it.unit?.unitName || it.unitName || it.unit_name || 'ອັນ';
       const multiplier = Number(it.unit?.multiplier || it.multiplier) || 1;
-      const unitPrice = Number(it.unit?.retailPrice || it.unit_price) || 0;
+      const rawUnitPrice = Number(it.unitPrice ?? it.unit_price ?? it.unit?.retailPrice ?? it.price) || 0;
+      const qty = Number(it.quantity) || 1;
+      const rawLineTotal = Number(it.lineTotal || it.line_total) || (rawUnitPrice * qty);
+      const effectiveUnitPrice = rawUnitPrice > 0 ? rawUnitPrice : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : 0);
 
       const matchedUnit = foundProd.units?.find((u) => u.unitName === unitName) || {
         id: `u_${unitName}`,
         unitName,
         multiplier,
-        retailPrice: unitPrice,
-        wholesalePrice: unitPrice,
+        retailPrice: effectiveUnitPrice,
+        wholesalePrice: effectiveUnitPrice,
       };
 
-      const qty = Number(it.quantity) || 1;
-      const rawLineTotal = Number(it.lineTotal || it.line_total) || (unitPrice * qty);
-      const baseTotal = unitPrice * qty;
+      const baseTotal = effectiveUnitPrice * qty;
       const diff = rawLineTotal > baseTotal ? (rawLineTotal - baseTotal) : 0;
       const fee = Number(foundProd.crateDepositFee || it.crateDepositFee) || 30000;
       const crateDepositTotal = Number(it.crateDepositTotal) || (diff > 0 ? diff : 0);
@@ -2692,14 +2699,19 @@ export default function App() {
 
       return {
         product: foundProd,
-        unit: matchedUnit,
+        unit: {
+          ...matchedUnit,
+          retailPrice: effectiveUnitPrice > 0 ? effectiveUnitPrice : matchedUnit.retailPrice,
+          wholesalePrice: effectiveUnitPrice > 0 ? effectiveUnitPrice : matchedUnit.wholesalePrice,
+        },
         quantity: qty,
-        customPrice: unitPrice,
+        unitPrice: effectiveUnitPrice,
+        customPrice: effectiveUnitPrice > 0 ? effectiveUnitPrice : null,
         noEmptyCrates: hasMissingCrates,
         missingCratesCount: missingCount,
         crateDepositFee: fee,
         crateDepositTotal,
-        lineTotal: rawLineTotal,
+        lineTotal: rawLineTotal > 0 ? rawLineTotal : (effectiveUnitPrice * qty),
       };
     });
 

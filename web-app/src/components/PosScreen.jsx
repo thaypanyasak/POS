@@ -356,11 +356,25 @@ export default function PosScreen({
   const handleApplyPriceOverride = (productId, unitId, newPrice, reason) => {
     setCart(
       cart.map((item) => {
-        if (!item.isBundle && item.product?.id === productId && item.unit?.id === unitId) {
+        if (!item.isBundle && item.product?.id === productId && (item.unit?.id === unitId || !unitId)) {
+          const parsedPrice = Number(newPrice) || 0;
+          const qty = Number(item.quantity) || 1;
+          const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
+          const missingCount = item.noEmptyCrates ? (Number(item.missingCratesCount ?? qty) || 0) : 0;
+          const crateFee = missingCount * feePerCrate;
+          const newLineTotal = (parsedPrice * qty) + crateFee;
+
           return {
             ...item,
-            customPrice: newPrice,
-            overrideReason: reason || 'ລູກຄ້າປະຈຳ',
+            customPrice: parsedPrice,
+            unitPrice: parsedPrice,
+            lineTotal: newLineTotal,
+            unit: {
+              ...(item.unit || {}),
+              retailPrice: parsedPrice,
+              wholesalePrice: parsedPrice,
+            },
+            overrideReason: reason || 'ປັບລາຄາພິເສດ',
           };
         }
         return item;
@@ -371,9 +385,25 @@ export default function PosScreen({
   const handleResetPriceOverride = (productId, unitId) => {
     setCart(
       cart.map((item) => {
-        if (!item.isBundle && item.product?.id === productId && item.unit?.id === unitId) {
+        if (!item.isBundle && item.product?.id === productId && (item.unit?.id === unitId || !unitId)) {
           const { customPrice, overrideReason, ...rest } = item;
-          return rest;
+          const tierPrice = getEffectiveUnitPrice(item.unit, item.selectedPriceTier || 1);
+          const standardPrice = item.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
+          const qty = Number(item.quantity) || 1;
+          const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
+          const missingCount = item.noEmptyCrates ? (Number(item.missingCratesCount ?? qty) || 0) : 0;
+          const crateFee = missingCount * feePerCrate;
+
+          return {
+            ...rest,
+            customPrice: null,
+            unitPrice: standardPrice,
+            lineTotal: (standardPrice * qty) + crateFee,
+            unit: {
+              ...(item.unit || {}),
+              retailPrice: tierPrice,
+            },
+          };
         }
         return item;
       })

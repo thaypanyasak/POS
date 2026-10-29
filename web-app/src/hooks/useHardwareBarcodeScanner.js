@@ -84,7 +84,7 @@ const LAO_THAI_TO_ASCII_MAP = {
 /**
  * Resolves physical keystroke into clean ASCII barcode character regardless of active keyboard language
  */
-function getNormalizedBarcodeChar(e) {
+function getNormalizedBarcodeChar(e, currentBuffer = '') {
   // 1. Primary: Use physical key code (e.code) to bypass all active keyboard layouts (Lao, Thai, VN, etc.)
   if (e.code) {
     if (e.code.startsWith('Digit') && e.code.length === 6) {
@@ -98,18 +98,29 @@ function getNormalizedBarcodeChar(e) {
       return e.shiftKey ? letter.toUpperCase() : letter.toLowerCase();
     }
     if (e.code === 'Minus' || e.code === 'NumpadSubtract') return '-';
-    if (e.code === 'Slash' || e.code === 'NumpadDivide') return '/';
+    if (e.code === 'Slash' || e.code === 'NumpadDivide') {
+      if (/^(inv|meii)$/i.test(currentBuffer) || /[\-_/](inv|meii)$/i.test(currentBuffer)) {
+        return '-';
+      }
+      return '/';
+    }
     if (e.code === 'Period' || e.code === 'NumpadDecimal') return '.';
   }
 
   // 2. Secondary fallback: Check if e.key is a known Lao or Thai character in the full mapping
   if (e.key && LAO_THAI_TO_ASCII_MAP[e.key]) {
     const mapped = LAO_THAI_TO_ASCII_MAP[e.key];
+    if (mapped === '/' && (/^(inv|meii)$/i.test(currentBuffer) || /[\-_/](inv|meii)$/i.test(currentBuffer))) {
+      return '-';
+    }
     return e.shiftKey ? mapped.toUpperCase() : mapped;
   }
 
   // 3. Fallback: single printable character as-is
   if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    if (e.key === '/' && (/^(inv|meii)$/i.test(currentBuffer) || /[\-_/](inv|meii)$/i.test(currentBuffer))) {
+      return '-';
+    }
     return e.key;
   }
 
@@ -227,7 +238,10 @@ export function useHardwareBarcodeScanner({
         flushTimerRef.current = null;
       }
 
-      const currentBuffer = (rawCode || bufferRef.current).trim();
+      let currentBuffer = (rawCode || bufferRef.current).trim();
+      if (/^inv[\/\\]/i.test(currentBuffer)) {
+        currentBuffer = currentBuffer.replace(/^inv[\/\\]/i, 'INV-');
+      }
       isMachineBurstRef.current = false;
 
       if (currentBuffer.length >= minLength) {
@@ -327,7 +341,7 @@ export function useHardwareBarcodeScanner({
       }
 
       // 3. Accumulate single printable characters with Lao / Thai scancode normalization
-      const char = getNormalizedBarcodeChar(e);
+      const char = getNormalizedBarcodeChar(e, bufferRef.current);
 
       if (char) {
         // Burst detection:
