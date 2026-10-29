@@ -34,20 +34,51 @@ import { Haptics, NotificationType } from '@capacitor/haptics';
  *    - Never calls native Keyboard.hide() or blur() that would drop WKWebView first responder.
  */
 
-// Fallback dictionary for Lao & Thai keyboard layouts when e.code is unavailable
-const LAO_CHAR_TO_DIGIT_MAP = {
-  // Lao typewriter number row (unshifted):
+// Comprehensive fallback dictionary for Lao & Thai (Kedmanee) keyboard layouts (Digits, Symbols, and Full QWERTY letters A-Z)
+const LAO_THAI_TO_ASCII_MAP = {
+  // --- 1. Lao Typewriter Number Row ---
   'ຢ': '1', 'ຟ': '2', 'ໂ': '3', 'ຖ': '4', 'ຸ': '5',
   'ູ': '6', 'ຄ': '7', 'ຕ': '8', 'ຈ': '9', 'ຂ': '0',
-  // Lao typewriter number row (shifted / alternates):
-  'ຼ': '1', 'ຽ': '3', 'ພ': '4', 'ົ': '8', '໌': '9', 'ໜ': '0',
   'ຊ': '-', 'ໍ': '=', 'ໆ': '`',
-  // Lao numerals:
+  'ຼ': '1', 'ຽ': '3', 'ພ': '4', 'ົ': '8', '໌': '9', 'ໜ': '0',
+
+  // --- 2. Thai Kedmanee Number Row (Unshifted & Shifted) ---
+  'ภ': '1', 'ถ': '2', 'ุ': '3', 'ึ': '4', 'ค': '5',
+  'ต': '6', 'จ': '7', 'ข': '8', 'ช': '9', 'ๆ': '0',
+
+  // --- 3. Lao Native Numerals ---
   '໐': '0', '໑': '1', '໒': '2', '໓': '3', '໔': '4',
   '໕': '5', '໖': '6', '໗': '7', '໘': '8', '໙': '9',
-  // Thai numerals:
+
+  // --- 4. Thai Native Numerals ---
   '๐': '0', '๑': '1', '๒': '2', '๓': '3', '๔': '4',
   '๕': '5', '๖': '6', '๗': '7', '๘': '8', '๙': '9',
+  '฿': '6',
+
+  // --- 5. Lao Letters (Q - P) ---
+  'ົ': 'q', 'ໄ': 'w', 'ຳ': 'e', 'ພ': 'r', 'ະ': 't',
+  'ິ': 'y', 'ີ': 'u', 'ຣ': 'i', 'ນ': 'o', 'ຍ': 'p',
+
+  // --- 6. Thai Letters (Q - P) ---
+  'ๆ': 'q', 'ไ': 'w', 'ำ': 'e', 'พ': 'r', 'ะ': 't',
+  'ั': 'y', 'ี': 'u', 'ร': 'i', 'น': 'o', 'ย': 'p',
+  'บ': '[', 'ล': ']', 'ฃ': '\\',
+
+  // --- 7. Lao Letters (A - L) ---
+  'ັ': 'a', 'ຫ': 's', 'ກ': 'd', 'ດ': 'f', 'ເ': 'g',
+  '້': 'h', '່': 'j', 'າ': 'k', 'ສ': 'l', 'ວ': ';', 'ງ': "'",
+
+  // --- 8. Thai Letters (A - L) ---
+  'ฟ': 'a', 'ห': 's', 'ก': 'd', 'ด': 'f', 'เ': 'g',
+  '้': 'h', '่': 'j', 'า': 'k', 'ส': 'l', 'ว': ';', 'ง': "'",
+
+  // --- 9. Lao Letters (Z - M) ---
+  'ຜ': 'z', 'ປ': 'x', 'ແ': 'c', 'ອ': 'v', 'ຶ': 'b',
+  'ື': 'n', 'ທ': 'm', 'ມ': ',', 'ໃ': '.', 'ຝ': '/',
+
+  // --- 10. Thai Letters (Z - M) ---
+  'ผ': 'z', 'ป': 'x', 'แ': 'c', 'อ': 'v', 'ิ': 'b',
+  'ื': 'n', 'ท': 'm', 'ม': ',', 'ใ': '.', 'ฝ': '/',
 };
 
 /**
@@ -71,9 +102,10 @@ function getNormalizedBarcodeChar(e) {
     if (e.code === 'Period' || e.code === 'NumpadDecimal') return '.';
   }
 
-  // 2. Secondary fallback: Check if e.key is a known Lao or Thai digit/scancode
-  if (e.key && LAO_CHAR_TO_DIGIT_MAP[e.key]) {
-    return LAO_CHAR_TO_DIGIT_MAP[e.key];
+  // 2. Secondary fallback: Check if e.key is a known Lao or Thai character in the full mapping
+  if (e.key && LAO_THAI_TO_ASCII_MAP[e.key]) {
+    const mapped = LAO_THAI_TO_ASCII_MAP[e.key];
+    return e.shiftKey ? mapped.toUpperCase() : mapped;
   }
 
   // 3. Fallback: single printable character as-is
