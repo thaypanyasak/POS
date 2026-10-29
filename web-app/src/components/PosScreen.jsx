@@ -1910,7 +1910,7 @@ export default function PosScreen({
             <PosProductGridSkeleton count={12} />
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-2.5 w-full">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-2.5 w-full">
                 {/* 1. Mixed Carton Bundles */}
                 {matchingBundles.map((b) => {
                   const bundleChildIds = b.itemIds || (b.product_bundle_items || []).map((it) => it.product_id) || [];
@@ -2085,6 +2085,9 @@ export default function PosScreen({
                               return multB - multA;
                             });
 
+                            const totalUnits = sortedUnits.length;
+                            const hasMillionPrice = sortedUnits.some((u) => (Number(u.retailPrice) || 0) >= 1000000);
+
                             return sortedUnits.map((unit, idx) => {
                               const isBulk =
                                 unit.tier === 3 ||
@@ -2095,22 +2098,47 @@ export default function PosScreen({
                                 unit.id?.endsWith('_pack') ||
                                 (!unit.tier && unit.multiplier > 1 && !isBulk);
 
+                              const priceNum = Number(unit.retailPrice) || 0;
+                              const priceStr = formatKip(priceNum).replace(' ₭', '');
+                              const charLen = priceStr.length;
+
+                              // Flex weight: Khi có 3 nút và có giá tiền triệu (>= 1.000.000), nút tiền triệu chiếm nhiều không gian hơn
+                              let flexRatio = 1;
+                              if (totalUnits >= 3 && hasMillionPrice) {
+                                if (priceNum >= 1000000 || charLen >= 8) {
+                                  flexRatio = 1.25;
+                                } else {
+                                  flexRatio = 0.88;
+                                }
+                              }
+
+                              // Font size: Với lưới iPad mới (~70px/nút), font chữ hiển thị to rõ hơn nhiều
+                              let priceFontClass = 'text-[10px] sm:text-[11px] tracking-tight';
+                              if (charLen >= 10) {
+                                priceFontClass = 'text-[8.5px] sm:text-[9px] tracking-[-0.04em]';
+                              } else if (charLen >= 8) {
+                                priceFontClass = 'text-[9.5px] sm:text-[10px] tracking-tight';
+                              } else if (charLen === 7) {
+                                priceFontClass = 'text-[10px] sm:text-[10.5px] tracking-normal';
+                              }
+
                               return (
                                 <button
                                   key={unit.id || idx}
                                   type="button"
                                   onClick={() => addToCart(p, unit, 1)}
-                                  className={`flex-1 min-w-0 py-1 px-0.5 rounded-lg text-center transition-all cursor-pointer active:scale-95 flex flex-col justify-center items-center shadow-2xs ${
+                                  style={{ flex: `${flexRatio} 1 0%` }}
+                                  className={`min-w-0 py-1.5 px-0.5 sm:px-1 rounded-lg text-center transition-all cursor-pointer active:scale-95 flex flex-col justify-center items-center shadow-2xs overflow-hidden ${
                                     isBulk
                                       ? 'bg-teal-600 hover:bg-teal-700 text-white'
                                       : isMiddlePack
                                       ? 'bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-slate-900'
                                       : 'bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-400 text-slate-900'
                                   }`}
-                                  title={`ຂາຍ 1 ${unit.unitName}`}
+                                  title={`ຂາຍ 1 ${unit.unitName} (${formatKip(priceNum)})`}
                                 >
                                   <span
-                                    className={`text-[9.5px] font-bold block truncate max-w-full ${
+                                    className={`text-[9.5px] sm:text-[10px] font-bold block truncate max-w-full leading-tight ${
                                       isBulk
                                         ? 'text-teal-100'
                                         : isMiddlePack
@@ -2121,11 +2149,11 @@ export default function PosScreen({
                                     {unit.unitName}
                                   </span>
                                   <span
-                                    className={`text-[10.5px] font-black block font-mono leading-tight mt-0.2 ${
+                                    className={`font-black block font-mono leading-tight mt-0.5 whitespace-nowrap truncate max-w-full ${priceFontClass} ${
                                       isBulk ? 'text-white' : 'text-slate-900'
                                     }`}
                                   >
-                                    {formatKip(unit.retailPrice).replace(' ₭', '')}
+                                    {priceStr}
                                   </span>
                                 </button>
                               );
