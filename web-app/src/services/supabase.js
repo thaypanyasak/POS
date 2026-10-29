@@ -2255,53 +2255,50 @@ export async function updateExistingSaleTransactionInSupabase(
       }
     }
 
-    // Step 4: Insert new sale_transaction_items
-    if (newCartItems && newCartItems.length > 0) {
-      const itemsPayload = newCartItems.map((item) => {
-        const prodId = item.product?.id || item.productId || item.product_id || 'p_custom';
-        const rawCustom = item.customPrice !== undefined && item.customPrice !== null ? Number(item.customPrice) : null;
-        const rawEffective = item.effectivePrice !== undefined && item.effectivePrice !== null ? Number(item.effectivePrice) : null;
-        const rawUnitPrice = item.unitPrice !== undefined && item.unitPrice !== null ? Number(item.unitPrice) : null;
-        const tierPrice = newTxData.isWholesale
-          ? (item.unit?.wholesalePrice ?? item.unit?.retailPrice)
-          : (item.unit?.retailPrice ?? 0);
-        const unitPrice = Number(rawCustom ?? rawEffective ?? rawUnitPrice ?? tierPrice ?? 0) || 0;
-        const qty = Number(item.quantity) || 1;
-        const rawLine = Number(item.lineTotal || item.line_total);
-        const lineTotal = rawLine > 0 ? rawLine : (unitPrice * qty);
-        const fullMult = Number(item.effectiveMultiplier ?? item.unit?.multiplier) || 1;
-        const multiplier = item.isHalfCarton ? fullMult / 2 : fullMult;
-        const baseCost = Number(item.product?.costPerBaseUnit) || 0;
-        const lineCost = baseCost * multiplier * qty;
-        const lineProfit = lineTotal - lineCost;
+    // Step 4 & 5: Insert new sale_transaction_items AND update sale_transactions header IN PARALLEL
+    const itemsPayload = (newCartItems && newCartItems.length > 0)
+      ? newCartItems.map((item) => {
+          const prodId = item.product?.id || item.productId || item.product_id || 'p_custom';
+          const rawCustom = item.customPrice !== undefined && item.customPrice !== null ? Number(item.customPrice) : null;
+          const rawEffective = item.effectivePrice !== undefined && item.effectivePrice !== null ? Number(item.effectivePrice) : null;
+          const rawUnitPrice = item.unitPrice !== undefined && item.unitPrice !== null ? Number(item.unitPrice) : null;
+          const tierPrice = newTxData.isWholesale
+            ? (item.unit?.wholesalePrice ?? item.unit?.retailPrice)
+            : (item.unit?.retailPrice ?? 0);
+          const unitPrice = Number(rawCustom ?? rawEffective ?? rawUnitPrice ?? tierPrice ?? 0) || 0;
+          const qty = Number(item.quantity) || 1;
+          const rawLine = Number(item.lineTotal || item.line_total);
+          const lineTotal = rawLine > 0 ? rawLine : (unitPrice * qty);
+          const fullMult = Number(item.effectiveMultiplier ?? item.unit?.multiplier) || 1;
+          const multiplier = item.isHalfCarton ? fullMult / 2 : fullMult;
+          const baseCost = Number(item.product?.costPerBaseUnit) || 0;
+          const lineCost = baseCost * multiplier * qty;
+          const lineProfit = lineTotal - lineCost;
 
-        const rawUnitName = item.unit?.unitName || item.unitName || 'ອັນ';
-        const unitName = item.isHalfCarton && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
+          const rawUnitName = item.unit?.unitName || item.unitName || 'ອັນ';
+          const unitName = item.isHalfCarton && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
 
-        return {
-          id: generateUUID(),
-          transaction_id: txId,
-          product_id: prodId,
-          product_name: item.productName || item.product?.name || 'ສິນຄ້າ',
-          unit_name: unitName,
-          multiplier,
-          quantity: qty,
-          unit_price: unitPrice,
-          line_total: lineTotal,
-          line_cost: lineCost,
-          line_profit: lineProfit,
-        };
-      });
+          return {
+            id: generateUUID(),
+            transaction_id: txId,
+            product_id: prodId,
+            product_name: item.productName || item.product?.name || 'ສິນຄ້າ',
+            unit_name: unitName,
+            multiplier,
+            quantity: qty,
+            unit_price: unitPrice,
+            line_total: lineTotal,
+            line_cost: lineCost,
+            line_profit: lineProfit,
+          };
+        })
+      : [];
 
-      const { error: insErr } = await supabase.from('sale_transaction_items').insert(itemsPayload);
-      if (insErr) {
-        console.error('Error inserting new sale_transaction_items:', insErr);
-        return { success: false, error: insErr.message };
-      }
-    }
+    const insertItemsPromise = itemsPayload.length > 0
+      ? supabase.from('sale_transaction_items').insert(itemsPayload)
+      : Promise.resolve({ error: null });
 
-    // Step 5: Update sale_transactions header
-    const { error: headerErr } = await supabase
+    const updateHeaderPromise = supabase
       .from('sale_transactions')
       .update({
         is_wholesale: Boolean(newTxData.isWholesale),
@@ -2326,9 +2323,16 @@ export async function updateExistingSaleTransactionInSupabase(
       })
       .eq('id', txId);
 
-    if (headerErr) {
-      console.error('Error updating sale_transactions header:', headerErr);
-      return { success: false, error: headerErr.message };
+    const [insRes, headerRes] = await Promise.all([insertItemsPromise, updateHeaderPromise]);
+
+    if (insRes?.error) {
+      console.error('Error inserting new sale_transaction_items:', insRes.error);
+      return { success: false, error: insRes.error.message };
+    }
+
+    if (headerRes?.error) {
+      console.error('Error updating sale_transactions header:', headerRes.error);
+      return { success: false, error: headerRes.error.message };
     }
 
     return { success: true };

@@ -432,7 +432,7 @@ export default function CheckoutModal({
               <div className="p-2.5 bg-white rounded-xl border border-rose-100 flex items-center justify-between shadow-2xs">
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">
-                    ຍອດຄ້າງຊຳລະ / ຄ້າງຊຳລະ (Debt Balance)
+                    ຍອດຄ້າງຊຳລະ 
                   </span>
                   <span className="text-[10.5px] text-slate-500 font-mono">
                     {debtPaidKip > 0

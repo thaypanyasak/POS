@@ -2484,30 +2484,51 @@ export default function App() {
       });
 
       if (editingOldTransaction) {
+        const savedOldTxId = editingOldTransaction.id;
         // Track local echo to avoid redundant notification
-        localEchoIdsRef.current.add(editingOldTransaction.id);
+        localEchoIdsRef.current.add(savedOldTxId);
 
         // Sequential Safe Replacement Pattern:
         // 1. Restore old stock 2. Delete old items 3. Deduct new stock 4. Insert new items 5. Update header
         const res = await updateExistingSaleTransactionInSupabase(
-          editingOldTransaction.id,
+          savedOldTxId,
           editingOldTransaction.items || editingOldTransaction.sale_transaction_items || [],
           receipt,
           receiptItems
         );
 
+        // Instantly dismiss loading spinner before showing alert
+        setIsSavingDb(false);
+        setDbSavingMessage('');
+
         if (!res.success) {
           openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກການແກ້ໄຂ: ' + res.error, 'ຂໍ້ຜິດພາດ', 'error');
         } else {
+          // Optimistically update local transactions state immediately
+          setTransactions((prev) =>
+            prev.map((t) =>
+              t.id === savedOldTxId
+                ? {
+                    ...t,
+                    ...receipt,
+                    items: receiptItems,
+                    sale_transaction_items: receiptItems,
+                    updated_at: new Date().toISOString(),
+                  }
+                : t
+            )
+          );
+
           openAlert(`ບັນທຶກການແກ້ໄຂບິນ #${receiptNo} ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
           // Đánh dấu đơn này là đơn đã chỉnh sửa (vừa hiện badge ở sidebar, vừa giữ nhãn & highlight amber bền vững)
-          setUnreadOrderIds((prev) => new Set([...prev, editingOldTransaction.id]));
-          setUpdatedOrderIds((prev) => new Set([...prev, editingOldTransaction.id]));
-          triggerHighlight?.(editingOldTransaction.id, 'updated');
+          setUnreadOrderIds((prev) => new Set([...prev, savedOldTxId]));
+          setUpdatedOrderIds((prev) => new Set([...prev, savedOldTxId]));
+          triggerHighlight?.(savedOldTxId, 'updated');
         }
 
         setEditingOldTransaction(null);
-        await handleRefreshAllFromSupabase();
+        // Refresh silently in background without blocking UI
+        void handleRefreshAllFromSupabase();
       } else {
         // Prepare stock deductions for tracked products
         const stockDeductions = [];
@@ -2963,6 +2984,10 @@ export default function App() {
 
     try {
       const res = await updateTransactionInSupabase(txId, updates);
+      // Turn off loading spinner immediately before showing alert
+      setIsSavingDb(false);
+      setDbSavingMessage('');
+
       if (!res.success) {
         openAlert('ເກີດຂໍ້ຜິດພາດໃນການແກ້ໄຂບິນ: ' + (res.error || 'Unknown error'), 'ຂໍ້ຜິດພາດ', 'error');
         return false;
@@ -2983,6 +3008,8 @@ export default function App() {
       openAlert('ແກ້ໄຂຂໍ້ມູນບິນສຳເລັດແລ້ວ!', 'ສຳເລັດ', 'success');
       return true;
     } catch (err) {
+      setIsSavingDb(false);
+      setDbSavingMessage('');
       console.error('Update transaction error:', err);
       openAlert('ເກີດຂໍ້ຜິດພາດ: ' + err.message, 'ຂໍ້ຜິດພາດ', 'error');
       return false;

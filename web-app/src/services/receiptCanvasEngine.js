@@ -478,12 +478,15 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
     measureCtx.textBaseline = 'top';
   }
 
+  // Robust Text Drawing Helpers (iOS 18 WebKit immune: manual coordinate math with explicit 'left' alignment)
   const drawCenter = (text, y, font) => {
     if (isDraw) {
       ctx.fillStyle = '#000000';
       ctx.font = font;
-      ctx.textAlign = 'center';
-      ctx.fillText(text, K80.CENTER_X, y);
+      ctx.textAlign = 'left';
+      const w = ctx.measureText(text).width || 0;
+      const x = Math.round(K80.CENTER_X - (w / 2));
+      ctx.fillText(text, Math.max(K80.LEFT_MARGIN, x), y);
     }
   };
 
@@ -500,8 +503,9 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
     if (isDraw) {
       ctx.fillStyle = '#000000';
       ctx.font = font;
-      ctx.textAlign = 'right';
-      ctx.fillText(text, x, y);
+      ctx.textAlign = 'left';
+      const w = ctx.measureText(text).width || 0;
+      ctx.fillText(text, Math.round(x - w), y);
     }
   };
 
@@ -584,15 +588,19 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
   if (isDraw) {
     ctx.textBaseline = 'middle';
     ctx.font = FONTS.TITLE;
-    ctx.textAlign = 'center';
+    ctx.textAlign = 'left';
     if (titleLines.length <= 1) {
+      const tw = ctx.measureText(titleText).width || 0;
+      const tx = Math.round(K80.CENTER_X - (tw / 2));
       // Shift up 2.5px optically so the base characters sit dead center between borders
-      ctx.fillText(titleText, K80.CENTER_X, bannerMidY - 2.5);
+      ctx.fillText(titleText, Math.max(K80.LEFT_MARGIN, tx), bannerMidY - 2.5);
     } else {
       const lineStep = 32;
       const startTitleY = bannerMidY - ((titleLines.length - 1) * lineStep / 2) - 2;
       titleLines.forEach((tLine, tIdx) => {
-        ctx.fillText(tLine, K80.CENTER_X, startTitleY + (tIdx * lineStep));
+        const tw = ctx.measureText(tLine).width || 0;
+        const tx = Math.round(K80.CENTER_X - (tw / 2));
+        ctx.fillText(tLine, Math.max(K80.LEFT_MARGIN, tx), startTitleY + (tIdx * lineStep));
       });
     }
     ctx.textBaseline = 'top'; // Reset baseline
@@ -963,8 +971,10 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
     ctx.fillText(L.grandTotalLabel, K80.LEFT_MARGIN, grandMidY - 1);
 
     ctx.font = FONTS.GRAND_NUM;
-    ctx.textAlign = 'right';
-    ctx.fillText(fmtKip(finalGrandTotal), K80.RIGHT_EDGE, grandMidY);
+    ctx.textAlign = 'left';
+    const numStr = fmtKip(finalGrandTotal);
+    const nw = ctx.measureText(numStr).width || 0;
+    ctx.fillText(numStr, Math.round(K80.RIGHT_EDGE - nw), grandMidY);
 
     ctx.textBaseline = 'top'; // Reset baseline
   }
@@ -1070,9 +1080,11 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
     if (isDraw) {
       ctx.fillStyle = '#000000'; // Explicitly ensure black color for signature text
       ctx.font = FONTS.SIGN_LABEL;
-      ctx.textAlign = 'center';
-      ctx.fillText(leftSignLabel, sigColLeftX, y);
-      ctx.fillText(rightSignLabel, sigColRightX, y);
+      ctx.textAlign = 'left';
+      const lw = ctx.measureText(leftSignLabel).width || 0;
+      const rw = ctx.measureText(rightSignLabel).width || 0;
+      ctx.fillText(leftSignLabel, Math.round(sigColLeftX - (lw / 2)), y);
+      ctx.fillText(rightSignLabel, Math.round(sigColRightX - (rw / 2)), y);
     }
 
     // Generous 150px space for hand signature (increased from 100px for comfortable signing height)
@@ -1255,6 +1267,13 @@ export async function renderReceiptCanvas(receipt, lang = 'lo', options = {}) {
           new Promise((resolve) => setTimeout(resolve, 500)),
         ]);
       }
+    } catch (_) {}
+  }
+
+  // Ensure all registered web fonts are 100% parsed & layout-ready before canvas measurement
+  if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+    try {
+      await document.fonts.ready;
     } catch (_) {}
   }
 

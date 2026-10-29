@@ -74,6 +74,12 @@ export default function HistoryView({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // Always reset to 'all' on mount so entering History unconditionally shows all bills
+  useEffect(() => {
+    setDateFilter('all');
+    setActiveTab('all');
+  }, []);
+
   // Modals state
   const [editingTx, setEditingTx] = useState(null);
   const [editCustomerName, setEditCustomerName] = useState('');
@@ -611,13 +617,20 @@ export default function HistoryView({
               playUnitChangeBeep('history');
               setDateFilter('all');
             }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
               dateFilter === 'all'
-                ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
-                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
             }`}
           >
-            ທັງໝົດ
+            <span>ທັງໝົດ</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                dateFilter === 'all' ? 'bg-teal-700 text-teal-100' : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {dateCounts.all}
+            </span>
           </button>
 
           {/* ມື້ນີ້ (Today) */}
@@ -627,13 +640,20 @@ export default function HistoryView({
               playUnitChangeBeep('history');
               setDateFilter('today');
             }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
               dateFilter === 'today'
-                ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
-                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
             }`}
           >
-            ມື້ນີ້ (Today)
+            <span>ມື້ນີ້ (Today)</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                dateFilter === 'today' ? 'bg-teal-700 text-teal-100' : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {dateCounts.today}
+            </span>
           </button>
 
           {/* ມື້ວານ (Yesterday) */}
@@ -643,13 +663,20 @@ export default function HistoryView({
               playUnitChangeBeep('history');
               setDateFilter('yesterday');
             }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
               dateFilter === 'yesterday'
-                ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
-                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
             }`}
           >
-            ມື້ວານ (Yesterday)
+            <span>ມື້ວານ (Yesterday)</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                dateFilter === 'yesterday' ? 'bg-teal-700 text-teal-100' : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {dateCounts.yesterday}
+            </span>
           </button>
 
           {/* 7 ມື້ຜ່ານມາ (7 Days) */}
@@ -659,13 +686,20 @@ export default function HistoryView({
               playUnitChangeBeep('history');
               setDateFilter('7days');
             }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
               dateFilter === '7days'
-                ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
-                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
             }`}
           >
-            7 ມື້ຜ່ານມາ (7 Days)
+            <span>7 ມື້ຜ່ານມາ (7 Days)</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                dateFilter === '7days' ? 'bg-teal-700 text-teal-100' : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {dateCounts.sevenDays}
+            </span>
           </button>
 
           {/* ເລືອກວັນທີ... */}
@@ -675,10 +709,10 @@ export default function HistoryView({
               playUnitChangeBeep('history');
               setDateFilter('custom');
             }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap border ${
               dateFilter === 'custom'
-                ? 'bg-teal-50 text-teal-800 border border-teal-300 font-black'
-                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
             }`}
           >
             ເລືອກວັນທີ...
