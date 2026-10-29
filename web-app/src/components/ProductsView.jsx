@@ -19,7 +19,9 @@ import {
   X,
   CaretLeft,
   CaretRight,
+  FileArrowDown,
 } from '@phosphor-icons/react';
+import { exportProductsToExcel } from '../utils/excelExport';
 import { formatKip, formatBaht, getCartonUnitInfo, formatStockDisplay, formatNegativeStockCompound, normalizeLao } from '../utils/formatters';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
@@ -332,6 +334,24 @@ export default function ProductsView({
     }
   }, [currentPage, totalPages]);
 
+  // Export filtered products to Excel (.xlsx)
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const handleExportExcel = async () => {
+    if (!filteredProducts || filteredProducts.length === 0) return;
+    try {
+      setIsExportingExcel(true);
+      playActionClickBeep('products');
+      await exportProductsToExcel(filteredProducts, {
+        category: selectedCategory,
+        searchQuery: searchTerm,
+      });
+    } catch (err) {
+      console.error('Export products error:', err);
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   const paginatedProducts = useMemo(() => {
     if (pageSize === 'ALL' || !pageSize) {
       return filteredProducts;
@@ -567,6 +587,19 @@ export default function ProductsView({
               <span className="hidden sm:inline">ຣີເຟຣຊ</span>
             </button>
           )}
+
+          {/* Export to Excel (Export theo filter: all / category / search) */}
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={isExportingExcel || filteredProducts.length === 0}
+            className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 h-9 sm:h-10 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 rounded-xl text-xs font-bold shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={`ດາວໂຫຼດ Excel (${filteredProducts.length} ສິນຄ້າ)`}
+          >
+            <FileArrowDown size={16} weight="bold" />
+            <span className="hidden sm:inline">Export Excel</span>
+            <span className="sm:hidden">Excel</span>
+          </button>
 
           <button
             type="button"

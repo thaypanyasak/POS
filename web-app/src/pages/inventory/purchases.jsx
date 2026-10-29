@@ -23,7 +23,9 @@ import {
   Trash,
   CaretLeft,
   CaretRight,
+  FileArrowDown,
 } from '@phosphor-icons/react';
+import { exportPurchasesToExcel } from '../../utils/excelExport';
 import {
   formatKip,
   formatDots,
@@ -251,6 +253,30 @@ export default function PurchasesView({
       setPoCurrentPage(poTotalPages);
     }
   }, [poCurrentPage, poTotalPages]);
+
+  // Export filtered purchase orders to Excel (.xlsx)
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const handleExportExcel = async () => {
+    if (!filteredOrders || filteredOrders.length === 0) return;
+    try {
+      setIsExportingExcel(true);
+      playActionClickBeep('inventory');
+      const statusMap = {
+        ALL: 'ທັງໝົດ',
+        PAID: 'ຈ່າຍຄົບແລ້ວ',
+        DEBT: 'ຕິດໜີ້',
+        PARTIAL: 'ຈ່າຍບາງສ່ວນ',
+      };
+      await exportPurchasesToExcel(filteredOrders, {
+        statusLabel: statusMap[filterStatus] || filterStatus,
+        searchQuery,
+      });
+    } catch (err) {
+      console.error('Export purchases error:', err);
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
 
   const paginatedOrders = useMemo(() => {
     if (poPageSize === 'ALL' || !poPageSize) {
@@ -1032,6 +1058,19 @@ export default function PurchasesView({
             <Truck size={15} />
             <span className="hidden sm:inline">ຈັດການຜູ້ສະໜອງ ({suppliers.length})</span>
             <span className="sm:hidden">ຮ້ານສົ່ງ ({suppliers.length})</span>
+          </button>
+
+          {/* Export to Excel (Export theo filter: status / search) */}
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={isExportingExcel || filteredOrders.length === 0}
+            className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 h-9 sm:h-10 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 rounded-xl text-xs font-bold shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={`ດາວໂຫຼດ Excel (${filteredOrders.length} ໃບຮັບສິນຄ້າ)`}
+          >
+            <FileArrowDown size={15} weight="bold" />
+            <span className="hidden sm:inline">Export Excel</span>
+            <span className="sm:hidden">Excel</span>
           </button>
 
           <button

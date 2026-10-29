@@ -25,7 +25,9 @@ import {
   CaretLeft,
   CaretRight,
   Bell,
+  FileArrowDown,
 } from '@phosphor-icons/react';
+import { exportTransactionsToExcel } from '../utils/excelExport';
 import { formatKip, normalizeLao } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
@@ -408,6 +410,44 @@ export default function HistoryView({
     }
   }, [currentPage, totalPages]);
 
+  // Export filtered transactions to Excel (.xlsx)
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const handleExportExcel = async () => {
+    if (!filteredTransactions || filteredTransactions.length === 0) return;
+    try {
+      setIsExportingExcel(true);
+      playActionClickBeep('history');
+      const tabNames = {
+        all: 'ທັງໝົດ',
+        cash: 'ເງິນສົດ',
+        transfer: 'ໂອນເງິນ',
+        debt: 'ຕິດໜີ້',
+        cancelled: 'ຍົກເລີກແລ້ວ',
+        notifications: 'ແຈ້ງເຕືອນໃໝ່',
+      };
+      const dateNames = {
+        all: 'ທັງໝົດ',
+        today: 'ມື້ນີ້',
+        yesterday: 'ມື້ວານ',
+        '7days': '7 ມື້ຜ່ານມາ',
+        custom: `${startDate || '...'} ຫາ ${endDate || '...'}`,
+      };
+
+      await exportTransactionsToExcel(filteredTransactions, {
+        timeframeLabel: dateNames[dateFilter] || dateFilter,
+        tabLabel: tabNames[activeTab] || activeTab,
+        searchQuery: searchTerm,
+      });
+    } catch (err) {
+      console.error('Export transactions error:', err);
+      if (onAlert) {
+        onAlert(`ດາວໂຫຼດ Excel ບໍ່ສຳເລັດ: ${err.message || 'ເກີດຂໍ້ຜິດພາດ'}`, 'ຜິດພາດ', 'error');
+      }
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   const paginatedTransactions = useMemo(() => {
     if (pageSize === 'ALL' || !pageSize) {
       return filteredTransactions;
@@ -592,6 +632,19 @@ export default function HistoryView({
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Export to Excel (Export theo filter: ngày, tab thanh toán, tìm kiếm) */}
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={isExportingExcel || filteredTransactions.length === 0}
+            className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={`ດາວໂຫຼດ Excel (${filteredTransactions.length} ບິນ)`}
+          >
+            <FileArrowDown size={15} weight="bold" />
+            <span className="hidden sm:inline">Export Excel</span>
+            <span className="sm:hidden">Excel</span>
+          </button>
+
           <button
             type="button"
             onClick={onRefreshTransactions}

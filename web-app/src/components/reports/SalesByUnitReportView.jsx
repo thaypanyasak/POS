@@ -14,8 +14,10 @@ import {
   ChartPieSlice,
   Printer,
   Export,
-  Minus
+  Minus,
+  FileArrowDown,
 } from '@phosphor-icons/react';
+import { exportSalesByUnitToExcel } from '../../utils/excelExport';
 import { formatKip, formatBaht, formatDots, normalizeLao } from '../../utils/formatters';
 import { playUnitChangeBeep, playActionClickBeep } from '../../utils/audioFeedback';
 import { SalesByUnitSkeleton } from '../common/SkeletonLoaders';
@@ -312,6 +314,33 @@ export default function SalesByUnitReportView({
     );
   };
 
+  // Excel Export handler (.xlsx)
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const handleExportExcel = async () => {
+    if (!displayedProducts || displayedProducts.length === 0) return;
+    try {
+      setIsExportingExcel(true);
+      playActionClickBeep('reports');
+      const tfMap = {
+        today: 'ມື້ນີ້ (Today)',
+        yesterday: 'ມື້ວານ (Yesterday)',
+        week: '7 ມື້ຜ່ານມາ (Last 7 Days)',
+        month: 'ເດືອນນີ້ (This Month)',
+        all: 'ທັງໝົດ (All Time)',
+        custom: `${customStartDate || '...'} ຫາ ${customEndDate || '...'}`,
+      };
+      await exportSalesByUnitToExcel(displayedProducts, {
+        timeframeLabel: tfMap[timeframe] || timeframe,
+        totalTransactions: filteredTransactions.length,
+        totalRevenue: totalStats.totalRevenue,
+      });
+    } catch (err) {
+      console.error('Export sales by unit error:', err);
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   // CSV Export handler
   const handleExportCSV = () => {
     if (!displayedProducts.length) return;
@@ -367,18 +396,19 @@ export default function SalesByUnitReportView({
             </div>
           </div>
 
-          {/* Right Actions: Export CSV, Print & Refresh Buttons */}
+          {/* Right Actions: Export Excel, Print & Refresh Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Export CSV Button */}
+            {/* Export Excel Button (.xlsx) */}
             <button
               type="button"
-              onClick={handleExportCSV}
-              disabled={displayedProducts.length === 0}
-              className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-teal-700 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5"
-              title="ສົ່ງອອກໄຟລ໌ Excel / CSV"
+              onClick={handleExportExcel}
+              disabled={isExportingExcel || displayedProducts.length === 0}
+              className="p-2 sm:px-3 sm:py-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5"
+              title="ສົ່ງອອກໄຟລ໌ Excel (.xlsx)"
             >
-              <Export size={15} weight="bold" />
-              <span className="hidden md:inline">Excel/CSV</span>
+              <FileArrowDown size={15} weight="bold" />
+              <span className="hidden md:inline">Export Excel</span>
+              <span className="md:hidden">Excel</span>
             </button>
 
             {/* Print Button */}

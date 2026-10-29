@@ -23,7 +23,9 @@ import {
   TrendUp,
   TrendDown,
   ArrowsLeftRight,
+  FileArrowDown,
 } from '@phosphor-icons/react';
+import { exportDashboardToExcel } from '../utils/excelExport';
 import { formatKip, formatBaht, formatCompoundStock } from '../utils/formatters';
 import MonthComparisonView from './dashboard/MonthComparisonView';
 import DynamicDailyRevenueChart from './dashboard/DynamicDailyRevenueChart';
@@ -356,6 +358,37 @@ export default function DashboardView({
   }, [products]);
 
   // 5. Recent Credit / Debt Customers (Unsettled debts)
+  // Export Executive Dashboard to Excel (.xlsx)
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const handleExportExcel = async () => {
+    try {
+      setIsExportingExcel(true);
+      playActionClickBeep('dashboard');
+      const tfLabels = {
+        daily: 'ມື້ນີ້ (Today)',
+        weekly: '7 ມື້ຜ່ານມາ (Last 7 Days)',
+        monthly: 'ເດືອນນີ້ (This Month)',
+        all: 'ທັງໝົດ (All Time)',
+        custom: `${customStartDate || '...'} ຫາ ${customEndDate || '...'}`,
+        compare: `ສົມທຽບ ${compareMonthA} vs ${compareMonthB}`,
+      };
+
+      await exportDashboardToExcel({
+        timeframeLabel: tfLabels[dashboardTimeframe] || dashboardTimeframe,
+        exchangeRate,
+        snapshotMetrics,
+        hourlyData: hourlyData?.hours || [],
+        categoryBreakdown: categoryBreakdown?.list || [],
+        topProducts,
+        currentTxs,
+      });
+    } catch (err) {
+      console.error('Export dashboard error:', err);
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   const recentCreditTxs = useMemo(() => {
     return transactions
       .filter((t) => {
@@ -399,6 +432,19 @@ export default function DashboardView({
 
           {/* Right Action: Exchange Rate Badge */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Export Dashboard to Excel Button */}
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              disabled={isExportingExcel}
+              className="px-2.5 sm:px-3.5 h-8 sm:h-9 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 rounded-xl text-xs font-bold shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="ດາວໂຫຼດບົດລາຍງານ Excel ແຜງຄວບຄຸມລາຍຮັບ & ຕົ້ນທຶນ (.xlsx)"
+            >
+              <FileArrowDown size={15} weight="bold" />
+              <span className="hidden sm:inline">Export Excel</span>
+              <span className="sm:hidden">Excel</span>
+            </button>
+
             <ExchangeRateBadge
               exchangeRate={exchangeRate}
               onRateUpdated={setExchangeRate}
