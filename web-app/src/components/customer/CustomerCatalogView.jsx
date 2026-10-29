@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   MagnifyingGlass,
   XCircle,
@@ -10,7 +10,6 @@ import {
   ListDashes,
   Package,
   ArrowClockwise,
-  CaretDown,
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao, getSortedUnits, sanitizeImageUrl } from '../../utils/formatters';
 import CustomerProductDetailModal from './CustomerProductDetailModal';
@@ -85,24 +84,67 @@ export default function CustomerCatalogView({
     });
   }, [products, searchQuery, activeCategory]);
 
-  // Batch / Lazy Load Pagination for smooth scrolling on 3,000+ products
-  const INITIAL_BATCH_SIZE = 40;
-  const LOAD_MORE_STEP = 30;
+  // Batch / Lazy Load Infinite Scroll (Identical to POS Screen for 3,000+ items)
+  const INITIAL_BATCH_SIZE = 48;
+  const LOAD_MORE_STEP = 36;
   const [visibleLimit, setVisibleLimit] = useState(INITIAL_BATCH_SIZE);
+  const scrollContainerRef = useRef(null);
+  const sentinelRef = useRef(null);
 
-  // Reset pagination limit when search query or category filter changes
+  // Reset pagination limit & scroll to top when search query or category filter changes
   useEffect(() => {
     setVisibleLimit(INITIAL_BATCH_SIZE);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
   }, [activeCategory, searchQuery]);
 
   const visibleProducts = useMemo(() => {
     if (!processedProducts) return [];
-    if (processedProducts.length <= visibleLimit) return processedProducts;
+    if (processedProducts.length <= INITIAL_BATCH_SIZE) return processedProducts;
     return processedProducts.slice(0, visibleLimit);
   }, [processedProducts, visibleLimit]);
 
+  // Load more items smoothly when approaching bottom
+  const loadMoreProducts = useCallback(() => {
+    if (processedProducts && visibleLimit < processedProducts.length) {
+      setVisibleLimit((prev) => Math.min(prev + LOAD_MORE_STEP, processedProducts.length));
+    }
+  }, [processedProducts, visibleLimit]);
+
+  // Dual-trigger: IntersectionObserver on sentinel element (400px before bottom) + scroll listener
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMoreProducts();
+        }
+      },
+      {
+        root: scrollContainerRef.current,
+        rootMargin: '400px 0px',
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loadMoreProducts]);
+
+  const handleContainerScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 400) {
+      loadMoreProducts();
+    }
+  };
+
   return (
     <div
+      ref={scrollContainerRef}
+      onScroll={handleContainerScroll}
       className="fixed inset-0 w-full h-full h-dvh overflow-y-auto touch-scroll-container bg-slate-50 text-slate-900 font-sans flex flex-col selection:bg-teal-500/20 selection:text-teal-900 pb-12 z-10"
       style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }}
     >
@@ -521,17 +563,15 @@ export default function CustomerCatalogView({
           </div>
         )}
 
-        {/* Load More Button for 3,000+ items */}
+        {/* Sentinel & smooth auto-loader indicator at bottom (Infinite Scroll) */}
         {visibleLimit < processedProducts.length && (
-          <div className="flex flex-col items-center justify-center pt-6 pb-2">
-            <button
-              type="button"
-              onClick={() => setVisibleLimit((prev) => prev + LOAD_MORE_STEP)}
-              className="h-11 px-6 rounded-2xl bg-white hover:bg-teal-50 text-teal-800 border border-teal-200/90 font-bold text-xs sm:text-sm shadow-2xs hover:shadow-xs active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <span>ສະແດງຕື່ມ ({visibleProducts.length} ຈາກ {processedProducts.length} ລາຍການ)</span>
-              <CaretDown size={16} weight="bold" />
-            </button>
+          <div
+            ref={sentinelRef}
+            className="py-6 flex items-center justify-center text-xs font-bold text-slate-400 gap-2"
+          >
+            <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+            <span>ສະແດງ {visibleProducts.length} ຈາກ {processedProducts.length} ລາຍການ</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
           </div>
         )}
       </main>
