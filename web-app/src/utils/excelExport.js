@@ -748,7 +748,21 @@ export async function exportSalesByUnitToExcel(
     }
   });
 
-  autoFitColumns(ws);
+  autoFitColumns(ws, {
+    colWidths: {
+      1: 7,   // ລ/ດ (No)
+      2: 30,  // ຊື່ສິນຄ້າ (Product Name)
+      3: 22,  // ຊື່ພາສາຫວຽດ (Vietnamese Name)
+      4: 16,  // ບາໂຄດ (Barcode)
+      5: 18,  // ໝວດໝູ່ (Category)
+      6: 18,  // ຂາຍແກັດ/ລັງ (Cartons Sold)
+      7: 16,  // ຂາຍແພັກ (Packs Sold)
+      8: 16,  // ຂາຍຍ່ອຍ (Pieces Sold)
+      9: 18,  // ລວມໜ່ວຍຍ່ອຍ (Base Units)
+      10: 22, // ຍອດຂາຍລວມ (Revenue ₭)
+      11: 14, // ສ່ວນແບ່ງ (%)
+    },
+  });
 
   const today = new Date().toISOString().slice(0, 10);
   const cleanLabel = (str) => (str ? String(str).replace(/\s*\(.*?\)/g, '').replace(/[\s/\\:*?"<>|]/g, '_') : '');

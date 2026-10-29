@@ -502,14 +502,14 @@ export default function StaffManagementView() {
       )}
 
       {/* View Tabs: Staff List vs Role Permissions */}
-      <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
+      <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar">
         <button
           type="button"
           onClick={() => {
             playActionClickBeep();
             setActiveViewTab('staff');
           }}
-          className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+          className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
             activeViewTab === 'staff'
               ? 'bg-slate-900 text-white shadow-sm'
               : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
@@ -531,7 +531,7 @@ export default function StaffManagementView() {
             setActiveViewTab('permissions');
             setSelectedRoleConfig('admin');
           }}
-          className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+          className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
             activeViewTab === 'permissions'
               ? 'bg-teal-600 text-white shadow-sm'
               : 'bg-white hover:bg-teal-50 text-slate-600 border border-slate-200'
@@ -551,44 +551,44 @@ export default function StaffManagementView() {
       {activeViewTab === 'staff' && (
         <>
           {/* 2. Stats Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
+        <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black shrink-0">
             <Users size={20} weight="duotone" />
           </div>
-          <div>
-            <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">ທັງໝົດ</div>
-            <div className="text-lg font-black text-slate-900 font-mono">{stats.total}</div>
+          <div className="min-w-0">
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-bold uppercase tracking-wider truncate">ທັງໝົດ</div>
+            <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">{stats.total}</div>
           </div>
         </div>
 
-        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black">
+        <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black shrink-0">
             <ShieldCheck size={20} weight="duotone" />
           </div>
-          <div>
-            <div className="text-[11px] text-amber-600 font-bold uppercase tracking-wider">ຜູ້ຈັດການ (Admin)</div>
-            <div className="text-lg font-black text-amber-900 font-mono">{stats.admins}</div>
+          <div className="min-w-0">
+            <div className="text-[10px] sm:text-[11px] text-amber-600 font-bold uppercase tracking-wider truncate">ຜູ້ຈັດການ (Admin)</div>
+            <div className="text-base sm:text-lg font-black text-amber-900 font-mono truncate">{stats.admins}</div>
           </div>
         </div>
 
-        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black">
+        <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black shrink-0">
             <User size={20} weight="duotone" />
           </div>
-          <div>
-            <div className="text-[11px] text-teal-600 font-bold uppercase tracking-wider">ພະນັກງານຂາຍ</div>
-            <div className="text-lg font-black text-teal-900 font-mono">{stats.cashiers}</div>
+          <div className="min-w-0">
+            <div className="text-[10px] sm:text-[11px] text-teal-600 font-bold uppercase tracking-wider truncate">ພະນັກງານຂາຍ</div>
+            <div className="text-base sm:text-lg font-black text-teal-900 font-mono truncate">{stats.cashiers}</div>
           </div>
         </div>
 
-        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center font-black">
+        <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center font-black shrink-0">
             <Prohibit size={20} weight="duotone" />
           </div>
-          <div>
-            <div className="text-[11px] text-rose-600 font-bold uppercase tracking-wider">ລະງັບບັນຊີ</div>
-            <div className="text-lg font-black text-rose-900 font-mono">{stats.inactive}</div>
+          <div className="min-w-0">
+            <div className="text-[10px] sm:text-[11px] text-rose-600 font-bold uppercase tracking-wider truncate">ລະງັບບັນຊີ</div>
+            <div className="text-base sm:text-lg font-black text-rose-900 font-mono truncate">{stats.inactive}</div>
           </div>
         </div>
       </div>
@@ -644,9 +644,157 @@ export default function StaffManagementView() {
         </div>
       </div>
 
-      {/* 4. Staff Data Table */}
+      {/* 4. Staff Data: Mobile Cards (< md) & Desktop Table (>= md) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden mb-6 w-full max-w-full">
-        <div className="w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-y">
+        {/* Mobile View (< md) */}
+        <div className="block md:hidden">
+          {filteredStaff.length > 0 ? (
+            <div className="divide-y divide-slate-100">
+              {filteredStaff.map((st, idx) => {
+                const isAdmin = st.role === 'admin';
+                const isRevealed = Boolean(revealedPins[st.id]);
+
+                return (
+                  <div
+                    key={st.id || idx}
+                    className={`p-3.5 flex flex-col gap-2.5 transition-colors ${
+                      !st.is_active ? 'bg-rose-50/20' : 'bg-white'
+                    }`}
+                  >
+                    {/* Top Row: Avatar, Name, Email, Status */}
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div
+                          className={`w-10 h-10 rounded-2xl font-black text-sm flex items-center justify-center shrink-0 shadow-xs text-white ${
+                            isAdmin
+                              ? 'bg-gradient-to-tr from-amber-600 to-amber-500'
+                              : 'bg-gradient-to-tr from-teal-600 to-emerald-500'
+                          }`}
+                        >
+                          {st.full_name?.charAt(0) || 'U'}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-extrabold text-slate-900 text-sm truncate">
+                            {st.full_name}
+                          </div>
+                          <div className="text-xs text-slate-500 truncate">
+                            {st.email || 'ບໍ່ມີອີເມວ'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-black uppercase font-mono shrink-0 ${
+                          st.is_active
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            st.is_active ? 'bg-emerald-500' : 'bg-rose-500'
+                          }`}
+                        />
+                        <span>{st.is_active ? 'Active' : 'Disabled'}</span>
+                      </span>
+                    </div>
+
+                    {/* Middle Row: Role Badge & PIN Code */}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-black uppercase font-mono ${
+                          isAdmin
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-teal-100 text-teal-900 border border-teal-300'
+                        }`}
+                      >
+                        {isAdmin ? (
+                          <>
+                            <ShieldCheck size={13} weight="bold" />
+                            <span>Admin</span>
+                          </>
+                        ) : (
+                          <>
+                            <User size={13} weight="bold" />
+                            <span>Cashier</span>
+                          </>
+                        )}
+                      </span>
+
+                      {/* PIN with Reveal */}
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200/80 font-mono font-bold text-slate-800 text-xs">
+                        <Key size={13} className="text-slate-400" weight="bold" />
+                        <span>PIN: {isRevealed ? st.pin_code : '••••'}</span>
+                        <button
+                          type="button"
+                          onClick={() => togglePinReveal(st.id)}
+                          className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer ml-1"
+                          title={isRevealed ? 'ເຊື່ອງ PIN' : 'ເບິ່ງ PIN'}
+                        >
+                          {isRevealed ? <EyeSlash size={14} /> : <Eye size={14} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Bottom Row: Actions */}
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(st)}
+                        className="flex-1 py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 border border-slate-200 shadow-2xs"
+                      >
+                        <PencilSimple size={13} weight="bold" />
+                        <span>ແກ້ໄຂ</span>
+                      </button>
+
+                      {st.is_active ? (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleActive(st, false)}
+                          className="py-1.5 px-3 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 border border-amber-200"
+                        >
+                          <Prohibit size={13} weight="bold" />
+                          <span>ປິດ</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleActive(st, true)}
+                          className="py-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 border border-emerald-200"
+                        >
+                          <CheckCircle size={13} weight="bold" />
+                          <span>ເປີດ</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDelete(st)}
+                        className="py-1.5 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 border border-rose-200"
+                      >
+                        <Trash size={13} weight="bold" />
+                        <span>ລຶບ</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="py-12 text-center text-slate-400 p-4">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
+                <Users size={24} weight="duotone" />
+              </div>
+              <div className="font-bold text-sm text-slate-600">ບໍ່ພົບລາຍຊື່ພະນັກງານ</div>
+              <div className="text-xs text-slate-400 mt-0.5">
+                ກົດປຸ່ມ "+ ເພີ່ມພະນັກງານ" ເພື່ອສ້າງບັນຊີໃໝ່
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop View (>= md) */}
+        <div className="hidden md:block w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-y">
           <table className="w-full text-left text-xs border-collapse min-w-[760px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-extrabold uppercase tracking-wider text-[11px]">
@@ -915,7 +1063,7 @@ export default function StaffManagementView() {
             </span>
             <span className="text-[11px] text-slate-400">•</span>
             <span className="text-xs text-slate-500 font-mono">
-              ເປີດໃຊ້ {(tempPermissions[selectedRoleConfig] || []).length} / 8 ເມນູ
+              ເປີດໃຊ້ {(tempPermissions[selectedRoleConfig] || []).length} / {NAVIGATION_SCHEMA.length} ເມນູ
             </span>
             {isCurrentRoleDirty && (
               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-200">

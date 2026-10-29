@@ -45,7 +45,9 @@ import CheckoutModal from './components/CheckoutModal';
 import UnitSelectorModal from './components/UnitSelectorModal';
 import ProductFormModal from './components/ProductFormModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
+import CategoriesView from './components/CategoriesView';
 import ProductBundleModal from './components/ProductBundleModal';
+import MixProductsView from './components/MixProductsView';
 import ConfirmDialogModal from './components/ConfirmDialogModal';
 import StaffManagementView from './components/auth/StaffManagementView';
 import CashierLockOverlay from './components/auth/CashierLockOverlay';
@@ -3381,9 +3383,37 @@ export default function App() {
               onEditProduct={handleOpenEditProduct}
               onDeleteProduct={handleDeleteProduct}
               onRefreshProducts={handleRefreshAllFromSupabase}
-              onOpenCategoryManager={() => setCategoryManagerModalOpen(true)}
-              onOpenBundleManager={() => setBundleModalOpen(true)}
+              onOpenCategoryManager={() => setActiveMainTab('categories')}
+              onOpenBundleManager={() => setActiveMainTab('bundles')}
               isLoading={isLoadingProducts || isRefreshing}
+            />
+          </RouteGuard>
+        )}
+
+        {activeMainTab === 'categories' && (
+          <RouteGuard routeId="categories" onRedirect={handleTabChange}>
+            <CategoriesView
+              categories={rawCategories}
+              products={products}
+              onCreateCategory={handleCreateCategory}
+              onUpdateCategory={handleUpdateCategory}
+              onDeleteCategory={handleDeleteCategory}
+              onRefresh={handleRefreshAllFromSupabase}
+              isLoading={isLoadingProducts || isRefreshing}
+              onAlert={openAlert}
+            />
+          </RouteGuard>
+        )}
+
+        {activeMainTab === 'bundles' && (
+          <RouteGuard routeId="bundles" onRedirect={handleTabChange}>
+            <MixProductsView
+              bundles={bundles}
+              products={products}
+              exchangeRate={exchangeRate}
+              onSaveBundle={handleSaveBundle}
+              onDeleteBundle={handleDeleteBundle}
+              onAlert={openAlert}
             />
           </RouteGuard>
         )}
@@ -3436,6 +3466,7 @@ export default function App() {
               exchangeRate={exchangeRate}
               onRefresh={handleRefreshAllFromSupabase}
               isLoading={isLoadingProducts || isRefreshing}
+              onAlert={openAlert}
             />
           </RouteGuard>
         )}

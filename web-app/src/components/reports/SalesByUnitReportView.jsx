@@ -82,6 +82,7 @@ export default function SalesByUnitReportView({
   exchangeRate = 690,
   onRefresh,
   isLoading = false,
+  onAlert,
 }) {
   // 1. Filter States
   // 'today' | 'yesterday' | '7days' | 'month' | 'custom'
@@ -202,7 +203,9 @@ export default function SalesByUnitReportView({
           aggMap.set(prodId, {
             id: prodId,
             name: rawName,
+            name_vi: prodInfo.name_vi || prodInfo.nameVi || prodInfo.vietnameseName || '',
             barcode: rawBarcode,
+            category: prodInfo.category || prodInfo.categoryName || prodInfo.category_name || 'ທົ່ວໄປ',
             imageUrl: rawImage,
             cartonUnitName: cUnitName,
             packUnitName: pUnitName,
@@ -210,6 +213,7 @@ export default function SalesByUnitReportView({
             cartonQty: 0,
             packQty: 0,
             retailQty: 0,
+            totalBaseUnits: 0,
             revenue: 0,
             orderCount: 0,
           });
@@ -218,6 +222,7 @@ export default function SalesByUnitReportView({
         const entry = aggMap.get(prodId);
         entry.revenue += lineTotal;
         entry.orderCount += 1;
+        entry.totalBaseUnits += qty * (multiplier > 0 ? multiplier : 1);
         grandRevenue += lineTotal;
 
         if (unitLevel === 3) {
@@ -329,13 +334,19 @@ export default function SalesByUnitReportView({
         all: 'ທັງໝົດ (All Time)',
         custom: `${customStartDate || '...'} ຫາ ${customEndDate || '...'}`,
       };
-      await exportSalesByUnitToExcel(displayedProducts, {
+      const res = await exportSalesByUnitToExcel(displayedProducts, {
         timeframeLabel: tfMap[timeframe] || timeframe,
         totalTransactions: filteredTransactions.length,
-        totalRevenue: totalStats.totalRevenue,
+        totalRevenue: totalRevenue,
       });
+      if (res?.success && onAlert) {
+        onAlert(`ສົ່ງອອກໄຟລ໌ ${res.fileName || 'Excel'} ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
+      }
     } catch (err) {
       console.error('Export sales by unit error:', err);
+      if (onAlert) {
+        onAlert(`ເກີດຂໍ້ຜິດພາດໃນການສົ່ງອອກ Excel: ${err.message || 'ລອງໃໝ່ອີກຄັ້ງ'}`, 'ແຈ້ງເຕືອນ', 'error');
+      }
     } finally {
       setIsExportingExcel(false);
     }
@@ -581,19 +592,19 @@ export default function SalesByUnitReportView({
       </div>
 
       {/* 2. MAIN SCROLLABLE CONTENT */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4 pb-28 md:pb-6 min-h-0">
         {/* 2.1 4 COMPACT STATS CARDS (REDESIGNED MATCHING STAFF STATS) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           {/* Card 1: Total Cartons */}
-          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black shrink-0">
+          <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black shrink-0">
               <Package size={20} weight="duotone" />
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] text-amber-600 font-bold uppercase tracking-wider truncate">
+              <div className="text-[10px] sm:text-[11px] text-amber-600 font-bold uppercase tracking-wider truncate">
                 ຂາຍຕາມແກັດ
               </div>
-              <div className="text-lg font-black text-slate-900 font-mono truncate">
+              <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">
                 {formatDots(totalCartons)}{' '}
                 <span className="text-xs font-bold font-sans text-slate-500">ແກັດ</span>
               </div>
@@ -601,15 +612,15 @@ export default function SalesByUnitReportView({
           </div>
 
           {/* Card 2: Total Packs */}
-          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center font-black shrink-0">
+          <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center font-black shrink-0">
               <SquaresFour size={20} weight="duotone" />
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] text-sky-600 font-bold uppercase tracking-wider truncate">
+              <div className="text-[10px] sm:text-[11px] text-sky-600 font-bold uppercase tracking-wider truncate">
                 ຂາຍຕາມແພັກ
               </div>
-              <div className="text-lg font-black text-slate-900 font-mono truncate">
+              <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">
                 {formatDots(totalPacks)}{' '}
                 <span className="text-xs font-bold font-sans text-slate-500">ແພັກ</span>
               </div>
@@ -617,15 +628,15 @@ export default function SalesByUnitReportView({
           </div>
 
           {/* Card 3: Total Retail Units */}
-          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-black shrink-0">
+          <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-black shrink-0">
               <Tag size={20} weight="duotone" />
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] text-indigo-600 font-bold uppercase tracking-wider truncate">
+              <div className="text-[10px] sm:text-[11px] text-indigo-600 font-bold uppercase tracking-wider truncate">
                 ຂາຍຍ່ອຍ
               </div>
-              <div className="text-lg font-black text-slate-900 font-mono truncate">
+              <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">
                 {formatDots(totalRetail)}{' '}
                 <span className="text-xs font-bold font-sans text-slate-500">ອັນ</span>
               </div>
@@ -633,15 +644,15 @@ export default function SalesByUnitReportView({
           </div>
 
           {/* Card 4: Total Revenue */}
-          <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black shrink-0">
+          <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black shrink-0">
               <CurrencyCircleDollar size={20} weight="duotone" />
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] text-teal-600 font-bold uppercase tracking-wider truncate">
+              <div className="text-[10px] sm:text-[11px] text-teal-600 font-bold uppercase tracking-wider truncate">
                 ລວມຍອດຂາຍ
               </div>
-              <div className="text-lg font-black text-teal-900 font-mono truncate">
+              <div className="text-base sm:text-lg font-black text-teal-900 font-mono truncate">
                 {formatKip(totalRevenue)}
               </div>
             </div>
@@ -651,19 +662,144 @@ export default function SalesByUnitReportView({
         {/* 2.2 SALES DETAILS COMPACT TABLE */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden flex flex-col">
           {/* Table Header Bar */}
-          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/60">
+          <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/60">
             <div className="flex items-center gap-2">
               <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
                 ລາຍການສິນຄ້າ ({displayedProducts.length} ລາຍການ)
               </span>
             </div>
-            <div className="text-xs text-slate-400 font-medium">
-              ຄລິກຫົວຂໍ້ຕາຕະລາງເພື່ອຈັດລຽງ
+            <div className="text-[11px] sm:text-xs text-slate-400 font-medium">
+              <span className="hidden sm:inline">ຄລິກຫົວຂໍ້ຕາຕະລາງເພື່ອຈັດລຽງ</span>
+              <span className="sm:hidden">ຈັດລຽງຕາມຍອດຂາຍ</span>
             </div>
           </div>
 
-          {/* Table Body */}
-          <div className="overflow-x-auto">
+          {/* Mobile Product Card List (md:hidden) */}
+          <div className="block md:hidden">
+            {isLoading && transactions.length === 0 ? (
+              <div className="p-4 space-y-3">
+                <SalesByUnitSkeleton count={4} />
+              </div>
+            ) : displayedProducts.length === 0 ? (
+              <div className="py-12 text-center px-4">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
+                  <Package size={24} weight="duotone" />
+                </div>
+                <p className="text-xs font-bold text-slate-700">ບໍ່ພົບລາຍການຂາຍໃນຊ່ວງເວລານີ້</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {searchTerm ? `ບໍ່ພົບສິນຄ້າທີ່ກົງກັບ "${searchTerm}"` : 'ລອງປ່ຽນຊ່ວງວັນທີ ຫຼື ຂາຍສິນຄ້າໃນໜ້າ POS'}
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {displayedProducts.map((p) => {
+                  const hasCarton = p.cartonQty > 0;
+                  const hasPack = p.packQty > 0;
+                  const hasRetail = p.retailQty > 0;
+
+                  return (
+                    <div key={p.id} className="p-3 hover:bg-slate-50/70 transition-colors flex flex-col gap-2">
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {p.imageUrl ? (
+                            <img
+                              src={p.imageUrl}
+                              alt={p.name}
+                              className="w-10 h-10 rounded-xl object-cover bg-slate-100 border border-slate-200 shrink-0"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          <div
+                            className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 items-center justify-center text-slate-400 shrink-0"
+                            style={{ display: p.imageUrl ? 'none' : 'flex' }}
+                          >
+                            <Package size={18} weight="bold" />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="font-extrabold text-slate-900 text-xs leading-snug line-clamp-2">
+                              {p.name}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 text-[10.5px] text-slate-400 font-mono">
+                              {p.barcode ? <span>{p.barcode}</span> : <span>{p.orderCount} ຄັ້ງທີ່ຂາຍ</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="font-black text-teal-700 text-sm font-mono">
+                            {formatKip(p.revenue)}
+                          </div>
+                          <div className="text-[10px] text-slate-400">ຍອດຂາຍລວມ</div>
+                        </div>
+                      </div>
+
+                      {/* 3 Unit Breakdown Badges */}
+                      <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-slate-100/80">
+                        <div className={`p-1.5 rounded-xl border flex flex-col items-center justify-center text-center ${
+                          hasCarton
+                            ? 'bg-amber-50/80 border-amber-200/80 text-amber-900'
+                            : 'bg-slate-50 border-slate-200/60 text-slate-400'
+                        }`}>
+                          <span className="text-[9.5px] font-bold uppercase tracking-wider">ແກັດ</span>
+                          <span className="text-xs font-mono font-black mt-0.5">
+                            {hasCarton ? `${formatDots(p.cartonQty)} ${p.cartonUnitName}` : '-'}
+                          </span>
+                        </div>
+
+                        <div className={`p-1.5 rounded-xl border flex flex-col items-center justify-center text-center ${
+                          hasPack
+                            ? 'bg-sky-50/80 border-sky-200/80 text-sky-900'
+                            : 'bg-slate-50 border-slate-200/60 text-slate-400'
+                        }`}>
+                          <span className="text-[9.5px] font-bold uppercase tracking-wider">ແພັກ</span>
+                          <span className="text-xs font-mono font-black mt-0.5">
+                            {hasPack ? `${formatDots(p.packQty)} ${p.packUnitName}` : '-'}
+                          </span>
+                        </div>
+
+                        <div className={`p-1.5 rounded-xl border flex flex-col items-center justify-center text-center ${
+                          hasRetail
+                            ? 'bg-slate-100 border-slate-200/80 text-slate-900'
+                            : 'bg-slate-50 border-slate-200/60 text-slate-400'
+                        }`}>
+                          <span className="text-[9.5px] font-bold uppercase tracking-wider">ຍ່ອຍ</span>
+                          <span className="text-xs font-mono font-black mt-0.5">
+                            {hasRetail ? `${formatDots(p.retailQty)} ${p.retailUnitName}` : '-'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Mobile Summary Row */}
+                <div className="p-3 bg-slate-100/90 border-t-2 border-slate-200 flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                    <span>ລວມທັງໝົດ ({displayedProducts.length} ລາຍການ):</span>
+                    <span className="font-mono text-teal-800 font-black text-sm">{formatKip(totalRevenue)}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 text-center text-[10.5px] font-mono">
+                    <span className="p-1 rounded-lg bg-amber-50 text-amber-900 font-bold border border-amber-200/60">
+                      ແກັດ: {formatDots(totalCartons)}
+                    </span>
+                    <span className="p-1 rounded-lg bg-sky-50 text-sky-900 font-bold border border-sky-200/60">
+                      ແພັກ: {formatDots(totalPacks)}
+                    </span>
+                    <span className="p-1 rounded-lg bg-slate-200/70 text-slate-900 font-bold border border-slate-300/60">
+                      ຍ່ອຍ: {formatDots(totalRetail)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Desktop/Tablet Table (hidden md:block) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="bg-slate-50/90 border-b border-slate-200 text-[11px] font-extrabold text-slate-600 uppercase tracking-wider select-none">

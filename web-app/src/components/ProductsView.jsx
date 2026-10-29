@@ -542,36 +542,6 @@ export default function ProductsView({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {onOpenCategoryManager && (
-            <button
-              type="button"
-              onClick={() => {
-                playActionClickBeep('products');
-                onOpenCategoryManager();
-              }}
-              className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
-              title="ຈັດການໝວດໝູ່ສິນຄ້າ"
-            >
-              <Folders size={15} weight="bold" className="text-teal-700" />
-              <span className="hidden sm:inline">ໝວດໝູ່</span>
-            </button>
-          )}
-
-          {onOpenBundleManager && (
-            <button
-              type="button"
-              onClick={() => {
-                playActionClickBeep('products');
-                onOpenBundleManager();
-              }}
-              className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-teal-50 hover:bg-teal-100/80 text-teal-800 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 border border-teal-200/80 shadow-2xs"
-              title="ຈັດການກຸ່ມສິນຄ້າລວມ (Mixed Carton Bundles)"
-            >
-              <Package size={15} weight="bold" className="text-teal-600" />
-              <span className="hidden sm:inline">ກຸ່ມລວມ Mix</span>
-            </button>
-          )}
-
           {onRefreshProducts && (
             <button
               type="button"

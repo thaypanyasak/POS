@@ -90,13 +90,29 @@ export async function getRolePermissions() {
     );
 
     if (permissions && typeof permissions === 'object') {
-      // Ensure admin & cashier defaults are present
-      return {
+      const defaultAdmin = DEFAULT_ROLE_PERMISSIONS[USER_ROLES.ADMIN] || [];
+      const defaultCashier = DEFAULT_ROLE_PERMISSIONS[USER_ROLES.CASHIER] || [];
+
+      // Auto-include any newly introduced system routes (e.g. 'categories', 'bundles')
+      const savedAdmin = Array.isArray(permissions[USER_ROLES.ADMIN]) ? permissions[USER_ROLES.ADMIN] : [];
+      const mergedAdmin = Array.from(new Set([...savedAdmin, ...defaultAdmin]));
+
+      const savedCashier = Array.isArray(permissions[USER_ROLES.CASHIER]) ? permissions[USER_ROLES.CASHIER] : [];
+      const mergedCashier = Array.from(new Set([...savedCashier, ...defaultCashier]));
+
+      const result = {
         ...DEFAULT_ROLE_PERMISSIONS,
         ...permissions,
-        [USER_ROLES.ADMIN]: permissions[USER_ROLES.ADMIN] || DEFAULT_ROLE_PERMISSIONS[USER_ROLES.ADMIN],
-        [USER_ROLES.CASHIER]: permissions[USER_ROLES.CASHIER] || DEFAULT_ROLE_PERMISSIONS[USER_ROLES.CASHIER],
+        [USER_ROLES.ADMIN]: mergedAdmin,
+        [USER_ROLES.CASHIER]: mergedCashier,
       };
+
+      // If new routes were missing from previously saved permissions, auto-sync to cloud & local
+      if (savedAdmin.length < mergedAdmin.length || savedCashier.length < mergedCashier.length) {
+        updateStoreSetting(PERMISSIONS_STORAGE_KEY, result).catch(() => {});
+      }
+
+      return result;
     }
 
     return DEFAULT_ROLE_PERMISSIONS;

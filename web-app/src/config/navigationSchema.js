@@ -11,6 +11,8 @@ import {
   ChartPieSlice,
   Gear,
   UsersThree,
+  Folders,
+  Intersect,
 } from '@phosphor-icons/react';
 
 export const USER_ROLES = {
@@ -52,6 +54,24 @@ export const NAVIGATION_SCHEMA = [
     icon: Package,
     allowedRoles: [USER_ROLES.ADMIN, USER_ROLES.CASHIER],
     badgeKey: 'outOfStockCount',
+  },
+  {
+    id: 'categories',
+    path: '#categories',
+    label: 'ໝວດໝູ່ສິນຄ້າ',
+    sub: 'ໝວດໝູ່ & ຈຳນວນສິນຄ້າ',
+    shortLabel: 'ໝວດໝູ່',
+    icon: Folders,
+    allowedRoles: [USER_ROLES.ADMIN, USER_ROLES.CASHIER],
+  },
+  {
+    id: 'bundles',
+    path: '#bundles',
+    label: 'ກຸ່ມລວມ Mix',
+    sub: 'ສິນຄ້າຂາຍຍົກລັງລວມລົດ',
+    shortLabel: 'ກຸ່ມລວມ Mix',
+    icon: Intersect,
+    allowedRoles: [USER_ROLES.ADMIN, USER_ROLES.CASHIER],
   },
   {
     id: 'purchases',
@@ -110,6 +130,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'pos',
     'history',
     'products',
+    'categories',
+    'bundles',
     'purchases',
     'dashboard',
     'sales-by-unit',
@@ -120,6 +142,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'pos',
     'history',
     'products',
+    'categories',
+    'bundles',
   ],
 };
 
@@ -158,12 +182,20 @@ export function isRouteAllowed(routeIdOrPath, role = USER_ROLES.CASHIER, permiss
   const cleanId = String(routeIdOrPath).replace(/^#\/?/, '').replace(/^\//, '');
   const currentRole = role || USER_ROLES.CASHIER;
 
-  // 1. Dynamic role permissions take highest precedence
-  if (permissionsMap && Array.isArray(permissionsMap[currentRole])) {
-    return permissionsMap[currentRole].includes(cleanId);
+  // 1. Admin role always has full access to all system navigation routes
+  if (currentRole === USER_ROLES.ADMIN) {
+    return true;
   }
 
-  // 2. Default role permissions fallback
+  // 2. Dynamic role permissions
+  if (permissionsMap && Array.isArray(permissionsMap[currentRole])) {
+    if (permissionsMap[currentRole].includes(cleanId)) return true;
+    // Auto-allow new default routes if defined in DEFAULT_ROLE_PERMISSIONS
+    if (DEFAULT_ROLE_PERMISSIONS[currentRole]?.includes(cleanId)) return true;
+    return false;
+  }
+
+  // 3. Default role permissions fallback
   if (DEFAULT_ROLE_PERMISSIONS[currentRole]) {
     return DEFAULT_ROLE_PERMISSIONS[currentRole].includes(cleanId);
   }

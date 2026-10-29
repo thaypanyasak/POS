@@ -11,15 +11,18 @@ import {
   CaretRight,
   SidebarSimple,
   CornersOut,
-  CurrencyCircleDollar,
   CloudCheck,
   CloudSlash,
   Users,
   UserSwitch,
   Lock,
   ShieldCheck,
-  SignOut,
   SignIn,
+  SignOut,
+  Folders,
+  Intersect,
+  SquaresFour,
+  X,
 } from '@phosphor-icons/react';
 import { playUnitChangeBeep } from '../utils/audioFeedback';
 import { useAuth, useAuthRole } from '../contexts/AuthContext';
@@ -44,6 +47,7 @@ export default function Navbar({
   const [isSwitchModalOpen, setIsSwitchModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
   // Controlled or uncontrolled collapsed state
   const [localCollapsed, setLocalCollapsed] = useState(true);
@@ -136,7 +140,7 @@ export default function Navbar({
           </div>
 
           {/* Navigation Items List */}
-          <nav className="p-2.5 space-y-1.5 mt-1">
+          <nav className="p-1.5 space-y-0.5 mt-0.5">
             {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeMainTab === item.id;
@@ -153,7 +157,7 @@ export default function Navbar({
                   className={`relative flex items-center rounded-xl transition-all duration-150 cursor-pointer group ${
                     collapsed
                       ? 'w-12 h-12 mx-auto justify-center'
-                      : 'w-full px-3 py-2.5 justify-between'
+                      : 'w-full px-3 py-2 justify-between'
                   } ${
                     isActive
                       ? 'bg-teal-50 text-teal-700 font-bold'
@@ -169,8 +173,7 @@ export default function Navbar({
                   {/* Left Icon + Text */}
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="relative inline-flex items-center justify-center shrink-0">
-                      <Icon
-                        size={22}
+                      <Icon size={20}
                         weight="bold"
                         className={`shrink-0 transition-colors ${
                           isActive
@@ -202,18 +205,13 @@ export default function Navbar({
                     </div>
 
                     {!collapsed && (
-                      <div className="text-left min-w-0 overflow-hidden">
-                        <div
-                          className={`text-xs truncate ${
-                            isActive ? 'text-teal-800 font-black' : 'text-slate-800'
-                          }`}
-                        >
-                          {item.label}
-                        </div>
-                        <div className="text-[10.5px] text-slate-400 font-normal truncate mt-0.5">
-                          {item.sub}
-                        </div>
-                      </div>
+                      <span
+                        className={`text-[13px] truncate ${
+                          isActive ? 'text-teal-800 font-bold' : 'text-slate-700 font-medium group-hover:text-slate-900'
+                        }`}
+                      >
+                        {item.label}
+                      </span>
                     )}
                   </div>
 
@@ -242,7 +240,7 @@ export default function Navbar({
         </div>
 
         {/* Bottom Area: Controls, Active Cashier Card, Rate, Sync & Collapse Button */}
-        <div className="p-2.5 border-t border-slate-200/90 flex flex-col gap-2 bg-slate-50/50">
+        <div className="p-2 border-t border-slate-200/90 flex flex-col gap-1.5 bg-slate-50/50">
           {!collapsed ? (
             <>
               {/* Active Cashier Shift Card */}
@@ -269,11 +267,11 @@ export default function Navbar({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-slate-100">
+                <div className="grid grid-cols-2 gap-1.5 pt-1.5 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => setIsSwitchModalOpen(true)}
-                    className="py-1 px-1 rounded-lg bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-800 text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors active:scale-95"
+                    className="py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-800 text-[10.5px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors active:scale-95"
                     title="ປ່ຽນກະຂາຍເຄື່ອງ (Switch Shift)"
                   >
                     <UserSwitch size={12} weight="bold" />
@@ -282,33 +280,13 @@ export default function Navbar({
                   <button
                     type="button"
                     onClick={lockPos}
-                    className="py-1 px-1 rounded-lg bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors active:scale-95"
+                    className="py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 text-[10.5px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors active:scale-95"
                     title="ລັອກໜ້າຈໍ POS (Lock Screen)"
                   >
                     <Lock size={12} weight="bold" />
                     <span>ລັອກ</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsLogoutConfirmOpen(true)}
-                    className="py-1 px-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors active:scale-95 border border-rose-200"
-                    title="ອອກຈາກລະບົບ (Logout)"
-                  >
-                    <SignOut size={12} weight="bold" />
-                    <span>ອອກ</span>
-                  </button>
                 </div>
-              </div>
-
-              {/* Currency Rate Widget */}
-              <div className="flex items-center justify-between px-3 py-2 bg-white rounded-xl border border-slate-200/80 text-xs shadow-2xs">
-                <div className="flex items-center gap-1.5 text-slate-600 font-bold">
-                  <CurrencyCircleDollar size={16} className="text-amber-500" weight="fill" />
-                  <span className="text-[11px]">ອັດຕາຕົ້ນທຶນ:</span>
-                </div>
-                <span className="font-mono font-bold text-slate-800 text-[11px] bg-slate-100 px-1.5 py-0.5 rounded-md">
-                  1 ฿ = {exchangeRate} ₭
-                </span>
               </div>
 
               {/* Cloud / Offline Sync Status Widget */}
@@ -366,27 +344,6 @@ export default function Navbar({
                 </span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setIsLogoutConfirmOpen(true)}
-                className="w-10 h-6 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-2xs border border-rose-200"
-                title="ອອກຈາກລະບົບ (Logout)"
-              >
-                <SignOut size={13} weight="bold" />
-              </button>
-
-              {/* Rate Icon */}
-              <div
-                className="flex flex-col items-center justify-center py-1 cursor-pointer"
-                onClick={toggleCollapsed}
-                title={`ອັດຕາຕົ້ນທຶນ: 1 ฿ = ${exchangeRate} ₭`}
-              >
-                <CurrencyCircleDollar size={20} className="text-amber-500" weight="fill" />
-                <span className="text-[11px] font-mono font-bold text-slate-600 mt-0.5">
-                  {exchangeRate}₭
-                </span>
-              </div>
-
               {/* Cloud Sync Status Icon in collapsed mode */}
               <div
                 className="flex flex-col items-center justify-center py-1 cursor-pointer"
@@ -421,83 +378,253 @@ export default function Navbar({
         </div>
       </aside>
 
-      {/* 2. MOBILE: Touch-Optimized Bottom Navigation Bar (< 768px) */}
-      <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 flex items-center justify-around py-1.5 px-1 shadow-lg"
-        style={{
-          paddingBottom: 'max(0.4rem, env(safe-area-inset-bottom, 0px))',
-        }}
-      >
-        {visibleNavItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeMainTab === item.id;
-          const hasBadge = item.badge !== null && item.badge !== undefined && item.badge > 0;
+      {/* 2. MOBILE: 5-Button Bottom Navigation Bar with Bottom Sheet */}
+      {(() => {
+        const primaryMobileIds = ['pos', 'history', 'products', 'purchases'];
+        const primaryMobileNavItems = primaryMobileIds
+          .map((id) => visibleNavItems.find((item) => item.id === id))
+          .filter(Boolean);
 
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                playUnitChangeBeep('sidebar');
-                setActiveMainTab(item.id);
+        const moreNavItems = visibleNavItems.filter((item) => !primaryMobileIds.includes(item.id));
+        const isMoreActive = !primaryMobileIds.includes(activeMainTab);
+        const moreHasBadge = moreNavItems.some(
+          (item) => item.badge !== null && item.badge !== undefined && item.badge > 0
+        );
+
+        return (
+          <>
+            <nav
+              className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/98 backdrop-blur-md border-t border-slate-200 flex items-stretch justify-around px-1 pt-0 shadow-lg select-none"
+              style={{
+                paddingBottom: 'max(0.4rem, env(safe-area-inset-bottom, 0px))',
               }}
-              className={`flex-1 py-1 px-0.5 rounded-xl flex flex-col items-center justify-center transition-all relative min-h-[48px] active:scale-95 cursor-pointer ${
-                isActive
-                  ? 'text-teal-700'
-                  : 'text-slate-400 hover:text-slate-600'
-              }`}
             >
-              <div className="relative inline-flex items-center justify-center">
-                <Icon size={22} weight={isActive ? 'bold' : 'bold'} />
-                {hasBadge && (
-                  <span className="absolute -top-2.5 -right-3.5 translate-x-1 -translate-y-0.5 z-10 flex items-center justify-center pointer-events-none">
-                    {item.id === 'history' && (
-                      <span
-                        className="absolute inset-0 rounded-full bg-red-600 opacity-50 animate-ping"
-                        style={{ animationDuration: '3s' }}
-                      />
-                    )}
+              {/* Buttons 1-4: Primary Tabs (POS, History, Products, Purchases) */}
+              {primaryMobileNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeMainTab === item.id;
+                const hasBadge = item.badge !== null && item.badge !== undefined && item.badge > 0;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      playUnitChangeBeep('sidebar');
+                      setIsMoreMenuOpen(false);
+                      setActiveMainTab(item.id);
+                    }}
+                    className={`flex-1 min-w-0 flex flex-col items-center justify-between pb-1 transition-all relative cursor-pointer active:scale-95 select-none ${
+                      isActive ? 'text-teal-700' : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    {/* Top Neon Line Indicator (Exact match to reference photo) */}
+                    <div
+                      className={`h-1 w-8 sm:w-10 rounded-full transition-all duration-200 ${
+                        isActive
+                          ? 'bg-teal-600 shadow-[0_1px_6px_rgba(13,148,136,0.5)]'
+                          : 'bg-transparent'
+                      }`}
+                    />
+
+                    {/* Icon with potential badge */}
+                    <div className="relative inline-flex items-center justify-center mt-1">
+                      <Icon size={22} weight={isActive ? 'bold' : 'regular'} />
+                      {hasBadge && (
+                        <span className="absolute -top-1.5 -right-2.5 z-10 flex items-center justify-center pointer-events-none">
+                          {item.id === 'history' && (
+                            <span
+                              className="absolute inset-0 rounded-full bg-red-600 opacity-50 animate-ping"
+                              style={{ animationDuration: '3s' }}
+                            />
+                          )}
+                          <span
+                            className={`relative flex items-center justify-center h-[17px] min-w-[17px] px-1 rounded-full text-[9px] font-black font-sans tabular-nums leading-none text-white ring-2 ring-white ${
+                              item.id === 'history'
+                                ? 'bg-gradient-to-tr from-red-700 via-red-600 to-red-500 shadow-xs'
+                                : 'bg-gradient-to-tr from-teal-600 to-emerald-500 shadow-xs'
+                            }`}
+                          >
+                            {item.badge > 99 ? '99+' : item.badge}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Short Label */}
                     <span
-                      className={`relative flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-black font-sans tabular-nums leading-none text-white ring-2 ring-white ${
-                        item.id === 'history'
-                          ? 'bg-gradient-to-tr from-red-700 via-red-600 to-red-500 shadow-[0_2px_8px_rgba(220,38,38,0.45)]'
-                          : 'bg-gradient-to-tr from-teal-600 to-emerald-500 shadow-[0_2px_8px_rgba(13,148,136,0.35)]'
+                      className={`text-[10.5px] mt-0.5 truncate max-w-full leading-tight font-sans ${
+                        isActive ? 'text-teal-800 font-extrabold' : 'text-slate-500 font-medium'
                       }`}
                     >
-                      {item.badge > 99 ? '99+' : item.badge}
+                      {item.shortLabel}
                     </span>
-                  </span>
-                )}
-              </div>
-              <span
-                className={`text-[11px] mt-0.5 truncate leading-tight ${
-                  isActive ? 'text-teal-800 font-extrabold' : 'text-slate-500 font-medium'
+                  </button>
+                );
+              })}
+
+              {/* Button 5: ເພີ່ມເຕີມ (More Menu Trigger) with Green Dot Notification & Top Neon Line when active */}
+              <button
+                type="button"
+                onClick={() => {
+                  playUnitChangeBeep('sidebar');
+                  setIsMoreMenuOpen(!isMoreMenuOpen);
+                }}
+                className={`flex-1 min-w-0 flex flex-col items-center justify-between pb-1 transition-all relative cursor-pointer active:scale-95 select-none ${
+                  isMoreActive || isMoreMenuOpen
+                    ? 'text-teal-700'
+                    : 'text-slate-400 hover:text-slate-600'
                 }`}
               >
-                {item.shortLabel}
-              </span>
-              {isActive && (
-                <div className="w-1.5 h-1.5 rounded-full bg-teal-600 mt-0.5 shadow-2xs" />
-              )}
-            </button>
-          );
-        })}
+                {/* Top Neon Line Indicator */}
+                <div
+                  className={`h-1 w-8 sm:w-10 rounded-full transition-all duration-200 ${
+                    isMoreActive || isMoreMenuOpen
+                      ? 'bg-teal-600 shadow-[0_1px_6px_rgba(13,148,136,0.5)]'
+                      : 'bg-transparent'
+                  }`}
+                />
 
-        {/* Mobile Cashier Quick Shift / Lock button */}
-        <button
-          type="button"
-          onClick={() => setIsSwitchModalOpen(true)}
-          className="flex-1 py-1 px-0.5 rounded-xl flex flex-col items-center justify-center transition-all text-slate-500 hover:text-teal-700 min-h-[48px] active:scale-95 cursor-pointer"
-          title={`ຜູ້ຂາຍ: ${cashierDisplayName} • ປ່ຽນກະ`}
-        >
-          <div className="w-5 h-5 rounded-full bg-teal-600 text-white font-black text-[10px] flex items-center justify-center shadow-2xs">
-            {cashierInitial}
-          </div>
-          <span className="text-[10px] mt-0.5 truncate leading-tight font-bold text-teal-800">
-            {cashierDisplayName.split(' ')[0]}
-          </span>
-        </button>
-      </nav>
+                {/* Icon with Green Dot Badge matching Image 3 */}
+                <div className="relative inline-flex items-center justify-center mt-1">
+                  <SquaresFour size={22} weight={isMoreActive || isMoreMenuOpen ? 'bold' : 'regular'} />
+                  {moreHasBadge && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white animate-pulse" />
+                  )}
+                </div>
+
+                {/* Short Label */}
+                <span
+                  className={`text-[10.5px] mt-0.5 truncate max-w-full leading-tight font-sans ${
+                    isMoreActive || isMoreMenuOpen ? 'text-teal-800 font-extrabold' : 'text-slate-500 font-medium'
+                  }`}
+                >
+                  ເພີ່ມເຕີມ
+                </span>
+              </button>
+            </nav>
+
+            {/* 30-40% Height Bottom Sheet for More Menu */}
+            {isMoreMenuOpen && (
+              <div
+                className="md:hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-2xs flex flex-col justify-end animate-in fade-in duration-150"
+                onClick={() => setIsMoreMenuOpen(false)}
+              >
+                <div
+                  className="bg-white rounded-t-3xl shadow-2xl border-t border-slate-200 w-full max-h-[45vh] min-h-[30vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200 pb-safe"
+                  style={{
+                    paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))',
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Drag Handle Indicator */}
+                  <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto mt-2.5 mb-1 shrink-0" />
+
+                  {/* Sheet Header */}
+                  <div className="px-4 py-2 flex items-center justify-between border-b border-slate-100 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <SquaresFour size={18} weight="bold" className="text-teal-600" />
+                      <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">
+                        ເມນູເພີ່ມເຕີມ (More Menu)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsMoreMenuOpen(false)}
+                      className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <X size={15} weight="bold" />
+                    </button>
+                  </div>
+
+                  {/* Grid of Remaining Navigation Items */}
+                  <div className="flex-1 overflow-y-auto p-3.5 grid grid-cols-3 gap-2 min-h-0">
+                    {moreNavItems.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = activeMainTab === item.id;
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            playUnitChangeBeep('sidebar');
+                            setActiveMainTab(item.id);
+                            setIsMoreMenuOpen(false);
+                          }}
+                          className={`p-2 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all text-center border cursor-pointer active:scale-95 ${
+                            isActive
+                              ? 'bg-teal-50 border-teal-300 text-teal-800 shadow-2xs font-bold'
+                              : 'bg-slate-50/80 hover:bg-slate-100 border-slate-200/80 text-slate-700 font-medium'
+                          }`}
+                        >
+                          <div
+                            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                              isActive ? 'bg-teal-600 text-white shadow-2xs' : 'bg-white text-slate-600 shadow-2xs'
+                            }`}
+                          >
+                            <Icon size={18} weight="bold" />
+                          </div>
+                          <span className="text-[11px] leading-tight truncate max-w-full font-bold">
+                            {item.shortLabel || item.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Quick Shift, Lock & Logout Footer */}
+                  <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-6 h-6 rounded-full bg-teal-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">
+                        {cashierInitial}
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-800 truncate">
+                        {cashierDisplayName}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMoreMenuOpen(false);
+                          setIsSwitchModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-800 text-[10.5px] font-bold rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                      >
+                        ປ່ຽນກະ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMoreMenuOpen(false);
+                          lockPos();
+                        }}
+                        className="px-2.5 py-1 bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-800 text-[10.5px] font-bold rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                      >
+                        ລັອກ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMoreMenuOpen(false);
+                          setIsLogoutConfirmOpen(true);
+                        }}
+                        className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-900 text-[10.5px] font-bold rounded-lg border border-rose-200 transition-colors cursor-pointer flex items-center gap-1"
+                        title="ອອກຈາກລະບົບ (Logout)"
+                      >
+                        <SignOut size={13} weight="bold" />
+                        <span>ອອກ</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Cashier Shift Switch Modal */}
       <CashierSwitchModal
