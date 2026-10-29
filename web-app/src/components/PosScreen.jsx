@@ -169,6 +169,7 @@ export default function PosScreen({
   onSelectOrderTab,
   onAddNewOrderTab,
   onCloseOrderTab,
+  onAlert,
 }) {
   // Modal for editing line item price (familiar customer / price override)
   const [overrideModalItem, setOverrideModalItem] = useState(null);
@@ -1367,54 +1368,75 @@ export default function PosScreen({
                                   )}
                                 </button>
 
-                                {/* Dropdown Menu/Popover for Carton (1 ແກັດ vs ½ ແກັດ) */}
-                                {isHalfMenuOpen && (
-                                  <>
-                                    <div
-                                      className="fixed inset-0 z-40"
-                                      onClick={() => setOpenHalfCartonMenuKey(null)}
-                                    />
-                                    <div className="absolute left-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-1 min-w-[160px] flex flex-col gap-0.5 animate-in fade-in zoom-in-95">
-                                      <div className="px-2 py-1 text-[9.5px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">
-                                        ຂະໜາດແກັດ / Quy cách:
+                                {/* Dropdown Menu/Popover for Carton (1 ແກັດ vs ເຄິ່ງແກັດ) */}
+                                {isHalfMenuOpen && (() => {
+                                  const hasSubUnits =
+                                    (item.product?.units && item.product.units.length > 1 && Number(u.multiplier || 1) > 1) ||
+                                    Number(u.multiplier || 1) > 1;
+
+                                  return (
+                                    <>
+                                      <div
+                                        className="fixed inset-0 z-40"
+                                        onClick={() => setOpenHalfCartonMenuKey(null)}
+                                      />
+                                      <div className={`absolute left-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-1 ${!hasSubUnits ? 'min-w-[230px] w-max max-w-[280px]' : 'min-w-[160px]'} flex flex-col gap-0.5 animate-in fade-in zoom-in-95`}>
+                                        <div className="px-2 py-1 text-[9.5px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                                          ຂະໜາດ{u.unitName || 'ແກັດ'} :
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (toggleCartItemHalfCarton) {
+                                              toggleCartItemHalfCarton(item.product.id, item.unit.id, false);
+                                            }
+                                            setOpenHalfCartonMenuKey(null);
+                                          }}
+                                          className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors whitespace-nowrap ${
+                                            !isHalfCartonActive
+                                              ? 'bg-teal-50 text-teal-900 font-bold'
+                                              : 'text-slate-700 hover:bg-slate-50 font-medium'
+                                          }`}
+                                        >
+                                          <span>1 {u.unitName} (ເຕັມ)</span>
+                                          {!isHalfCartonActive && <Check size={13} weight="bold" className="text-teal-600 shrink-0" />}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (!hasSubUnits) {
+                                              if (onAlert) {
+                                                onAlert('ສິນຄ້ານີ້ຍັງບໍ່ມີຫົວໜ່ວຍຍ່ອຍ (ປ໋ອງ/ແກ້ວ) ເພື່ອຫານເຄິ່ງ', 'ແຈ້ງເຕືອນ', 'warning');
+                                              }
+                                              setOpenHalfCartonMenuKey(null);
+                                              return;
+                                            }
+
+                                            if (toggleCartItemHalfCarton) {
+                                              toggleCartItemHalfCarton(item.product.id, item.unit.id, true);
+                                            }
+                                            setOpenHalfCartonMenuKey(null);
+                                          }}
+                                          className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between gap-2 cursor-pointer transition-colors whitespace-nowrap ${
+                                            isHalfCartonActive
+                                              ? 'bg-amber-50 text-amber-900 font-bold'
+                                              : 'text-slate-700 hover:bg-slate-50 font-medium'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2 whitespace-nowrap min-w-0">
+                                            <span className="shrink-0 font-bold">ເຄິ່ງ{u.unitName}</span>
+                                            {!hasSubUnits && (
+                                              <span className="text-[9.5px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-normal whitespace-nowrap shrink-0">
+                                                ບໍ່ມີຫົວໜ່ວຍຍ່ອຍ
+                                              </span>
+                                            )}
+                                          </div>
+                                          {isHalfCartonActive && <Check size={13} weight="bold" className="text-amber-600 shrink-0" />}
+                                        </button>
                                       </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (toggleCartItemHalfCarton) {
-                                            toggleCartItemHalfCarton(item.product.id, item.unit.id, false);
-                                          }
-                                          setOpenHalfCartonMenuKey(null);
-                                        }}
-                                        className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                                          !isHalfCartonActive
-                                            ? 'bg-teal-50 text-teal-900 font-bold'
-                                            : 'text-slate-700 hover:bg-slate-50 font-medium'
-                                        }`}
-                                      >
-                                        <span>1 {u.unitName} (ເຕັມ)</span>
-                                        {!isHalfCartonActive && <Check size={13} weight="bold" className="text-teal-600" />}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (toggleCartItemHalfCarton) {
-                                            toggleCartItemHalfCarton(item.product.id, item.unit.id, true);
-                                          }
-                                          setOpenHalfCartonMenuKey(null);
-                                        }}
-                                        className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                                          isHalfCartonActive
-                                            ? 'bg-amber-50 text-amber-900 font-bold'
-                                            : 'text-slate-700 hover:bg-slate-50 font-medium'
-                                        }`}
-                                      >
-                                        <span>½ {u.unitName} (ເຄິ່ງ)</span>
-                                        {isHalfCartonActive && <Check size={13} weight="bold" className="text-amber-600" />}
-                                      </button>
-                                    </div>
-                                  </>
-                                )}
+                                    </>
+                                  );
+                                })()}
                               </div>
                             );
                           });
@@ -1460,53 +1482,74 @@ export default function PosScreen({
                                   <span>{displayLabel}</span>
                                   <CaretDown size={9} weight="bold" className={`opacity-80 transition-transform ${isHalfMenuOpen ? 'rotate-180' : ''}`} />
                                 </button>
-                                {isHalfMenuOpen && (
-                                  <>
-                                    <div
-                                      className="fixed inset-0 z-40"
-                                      onClick={() => setOpenHalfCartonMenuKey(null)}
-                                    />
-                                    <div className="absolute left-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-1 min-w-[160px] flex flex-col gap-0.5 animate-in fade-in zoom-in-95">
-                                      <div className="px-2 py-1 text-[9.5px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">
-                                        ຂະໜາດແກັດ / Quy cách:
+                                {isHalfMenuOpen && (() => {
+                                  const hasSubUnits =
+                                    (item.product?.units && item.product.units.length > 1 && Number(u.multiplier || 1) > 1) ||
+                                    Number(u.multiplier || 1) > 1;
+
+                                  return (
+                                    <>
+                                      <div
+                                        className="fixed inset-0 z-40"
+                                        onClick={() => setOpenHalfCartonMenuKey(null)}
+                                      />
+                                      <div className={`absolute left-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-xl border border-slate-200 p-1 ${!hasSubUnits ? 'min-w-[230px] w-max max-w-[280px]' : 'min-w-[160px]'} flex flex-col gap-0.5 animate-in fade-in zoom-in-95`}>
+                                        <div className="px-2 py-1 text-[9.5px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                                          ຂະໜາດ{u.unitName || 'ແກັດ'} :
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (toggleCartItemHalfCarton) {
+                                              toggleCartItemHalfCarton(item.product.id, item.unit.id, false);
+                                            }
+                                            setOpenHalfCartonMenuKey(null);
+                                          }}
+                                          className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors whitespace-nowrap ${
+                                            !isHalfCartonActive
+                                              ? 'bg-teal-50 text-teal-900 font-bold'
+                                              : 'text-slate-700 hover:bg-slate-50 font-medium'
+                                          }`}
+                                        >
+                                          <span>1 {u.unitName} (ເຕັມ)</span>
+                                          {!isHalfCartonActive && <Check size={13} weight="bold" className="text-teal-600 shrink-0" />}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (!hasSubUnits) {
+                                              if (onAlert) {
+                                                onAlert('ສິນຄ້ານີ້ຍັງບໍ່ມີຫົວໜ່ວຍຍ່ອຍ (ປ໋ອງ/ແກ້ວ) ເພື່ອຫານເຄິ່ງ', 'ແຈ້ງເຕືອນ', 'warning');
+                                              }
+                                              setOpenHalfCartonMenuKey(null);
+                                              return;
+                                            }
+
+                                            if (toggleCartItemHalfCarton) {
+                                              toggleCartItemHalfCarton(item.product.id, item.unit.id, true);
+                                            }
+                                            setOpenHalfCartonMenuKey(null);
+                                          }}
+                                          className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between gap-2 cursor-pointer transition-colors whitespace-nowrap ${
+                                            isHalfCartonActive
+                                              ? 'bg-amber-50 text-amber-900 font-bold'
+                                              : 'text-slate-700 hover:bg-slate-50 font-medium'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2 whitespace-nowrap min-w-0">
+                                            <span className="shrink-0 font-bold">ເຄິ່ງ{u.unitName}</span>
+                                            {!hasSubUnits && (
+                                              <span className="text-[9.5px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-normal whitespace-nowrap shrink-0">
+                                                ບໍ່ມີຫົວໜ່ວຍຍ່ອຍ
+                                              </span>
+                                            )}
+                                          </div>
+                                          {isHalfCartonActive && <Check size={13} weight="bold" className="text-amber-600 shrink-0" />}
+                                        </button>
                                       </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (toggleCartItemHalfCarton) {
-                                            toggleCartItemHalfCarton(item.product.id, item.unit.id, false);
-                                          }
-                                          setOpenHalfCartonMenuKey(null);
-                                        }}
-                                        className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                                          !isHalfCartonActive
-                                            ? 'bg-teal-50 text-teal-900 font-bold'
-                                            : 'text-slate-700 hover:bg-slate-50 font-medium'
-                                        }`}
-                                      >
-                                        <span>1 {u.unitName} (ເຕັມ)</span>
-                                        {!isHalfCartonActive && <Check size={13} weight="bold" className="text-teal-600" />}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (toggleCartItemHalfCarton) {
-                                            toggleCartItemHalfCarton(item.product.id, item.unit.id, true);
-                                          }
-                                          setOpenHalfCartonMenuKey(null);
-                                        }}
-                                        className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                                          isHalfCartonActive
-                                            ? 'bg-amber-50 text-amber-900 font-bold'
-                                            : 'text-slate-700 hover:bg-slate-50 font-medium'
-                                        }`}
-                                      >
-                                        <span>½ {u.unitName} (ເຄິ່ງ)</span>
-                                        {isHalfCartonActive && <Check size={13} weight="bold" className="text-amber-600" />}
-                                      </button>
-                                    </div>
-                                  </>
-                                )}
+                                    </>
+                                  );
+                                })()}
                               </>
                             );
                           })()}
@@ -1763,6 +1806,30 @@ export default function PosScreen({
               <Barcode size={20} weight="bold" />
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse hidden sm:inline-block" />
               <span className="hidden sm:inline">ສະແກນ</span>
+            </button>
+
+            {/* Nút Cart trên Mobile (chỉ hiển thị ở màn hình nhỏ xoay dọc < 768px): Nằm giữa nút Scan và Refresh */}
+            <button
+              type="button"
+              onClick={() => {
+                playActionClickBeep();
+                setMobileCartOpen(true);
+              }}
+              className={`md:hidden relative h-11 px-3 rounded-xl border transition-all active:scale-95 shrink-0 flex items-center justify-center cursor-pointer shadow-2xs ${
+                cart.length > 0
+                  ? 'bg-teal-600 hover:bg-teal-700 text-white border-teal-600 shadow-teal-600/25'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+              }`}
+              title="ເປີດກະຕ່າສິນຄ້າ (Shopping Cart)"
+            >
+              <div className="relative flex items-center justify-center">
+                <ShoppingCart size={19} weight="bold" />
+                {cart.length > 0 && (
+                  <span className="absolute -top-2 -right-2.5 min-w-[17px] h-[17px] px-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black font-mono flex items-center justify-center border-2 border-white shadow-xs">
+                    {cart.reduce((s, i) => s + (i.quantity || 1), 0)}
+                  </span>
+                )}
+              </div>
             </button>
 
             {/* Nút Tỷ giá: Ẩn ở chế độ màn hình dọc điện thoại (< 768px/md:flex), giữ nguyên ở iPad / Tablet (>= 768px) */}

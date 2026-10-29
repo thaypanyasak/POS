@@ -971,7 +971,7 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       const qty = Number(item.quantity) || 1;
       const lineTotal = Number(item.lineTotal !== undefined ? item.lineTotal : (unitPrice * qty));
       const fullMult = Number(item.effectiveMultiplier ?? item.unit?.multiplier) || 1;
-      const multiplier = item.isHalfCarton ? fullMult / 2 : fullMult;
+      const multiplier = item.isHalfCarton ? (fullMult > 1 ? Math.round(fullMult / 2) : 1) : Math.round(fullMult);
       const baseCost = Number(item.product?.costPerBaseUnit) || 0;
 
       // Extract bundle components breakdown if item is a bundle
@@ -2270,7 +2270,7 @@ export async function updateExistingSaleTransactionInSupabase(
           const rawLine = Number(item.lineTotal || item.line_total);
           const lineTotal = rawLine > 0 ? rawLine : (unitPrice * qty);
           const fullMult = Number(item.effectiveMultiplier ?? item.unit?.multiplier) || 1;
-          const multiplier = item.isHalfCarton ? fullMult / 2 : fullMult;
+          const multiplier = item.isHalfCarton ? (fullMult > 1 ? Math.round(fullMult / 2) : 1) : Math.round(fullMult);
           const baseCost = Number(item.product?.costPerBaseUnit) || 0;
           const lineCost = baseCost * multiplier * qty;
           const lineProfit = lineTotal - lineCost;

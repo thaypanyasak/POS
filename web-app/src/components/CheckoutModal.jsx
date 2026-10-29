@@ -40,6 +40,11 @@ export default function CheckoutModal({
 
   const remainingDebt = Math.max(0, cartSubtotal - (Number(debtPaidKip) || 0));
 
+  // Scan for any half-carton items on single-tier products
+  const hasSingleTierHalfCarton = useMemo(() => {
+    return cart.some((it) => it.isHalfCarton && Number(it.unit?.multiplier || 1) <= 1 && it.product?.trackStock !== false);
+  }, [cart]);
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col gap-3.5 max-h-[92vh] overflow-y-auto">
@@ -75,7 +80,12 @@ export default function CheckoutModal({
                       editingOldTransaction.originalRemainingDebt !== undefined
                         ? Number(editingOldTransaction.originalRemainingDebt)
                         : Number(editingOldTransaction.remainingDebt || 0);
-                    return (
+                    // Scan for any half-carton items on single-tier products
+  const hasSingleTierHalfCarton = useMemo(() => {
+    return cart.some((it) => it.isHalfCarton && Number(it.unit?.multiplier || 1) <= 1 && it.product?.trackStock !== false);
+  }, [cart]);
+
+  return (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                         <HandCoins size={12} weight="bold" />
                         <span>ຕິດໜີ້ (ຄ້າງ: {formatDots(remaining)} ₭)</span>
@@ -83,14 +93,24 @@ export default function CheckoutModal({
                     );
                   }
                   if (m === 'transfer' || m === 'onepay') {
-                    return (
+                    // Scan for any half-carton items on single-tier products
+  const hasSingleTierHalfCarton = useMemo(() => {
+    return cart.some((it) => it.isHalfCarton && Number(it.unit?.multiplier || 1) <= 1 && it.product?.trackStock !== false);
+  }, [cart]);
+
+  return (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                         <QrCode size={12} weight="bold" />
                         <span>ໂອນເງິນ (Transfer)</span>
                       </span>
                     );
                   }
-                  return (
+                  // Scan for any half-carton items on single-tier products
+  const hasSingleTierHalfCarton = useMemo(() => {
+    return cart.some((it) => it.isHalfCarton && Number(it.unit?.multiplier || 1) <= 1 && it.product?.trackStock !== false);
+  }, [cart]);
+
+  return (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                       <Money size={12} weight="bold" />
                       <span>ເງິນສົດ (Cash)</span>
@@ -170,7 +190,12 @@ export default function CheckoutModal({
                     : 0;
                   const crateDepositTotal = missingCount * feePerCrate;
 
-                  return (
+                  // Scan for any half-carton items on single-tier products
+  const hasSingleTierHalfCarton = useMemo(() => {
+    return cart.some((it) => it.isHalfCarton && Number(it.unit?.multiplier || 1) <= 1 && it.product?.trackStock !== false);
+  }, [cart]);
+
+  return (
                     <div
                       key={`${item.product?.id}_${item.unit?.id}_${idx}`}
                       className="flex flex-col text-xs border-b border-slate-100 last:border-none pb-1.5 last:pb-0"
@@ -206,6 +231,14 @@ export default function CheckoutModal({
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* Half-carton without sub-unit fail-safe warning */}
+          {cart && cart.some((it) => it.isHalfCarton && Number(it.unit?.multiplier || 1) <= 1 && it.product?.trackStock !== false) && (
+            <div className="p-2.5 bg-amber-50 border border-amber-200/90 rounded-2xl text-amber-900 text-xs flex items-center gap-2 font-bold shadow-2xs">
+              <WarningCircle size={16} weight="fill" className="text-amber-600 shrink-0" />
+              <span>ມີສິນຄ້າຂາຍເຄິ່ງທີ່ບໍ່ມີຫົວໜ່ວຍຍ່ອຍ (ຕັດສາງ 1)</span>
             </div>
           )}
 

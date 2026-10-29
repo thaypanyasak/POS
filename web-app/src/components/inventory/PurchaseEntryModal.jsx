@@ -1115,7 +1115,7 @@ export default function PurchaseEntryModal({
                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                   }`}
                 >
-                  ຈ່າຍຄົບ (PAID)
+                  ຈ່າຍຄົບ 
                 </button>
                 <button
                   type="button"
@@ -1126,7 +1126,7 @@ export default function PurchaseEntryModal({
                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                   }`}
                 >
-                  ຕິດໜີ້ (DEBT)
+                  ຕິດໜີ້ 
                 </button>
                 <button
                   type="button"
@@ -1146,7 +1146,7 @@ export default function PurchaseEntryModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                  ຈຳນວນເງິນທີ່ຈ່າຍແລ້ວ (Paid Amount ₭)
+                  ຈຳນວນເງິນທີ່ຈ່າຍແລ້ວ
                 </label>
                 <input
                   type="text"
@@ -1166,7 +1166,7 @@ export default function PurchaseEntryModal({
               >
                 <div>
                   <span className="text-[10px] font-black uppercase tracking-wider block">
-                    ຍອດໜີ້ຄ້າງຊຳລະ (DEBT BALANCE)
+                    ຍອດໜີ້ຄ້າງຊຳລະ
                   </span>
                   <span className="text-xs font-mono font-bold">
                     {debtAmount > 0 ? 'ຍັງຄ້າງຈ່າຍຜູ້ສະໜອງ' : 'ຊຳລະຄົບຖ້ວນ 100% (PAID)'}

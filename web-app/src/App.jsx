@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import confetti from 'canvas-confetti';
 import {
   fetchProductsFromSupabase,
@@ -2318,7 +2319,7 @@ export default function App() {
           });
         } else {
           const fullMult = Number(it.unit?.multiplier || 1);
-          const effectiveMult = it.isHalfCarton ? fullMult / 2 : fullMult;
+          const effectiveMult = it.isHalfCarton ? (fullMult > 1 ? fullMult / 2 : 1) : fullMult;
           totalCost += (it.product?.costPerBaseUnit || 0) * effectiveMult * it.quantity;
         }
       });
@@ -2388,7 +2389,7 @@ export default function App() {
         const lineTotal = baseLine + crateDepositTotal;
 
         const fullMult = Number(it.unit.multiplier || 1);
-        const effectiveMultiplier = it.isHalfCarton ? fullMult / 2 : fullMult;
+        const effectiveMultiplier = it.isHalfCarton ? (fullMult > 1 ? Math.round(fullMult / 2) : 1) : Math.round(fullMult);
 
         return {
           ...it,
@@ -2553,7 +2554,7 @@ export default function App() {
 
           const regularBaseSold = soldItems.reduce((sum, it) => {
             const mult = Number(it.unit?.multiplier || 1);
-            const effMult = it.isHalfCarton ? mult / 2 : mult;
+            const effMult = it.isHalfCarton ? (mult > 1 ? Math.round(mult / 2) : 1) : Math.round(mult);
             return sum + effMult * it.quantity;
           }, 0);
 
@@ -2824,7 +2825,7 @@ export default function App() {
           const itemsToRestore = (tx.items || tx.sale_transaction_items || []).map((it) => {
             const prodId = it.product?.id || it.productId || it.product_id;
             const fullMult = Number(it.effectiveMultiplier || it.unit?.multiplier || it.multiplier) || 1;
-            const effMult = it.isHalfCarton ? fullMult / 2 : fullMult;
+            const effMult = it.isHalfCarton ? (fullMult > 1 ? Math.round(fullMult / 2) : 1) : Math.round(fullMult);
             const qty = Number(it.quantity) || 1;
             return {
               productId: prodId,
@@ -2926,7 +2927,7 @@ export default function App() {
         try {
           const itemsToRestore = (tx.items || tx.sale_transaction_items || []).map((it) => {
             const fullMult = Number(it.effectiveMultiplier || it.unit?.multiplier || it.multiplier) || 1;
-            const effMult = it.isHalfCarton ? fullMult / 2 : fullMult;
+            const effMult = it.isHalfCarton ? (fullMult > 1 ? Math.round(fullMult / 2) : 1) : Math.round(fullMult);
             return {
               productId: it.product?.id || it.product_id,
               unitsToRestore: effMult * (Number(it.quantity) || 1),
@@ -3352,6 +3353,7 @@ export default function App() {
             onSelectOrderTab={handleSelectOrderTab}
             onAddNewOrderTab={handleAddNewOrderTab}
             onCloseOrderTab={handleCloseOrderTab}
+            onAlert={openAlert}
           />
         )}
 
@@ -3653,15 +3655,16 @@ export default function App() {
       />
 
       {/* 4. REAL DATABASE LOADING OVERLAY */}
-      {isSavingDb && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-100">
+      {isSavingDb && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[998] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-100">
           <div className="bg-white p-5 rounded-2xl shadow-2xl flex items-center gap-3.5 border border-slate-200">
             <div className="w-5 h-5 border-2 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
             <span className="text-xs font-bold text-slate-800 font-sans">
               {dbSavingMessage || 'ກຳລັງບັນທຶກລົງຖານຂໍ້ມູນ Supabase...'}
             </span>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* 5. TACTILE NUMPAD CASHIER PIN LOCK OVERLAY */}
