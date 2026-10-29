@@ -26,9 +26,10 @@ import {
   CaretRight,
   Bell,
   FileArrowDown,
+  DotsThreeVertical,
 } from '@phosphor-icons/react';
 import { exportTransactionsToExcel } from '../utils/excelExport';
-import { formatKip, normalizeLao } from '../utils/formatters';
+import { formatKip, normalizeLao, getDueDateStatus } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
@@ -90,6 +91,21 @@ export default function HistoryView({
   // Customer Debt Recovery Modal state
   const [debtModalTx, setDebtModalTx] = useState(null);
 
+  // Row Action Menu State (for 3-dots action popover)
+  const [openActionTxId, setOpenActionTxId] = useState(null);
+
+  // Close 3-dots action popover when clicking anywhere outside
+  useEffect(() => {
+    if (!openActionTxId) return;
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('.row-action-popover-container')) {
+        setOpenActionTxId(null);
+      }
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, [openActionTxId]);
+
   // 1. Transactions filtered strictly by the currently selected date range (today, yesterday, 7days, all, custom)
   const dateFilteredTransactions = useMemo(() => {
     const now = new Date();
@@ -139,13 +155,17 @@ export default function HistoryView({
       } else {
         const method = (tx.paymentMethod || '').toLowerCase();
         const status = (tx.paymentStatus || '').toUpperCase();
-        const remainingDebt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
-
+        const total = Number(tx.grandTotal || tx.finalTotalKip || 0);
+        const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
+        let remainingDebt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
         const isDebtOrder =
           status === 'DEBT' ||
           status === 'PARTIAL' ||
           remainingDebt > 0 ||
           method === 'debt';
+        if (isDebtOrder && remainingDebt <= 0 && paid < total) {
+          remainingDebt = Math.max(0, total - paid);
+        }
 
         if (isDebtOrder) {
           debt++;
@@ -223,8 +243,13 @@ export default function HistoryView({
 
       const method = (tx.paymentMethod || '').toLowerCase();
       const status = (tx.paymentStatus || '').toUpperCase();
-      const remainingDebt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
+      const total = Number(tx.grandTotal || tx.finalTotalKip || tx.totalKip || 0);
+      const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
+      let remainingDebt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
       const isDebt = status === 'DEBT' || status === 'PARTIAL' || remainingDebt > 0 || method === 'debt';
+      if (isDebt && remainingDebt <= 0 && paid < total) {
+        remainingDebt = Math.max(0, total - paid);
+      }
 
       if (isDebt) {
         debtBills++;
@@ -310,7 +335,9 @@ export default function HistoryView({
         const method = (tx.paymentMethod || '').toLowerCase();
         const status = (tx.paymentStatus || '').toUpperCase();
         const debt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
-        return status === 'DEBT' || status === 'PARTIAL' || debt > 0 || method === 'debt';
+        const total = Number(tx.grandTotal || 0);
+        const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
+        return status === 'DEBT' || status === 'PARTIAL' || debt > 0 || method === 'debt' || (method === 'debt' && paid < total);
       });
     } else if (activeTab === 'cancelled') {
       list = list.filter((tx) => tx.status === 'cancelled' || tx.isCancelled);
@@ -521,6 +548,9 @@ export default function HistoryView({
       }
       inputEl.dispatchEvent(new Event('input', { bubbles: true }));
       inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+      try {
+        inputEl.blur();
+      } catch (_) {}
     }
 
     setScannerOpen(false);
@@ -574,7 +604,8 @@ export default function HistoryView({
   useHardwareBarcodeScanner({
     onScan: handleScanBarcode,
     enabled: true,
-    maxInterval: 50,
+    maxInterval: 180,
+    maxAvgInterval: 85,
     duplicateInterval: 250,
     minLength: 3,
     preventDefaultOnEnter: true,
@@ -1109,18 +1140,24 @@ export default function HistoryView({
           const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
           const total = Number(tx.grandTotal) || 0;
           const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
-          const remainingDebt = Number(
-            tx.remainingDebt ?? tx.debtAmount ?? Math.max(0, total - paid)
-          );
           const method = (tx.paymentMethod || '').toLowerCase();
           const status = (tx.paymentStatus || '').toUpperCase();
+          const isDebtOrder = method === 'debt' || tx.isDebt || status === 'DEBT' || status === 'PARTIAL';
+
+          let remainingDebt = Number(
+            tx.remainingDebt ?? tx.debtAmount ?? Math.max(0, total - paid)
+          );
+          if (isDebtOrder && remainingDebt <= 0 && paid < total) {
+            remainingDebt = Math.max(0, total - paid);
+          }
+
           const isDebtItem =
             status === 'DEBT' ||
             status === 'PARTIAL' ||
             remainingDebt > 0 ||
-            method === 'debt' ||
+            isDebtOrder ||
             (tx.debtPayments && tx.debtPayments.length > 0);
-          const hasDebt = remainingDebt > 0 || status === 'DEBT' || status === 'PARTIAL';
+          const hasDebt = remainingDebt > 0;
 
           const highlightType = realtimeHighlights?.[tx.id];
           const isRealtimeNew = highlightType === 'new';
@@ -1287,6 +1324,26 @@ export default function HistoryView({
                     <span className="text-xs font-mono font-black text-slate-900">
                       {formatKip(total)}
                     </span>
+                  </div>
+                )}
+
+                {/* Mobile Debt Due Date Banner */}
+                {activeTab === 'debt' && isDebtItem && (
+                  <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 text-xs">
+                    <span className="text-[10.5px] text-slate-500 font-bold uppercase flex items-center gap-1">
+                      <CalendarBlank size={12} weight="bold" className="text-rose-500" />
+                      <span>ກຳນົດຊຳລະ:</span>
+                    </span>
+                    {(() => {
+                      const rawDue = tx.debtDueDate || tx.debt_due_date;
+                      const due = getDueDateStatus(rawDue);
+                      if (!due) return <span className="text-[10.5px] text-slate-400 font-medium">ບໍ່ກຳນົດ</span>;
+                      return (
+                        <span className={`px-2 py-0.5 rounded-full text-[10.5px] ${due.badgeClass}`}>
+                          {due.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -1482,22 +1539,23 @@ export default function HistoryView({
       {/* 4. TABLET & DESKTOP VIEW (>= 768px): Data Table */}
       <div className="hidden md:block w-full max-w-full bg-white rounded-2xl border border-slate-200 shadow-xs mb-3 overflow-hidden">
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-y">
-          <table className={`w-full text-left text-xs border-separate border-spacing-0 ${activeTab === 'debt' ? 'min-w-[840px]' : 'min-w-[700px]'}`}>
+          <table className={`w-full text-left text-xs border-separate border-spacing-0 ${activeTab === 'debt' ? 'min-w-[760px]' : 'min-w-[700px]'}`}>
           <thead>
             <tr className="sticky top-0 z-10 text-slate-700 font-extrabold [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
-              <th className="py-3 px-4">ເລກທີບິນ</th>
+              <th className="py-3 px-3 sm:px-4">ເລກທີບິນ</th>
               <th className="py-3 px-3">ວັນທີ & ເວລາ</th>
               <th className="py-3 px-3">ຜູ້ຂາຍ</th>
               <th className="py-3 px-3">ຊື່ລູກຄ້າ</th>
-              <th className="py-3 px-3">ຮູບແບບ / ສະຖານະ</th>
+              {activeTab !== 'debt' && <th className="py-3 px-3">ຮູບແບບ / ສະຖານະ</th>}
               <th className="py-3 px-3 text-right">ຍອດລວມ</th>
               {activeTab === 'debt' && (
                 <>
                   <th className="py-3 px-3 text-right">ຈ່າຍແລ້ວ</th>
                   <th className="py-3 px-3 text-right">ໜີ້ຄ້າງ</th>
+                  <th className="py-3 px-3 text-center whitespace-nowrap">ກຳນົດຊຳລະ</th>
                 </>
               )}
-              <th className="py-3 px-4 text-center">ຈັດການບິນ (Actions)</th>
+              <th className="py-3 px-3 sm:px-4 text-center">ຈັດການ (Actions)</th>
             </tr>
           </thead>
           <tbody className="[&_td]:border-b [&_td]:border-slate-100">
@@ -1505,18 +1563,24 @@ export default function HistoryView({
               const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
               const total = Number(tx.grandTotal) || 0;
               const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
-              const remainingDebt = Number(
-                tx.remainingDebt ?? tx.debtAmount ?? Math.max(0, total - paid)
-              );
               const method = (tx.paymentMethod || '').toLowerCase();
               const status = (tx.paymentStatus || '').toUpperCase();
+              const isDebtOrder = method === 'debt' || tx.isDebt || status === 'DEBT' || status === 'PARTIAL';
+
+              let remainingDebt = Number(
+                tx.remainingDebt ?? tx.debtAmount ?? Math.max(0, total - paid)
+              );
+              if (isDebtOrder && remainingDebt <= 0 && paid < total) {
+                remainingDebt = Math.max(0, total - paid);
+              }
+
               const isDebtItem =
                 status === 'DEBT' ||
                 status === 'PARTIAL' ||
                 remainingDebt > 0 ||
-                method === 'debt' ||
+                isDebtOrder ||
                 (tx.debtPayments && tx.debtPayments.length > 0);
-              const hasDebt = remainingDebt > 0 || status === 'DEBT' || status === 'PARTIAL';
+              const hasDebt = remainingDebt > 0;
 
               const highlightType = realtimeHighlights?.[tx.id];
               const isRealtimeNew = highlightType === 'new';
@@ -1586,7 +1650,7 @@ export default function HistoryView({
                     </div>
                   </td>
 
-                  {/* Date & Time */}
+                  {/* Date & Time (Clean 2-row max) */}
                   <td className="py-3 px-3 text-slate-600 font-medium whitespace-nowrap">
                     <div>{new Date(tx.createdAt).toLocaleDateString('lo-LA')}</div>
                     <div className="text-[10px] text-slate-400">
@@ -1597,7 +1661,7 @@ export default function HistoryView({
                     </div>
                   </td>
 
-                  {/* Cashier */}
+                  {/* Cashier - Separated column (Single row chip) */}
                   <td className="py-3 px-3 whitespace-nowrap">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
                       <User size={12} weight="bold" />
@@ -1611,45 +1675,58 @@ export default function HistoryView({
                       isCancelled ? 'text-slate-500' : 'text-slate-800'
                     }`}
                   >
-                    {tx.customerName || 'ລູກຄ້າທົ່ວໄປ'}
-                  </td>
-
-                  {/* Payment Method / Status - With Clean Icons */}
-                  <td className="py-3 px-3 whitespace-nowrap">
-                    {isCancelled ? (
-                      <span className="px-2 py-0.5 rounded-full text-[10.5px] font-black bg-rose-100 text-rose-800 border border-rose-300 inline-flex items-center gap-1">
-                        <Prohibit size={12} weight="bold" />
-                        <span>ຍົກເລີກບິນ</span>
-                      </span>
-                    ) : isDebtItem ? (
-                      <span className="px-2 py-0.5 rounded-full text-[10.5px] font-black bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
-                        <HandCoins size={12} weight="bold" />
-                        <span>
-                          {remainingDebt >= total ? 'ຕິດໜີ້ 100%' : remainingDebt > 0 ? 'ຕິດໜີ້ບາງສ່ວນ' : 'ຊຳລະຄົບແລ້ວ'}
+                    <div>{tx.customerName || 'ລູກຄ້າທົ່ວໄປ'}</div>
+                    {/* In Debt Tab: Merge Debt status badge right under customer name */}
+                    {activeTab === 'debt' && isDebtItem && (
+                      <div className="mt-1">
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-0.5">
+                          <HandCoins size={10} weight="bold" />
+                          <span>
+                            {remainingDebt >= total ? 'ຕິດໜີ້ 100%' : remainingDebt > 0 ? 'ຕິດໜີ້ບາງສ່ວນ' : 'ຊຳລະຄົບແລ້ວ'}
+                          </span>
                         </span>
-                      </span>
-                    ) : (
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold inline-flex items-center gap-1 ${
-                          tx.paymentMethod === 'cash' || tx.paymentMethod === 'ເງິນສົດ'
-                            ? 'bg-teal-50 text-teal-800 border border-teal-200'
-                            : 'bg-blue-50 text-blue-800 border border-blue-200'
-                        }`}
-                      >
-                        {tx.paymentMethod === 'cash' || tx.paymentMethod === 'ເງິນສົດ' ? (
-                          <>
-                            <Money size={12} weight="bold" />
-                            <span>ເງິນສົດ</span>
-                          </>
-                        ) : (
-                          <>
-                            <QrCode size={12} weight="bold" />
-                            <span>QR ໂອນ</span>
-                          </>
-                        )}
-                      </span>
+                      </div>
                     )}
                   </td>
+
+                  {/* Payment Method / Status - Hidden in Debt Tab */}
+                  {activeTab !== 'debt' && (
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      {isCancelled ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10.5px] font-black bg-rose-100 text-rose-800 border border-rose-300 inline-flex items-center gap-1">
+                          <Prohibit size={12} weight="bold" />
+                          <span>ຍົກເລີກບິນ</span>
+                        </span>
+                      ) : isDebtItem ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10.5px] font-black bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
+                          <HandCoins size={12} weight="bold" />
+                          <span>
+                            {remainingDebt >= total ? 'ຕິດໜີ້ 100%' : remainingDebt > 0 ? 'ຕິດໜີ້ບາງສ່ວນ' : 'ຊຳລະຄົບແລ້ວ'}
+                          </span>
+                        </span>
+                      ) : (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold inline-flex items-center gap-1 ${
+                            tx.paymentMethod === 'cash' || tx.paymentMethod === 'ເງິນສົດ'
+                              ? 'bg-teal-50 text-teal-800 border border-teal-200'
+                              : 'bg-blue-50 text-blue-800 border border-blue-200'
+                          }`}
+                        >
+                          {tx.paymentMethod === 'cash' || tx.paymentMethod === 'ເງິນສົດ' ? (
+                            <>
+                              <Money size={12} weight="bold" />
+                              <span>ເງິນສົດ</span>
+                            </>
+                          ) : (
+                            <>
+                              <QrCode size={12} weight="bold" />
+                              <span>QR ໂອນ</span>
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </td>
+                  )}
 
                   {/* Grand Total */}
                   <td className="py-3 px-3 text-right font-black font-mono">
@@ -1658,7 +1735,7 @@ export default function HistoryView({
                     </span>
                   </td>
 
-                  {/* Paid Amount & Remaining Debt - ONLY DISPLAYED WHEN activeTab === 'debt' */}
+                  {/* Paid Amount, Remaining Debt & Due Date - ONLY DISPLAYED WHEN activeTab === 'debt' */}
                   {activeTab === 'debt' && (
                     <>
                       {/* Paid Amount (ຈ່າຍແລ້ວ) */}
@@ -1685,82 +1762,218 @@ export default function HistoryView({
                           <span className="text-slate-300 font-bold select-none">-</span>
                         )}
                       </td>
+
+                      {/* Due Date (ກຳນົດຊຳລະ) */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        {(() => {
+                          const rawDue = tx.debtDueDate || tx.debt_due_date;
+                          const due = isDebtItem ? getDueDateStatus(rawDue) : null;
+                          if (!due) return <span className="text-slate-300 font-bold select-none">-</span>;
+                          return (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] ${due.badgeClass}`}
+                              title={due.formattedDate}
+                            >
+                              <CalendarBlank size={12} weight="bold" />
+                              <span>{due.label}</span>
+                            </span>
+                          );
+                        })()}
+                      </td>
                     </>
                   )}
 
-                  {/* Actions */}
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex items-center justify-center gap-1 flex-wrap">
-                      {/* View/Print Receipt */}
-                      <button
-                        type="button"
-                        onClick={() => handlePrintReceipt(tx)}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer ${
-                          Boolean(tx.is_printed || tx.isPrinted)
-                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                            : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
-                        }`}
-                        title={Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນໃໝ່' : 'ເບິ່ງ / ພິມບິນ'}
-                      >
-                        <Printer size={13} />
-                        <span>{Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນ' : 'ພິມ'}</span>
-                      </button>
+                  {/* Actions Column */}
+                  <td className="py-3 px-3 sm:px-4 text-center">
+                    {activeTab === 'debt' ? (
+                      /* Optimized Compact Action for Debt Tab on iPad: Primary Button + 3-Dots Dropdown */
+                      <div className="inline-flex items-center justify-center gap-1.5 relative row-action-popover-container">
+                        {/* Primary Button */}
+                        {!isCancelled && hasDebt ? (
+                          <button
+                            type="button"
+                            onClick={() => setDebtModalTx(tx)}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black inline-flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer"
+                            title="ຊຳລະໜີ້ລູກຄ້າ"
+                          >
+                            <HandCoins size={13} weight="bold" />
+                            <span>ຊຳລະ</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handlePrintReceipt(tx)}
+                            className={`px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer ${
+                              Boolean(tx.is_printed || tx.isPrinted)
+                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
+                            }`}
+                            title={Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນໃໝ່' : 'ເບິ່ງ / ພິມບິນ'}
+                          >
+                            <Printer size={13} />
+                            <span>{Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນ' : 'ພິມ'}</span>
+                          </button>
+                        )}
 
-                      {/* Edit Order via POS (Replace & Re-checkout pattern) */}
-                      {!isCancelled && onEditOrderInPos && (
+                        {/* 3-Dots Action Button */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenActionTxId(openActionTxId === tx.id ? null : tx.id);
+                            }}
+                            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                              openActionTxId === tx.id
+                                ? 'bg-slate-200 border-slate-300 text-slate-900'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200/80'
+                            }`}
+                            title="ຕົວເລືອກເພີ່ມເຕີມ"
+                          >
+                            <DotsThreeVertical size={16} weight="bold" />
+                          </button>
+
+                          {/* 3-Dots Floating Dropdown Popover */}
+                          {openActionTxId === tx.id && (
+                            <div
+                              className="absolute right-0 top-full mt-1 z-40 bg-white rounded-xl shadow-xl border border-slate-200 py-1 min-w-[150px] text-left animate-in fade-in zoom-in-95 duration-150"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {/* Print */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenActionTxId(null);
+                                  handlePrintReceipt(tx);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-2 transition-colors cursor-pointer"
+                              >
+                                <Printer size={14} className="text-teal-600" />
+                                <span>ເບິ່ງ / ພິມບິນ</span>
+                              </button>
+
+                              {/* Edit Order via POS */}
+                              {!isCancelled && onEditOrderInPos && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenActionTxId(null);
+                                    onEditOrderInPos(tx);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer"
+                                >
+                                  <PencilSimple size={14} weight="bold" className="text-amber-600" />
+                                  <span>ແກ້ໄຂບິນ</span>
+                                </button>
+                              )}
+
+                              {/* Void / Cancel */}
+                              {!isCancelled && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenActionTxId(null);
+                                    onCancelTransaction && onCancelTransaction(tx);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer"
+                                >
+                                  <Prohibit size={14} weight="bold" className="text-rose-600" />
+                                  <span>ຍົກເລີກບິນ</span>
+                                </button>
+                              )}
+
+                              {/* Delete (Admin Only) */}
+                              {canDeleteOrders && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenActionTxId(null);
+                                    onDeleteTransaction && onDeleteTransaction(tx);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-100"
+                                >
+                                  <Trash size={14} className="text-red-600" />
+                                  <span>ລຶບຖາວອນ</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Standard Multi-Button Actions for Other Tabs */
+                      <div className="flex items-center justify-center gap-1 flex-wrap">
+                        {/* View/Print Receipt */}
                         <button
                           type="button"
-                          onClick={() => onEditOrderInPos(tx)}
-                          className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-                          title="ແກ້ໄຂບິນໂດຍນຳເຂົ້າໜ້າ POS"
+                          onClick={() => handlePrintReceipt(tx)}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer ${
+                            Boolean(tx.is_printed || tx.isPrinted)
+                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                              : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
+                          }`}
+                          title={Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນໃໝ່' : 'ເບິ່ງ / ພິມບິນ'}
                         >
-                          <PencilSimple size={13} weight="bold" />
-                          <span>ແກ້ໄຂ</span>
+                          <Printer size={13} />
+                          <span>{Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນ' : 'ພິມ'}</span>
                         </button>
-                      )}
 
-                      {/* Collect Debt Modal */}
-                      {!isCancelled && hasDebt && (
-                        <button
-                          type="button"
-                          onClick={() => setDebtModalTx(tx)}
-                          className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black inline-flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer"
-                          title="ຊຳລະໜີ້ລູກຄ້າ"
-                        >
-                          <HandCoins size={13} weight="bold" />
-                          <span>ຊຳລະ</span>
-                        </button>
-                      )}
+                        {/* Edit Order via POS (Replace & Re-checkout pattern) */}
+                        {!isCancelled && onEditOrderInPos && (
+                          <button
+                            type="button"
+                            onClick={() => onEditOrderInPos(tx)}
+                            className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                            title="ແກ້ໄຂບິນໂດຍນຳເຂົ້າໜ້າ POS"
+                          >
+                            <PencilSimple size={13} weight="bold" />
+                            <span>ແກ້ໄຂ</span>
+                          </button>
+                        )}
 
-                      {/* Void / Cancel */}
-                      {!isCancelled ? (
-                        <button
-                          type="button"
-                          onClick={() => onCancelTransaction && onCancelTransaction(tx)}
-                          className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-                          title="ຍົກເລີກບິນ & ຄືນສະຕັອກ"
-                        >
-                          <Prohibit size={13} weight="bold" />
-                          <span>ຍົກເລີກ</span>
-                        </button>
-                      ) : (
-                        <span className="px-2 py-1 rounded-lg bg-rose-50 text-rose-400 text-[10px] font-bold inline-flex items-center gap-1">
-                          ຍົກເລີກແລ້ວ
-                        </span>
-                      )}
+                        {/* Collect Debt Modal */}
+                        {!isCancelled && hasDebt && (
+                          <button
+                            type="button"
+                            onClick={() => setDebtModalTx(tx)}
+                            className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black inline-flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer"
+                            title="ຊຳລະໜີ້ລູກຄ້າ"
+                          >
+                            <HandCoins size={13} weight="bold" />
+                            <span>ຊຳລະ</span>
+                          </button>
+                        )}
 
-                      {/* Delete (Admin Only) */}
-                      {canDeleteOrders && (
-                        <button
-                          type="button"
-                          onClick={() => onDeleteTransaction && onDeleteTransaction(tx)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer"
-                          title="ລຶບຖາວອນ (Admin Only)"
-                        >
-                          <Trash size={14} />
-                        </button>
-                      )}
-                    </div>
+                        {/* Void / Cancel */}
+                        {!isCancelled ? (
+                          <button
+                            type="button"
+                            onClick={() => onCancelTransaction && onCancelTransaction(tx)}
+                            className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                            title="ຍົກເລີກບິນ & ຄືນສະຕັອກ"
+                          >
+                            <Prohibit size={13} weight="bold" />
+                            <span>ຍົກເລີກ</span>
+                          </button>
+                        ) : (
+                          <span className="px-2 py-1 rounded-lg bg-rose-50 text-rose-400 text-[10px] font-bold inline-flex items-center gap-1">
+                            ຍົກເລີກແລ້ວ
+                          </span>
+                        )}
+
+                        {/* Delete (Admin Only) */}
+                        {canDeleteOrders && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteTransaction && onDeleteTransaction(tx)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer"
+                            title="ລຶບຖາວອນ (Admin Only)"
+                          >
+                            <Trash size={14} />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               );

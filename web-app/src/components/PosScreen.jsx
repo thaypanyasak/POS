@@ -184,6 +184,7 @@ export default function PosScreen({
   const [selectedBundleForModal, setSelectedBundleForModal] = useState(null);
   const [editingBundleCartItem, setEditingBundleCartItem] = useState(null);
   const searchInputRef = useRef(null);
+  const lastHardwareScanTimeRef = useRef(0);
 
   // High-performance Infinite Scroll / Lazy Load for product catalog (Optimized for 3000+ items)
   const INITIAL_BATCH_SIZE = 48;
@@ -269,6 +270,7 @@ export default function PosScreen({
 
   const handleScanBarcode = (barcode) => {
     if (!barcode) return;
+    lastHardwareScanTimeRef.current = Date.now();
     const cleanCode = String(barcode).trim().toLowerCase();
 
     // Check if barcode matches any mixed carton bundle
@@ -280,6 +282,12 @@ export default function PosScreen({
       playSuccessBeep();
       setScannerOpen(false);
       setSearchQuery?.('');
+      if (searchInputRef.current) {
+        searchInputRef.current.value = '';
+        try {
+          searchInputRef.current.blur();
+        } catch (_) {}
+      }
       setScanToast({
         type: 'success',
         message: `ເປີດເລືອກລົດຊາດ: "${matchedBundle.name}"!`,
@@ -320,6 +328,12 @@ export default function PosScreen({
       playSuccessBeep();
       setScannerOpen(false);
       setSearchQuery('');
+      if (searchInputRef.current) {
+        searchInputRef.current.value = '';
+        try {
+          searchInputRef.current.blur();
+        } catch (_) {}
+      }
       setScanToast({
         type: 'success',
         message: `ເພີ່ມ "${matched.name}" (${targetUnit.unitName}) +1 ເຂົ້າກະຕ່າແລ້ວ!`,
@@ -348,9 +362,17 @@ export default function PosScreen({
   });
 
   const handleSearchKeyDown = (e) => {
-    if (e.key === 'Enter' && searchQuery.trim()) {
-      e.preventDefault();
-      handleScanBarcode(searchQuery);
+    if (e.key === 'Enter') {
+      // Ignore Enter if a hardware barcode scan just fired in the last 600ms to avoid double firing
+      if (Date.now() - lastHardwareScanTimeRef.current < 600) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (searchQuery.trim()) {
+        e.preventDefault();
+        handleScanBarcode(searchQuery);
+      }
     }
   };
 

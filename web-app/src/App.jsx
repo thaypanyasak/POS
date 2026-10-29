@@ -471,6 +471,7 @@ export default function App() {
   const [tenderedKip, setTenderedKip] = useState(0);
   const [debtPaidKip, setDebtPaidKip] = useState(0);
   const [debtNote, setDebtNote] = useState('');
+  const [debtDueDate, setDebtDueDate] = useState('');
 
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [selectedReceiptForView, setSelectedReceiptForView] = useState(null);
@@ -2284,11 +2285,13 @@ export default function App() {
         setTenderedKip(oldTendered >= cartSubtotal ? oldTendered : cartSubtotal);
       }
       setDebtNote(editingOldTransaction.debtNote || editingOldTransaction.debt_note || '');
+      setDebtDueDate(editingOldTransaction.debtDueDate || editingOldTransaction.debt_due_date || '');
     } else {
       setPaymentMethod('cash');
       setTenderedKip(cartSubtotal);
       setDebtPaidKip(0);
       setDebtNote('');
+      setDebtDueDate('');
     }
     setCheckoutModalOpen(true);
   };
@@ -2458,6 +2461,8 @@ export default function App() {
         debtAmount: remainingDebt,
         debtStatus,
         debtNote: debtNote.trim(),
+        debtDueDate: isDebt ? (debtDueDate || null) : null,
+        debt_due_date: isDebt ? (debtDueDate || null) : null,
         totalCost: totalCostLak,
         totalCostLak,
         totalCostThb,
@@ -2484,6 +2489,8 @@ export default function App() {
       safeSetItem(`meiishop_tx_meta_${txId}`, {
         items: receiptItems,
         receiptNumber: receiptNo,
+        debtNote: debtNote.trim(),
+        debtDueDate: isDebt ? (debtDueDate || null) : null,
       });
 
       if (editingOldTransaction) {
@@ -3659,6 +3666,8 @@ export default function App() {
         setDebtPaidKip={setDebtPaidKip}
         debtNote={debtNote}
         setDebtNote={setDebtNote}
+        debtDueDate={debtDueDate}
+        setDebtDueDate={setDebtDueDate}
         editingOldTransaction={editingOldTransaction}
         onConfirmPayment={handleConfirmPayment}
       />

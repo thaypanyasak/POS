@@ -14,7 +14,7 @@ import {
   CaretRight,
   FileImage,
 } from '@phosphor-icons/react';
-import { formatKip } from '../utils/formatters';
+import { formatKip, getDueDateStatus } from '../utils/formatters';
 import {
   printReceiptSmart,
   printReceiptWithRetry,
@@ -45,21 +45,6 @@ export default function ReceiptModal({
 }) {
   // K80 80mm hardcoded — no 58mm support
   const paperWidth = 80;
-  if (!isOpen || !receipt) return null;
-
-  const isQuotation = Boolean(receipt.isQuotation);
-  const isCancelled = !isQuotation && (receipt.status === 'cancelled' || receipt.isCancelled);
-
-  const receiptItems =
-    receipt.items && receipt.items.length > 0
-      ? receipt.items
-      : (receipt.sale_transaction_items && receipt.sale_transaction_items.length > 0
-          ? receipt.sale_transaction_items
-          : []);
-  const pm = String(receipt.paymentMethod || receipt.payment_method || 'cash').toLowerCase();
-  const isDebt = pm === 'debt' || Boolean(receipt.isDebt);
-  const isCash = pm === 'cash';
-  const isTransferPayment = !isQuotation && (pm === 'transfer' || pm === 'onepay' || pm === 'qrtransfer' || pm === 'qr' || (!isCash && !isDebt));
 
   // Bilingual Receipt Language: 'lo' (default) | 'vi'
   const [receiptLanguage, setReceiptLanguage] = useState('lo');
@@ -79,6 +64,20 @@ export default function ReceiptModal({
   const [customInputValue, setCustomInputValue] = useState('15');
   const [previewPage, setPreviewPage] = useState(1);
   const [printProgressText, setPrintProgressText] = useState(null);
+
+  const isQuotation = Boolean(receipt?.isQuotation);
+  const isCancelled = !isQuotation && (receipt?.status === 'cancelled' || receipt?.isCancelled);
+
+  const receiptItems =
+    receipt?.items && receipt.items.length > 0
+      ? receipt.items
+      : (receipt?.sale_transaction_items && receipt.sale_transaction_items.length > 0
+          ? receipt.sale_transaction_items
+          : []);
+  const pm = String(receipt?.paymentMethod || receipt?.payment_method || 'cash').toLowerCase();
+  const isDebt = pm === 'debt' || Boolean(receipt?.isDebt);
+  const isCash = pm === 'cash';
+  const isTransferPayment = !isQuotation && (pm === 'transfer' || pm === 'onepay' || pm === 'qrtransfer' || pm === 'qr' || (!isCash && !isDebt));
 
   const handlePerPageSelect = (e) => {
     playUnitChangeBeep('receipt');
@@ -189,6 +188,7 @@ export default function ReceiptModal({
       grandTotalLabel: 'ຍອດຊຳລະສຸດທິ:',
       paidLabel: 'ຈ່າຍແລ້ວ:',
       debtBalanceLabel: 'ຍອດຄ້າງຊຳລະ :',
+      debtDueDateLabel: 'ກຳນົດຊຳລະ:',
       debtNoteLabel: '* ໝາຍເຫດ:',
       tenderedLabel: 'ຮັບເງິນມາ:',
       changeLabel: 'ເງິນທອນ:',
@@ -256,6 +256,7 @@ export default function ReceiptModal({
       grandTotalLabel: 'TỔNG THANH TOÁN:',
       paidLabel: 'Đã thanh toán (Paid):',
       debtBalanceLabel: 'Còn nợ :',
+      debtDueDateLabel: 'Hạn thanh toán:',
       debtNoteLabel: '* Ghi chú nợ:',
       tenderedLabel: 'Tiền khách đưa :',
       changeLabel: 'Tiền thừa thối lại :',
@@ -736,6 +737,8 @@ export default function ReceiptModal({
       setIsSavingImage(false);
     }
   };
+
+  if (!isOpen || !receipt) return null;
 
   const modalContent = (
     <div className="fixed inset-0 z-[120] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 print:static print:inset-auto print:p-0 print:bg-transparent print:backdrop-blur-none print:block">
@@ -1321,6 +1324,18 @@ export default function ReceiptModal({
                         {formatKip(debtAmt)}
                       </span>
                     </div>
+                    {(receipt.debtDueDate || receipt.debt_due_date) && (
+                      <div className="flex justify-between items-center text-amber-950 font-bold text-[10.5px] pt-1 border-t border-amber-200 leading-normal">
+                        <span>{L.debtDueDateLabel}</span>
+                        <span className="font-mono font-bold text-amber-900">
+                          {(() => {
+                            const rawDate = receipt.debtDueDate || receipt.debt_due_date;
+                            const info = getDueDateStatus(rawDate);
+                            return info ? info.label : rawDate;
+                          })()}
+                        </span>
+                      </div>
+                    )}
                     {receipt.debtNote && (
                       <div className="text-[9.5px] text-amber-950 font-medium italic pt-1 border-t border-amber-200 leading-normal">
                         {L.debtNoteLabel} {receipt.debtNote}

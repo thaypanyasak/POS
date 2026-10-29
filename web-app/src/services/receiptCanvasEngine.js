@@ -126,6 +126,7 @@ const LABELS = {
     grandTotalLabel: 'ຍອດຊຳລະສຸດທິ:',
     paidLabel: 'ຈ່າຍແລ້ວ / ຈ່າຍກ່ອນ (Paid):',
     debtBalanceLabel: 'ຍອດຄ້າງຊຳລະ (Debt Balance):',
+    debtDueDateLabel: 'ກຳນົດຊຳລະ (Due Date):',
     debtNoteLabel: '* ໝາຍເຫດ:',
     tenderedLabel: 'ຮັບເງິນມາ (Tendered):',
     changeLabel: 'ເງິນທອນ (Change):',
@@ -183,6 +184,7 @@ const LABELS = {
     grandTotalLabel: 'TỔNG THANH TOÁN:',
     paidLabel: 'Đã thanh toán (Paid):',
     debtBalanceLabel: 'Còn nợ (Debt Balance):',
+    debtDueDateLabel: 'Hạn thanh toán (Due Date):',
     debtNoteLabel: '* Ghi chú nợ:',
     tenderedLabel: 'Tiền khách đưa (Tendered):',
     changeLabel: 'Tiền thừa thối lại (Change):',
@@ -999,6 +1001,14 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
       drawLeft(L.debtBalanceLabel, K80.LEFT_MARGIN, y, FONTS.DEBT_LABEL);
       drawRight(fmtKip(debtAmt), K80.RIGHT_EDGE, y, FONTS.DEBT_NUM);
       y += 40; // Increased from 30 to 40 for spacious height of 28px/30px font!
+
+      const rawDueDate = receipt.debtDueDate || receipt.debt_due_date;
+      if (rawDueDate) {
+        const parts = String(rawDueDate).slice(0, 10).split('-');
+        const formattedDue = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : rawDueDate;
+        drawLeft(`${L.debtDueDateLabel} ${formattedDue}`, K80.LEFT_MARGIN, y, FONTS.ADDRESS);
+        y += 24;
+      }
 
       if (receipt.debtNote) {
         measureCtx.font = FONTS.ADDRESS;

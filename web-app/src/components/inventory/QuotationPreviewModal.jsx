@@ -12,8 +12,6 @@ export default function QuotationPreviewModal({
   products = [],
   onAlert,
 }) {
-  if (!isOpen) return null;
-
   const now = new Date();
   const quotationNumber = `QT-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getTime()).slice(-4)}`;
 
@@ -94,6 +92,8 @@ export default function QuotationPreviewModal({
       products: productsPool,
     };
   }, [cart, cartSubtotal, customerName, cashierName, quotationNumber, products]);
+
+  if (!isOpen) return null;
 
   return (
     <ReceiptModal

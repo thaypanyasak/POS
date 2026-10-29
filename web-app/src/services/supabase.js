@@ -781,28 +781,95 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
         cleanPaymentMethod === 'debt' ||
         Number(t.remaining_debt) > 0
     ),
-    remainingDebt: Number(
-      t.remaining_debt ??
-        (cleanPaymentMethod === 'debt'
-          ? Math.max(0, (Number(t.grand_total) || 0) - (Number(t.amount_tendered) || 0))
-          : 0)
-    ),
-    debtAmount: Number(
-      t.remaining_debt ??
-        cachedMeta?.receipt?.debtAmount ??
-        (cleanPaymentMethod === 'debt' ? Number(t.grand_total) || 0 : 0)
-    ),
-    paidAmount: Number(
-      t.paid_amount ??
-        t.amount_tendered ??
-        (cleanPaymentMethod === 'debt' ? 0 : Number(t.grand_total) || 0)
-    ),
-    paymentStatus: t.payment_status || (cleanPaymentMethod === 'debt' ? 'DEBT' : 'PAID'),
+    remainingDebt: (() => {
+      const grand = Number(t.grand_total) || 0;
+      const isD = cleanPaymentMethod === 'debt' || t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL';
+      const paid = Number(
+        t.paid_amount !== null && t.paid_amount !== undefined
+          ? t.paid_amount
+          : (t.amount_tendered !== null && t.amount_tendered !== undefined
+              ? t.amount_tendered
+              : (cleanPaymentMethod === 'debt' ? 0 : grand))
+      );
+      let rem = Number(
+        t.remaining_debt !== null && t.remaining_debt !== undefined
+          ? t.remaining_debt
+          : (cachedMeta?.receipt?.debtAmount ?? (cleanPaymentMethod === 'debt' ? Math.max(0, grand - paid) : 0))
+      );
+      if (isD && rem <= 0 && paid < grand) {
+        rem = Math.max(0, grand - paid);
+      }
+      return isD ? rem : 0;
+    })(),
+    debtAmount: (() => {
+      const grand = Number(t.grand_total) || 0;
+      const isD = cleanPaymentMethod === 'debt' || t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL';
+      const paid = Number(
+        t.paid_amount !== null && t.paid_amount !== undefined
+          ? t.paid_amount
+          : (t.amount_tendered !== null && t.amount_tendered !== undefined
+              ? t.amount_tendered
+              : (cleanPaymentMethod === 'debt' ? 0 : grand))
+      );
+      let rem = Number(
+        t.remaining_debt !== null && t.remaining_debt !== undefined
+          ? t.remaining_debt
+          : (cachedMeta?.receipt?.debtAmount ?? (cleanPaymentMethod === 'debt' ? Math.max(0, grand - paid) : 0))
+      );
+      if (isD && rem <= 0 && paid < grand) {
+        rem = Math.max(0, grand - paid);
+      }
+      return isD ? rem : 0;
+    })(),
+    paidAmount: (() => {
+      const grand = Number(t.grand_total) || 0;
+      const isD = cleanPaymentMethod === 'debt' || t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL';
+      const raw = Number(
+        t.paid_amount !== null && t.paid_amount !== undefined
+          ? t.paid_amount
+          : (t.amount_tendered !== null && t.amount_tendered !== undefined
+              ? t.amount_tendered
+              : (cleanPaymentMethod === 'debt' ? 0 : grand))
+      );
+      return isD ? Math.min(grand, Math.max(0, raw)) : (Number(t.amount_tendered) || grand);
+    })(),
+    paymentStatus: (() => {
+      const grand = Number(t.grand_total) || 0;
+      const isD = cleanPaymentMethod === 'debt' || t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL';
+      if (!isD) return t.payment_status || 'PAID';
+      const paid = Number(
+        t.paid_amount !== null && t.paid_amount !== undefined
+          ? t.paid_amount
+          : (t.amount_tendered !== null && t.amount_tendered !== undefined ? t.amount_tendered : 0)
+      );
+      let rem = Number(t.remaining_debt ?? 0);
+      if (rem <= 0 && paid < grand) {
+        rem = Math.max(0, grand - paid);
+      }
+      if (rem <= 0) return 'PAID';
+      if (paid > 0) return 'PARTIAL';
+      return 'DEBT';
+    })(),
     debtNote: cachedMeta?.receipt?.debtNote || cachedMeta?.debtNote || '',
-    debtStatus:
-      t.payment_status ||
-      cachedMeta?.receipt?.debtStatus ||
-      (cleanPaymentMethod === 'debt' ? 'unpaid' : 'paid'),
+    debtDueDate: t.debt_due_date || t.due_date || cachedMeta?.debtDueDate || cachedMeta?.receipt?.debtDueDate || null,
+    debt_due_date: t.debt_due_date || t.due_date || cachedMeta?.debtDueDate || cachedMeta?.receipt?.debtDueDate || null,
+    debtStatus: (() => {
+      const isD = cleanPaymentMethod === 'debt' || t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL';
+      if (!isD) return 'paid';
+      const grand = Number(t.grand_total) || 0;
+      const paid = Number(
+        t.paid_amount !== null && t.paid_amount !== undefined
+          ? t.paid_amount
+          : (t.amount_tendered !== null && t.amount_tendered !== undefined ? t.amount_tendered : 0)
+      );
+      let rem = Number(t.remaining_debt ?? 0);
+      if (rem <= 0 && paid < grand) {
+        rem = Math.max(0, grand - paid);
+      }
+      if (rem <= 0) return 'paid';
+      if (paid > 0) return 'partial';
+      return 'unpaid';
+    })(),
     sale_transaction_items: t.sale_transaction_items || [],
     items:
       cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0
@@ -1019,6 +1086,13 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       return mappedItem;
     });
 
+    const toValidUuidOrNull = (val) => {
+      if (typeof val !== 'string') return null;
+      const trimmed = val.trim();
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      return uuidRegex.test(trimmed) ? trimmed : null;
+    };
+
     const checkoutPayload = {
       id: tx.id,
       receipt_number: tx.receiptNumber,
@@ -1036,10 +1110,11 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       gross_profit_lak: grossProfitLak,
       gross_profit_thb: grossProfitThb,
       cashier_name: sanitizeCashierName(tx.cashierName),
-      cashier_id: tx.cashierId || null,
+      cashier_id: toValidUuidOrNull(tx.cashierId || tx.cashier_id),
       paid_amount: Number(tx.paidAmount ?? (tx.paymentMethod === 'debt' ? (tx.amountTendered || 0) : (tx.amountTendered || tx.grandTotal || 0))),
       remaining_debt: Number(tx.debtAmount ?? (tx.paymentMethod === 'debt' ? Math.max(0, (tx.grandTotal || 0) - (tx.amountTendered || 0)) : 0)),
       payment_status: tx.paymentStatus || (tx.paymentMethod === 'debt' ? ((tx.amountTendered || 0) > 0 ? 'PARTIAL' : 'DEBT') : 'PAID'),
+      debt_due_date: tx.debtDueDate || tx.debt_due_date || null,
       exchange_rate: rate,
       total_lak: totalLak,
       total_thb: totalThb,
@@ -1049,6 +1124,34 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
     // 1. GỌI POSTGRES RPC NGUYÊN TỬ VỚI KHÓA HÀNG FOR UPDATE VÀ GHI THẺ KHO
     const { data: rpcData, error: rpcErr } = await supabase.rpc('process_pos_checkout', { payload: checkoutPayload });
     if (!rpcErr && rpcData?.success) {
+      // Ensure debt tracking fields (remaining_debt, paid_amount, payment_status, debt_due_date) are updated in DB
+      // because process_pos_checkout RPC on the server might have omitted them in its INSERT statement
+      if (checkoutPayload.payment_method === 'debt') {
+        try {
+          const debtUpdate = {
+            paid_amount: Number(checkoutPayload.paid_amount || 0),
+            remaining_debt: Number(checkoutPayload.remaining_debt || 0),
+            payment_status: checkoutPayload.payment_status || 'DEBT',
+            debt_due_date: checkoutPayload.debt_due_date || null,
+          };
+          const { error: debtErr } = await supabase
+            .from('sale_transactions')
+            .update(debtUpdate)
+            .eq('id', tx.id);
+          if (debtErr && (debtErr.code === '42703' || debtErr.message?.includes('debt_due_date'))) {
+            await supabase
+              .from('sale_transactions')
+              .update({
+                paid_amount: debtUpdate.paid_amount,
+                remaining_debt: debtUpdate.remaining_debt,
+                payment_status: debtUpdate.payment_status,
+              })
+              .eq('id', tx.id);
+          }
+        } catch (e) {
+          console.warn('[createSaleTransactionInSupabase] Error ensuring debt fields:', e);
+        }
+      }
       return { success: true, via: 'atomic_rpc' };
     }
 
@@ -1070,7 +1173,7 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
     }
 
     // 2. Fallback thủ công nếu RPC chưa được chạy migration trong SQL Editor
-    const { error: txErr } = await supabase.from('sale_transactions').insert({
+    const baseTxRow = {
       id: tx.id,
       receipt_number: tx.receiptNumber,
       created_at: tx.createdAt,
@@ -1089,14 +1192,24 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       gross_profit_lak: grossProfitLak,
       gross_profit_thb: grossProfitThb,
       cashier_name: sanitizeCashierName(tx.cashierName),
-      cashier_id: tx.cashierId || null,
+      cashier_id: toValidUuidOrNull(tx.cashierId || tx.cashier_id),
       paid_amount: Number(tx.paidAmount ?? (tx.paymentMethod === 'debt' ? (tx.amountTendered || 0) : (tx.amountTendered || tx.grandTotal || 0))),
       remaining_debt: Number(tx.debtAmount ?? (tx.paymentMethod === 'debt' ? Math.max(0, (tx.grandTotal || 0) - (tx.amountTendered || 0)) : 0)),
       payment_status: tx.paymentStatus || (tx.paymentMethod === 'debt' ? ((tx.amountTendered || 0) > 0 ? 'PARTIAL' : 'DEBT') : 'PAID'),
+      debt_due_date: tx.debtDueDate || tx.debt_due_date || null,
       exchange_rate: rate,
       total_lak: totalLak,
       total_thb: totalThb,
-    });
+    };
+
+    let { error: txErr } = await supabase.from('sale_transactions').insert(baseTxRow);
+
+    // If debt_due_date or cashier_id columns cause type mismatch or do not exist yet, retry safely
+    if (txErr && (txErr.code === '42703' || txErr.code === '42804' || txErr.message?.includes('debt_due_date') || txErr.message?.includes('cashier_id'))) {
+      const { debt_due_date, cashier_id, ...withoutFields } = baseTxRow;
+      const retryResult = await supabase.from('sale_transactions').insert(withoutFields);
+      txErr = retryResult.error;
+    }
 
     if (txErr) {
       console.error('Transaction insert error:', txErr);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Money, HandCoins, CheckCircle } from '@phosphor-icons/react';
 import { formatKip, formatDots, parseDots } from '../../utils/formatters';
 import { recordCustomerDebtPaymentInSupabase } from '../../services/supabase';
@@ -10,20 +10,26 @@ export default function CustomerDebtPaymentModal({
   onSuccess,
   onAlert,
 }) {
-  if (!isOpen || !transaction) return null;
-
-  const totalAmount = Number(transaction.grandTotal) || 0;
-  const currentPaid = Number(transaction.paidAmount ?? (transaction.amountTendered || 0));
+  const totalAmount = Number(transaction?.grandTotal) || 0;
+  const currentPaid = Number(transaction?.paidAmount ?? (transaction?.amountTendered || 0));
   const remainingDebt = Number(
-    transaction.remainingDebt ??
-      transaction.debtAmount ??
+    transaction?.remainingDebt ??
+      transaction?.debtAmount ??
       Math.max(0, totalAmount - currentPaid)
   );
 
-  const [paymentAmount, setPaymentAmount] = useState(formatDots(remainingDebt));
+  const [paymentAmount, setPaymentAmount] = useState(() => formatDots(remainingDebt));
   const [paymentMethod, setPaymentMethod] = useState('CASH'); // CASH | TRANSFER
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && transaction) {
+      setPaymentAmount(formatDots(remainingDebt));
+      setNote('');
+      setIsSubmitting(false);
+    }
+  }, [isOpen, transaction?.id, remainingDebt]);
 
   // Quick Action: Pay full remaining debt
   const handlePayFull = () => {
@@ -74,6 +80,8 @@ export default function CustomerDebtPaymentModal({
 
   const parsedEntered = parseDots(paymentAmount);
   const projectedDebt = Math.max(0, remainingDebt - parsedEntered);
+
+  if (!isOpen || !transaction) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">

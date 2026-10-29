@@ -86,8 +86,6 @@ export default function MixedCartonSelectorModal({
     return Number(bundle?.price_lak) || 0;
   }, [childProducts, bundle]);
 
-  if (!isOpen || !bundle) return null;
-
   // Auto-resolve carton capacity from child product units (e.g. 12 packs/carton) if bundle spec is missing
   const packageQty = useMemo(() => {
     if (bundle?.package_qty && Number(bundle.package_qty) > 0) {
@@ -111,7 +109,7 @@ export default function MixedCartonSelectorModal({
   }, [bundle, childProducts]);
 
   const cartonPrice = resolvedCartonPrice;
-  const unitName = bundle.unit_name || 'ແກັດ';
+  const unitName = bundle?.unit_name || 'ແກັດ';
 
   // Auto-resolve base/pack unit name (prefer 'ແພັກ' or tier 2 unit over generic 'ອັນ')
   const baseUnitName = useMemo(() => {
@@ -313,6 +311,8 @@ export default function MixedCartonSelectorModal({
     }
     onClose();
   };
+
+  if (!isOpen || !bundle) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">

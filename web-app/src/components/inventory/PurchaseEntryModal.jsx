@@ -421,8 +421,6 @@ export default function PurchaseEntryModal({
     }
   };
 
-  if (!isOpen) return null;
-
   // Extract all categories for quick filtering
   const categories = useMemo(() => {
     const cats = new Set();
@@ -504,6 +502,8 @@ export default function PurchaseEntryModal({
       }
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col w-screen h-screen overflow-hidden animate-in fade-in duration-150 select-none font-sans">

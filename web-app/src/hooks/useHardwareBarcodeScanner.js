@@ -169,6 +169,11 @@ export function useHardwareBarcodeScanner({
           activeEl.name?.toLowerCase().includes('barcode');
 
         const setValue = (val) => {
+          // Reset React value tracker so synthetic input/change events are recognized across React 16/17/18/19
+          if (activeEl._valueTracker) {
+            activeEl._valueTracker.setValue(val === '' ? ' ' : '');
+          }
+
           const proto =
             activeEl instanceof HTMLTextAreaElement
               ? window.HTMLTextAreaElement.prototype
@@ -194,11 +199,17 @@ export function useHardwareBarcodeScanner({
 
         if (activeEl.getAttribute('data-barcode-clear') === 'true') {
           setValue('');
+          if (typeof activeEl.blur === 'function') {
+            activeEl.blur();
+          }
           return;
         }
 
         if (activeEl.getAttribute('data-barcode-replace') === 'true') {
           setValue(scannedCode);
+          if (typeof activeEl.blur === 'function') {
+            activeEl.blur();
+          }
           return;
         }
 
@@ -321,8 +332,8 @@ export function useHardwareBarcodeScanner({
 
       // 2. Burst Gap / Reset Detection:
       // If we are NOT in an active machine burst and delta > maxInterval: start a fresh buffer.
-      // If we ARE in an active machine burst, allow generous jitter (up to 320ms) before declaring burst dead.
-      const resetThreshold = isMachineBurstRef.current ? Math.max(maxInterval + 140, 320) : maxInterval;
+      // If we ARE in an active machine burst, allow generous jitter (up to 350ms) before declaring burst dead.
+      const resetThreshold = isMachineBurstRef.current ? Math.max(maxInterval + 140, 350) : maxInterval;
 
       if (delta > resetThreshold) {
         bufferRef.current = '';
@@ -345,9 +356,36 @@ export function useHardwareBarcodeScanner({
 
       if (char) {
         // Burst detection:
-        // Key 2 or later arriving at machine speed (delta <= 55ms)
-        if (bufferRef.current.length >= 1 && delta <= 55) {
-          isMachineBurstRef.current = true;
+        // Key 2 or later arriving at machine speed (delta <= 95ms on key 2, or <= 125ms on key 3+)
+        const isFastConsecutiveKey =
+          (bufferRef.current.length >= 1 && delta <= 95) ||
+          (bufferRef.current.length >= 2 && delta <= 125);
+
+        if (isFastConsecutiveKey) {
+          if (!isMachineBurstRef.current) {
+            isMachineBurstRef.current = true;
+            // Purge leaked key 1 immediately from focused input so React doesn't re-render during scan!
+            if (inputSnapshotRef.current.element) {
+              const targetEl = inputSnapshotRef.current.element;
+              const origVal = inputSnapshotRef.current.originalValue ?? '';
+              try {
+                if (targetEl._valueTracker) {
+                  targetEl._valueTracker.setValue(origVal === '' ? ' ' : '');
+                }
+                const proto =
+                  targetEl instanceof HTMLTextAreaElement
+                    ? window.HTMLTextAreaElement.prototype
+                    : window.HTMLInputElement.prototype;
+                const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+                if (descriptor && descriptor.set) {
+                  descriptor.set.call(targetEl, origVal);
+                } else {
+                  targetEl.value = origVal;
+                }
+                targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+              } catch (_) {}
+            }
+          }
         }
 
         // If machine burst is active:

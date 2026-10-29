@@ -607,3 +607,101 @@ export function matchesLaoSearch(target, query) {
   if (!target) return false;
   return normalizeLao(target).includes(normalizeLao(query));
 }
+
+/**
+ * Calculates debt due date status and human-friendly badge info
+ * @param {string} dueDateStr - ISO date string 'YYYY-MM-DD' or timestamp
+ * @returns {object|null} { status, diffDays, formattedDate, label, badgeClass, textColor }
+ */
+export function getDueDateStatus(dueDateStr) {
+  if (!dueDateStr) return null;
+
+  const str = String(dueDateStr).slice(0, 10);
+  const parts = str.split('-');
+  if (parts.length !== 3) return null;
+
+  const dueYear = parseInt(parts[0], 10);
+  const dueMonth = parseInt(parts[1], 10) - 1;
+  const dueDay = parseInt(parts[2], 10);
+
+  const dueDate = new Date(dueYear, dueMonth, dueDay);
+  if (isNaN(dueDate.getTime())) return null;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const diffTime = dueDate.getTime() - today.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+  const formattedDate = `${String(dueDay).padStart(2, '0')}/${String(dueMonth + 1).padStart(2, '0')}/${dueYear}`;
+
+  if (diffDays < 0) {
+    // Overdue: Quá ngày đó rồi -> hiển thị màu đỏ kèm (-số ngày đã trả trễ) ví dụ 25/10/2026(-5)
+    return {
+      status: 'overdue',
+      diffDays,
+      formattedDate,
+      label: `${formattedDate}(${diffDays})`,
+      badgeClass: 'bg-rose-50 text-rose-700 border border-rose-300 font-black',
+      textColor: 'text-rose-600',
+    };
+  }
+
+  if (diffDays === 0) {
+    // Due today: Đúng ngày đó phải trả -> hiển thị ngày màu đỏ
+    return {
+      status: 'due_today',
+      diffDays: 0,
+      formattedDate,
+      label: `${formattedDate} (ມື້ນີ້)`,
+      badgeClass: 'bg-red-50 text-red-700 border border-red-300 font-black animate-pulse',
+      textColor: 'text-red-700',
+    };
+  }
+
+  if (diffDays <= 3) {
+    // Upcoming: Sắp tới ngày trả (1-3 ngày) -> hiển thị ngày màu cam
+    return {
+      status: 'upcoming',
+      diffDays,
+      formattedDate,
+      label: `${formattedDate} (${diffDays} ວັນ)`,
+      badgeClass: 'bg-amber-50 text-amber-800 border border-amber-300 font-bold',
+      textColor: 'text-amber-700',
+    };
+  }
+
+  // Normal: Còn nhiều ngày (>3 ngày)
+  return {
+    status: 'normal',
+    diffDays,
+    formattedDate,
+    label: formattedDate,
+    badgeClass: 'bg-slate-50 text-slate-700 border border-slate-200 font-medium',
+    textColor: 'text-slate-700',
+  };
+}
+
+/**
+ * Formats ISO date string 'YYYY-MM-DD' or timestamp to 'DD/MM/YYYY'
+ * @param {string|Date} dateVal 
+ * @returns {string} e.g. "25/10/2026"
+ */
+export function formatDateToDDMMYYYY(dateVal) {
+  if (!dateVal) return '';
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return '';
+    const d = String(dateVal.getDate()).padStart(2, '0');
+    const m = String(dateVal.getMonth() + 1).padStart(2, '0');
+    const y = dateVal.getFullYear();
+    return `${d}/${m}/${y}`;
+  }
+  const str = String(dateVal).slice(0, 10);
+  const parts = str.split('-');
+  if (parts.length === 3) {
+    const [yyyy, mm, dd] = parts;
+    return `${dd}/${mm}/${yyyy}`;
+  }
+  return String(dateVal);
+}
+

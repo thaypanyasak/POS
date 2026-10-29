@@ -12,8 +12,9 @@ import {
   Money,
   HandCoins,
   FloppyDisk,
+  CalendarBlank,
 } from '@phosphor-icons/react';
-import { formatKip, formatDots, parseDots, getEffectiveUnitPrice } from '../utils/formatters';
+import { formatKip, formatDots, parseDots, getEffectiveUnitPrice, formatDateToDDMMYYYY } from '../utils/formatters';
 import { playModalCloseBeep, playModalConfirmBeep, playUnitChangeBeep } from '../utils/audioFeedback';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
@@ -33,17 +34,14 @@ export default function CheckoutModal({
   setDebtPaidKip,
   debtNote = '',
   setDebtNote,
+  debtDueDate = '',
+  setDebtDueDate,
   editingOldTransaction = null,
   onConfirmPayment,
 }) {
   if (!isOpen) return null;
 
   const remainingDebt = Math.max(0, cartSubtotal - (Number(debtPaidKip) || 0));
-
-  // Scan for any half-carton items on single-tier products
-  const hasSingleTierHalfCarton = useMemo(() => {
-    return cart.some((it) => it.isHalfCarton && Number(it.unit?.multiplier || 1) <= 1 && it.product?.trackStock !== false);
-  }, [cart]);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -80,10 +78,6 @@ export default function CheckoutModal({
                       editingOldTransaction.originalRemainingDebt !== undefined
                         ? Number(editingOldTransaction.originalRemainingDebt)
                         : Number(editingOldTransaction.remainingDebt || 0);
-                    // Scan for any half-carton items on single-tier products
-  const hasSingleTierHalfCarton = useMemo(() => {
-    return cart.some((it) => it.isHalfCarton && Number(it.unit?.multiplier || 1) <= 1 && it.product?.trackStock !== false);
-  }, [cart]);
 
   return (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
@@ -93,10 +87,6 @@ export default function CheckoutModal({
                     );
                   }
                   if (m === 'transfer' || m === 'onepay') {
-                    // Scan for any half-carton items on single-tier products
-  const hasSingleTierHalfCarton = useMemo(() => {
-    return cart.some((it) => it.isHalfCarton && Number(it.unit?.multiplier || 1) <= 1 && it.product?.trackStock !== false);
-  }, [cart]);
 
   return (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
@@ -105,10 +95,6 @@ export default function CheckoutModal({
                       </span>
                     );
                   }
-                  // Scan for any half-carton items on single-tier products
-  const hasSingleTierHalfCarton = useMemo(() => {
-    return cart.some((it) => it.isHalfCarton && Number(it.unit?.multiplier || 1) <= 1 && it.product?.trackStock !== false);
-  }, [cart]);
 
   return (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -189,11 +175,6 @@ export default function CheckoutModal({
                     ? Math.max(1, Math.min(item.quantity, Number(item.missingCratesCount) || item.quantity))
                     : 0;
                   const crateDepositTotal = missingCount * feePerCrate;
-
-                  // Scan for any half-carton items on single-tier products
-  const hasSingleTierHalfCarton = useMemo(() => {
-    return cart.some((it) => it.isHalfCarton && Number(it.unit?.multiplier || 1) <= 1 && it.product?.trackStock !== false);
-  }, [cart]);
 
   return (
                     <div
@@ -476,6 +457,77 @@ export default function CheckoutModal({
                 <span className="text-base sm:text-lg font-black text-rose-600 font-mono tracking-tight">
                   {formatKip(remainingDebt)}
                 </span>
+              </div>
+
+              {/* Debt Due Date (ວັນທີກຳນົດຊຳລະ) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                    <CalendarBlank size={13} weight="bold" className="text-rose-500" />
+                    <span>ວັນທີກຳນົດຊຳລະ (Ngày hẹn trả):</span>
+                  </label>
+                  {debtDueDate && (
+                    <button
+                      type="button"
+                      onClick={() => setDebtDueDate && setDebtDueDate('')}
+                      className="text-[10px] text-rose-500 hover:text-rose-700 font-bold cursor-pointer"
+                    >
+                      ລ້າງວັນທີ
+                    </button>
+                  )}
+                </div>
+                {/* Date Picker Input Formatted strictly as DD/MM/YYYY */}
+                <div className="relative group">
+                  <input
+                    type="date"
+                    value={debtDueDate || ''}
+                    onChange={(e) => setDebtDueDate && setDebtDueDate(e.target.value)}
+                    className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer"
+                    aria-label="ເລືອກວັນທີກຳນົດຊຳລະ"
+                  />
+                  <div className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono flex items-center justify-between shadow-2xs group-hover:border-rose-300 group-hover:bg-rose-50/20 transition-all pointer-events-none">
+                    <span className={debtDueDate ? "font-bold text-slate-800 tracking-wide text-[12.5px]" : "font-normal text-slate-400"}>
+                      {debtDueDate ? formatDateToDDMMYYYY(debtDueDate) : 'DD/MM/YYYY (ກົດເລືອກວັນທີ)'}
+                    </span>
+                    <CalendarBlank size={16} weight="bold" className={debtDueDate ? "text-rose-500" : "text-slate-400"} />
+                  </div>
+                </div>
+
+                {/* Quick Date Chips: +3, +7, +15, +30 ngày */}
+                <div className="grid grid-cols-4 gap-1.5 mt-1.5">
+                  {[
+                    { label: '+3 ມື້', days: 3 },
+                    { label: '+7 ມື້', days: 7 },
+                    { label: '+15 ມື້', days: 15 },
+                    { label: '+30 ມື້', days: 30 },
+                  ].map((chip) => {
+                    const targetDate = new Date();
+                    targetDate.setDate(targetDate.getDate() + chip.days);
+                    const yyyy = targetDate.getFullYear();
+                    const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+                    const dd = String(targetDate.getDate()).padStart(2, '0');
+                    const dateStr = `${yyyy}-${mm}-${dd}`;
+                    const isSelected = debtDueDate === dateStr;
+
+                    return (
+                      <button
+                        key={chip.days}
+                        type="button"
+                        onClick={() => {
+                          playUnitChangeBeep('debt');
+                          setDebtDueDate && setDebtDueDate(dateStr);
+                        }}
+                        className={`py-1 px-1 rounded-md text-[10.5px] font-bold border transition-all cursor-pointer text-center ${
+                          isSelected
+                            ? 'bg-rose-500 text-white border-rose-500 shadow-2xs'
+                            : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200'
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Debt Note */}
