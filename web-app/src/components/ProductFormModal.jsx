@@ -1073,6 +1073,10 @@ export default function ProductFormModal({
                           id="carton-barcode-input"
                           data-barcode-input="true"
                           type="text"
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck="false"
+                          autoComplete="off"
                           value={cartonBarcode}
                           onChange={(e) => setCartonBarcode && setCartonBarcode(e.target.value)}
                           placeholder="ຍິງບາໂຄດເທິງລັງ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"
@@ -1301,6 +1305,10 @@ export default function ProductFormModal({
                           id="pack-barcode-input"
                           data-barcode-input="true"
                           type="text"
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck="false"
+                          autoComplete="off"
                           value={packBarcode}
                           onChange={(e) => setPackBarcode && setPackBarcode(e.target.value)}
                           placeholder="ຍິງບາໂຄດເທິງແພັກ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"
@@ -1466,6 +1474,10 @@ export default function ProductFormModal({
                           id="piece-barcode-input"
                           data-barcode-input="true"
                           type="text"
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck="false"
+                          autoComplete="off"
                           value={pieceBarcode}
                           onChange={(e) => setPieceBarcode && setPieceBarcode(e.target.value)}
                           placeholder="ຍິງບາໂຄດເທິງຊອງ/ກະປ໋ອງ ຫຼື ກົດປຸ່ມສະແກນກ້ອງ"

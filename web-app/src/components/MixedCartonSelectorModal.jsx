@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Package,
@@ -137,33 +138,46 @@ export default function MixedCartonSelectorModal({
   const remainingToCarton = looseCount === 0 ? 0 : packageQty - looseCount;
 
   // Calculate pricing:
-  // Carton portion gets the wholesale carton price
-  const cartonTotalLak = cartonCount * cartonPrice;
-
-  // Loose portion: each loose unit gets its standard retail pack/piece price
+  // If totalPicked >= packageQty, customer qualifies for wholesale carton tier!
+  // Any extra packs beyond full cartons are also calculated at wholesale carton unit rate (rounded to nearest 1,000 Kip).
+  // Example: 1 carton (12 packs) = 275.000. For 20 packs: (20 * 275.000 / 12) = 458.333 -> 459.000 Kip!
+  let cartonTotalLak = 0;
   let looseTotalLak = 0;
-  // If there are loose units, price the first looseCount units picked at their retail pack price
-  if (looseCount > 0) {
-    let accountedLoose = 0;
-    for (const p of childProducts) {
-      const q = flavorQuantities[p.id] || 0;
-      if (q > 0) {
-        // Find pack/piece unit retail price (prefer pack tier/unit, fallback to base)
-        const packOrPieceUnit =
-          (p.units || []).find((u) => u.tier === 2 || u.id?.endsWith('_pack') || ['ແພັກ', 'pack'].includes(u.unitName)) ||
-          (p.units || []).find((u) => u.isBaseUnit || Number(u.multiplier) === 1 || u.tier === 1) ||
-          (p.units || [])[0];
-        const piecePrice = Number(packOrPieceUnit?.retailPrice ?? p.retailPrice ?? 0);
-        
-        const loosePortion = Math.min(q, looseCount - accountedLoose);
-        looseTotalLak += loosePortion * piecePrice;
-        accountedLoose += loosePortion;
-        if (accountedLoose >= looseCount) break;
+  let grandTotalLak = 0;
+
+  if (totalPicked >= packageQty) {
+    cartonTotalLak = cartonCount * cartonPrice;
+    if (looseCount === 0) {
+      looseTotalLak = 0;
+      grandTotalLak = cartonTotalLak;
+    } else {
+      // Loose packs get wholesale carton unit rate instead of retail price
+      grandTotalLak = Math.ceil((totalPicked * cartonPrice) / packageQty / 1000) * 1000;
+      looseTotalLak = Math.max(0, grandTotalLak - cartonTotalLak);
+    }
+  } else {
+    // Under 1 full carton: loose units are priced at their standard retail pack/piece price
+    cartonTotalLak = 0;
+    if (looseCount > 0) {
+      let accountedLoose = 0;
+      for (const p of childProducts) {
+        const q = flavorQuantities[p.id] || 0;
+        if (q > 0) {
+          const packOrPieceUnit =
+            (p.units || []).find((u) => u.tier === 2 || u.id?.endsWith('_pack') || ['ແພັກ', 'pack'].includes(u.unitName)) ||
+            (p.units || []).find((u) => u.isBaseUnit || Number(u.multiplier) === 1 || u.tier === 1) ||
+            (p.units || [])[0];
+          const piecePrice = Number(packOrPieceUnit?.retailPrice ?? p.retailPrice ?? 0);
+          
+          const loosePortion = Math.min(q, looseCount - accountedLoose);
+          looseTotalLak += loosePortion * piecePrice;
+          accountedLoose += loosePortion;
+          if (accountedLoose >= looseCount) break;
+        }
       }
     }
+    grandTotalLak = looseTotalLak;
   }
-
-  const grandTotalLak = cartonTotalLak + looseTotalLak;
   const grandTotalThb = exchangeRate > 0 ? Number((grandTotalLak / exchangeRate).toFixed(2)) : 0;
 
   // Progress percentage (capped at 100% per current carton milestone)
@@ -314,14 +328,20 @@ export default function MixedCartonSelectorModal({
 
   if (!isOpen || !bundle) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden border border-slate-200">
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[999] flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[90dvh] sm:h-auto max-h-[92dvh] sm:max-h-[88vh] overflow-hidden border border-slate-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Header */}
-        <div className="px-4 sm:px-6 py-3.5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black border border-teal-100 shadow-2xs overflow-hidden shrink-0">
+        <div className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black border border-teal-100 shadow-2xs overflow-hidden shrink-0">
               {childProducts.some((p) => p.imageUrl || p.image_url) ? (
                 <BundleCollage
                   images={childProducts.map((p) => p.imageUrl || p.image_url).filter(Boolean)}
@@ -332,25 +352,25 @@ export default function MixedCartonSelectorModal({
                 <Package size={22} weight="duotone" />
               )}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h2 className="text-sm sm:text-lg font-black text-slate-900 leading-tight truncate">
                   {bundle.name}
                 </h2>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
+                <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded-full bg-teal-100 text-teal-800 shrink-0">
                   {packageQty} {baseUnitName}/{unitName}
                 </span>
                 {editingCartItem && (
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 flex items-center gap-1">
-                    <PencilSimple size={11} weight="bold" />
+                  <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 flex items-center gap-0.5 shrink-0">
+                    <PencilSimple size={10} weight="bold" />
                     <span>ແກ້ໄຂ</span>
                   </span>
                 )}
               </div>
-              <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
+              <div className="text-[11px] sm:text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 truncate">
                 <span>ລາຄາຂາຍຍົກລັງ: <b className="text-teal-700 font-mono font-extrabold">{formatKip(cartonPrice)}</b></span>
                 {exchangeRate > 0 && (
-                  <span className="text-slate-400 font-mono">
+                  <span className="text-slate-400 font-mono hidden xs:inline">
                     (≈ {formatBaht(cartonPrice / exchangeRate)})
                   </span>
                 )}
@@ -360,45 +380,45 @@ export default function MixedCartonSelectorModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0 ml-1"
           >
-            <X size={20} weight="bold" />
+            <X size={18} weight="bold" />
           </button>
         </div>
 
         {/* Dynamic Progress Bar & Capacity Status */}
-        <div className="px-4 sm:px-6 py-3 bg-slate-50 border-b border-slate-200 shrink-0">
-          <div className="flex items-center justify-between text-xs mb-1.5">
+        <div className="px-3.5 sm:px-6 py-2 sm:py-2.5 bg-slate-50 border-b border-slate-200 shrink-0">
+          <div className="flex items-center justify-between text-xs mb-1">
             <div className="flex items-center gap-1.5 font-black text-slate-800">
-              <span>ເລືອກແລ້ວທັງໝົດ:</span>
-              <span className="text-sm font-mono text-teal-700 font-black">
+              <span className="text-[11px] sm:text-xs">ເລືອກແລ້ວ:</span>
+              <span className="text-xs sm:text-sm font-mono text-teal-700 font-black">
                 {totalPicked} / {packageQty} {baseUnitName}
               </span>
             </div>
 
             {/* Status Chip */}
-            <div className="text-xs font-bold">
+            <div className="text-[11px] sm:text-xs font-bold truncate max-w-[55%] text-right">
               {totalPicked === 0 ? (
-                <span className="text-slate-400">ກະລຸນາເລືອກລົດຊາດດ້ານລຸ່ມ</span>
+                <span className="text-slate-400">ກະລຸນາເລືອກລົດຊາດ</span>
               ) : remainingToCarton === 0 ? (
-                <span className="text-emerald-700 flex items-center gap-1 font-extrabold">
-                  <CheckCircle size={15} weight="fill" className="text-emerald-600" />
-                  ຄົບ {cartonCount} {unitName} ພໍດີ (ໄດ້ລາຄາຍົກລັງ)
+                <span className="text-emerald-700 flex items-center justify-end gap-1 font-extrabold">
+                  <CheckCircle size={13} weight="fill" className="text-emerald-600 shrink-0" />
+                  <span>ຄົບ {cartonCount} {unitName} ພໍດີ</span>
                 </span>
               ) : cartonCount >= 1 ? (
                 <span className="text-sky-700 font-extrabold">
-                  {cartonCount} {unitName} + {looseCount} {baseUnitName} ຍ່ອຍ
+                  {cartonCount} {unitName} + {looseCount} {baseUnitName}
                 </span>
               ) : (
                 <span className="text-amber-700 font-extrabold">
-                  ຂາດອີກ {remainingToCarton} {baseUnitName} ເພື່ອຄົບ 1 {unitName}
+                  ຂາດ {remainingToCarton} {baseUnitName}
                 </span>
               )}
             </div>
           </div>
 
           {/* Progress bar line */}
-          <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+          <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
             <div
               className={`h-full transition-all duration-300 rounded-full ${
                 remainingToCarton === 0 && totalPicked > 0
@@ -412,42 +432,42 @@ export default function MixedCartonSelectorModal({
           </div>
 
           {/* Quick Action Shortcuts Bar */}
-          <div className="flex items-center justify-between gap-2 mt-2.5">
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-between gap-1.5 mt-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
               <button
                 type="button"
                 onClick={handleDistributeEvenly}
-                className="px-2.5 py-1 bg-white hover:bg-teal-50 text-teal-700 rounded-lg text-xs font-extrabold border border-teal-200 transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs"
+                className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-white hover:bg-teal-50 text-teal-700 rounded-lg text-[11px] sm:text-xs font-extrabold border border-teal-200 transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs"
                 title="ປັນຈຳນວນເທົ່າກັນໃຫ້ທຸກລົດຊາດ"
               >
-                <Lightning size={13} weight="fill" />
+                <Lightning size={12} weight="fill" />
                 <span>ປັນສະເໝີກັນ</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleFillRemainder(activeFlavorId)}
-                className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-700 rounded-lg text-xs font-extrabold border border-emerald-200 transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs"
+                className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-white hover:bg-emerald-50 text-emerald-700 rounded-lg text-[11px] sm:text-xs font-extrabold border border-emerald-200 transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs"
                 title="ຕື່ມຈຳນວນທີ່ຍັງຂາດໃສ່ລົດຊາດທີ່ກຳລັງເລືອກ"
               >
-                <Check size={13} weight="bold" />
-                <span>ຕື່ມສ່ວນທີ່ເຫຼືອ (+{remainingToCarton > 0 ? remainingToCarton : packageQty})</span>
+                <Check size={12} weight="bold" />
+                <span>ຕື່ມສ່ວນຂາດ (+{remainingToCarton > 0 ? remainingToCarton : packageQty})</span>
               </button>
             </div>
 
             <button
               type="button"
               onClick={handleReset}
-              className="px-2.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+              className="px-2 py-0.5 sm:px-2.5 sm:py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
             >
-              <ArrowCounterClockwise size={13} />
+              <ArrowCounterClockwise size={12} />
               <span>ຣີເຊັດ</span>
             </button>
           </div>
         </div>
 
         {/* Flavors Grid List */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 min-h-0 space-y-2">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-2.5 sm:p-4 min-h-0 space-y-1.5 sm:space-y-2 touch-scroll-container">
           {childProducts.length === 0 ? (
             <div className="py-12 text-center text-xs text-slate-400">
               ກຸ່ມນີ້ຍັງບໍ່ມີລົດຊາດໃດໆ. ກະລຸນາເຂົ້າໄປທີ່ "ຈັດການກຸ່ມລວມ" ເພື່ອເລືອກລົດຊາດ!
@@ -466,7 +486,7 @@ export default function MixedCartonSelectorModal({
                 <div
                   key={p.id}
                   onClick={() => setActiveFlavorId(p.id)}
-                  className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                  className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl border transition-all flex items-center justify-between gap-2.5 sm:gap-3 ${
                     isSelected
                       ? 'bg-teal-50/60 border-teal-500 shadow-2xs'
                       : isActive
@@ -475,8 +495,8 @@ export default function MixedCartonSelectorModal({
                   }`}
                 >
                   {/* Left: Image & Name */}
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-400 overflow-hidden shrink-0">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-400 overflow-hidden shrink-0">
                       {p.imageUrl || p.image_url ? (
                         <img src={p.imageUrl || p.image_url} alt="" className="w-full h-full object-cover" />
                       ) : (
@@ -489,31 +509,31 @@ export default function MixedCartonSelectorModal({
                         {p.name}
                       </div>
                       {p.name_vi && (
-                        <div className="text-[11px] text-slate-400 truncate">
+                        <div className="text-[10.5px] sm:text-[11px] text-slate-400 truncate">
                           {p.name_vi}
                         </div>
                       )}
-                      <div className="flex items-center gap-2 text-[10.5px] mt-0.5">
+                      <div className="flex items-center gap-1.5 text-[10px] sm:text-[10.5px] mt-0.5">
                         <span className="text-slate-500">
-                          ລາຄາປີກ: {formatKip(piecePrice)} ₭/{baseUnitName}
+                          {formatKip(piecePrice)} ₭/{baseUnitName}
                         </span>
                         <span>•</span>
                         <span className={`font-mono font-bold ${isLowStock ? 'text-rose-600' : 'text-slate-600'}`}>
-                          ສະຕັອກ: {rawStock}
+                          ສາງ: {rawStock}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* Right: Stepper controls [- 0 +] */}
-                  <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1 sm:gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       disabled={qty <= 0}
                       onClick={() => handleDelta(p.id, -1)}
-                      className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-slate-700 flex items-center justify-center transition-all cursor-pointer active:scale-95"
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-slate-700 flex items-center justify-center transition-all cursor-pointer active:scale-95"
                     >
-                      <Minus size={14} weight="bold" />
+                      <Minus size={13} weight="bold" />
                     </button>
 
                     <input
@@ -521,25 +541,15 @@ export default function MixedCartonSelectorModal({
                       min="0"
                       value={qty}
                       onChange={(e) => handleSetQty(p.id, e.target.value)}
-                      className="w-12 h-8 text-center bg-white border border-slate-200 rounded-lg font-mono font-black text-sm text-slate-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                      className="w-10 sm:w-12 h-7 sm:h-8 text-center bg-white border border-slate-200 rounded-lg font-mono font-black text-xs sm:text-sm text-slate-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                     />
 
                     <button
                       type="button"
                       onClick={() => handleDelta(p.id, 1)}
-                      className="w-8 h-8 rounded-lg bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-xs"
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-xs"
                     >
-                      <Plus size={14} weight="bold" />
-                    </button>
-
-                    {/* Quick +6 / +12 mini button */}
-                    <button
-                      type="button"
-                      onClick={() => handleDelta(p.id, 6)}
-                      className="px-2 h-8 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 text-[11px] font-black border border-teal-200 transition-all cursor-pointer active:scale-95 hidden sm:flex items-center justify-center"
-                      title="ເພີ່ມ +6 ອັນ"
-                    >
-                      +6
+                      <Plus size={13} weight="bold" />
                     </button>
                   </div>
                 </div>
@@ -548,29 +558,18 @@ export default function MixedCartonSelectorModal({
           )}
         </div>
 
-        {/* Footer: Live Pricing Preview & Add to Cart */}
-        <div className="px-4 sm:px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+        {/* Footer: Live Pricing Preview & Add to Cart (Compact 1-row layout on mobile, never gets cut off) */}
+        <div className="px-3.5 sm:px-6 py-3 sm:py-3.5 bg-white sm:bg-slate-50 border-t border-slate-200 flex flex-row items-center justify-between gap-2 sm:gap-3 shrink-0 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:pb-3.5 shadow-lg sm:shadow-none">
           
           {/* Price Breakdown */}
-          <div className="w-full sm:w-auto text-left">
-            <div className="text-[11px] text-slate-500 flex items-center gap-2">
-              {cartonCount > 0 && (
-                <span>{cartonCount} {unitName} ({formatKip(cartonTotalLak)})</span>
-              )}
-              {cartonCount > 0 && looseCount > 0 && <span>+</span>}
-              {looseCount > 0 && (
-                <span>{looseCount} {baseUnitName} ຍ່ອຍ ({formatKip(looseTotalLak)})</span>
-              )}
-              {totalPicked === 0 && (
-                <span>ຍັງບໍ່ໄດ້ເລືອກຈຳນວນ</span>
-              )}
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl sm:text-2xl font-mono font-black text-teal-800">
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ຍອດລວມ:</div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-base sm:text-2xl font-mono font-black text-teal-800 truncate">
                 {formatKip(grandTotalLak)}
               </span>
               {exchangeRate > 0 && (
-                <span className="text-xs font-mono font-bold text-slate-400">
+                <span className="text-[10px] sm:text-xs font-mono font-bold text-slate-400 hidden xs:inline">
                   (≈ {formatBaht(grandTotalThb)})
                 </span>
               )}
@@ -578,7 +577,7 @@ export default function MixedCartonSelectorModal({
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {editingCartItem && onRemoveFromCart && (
               <button
                 type="button"
@@ -587,7 +586,7 @@ export default function MixedCartonSelectorModal({
                   onRemoveFromCart(editingCartItem.id, null);
                   onClose();
                 }}
-                className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold border border-rose-200 transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+                className="p-2 sm:px-3.5 sm:py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold border border-rose-200 transition-all cursor-pointer flex items-center gap-1 active:scale-95"
                 title="ລຶບລາຍການນີ້ອອກຈາກກະຕ່າ"
               >
                 <Trash size={15} />
@@ -598,7 +597,7 @@ export default function MixedCartonSelectorModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 transition-all cursor-pointer"
+              className="px-2.5 sm:px-4 py-2 sm:py-2.5 bg-white hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 transition-all cursor-pointer"
             >
               ຍົກເລີກ
             </button>
@@ -607,7 +606,7 @@ export default function MixedCartonSelectorModal({
               type="button"
               disabled={totalPicked === 0}
               onClick={handleConfirmAddToCart}
-              className={`flex-1 sm:flex-initial px-6 py-2.5 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              className={`px-3.5 sm:px-6 py-2 sm:py-2.5 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 editingCartItem
                   ? 'bg-amber-600 hover:bg-amber-700 disabled:opacity-40'
                   : 'bg-teal-600 hover:bg-teal-700 disabled:opacity-40'
@@ -615,13 +614,13 @@ export default function MixedCartonSelectorModal({
             >
               {editingCartItem ? (
                 <>
-                  <Check size={16} weight="bold" />
-                  <span>ອັບເດດລາຍການ ({totalPicked} {baseUnitName})</span>
+                  <Check size={15} weight="bold" />
+                  <span>ອັບເດດ ({totalPicked})</span>
                 </>
               ) : (
                 <>
-                  <ShoppingCart size={16} weight="bold" />
-                  <span>+ ເພີ່ມໃສ່ກະຕ່າ ({totalPicked} {baseUnitName})</span>
+                  <ShoppingCart size={15} weight="bold" />
+                  <span>+ ເພີ່ມໃສ່ກະຕ່າ ({totalPicked})</span>
                 </>
               )}
             </button>
@@ -631,4 +630,9 @@ export default function MixedCartonSelectorModal({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 }

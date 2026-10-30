@@ -11,6 +11,7 @@ import {
   ChartPieSlice,
   Gear,
   UsersThree,
+  Users,
   Folders,
   Intersect,
 } from '@phosphor-icons/react';
@@ -74,6 +75,15 @@ export const NAVIGATION_SCHEMA = [
     allowedRoles: [USER_ROLES.ADMIN, USER_ROLES.CASHIER],
   },
   {
+    id: 'customers',
+    path: '#customers',
+    label: 'ຈັດການລູກຄ້າ',
+    sub: 'ລາຍຊື່ & ໜີ້ສິນລູກຄ້າ',
+    shortLabel: 'ລູກຄ້າ',
+    icon: Users,
+    allowedRoles: [USER_ROLES.ADMIN, USER_ROLES.CASHIER],
+  },
+  {
     id: 'purchases',
     path: '#purchases',
     label: 'ຮັບສິນຄ້າເຂົ້າ (GRN)',
@@ -132,6 +142,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'products',
     'categories',
     'bundles',
+    'customers',
     'purchases',
     'dashboard',
     'sales-by-unit',
@@ -144,6 +155,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'products',
     'categories',
     'bundles',
+    'customers',
   ],
 };
 

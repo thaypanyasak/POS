@@ -646,6 +646,10 @@ export default function ProductBundleModal({
                       id="bundle-barcode-input"
                       data-barcode-input="true"
                       type="text"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck="false"
+                      autoComplete="off"
                       value={barcode}
                       onChange={(e) => setBarcode(e.target.value)}
                       placeholder="ຍິງບາຣ໌ໂຄດທີ່ຕິດຢູ່ນອກລັງ..."

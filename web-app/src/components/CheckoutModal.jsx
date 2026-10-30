@@ -7,6 +7,7 @@ import {
   Clock,
   Check,
   User,
+  Phone,
   WarningCircle,
   Bank,
   Money,
@@ -18,12 +19,18 @@ import { formatKip, formatDots, parseDots, getEffectiveUnitPrice, formatDateToDD
 import { playModalCloseBeep, playModalConfirmBeep, playUnitChangeBeep } from '../utils/audioFeedback';
 import { Capacitor } from '@capacitor/core';
 import { Keyboard } from '@capacitor/keyboard';
+import CustomerSearchSelect from './common/CustomerSearchSelect';
 
 export default function CheckoutModal({
   isOpen,
   onClose,
   customerName,
   setCustomerName,
+  customerPhone = '',
+  setCustomerPhone = null,
+  setCustomerId = null,
+  customers = [],
+  onOpenNewCustomerModal = null,
   cartSubtotal,
   cart = [],
   paymentMethod,
@@ -124,29 +131,42 @@ export default function CheckoutModal({
           </button>
         </div>
 
-        {/* Customer Name Editor Bar */}
-        <div className="flex items-center justify-between text-xs text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-            <User size={15} className="text-slate-400 shrink-0" weight="bold" />
-            <span className="text-slate-500 shrink-0 text-[11px] font-bold">ລູກຄ້າ:</span>
-            <input
-              type="text"
-              value={customerName || ''}
-              onChange={(e) => setCustomerName && setCustomerName(e.target.value)}
-              onFocus={() => {
-                if (Capacitor.isNativePlatform()) {
-                  Keyboard.show().catch(() => {});
-                }
-              }}
-              placeholder="ຊື່ລູກຄ້າ ຫຼື ເບີໂທຕິດຕໍ່..."
-              className="font-bold text-slate-900 bg-transparent hover:bg-white focus:bg-white border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none px-1.5 py-0.5 rounded text-xs flex-1 min-w-0"
-            />
+        {/* Customer Name & Phone Bar */}
+        <div className="flex flex-col gap-2 text-xs text-slate-700 bg-slate-50 p-2.5 rounded-2xl border border-slate-200 relative z-30">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500 shrink-0 text-xs font-bold">ລູກຄ້າ:</span>
+            <div className="flex-1 min-w-0">
+              <CustomerSearchSelect
+                customerName={customerName || 'ລູກຄ້າທົ່ວໄປ'}
+                customerPhone={customerPhone}
+                onChangeCustomer={({ name, phone, id }) => {
+                  if (setCustomerName) setCustomerName(name);
+                  if (setCustomerPhone) setCustomerPhone(phone);
+                  if (setCustomerId) setCustomerId(id || null);
+                }}
+                customers={customers}
+                onOpenNewCustomerModal={onOpenNewCustomerModal}
+              />
+            </div>
+            {paymentMethod === 'debt' && (!customerName || customerName.trim() === 'ລູກຄ້າທົ່ວໄປ') && (
+              <span className="text-[10px] text-amber-800 bg-amber-100 font-bold px-2 py-0.5 rounded-full ml-1 shrink-0 animate-pulse border border-amber-300 flex items-center gap-1">
+                <WarningCircle size={13} weight="fill" className="text-amber-600" />
+                <span>ຄວນໃສ່ຊື່ລູກຄ້າ</span>
+              </span>
+            )}
           </div>
-          {paymentMethod === 'debt' && (!customerName || customerName.trim() === 'ລູກຄ້າທົ່ວໄປ') && (
-            <span className="text-[10px] text-amber-800 bg-amber-100 font-bold px-2 py-0.5 rounded-full ml-1 shrink-0 animate-pulse border border-amber-300 flex items-center gap-1">
-              <WarningCircle size={13} weight="fill" className="text-amber-600" />
-              <span>ຄວນໃສ່ຊື່ລູກຄ້າ</span>
-            </span>
+          {setCustomerPhone && (
+            <div className="flex items-center gap-2 pt-1.5 border-t border-slate-200/60">
+              <Phone size={14} className="text-slate-400 shrink-0" weight="bold" />
+              <span className="text-slate-500 shrink-0 text-[11px] font-bold">ເບີໂທ:</span>
+              <input
+                type="tel"
+                value={customerPhone || ''}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="ເບີໂທຕິດຕໍ່ (ຖ້າມີ)..."
+                className="text-slate-800 font-bold bg-white border border-slate-200 focus:border-teal-500 focus:outline-none px-2 py-1 rounded-lg text-xs flex-1 min-w-0 shadow-2xs"
+              />
+            </div>
           )}
         </div>
 
@@ -493,13 +513,13 @@ export default function CheckoutModal({
                   </div>
                 </div>
 
-                {/* Quick Date Chips: +3, +7, +15, +30 ngày */}
+                {/* Quick Date Chips: +3, +7, +15, +30 ວັນ */}
                 <div className="grid grid-cols-4 gap-1.5 mt-1.5">
                   {[
-                    { label: '+3 ມື້', days: 3 },
-                    { label: '+7 ມື້', days: 7 },
-                    { label: '+15 ມື້', days: 15 },
-                    { label: '+30 ມື້', days: 30 },
+                    { label: '+3 ວັນ', days: 3 },
+                    { label: '+7 ວັນ', days: 7 },
+                    { label: '+15 ວັນ', days: 15 },
+                    { label: '+30 ວັນ', days: 30 },
                   ].map((chip) => {
                     const targetDate = new Date();
                     targetDate.setDate(targetDate.getDate() + chip.days);

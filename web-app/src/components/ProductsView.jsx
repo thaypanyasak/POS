@@ -514,7 +514,6 @@ export default function ProductsView({
       className="flex-1 w-full max-w-full p-3 sm:p-5 md:p-6 overflow-y-auto overflow-x-hidden font-sans min-h-0 pb-4 sm:pb-6 touch-pan-y"
       style={{
         paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
-        paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
         overscrollBehaviorX: 'none',
       }}
     >
@@ -643,6 +642,10 @@ export default function ProductsView({
               id="product-search-input"
               type="text"
               data-barcode-replace="true"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck="false"
+              autoComplete="off"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ, ໝວດໝູ່ ຫຼື ສະແກນບາໂຄດ..."

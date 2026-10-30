@@ -162,7 +162,8 @@ export default function HistoryView({
           status === 'DEBT' ||
           status === 'PARTIAL' ||
           remainingDebt > 0 ||
-          method === 'debt';
+          method === 'debt' ||
+          Boolean(tx.debtDueDate || tx.debt_due_date);
         if (isDebtOrder && remainingDebt <= 0 && paid < total) {
           remainingDebt = Math.max(0, total - paid);
         }
@@ -636,7 +637,6 @@ export default function HistoryView({
       className="flex-1 w-full max-w-full p-3 sm:p-5 md:p-6 overflow-y-auto overflow-x-hidden font-sans min-h-0 pb-4 sm:pb-6 touch-pan-y"
       style={{
         paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
-        paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
         overscrollBehaviorX: 'none',
       }}
     >
@@ -1042,6 +1042,10 @@ export default function HistoryView({
               id="history-search-input"
               type="text"
               data-barcode-replace="true"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck="false"
+              autoComplete="off"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="ຄົ້ນຫາເລກບິນ, ລູກຄ້າ, ສິນຄ້າ..."
@@ -1142,7 +1146,12 @@ export default function HistoryView({
           const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
           const method = (tx.paymentMethod || '').toLowerCase();
           const status = (tx.paymentStatus || '').toUpperCase();
-          const isDebtOrder = method === 'debt' || tx.isDebt || status === 'DEBT' || status === 'PARTIAL';
+          const isDebtOrder =
+            method === 'debt' ||
+            tx.isDebt ||
+            status === 'DEBT' ||
+            status === 'PARTIAL' ||
+            Boolean(tx.debtDueDate || tx.debt_due_date);
 
           let remainingDebt = Number(
             tx.remainingDebt ?? tx.debtAmount ?? Math.max(0, total - paid)
@@ -1565,7 +1574,12 @@ export default function HistoryView({
               const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
               const method = (tx.paymentMethod || '').toLowerCase();
               const status = (tx.paymentStatus || '').toUpperCase();
-              const isDebtOrder = method === 'debt' || tx.isDebt || status === 'DEBT' || status === 'PARTIAL';
+              const isDebtOrder =
+            method === 'debt' ||
+            tx.isDebt ||
+            status === 'DEBT' ||
+            status === 'PARTIAL' ||
+            Boolean(tx.debtDueDate || tx.debt_due_date);
 
               let remainingDebt = Number(
                 tx.remainingDebt ?? tx.debtAmount ?? Math.max(0, total - paid)

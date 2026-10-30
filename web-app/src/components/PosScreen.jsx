@@ -28,11 +28,12 @@ import {
   ArrowsClockwise,
   Keyboard,
 } from '@phosphor-icons/react';
-import { formatKip, formatCompoundStock, formatStockDisplay, formatNegativeStockCompound, formatDots, getEffectiveUnitPrice, PRICE_TIERS } from '../utils/formatters';
+import { formatKip, formatCompoundStock, formatStockDisplay, formatNegativeStockCompound, formatDots, getEffectiveUnitPrice, PRICE_TIERS, normalizeLao } from '../utils/formatters';
 import PriceOverrideModal from './PriceOverrideModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import QuotationPreviewModal from './inventory/QuotationPreviewModal';
 import MixedCartonSelectorModal from './MixedCartonSelectorModal';
+import CustomerSearchSelect from './common/CustomerSearchSelect';
 import ExchangeRateBadge from './common/ExchangeRateBadge';
 import { PosProductGridSkeleton } from './common/SkeletonLoaders';
 import BundleCollage from './common/BundleCollage';
@@ -144,8 +145,14 @@ export default function PosScreen({
   addToCart,
   openUnitSelector,
   cart,
-  customerName,
+  customerName = 'ລູກຄ້າທົ່ວໄປ',
   setCustomerName,
+  customerPhone = '',
+  setCustomerPhone = null,
+  customerId = null,
+  setCustomerId = null,
+  customers = [],
+  onOpenNewCustomerModal = null,
   updateCartQuantity,
   removeFromCart,
   setCart,
@@ -251,8 +258,8 @@ export default function PosScreen({
       const q = normalizeLao(searchQuery.trim());
       return bundles.filter(
         (b) =>
-          normalizeLao(b.name).includes(q) ||
-          normalizeLao(b.name_vi || '').includes(q) ||
+          normalizeLao(b.name || '').includes(q) ||
+          normalizeLao(b.name_vi || b.nameVi || '').includes(q) ||
           (b.barcode && b.barcode.toLowerCase().includes(q.toLowerCase()))
       );
     }
@@ -323,7 +330,7 @@ export default function PosScreen({
         };
       }
 
-      // Automatically add product or increment +1 in cart (barcode scan uses playSuccessBeep)
+      // Automatically add product or increment +1 in cart without cluttering search bar
       addToCart(matched, targetUnit, 1, { silent: true });
       playSuccessBeep();
       setScannerOpen(false);
@@ -363,8 +370,8 @@ export default function PosScreen({
 
   const handleSearchKeyDown = (e) => {
     if (e.key === 'Enter') {
-      // Ignore Enter if a hardware barcode scan just fired in the last 600ms to avoid double firing
-      if (Date.now() - lastHardwareScanTimeRef.current < 600) {
+      // Ignore Enter if a hardware barcode scan just fired in the last 800ms to avoid double firing
+      if (Date.now() - lastHardwareScanTimeRef.current < 800) {
         e.preventDefault();
         e.stopPropagation();
         return;
@@ -589,20 +596,20 @@ export default function PosScreen({
       {renderEditingBanner()}
 
       {/* 2. Compact Cart Header: Customer Name + Quick Chips + Order Dropdown Selector (Cuối bên phải) */}
-      <div className={`p-2 sm:p-2.5 border-b border-slate-100 flex flex-col gap-1.5 shrink-0 bg-slate-50/90 ${isDrawer ? 'pt-1.5' : ''}`}>
+      <div className={`p-2 sm:p-2.5 border-b border-slate-100 flex flex-col gap-1.5 shrink-0 bg-slate-50/90 relative z-30 ${isDrawer ? 'pt-1.5' : ''}`}>
         <div className="flex items-center gap-1.5">
-          {/* Ô Nhập Tên Khách Hàng */}
-          <div className="relative flex-1">
-            <User
-              size={13}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-            <input
-              type="text"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="ຊື່ລູກຄ້າ / Customer..."
-              className="w-full h-8 pl-7 pr-2 py-1 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-bold shadow-2xs"
+          {/* Dropdown Chọn & Tìm kiếm Tên Khách Hàng (Mặc định: ລູກຄ້າທົ່ວໄປ) */}
+          <div className="flex-1 min-w-0 relative z-30">
+            <CustomerSearchSelect
+              customerName={customerName || 'ລູກຄ້າທົ່ວໄປ'}
+              customerPhone={customerPhone}
+              onChangeCustomer={({ name, phone, id }) => {
+                setCustomerName(name);
+                if (setCustomerPhone) setCustomerPhone(phone);
+                if (setCustomerId) setCustomerId(id || null);
+              }}
+              customers={customers}
+              onOpenNewCustomerModal={onOpenNewCustomerModal}
             />
           </div>
 
@@ -1794,6 +1801,10 @@ export default function PosScreen({
                 id="pos-search-input"
                 data-barcode-clear="true"
                 type="text"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck="false"
+                autoComplete="off"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
@@ -2217,7 +2228,7 @@ export default function PosScreen({
         </div>
 
         {/* Mobile Floating Cart Summary Bar (< 768px): Nằm ngay phía trên Bottom Navigation Bar, không bị che khuất và khít hoàn hảo trên Native App & Browser */}
-        <div className="md:hidden bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-3 py-2.5 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] flex items-center justify-between gap-2 shrink-0 z-30 mb-[calc(3.7rem+env(safe-area-inset-bottom,0px))]">
+        <div className="md:hidden bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-3 py-2.5 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] flex items-center justify-between gap-2 shrink-0 z-30 mb-[calc(3.5rem+env(safe-area-inset-bottom,0px))]">
           <button
             type="button"
             onClick={() => setMobileCartOpen(true)}
@@ -2352,6 +2363,7 @@ export default function PosScreen({
         cart={cart}
         cartSubtotal={cartSubtotal}
         customerName={customerName}
+        customerPhone={customerPhone}
         products={products}
       />
 

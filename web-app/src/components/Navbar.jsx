@@ -394,9 +394,9 @@ export default function Navbar({
         return (
           <>
             <nav
-              className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/98 backdrop-blur-md border-t border-slate-200 flex items-stretch justify-around px-2 pt-0 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] select-none h-[62px]"
+              className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/98 backdrop-blur-md border-t border-slate-200 flex items-stretch justify-around px-1 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] select-none"
               style={{
-                paddingBottom: 'max(0.35rem, env(safe-area-inset-bottom, 0px))',
+                paddingBottom: 'max(0.4rem, env(safe-area-inset-bottom, 0px))',
               }}
             >
               {/* Buttons 1-4: Primary Tabs (POS, History, Products, Purchases) */}
@@ -414,13 +414,13 @@ export default function Navbar({
                       setIsMoreMenuOpen(false);
                       setActiveMainTab(item.id);
                     }}
-                    className={`flex-1 min-w-0 flex flex-col items-center justify-between pb-1 transition-all relative cursor-pointer active:scale-95 select-none ${
+                    className={`flex-1 min-w-0 flex flex-col items-center justify-center py-1 gap-0.5 transition-all relative cursor-pointer active:scale-95 select-none ${
                       isActive ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
                     }`}
                   >
-                    {/* Top Neon Line Indicator (Exact match to reference photo) */}
+                    {/* Top Neon Line Indicator */}
                     <div
-                      className={`h-[3.5px] w-8 sm:w-10 rounded-full transition-all duration-200 ${
+                      className={`h-[3px] w-8 sm:w-10 rounded-full transition-all duration-200 ${
                         isActive
                           ? 'bg-emerald-600 shadow-[0_1px_8px_rgba(5,150,105,0.6)]'
                           : 'bg-transparent'
@@ -429,7 +429,7 @@ export default function Navbar({
 
                     {/* Icon with potential badge */}
                     <div className="relative inline-flex items-center justify-center mt-0.5">
-                      <Icon size={24} weight={isActive ? 'bold' : 'regular'} />
+                      <Icon size={22} weight={isActive ? 'bold' : 'regular'} />
                       {hasBadge && (
                         <span className="absolute -top-1.5 -right-2.5 z-10 flex items-center justify-center pointer-events-none">
                           {item.id === 'history' && (
@@ -439,7 +439,7 @@ export default function Navbar({
                             />
                           )}
                           <span
-                            className={`relative flex items-center justify-center h-[17px] min-w-[17px] px-1 rounded-full text-[9px] font-black font-sans tabular-nums leading-none text-white ring-2 ring-white ${
+                            className={`relative flex items-center justify-center h-[16px] min-w-[16px] px-1 rounded-full text-[9px] font-black font-sans tabular-nums leading-none text-white ring-2 ring-white ${
                               item.id === 'history'
                                 ? 'bg-gradient-to-tr from-red-700 via-red-600 to-red-500 shadow-xs'
                                 : 'bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-xs'
@@ -453,7 +453,7 @@ export default function Navbar({
 
                     {/* Short Label */}
                     <span
-                      className={`text-[11px] truncate max-w-full leading-tight font-sans tracking-tight ${
+                      className={`text-[10px] sm:text-[10.5px] truncate max-w-full leading-tight font-sans tracking-tight ${
                         isActive ? 'text-emerald-700 font-extrabold' : 'text-slate-500 font-medium'
                       }`}
                     >
@@ -470,7 +470,7 @@ export default function Navbar({
                   playUnitChangeBeep('sidebar');
                   setIsMoreMenuOpen(!isMoreMenuOpen);
                 }}
-                className={`flex-1 min-w-0 flex flex-col items-center justify-between pb-1 transition-all relative cursor-pointer active:scale-95 select-none ${
+                className={`flex-1 min-w-0 flex flex-col items-center justify-center py-1 gap-0.5 transition-all relative cursor-pointer active:scale-95 select-none ${
                   isMoreActive || isMoreMenuOpen
                     ? 'text-emerald-600'
                     : 'text-slate-400 hover:text-slate-600'
@@ -478,16 +478,16 @@ export default function Navbar({
               >
                 {/* Top Neon Line Indicator */}
                 <div
-                  className={`h-[3.5px] w-8 sm:w-10 rounded-full transition-all duration-200 ${
+                  className={`h-[3px] w-8 sm:w-10 rounded-full transition-all duration-200 ${
                     isMoreActive || isMoreMenuOpen
                       ? 'bg-emerald-600 shadow-[0_1px_8px_rgba(5,150,105,0.6)]'
                       : 'bg-transparent'
                   }`}
                 />
 
-                {/* Icon with Green Dot Badge matching Image 3 */}
+                {/* Icon with Green Dot Badge */}
                 <div className="relative inline-flex items-center justify-center mt-0.5">
-                  <SquaresFour size={24} weight={isMoreActive || isMoreMenuOpen ? 'bold' : 'regular'} />
+                  <SquaresFour size={22} weight={isMoreActive || isMoreMenuOpen ? 'bold' : 'regular'} />
                   {moreHasBadge && (
                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white animate-pulse" />
                   )}
@@ -495,7 +495,7 @@ export default function Navbar({
 
                 {/* Short Label */}
                 <span
-                  className={`text-[11px] truncate max-w-full leading-tight font-sans tracking-tight ${
+                  className={`text-[10px] sm:text-[10.5px] truncate max-w-full leading-tight font-sans tracking-tight ${
                     isMoreActive || isMoreMenuOpen ? 'text-emerald-700 font-extrabold' : 'text-slate-500 font-medium'
                   }`}
                 >

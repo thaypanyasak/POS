@@ -104,10 +104,11 @@ const LABELS = {
     storeAddress: 'ບ້ານ ໂພນສະຫວັນ, ນະຄອນປາກເຊ, ຈຳປາສັກ',
     storeTel: '020 56468780 / 02052228432',
     receiptTitle: 'ໃບບິນຮັບເງິນ / RECEIPT',
-    voidTitle: 'ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ (VOID)',
+    voidTitle: 'ໃບບິນນີ້ຖືກຍົກເລີກແລ້ວ ',
     cashier: 'ຜູ້ຂາຍ :',
     customer: 'ລູກຄ້າ:',
     defaultCustomer: 'ລູກຄ້າທົ່ວໄປ',
+    phone: 'ເບີໂທ :',
     date: 'ວັນທີ:',
     payment: 'ຊຳລະ:',
     payCash: 'ເງິນສົດ',
@@ -120,16 +121,16 @@ const LABELS = {
     colPrice: 'ລາຄາ',
     colTotal: 'ລວມ (₭)',
     missingCrate: '↳ ບໍ່ມີລັງປ່ຽນ',
-    crateDepositLabel: 'ຄ່າມັດຈຳລັງ (Crate Deposit):',
+    crateDepositLabel: 'ຄ່າມັດຈຳລັງ :',
     subtotalLabel: 'ລວມເງິນສິນຄ້າ (Subtotal):',
-    discountLabel: 'ສ່ວນຫຼຸດ (Discount):',
+    discountLabel: 'ສ່ວນຫຼຸດ :',
     grandTotalLabel: 'ຍອດຊຳລະສຸດທິ:',
-    paidLabel: 'ຈ່າຍແລ້ວ / ຈ່າຍກ່ອນ (Paid):',
-    debtBalanceLabel: 'ຍອດຄ້າງຊຳລະ (Debt Balance):',
-    debtDueDateLabel: 'ກຳນົດຊຳລະ (Due Date):',
+    paidLabel: 'ຈ່າຍແລ້ວ :',
+    debtBalanceLabel: 'ຍອດຄ້າງຊຳລະ :',
+    debtDueDateLabel: 'ກຳນົດຊຳລະ :',
     debtNoteLabel: '* ໝາຍເຫດ:',
-    tenderedLabel: 'ຮັບເງິນມາ (Tendered):',
-    changeLabel: 'ເງິນທອນ (Change):',
+    tenderedLabel: 'ຮັບເງິນມາ :',
+    changeLabel: 'ເງິນທອນ :',
     transferTotalLabel: 'ຍອດໂອນ:',
     signDebtor: 'ລາຍເຊັນຜູ້ຄ້າງຊຳລະ',
     signCustomer: 'ຜູ້ຮັບເຄື່ອງ',
@@ -166,6 +167,7 @@ const LABELS = {
     cashier: 'Thu ngân :',
     customer: 'Khách hàng:',
     defaultCustomer: 'Khách lẻ',
+    phone: 'Số ĐT :',
     date: 'Ngày in:',
     payment: 'Thanh toán:',
     payCash: 'Tiền mặt',
@@ -178,16 +180,16 @@ const LABELS = {
     colPrice: 'Đơn giá',
     colTotal: 'Thành tiền (₭)',
     missingCrate: '↳ Thiếu két vỏ',
-    crateDepositLabel: 'Cọc vỏ/két (Crate Deposit):',
-    subtotalLabel: 'Tiền hàng (Subtotal):',
-    discountLabel: 'Giảm giá (Discount):',
+    crateDepositLabel: 'Cọc vỏ/két :',
+    subtotalLabel: 'Tiền hàng :',
+    discountLabel: 'Giảm giá :',
     grandTotalLabel: 'TỔNG THANH TOÁN:',
-    paidLabel: 'Đã thanh toán (Paid):',
-    debtBalanceLabel: 'Còn nợ (Debt Balance):',
-    debtDueDateLabel: 'Hạn thanh toán (Due Date):',
+    paidLabel: 'Đã thanh toán :',
+    debtBalanceLabel: 'Còn nợ :',
+    debtDueDateLabel: 'Hạn thanh toán :',
     debtNoteLabel: '* Ghi chú nợ:',
-    tenderedLabel: 'Tiền khách đưa (Tendered):',
-    changeLabel: 'Tiền thừa thối lại (Change):',
+    tenderedLabel: 'Tiền khách đưa :',
+    changeLabel: 'Tiền thừa thối lại :',
     transferTotalLabel: 'Số tiền chuyển khoản:',
     signDebtor: 'Chữ ký người nợ',
     signCustomer: 'Người nhận hàng',
@@ -209,8 +211,8 @@ const LABELS = {
       '• Giá có thể thay đổi theo biến động thực tế của thị trường.',
       '• Cảm ơn quý khách đã quan tâm đến cửa hàng chúng tôi!',
     ],
-    signQuotationCustomer: 'Khách hàng (Customer)',
-    signQuotationStaff: 'Nhân viên báo giá (Staff)',
+    signQuotationCustomer: 'Khách hàng ',
+    signQuotationStaff: 'Nhân viên báo giá ',
     defaultItemName: 'Sản phẩm',
     defaultUnitName: 'Cái',
   },
@@ -631,22 +633,23 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
     y += 54;
   }
 
-  // 4. METADATA SECTION (Clear, Bolder, High-Contrast Typography)
-  // Row 1: Cashier & Customer
+  // 4. METADATA SECTION: Reordered per user layout specification
+  // Row 1: Cashier (Left) & Date (Right)
   const rawCashier = receipt.cashierName || receipt.cashier_name || '';
   const cashierDisp = (!rawCashier || rawCashier.includes('\u0ec4\u0ea1\u0ec9\u0e84\u0eb3') || rawCashier.toLowerCase() === 'meii') ? 'Meii' : rawCashier;
   drawLeft(`${L.cashier} ${cashierDisp}`, K80.LEFT_MARGIN, y, FONTS.META_VAL);
+
+  const dateStr = receipt.createdAt || receipt.created_at
+    ? new Date(receipt.createdAt || receipt.created_at).toLocaleString(lang === 'vi' ? 'vi-VN' : 'lo-LA')
+    : new Date().toLocaleString();
+  drawRight(`${L.date} ${dateStr}`, K80.RIGHT_EDGE, y, FONTS.META_LABEL);
+  y += 34;
+
+  // Row 2: Customer Name (Left) & Payment Method (Right)
   const custName = (!receipt.customerName || receipt.customerName === 'ລູກຄ້າທົ່ວໄປ' || receipt.customerName === 'Khách lẻ / Khách vãng lai')
     ? L.defaultCustomer
     : receipt.customerName;
-  drawRight(`${L.customer} ${custName}`, K80.RIGHT_EDGE, y, FONTS.META_VAL);
-  y += 34;
-
-  // Row 2: Date & Payment Method (Payment omitted for Quotation)
-  const dateStr = receipt.createdAt
-    ? new Date(receipt.createdAt).toLocaleString(lang === 'vi' ? 'vi-VN' : 'lo-LA')
-    : new Date().toLocaleString();
-  drawLeft(`${L.date} ${dateStr}`, K80.LEFT_MARGIN, y, FONTS.META_LABEL);
+  drawLeft(`${L.customer} ${custName}`, K80.LEFT_MARGIN, y, FONTS.META_VAL);
 
   if (!isQuotation) {
     let payLabel = L.payCash;
@@ -657,7 +660,14 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
     } else payLabel = L.payTransfer;
     drawRight(`${L.payment} ${payLabel}`, K80.RIGHT_EDGE, y, FONTS.META_VAL);
   }
-  y += 36;
+  y += 34;
+
+  // Row 3: Customer Phone (if available)
+  const custPhone = receipt.customerPhone || receipt.customer_phone || '';
+  if (custPhone) {
+    drawLeft(`${L.phone} ${custPhone}`, K80.LEFT_MARGIN, y, FONTS.META_LABEL);
+    y += 34;
+  }
 
   // 5. COLUMN HEADERS (4 Columns)
   // 5. ITEMS SECTION (Modern 2-Line Non-Bordered Layout: Name on line 1, Qty x Price & Total on line 2)

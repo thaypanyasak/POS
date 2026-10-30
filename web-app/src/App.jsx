@@ -48,6 +48,9 @@ import CategoryManagerModal from './components/CategoryManagerModal';
 import CategoriesView from './components/CategoriesView';
 import ProductBundleModal from './components/ProductBundleModal';
 import MixProductsView from './components/MixProductsView';
+import CustomersView from './components/CustomersView';
+import CustomerFormModal from './components/CustomerFormModal';
+import { fetchSavedCustomers, saveCustomerRecord, buildCustomerDirectory } from './services/customerService';
 import ConfirmDialogModal from './components/ConfirmDialogModal';
 import StaffManagementView from './components/auth/StaffManagementView';
 import CashierLockOverlay from './components/auth/CashierLockOverlay';
@@ -104,9 +107,12 @@ export default function App() {
       const hash = (window.location.hash || '').toLowerCase();
       const path = (window.location.pathname || '').toLowerCase();
       return (
-        hash.includes('menu') ||
-        hash.includes('catalog') ||
-        hash.includes('customer') ||
+        hash === '#menu' ||
+        hash.startsWith('#menu') ||
+        hash === '#catalog' ||
+        hash.startsWith('#catalog') ||
+        hash === '#customer-catalog' ||
+        hash === '#customer-menu' ||
         path === '/menu' ||
         path.startsWith('/menu/') ||
         path === '/catalog' ||
@@ -303,6 +309,32 @@ export default function App() {
     return 'ລູກຄ້າທົ່ວໄປ';
   });
 
+  const [customerPhone, setCustomerPhone] = useState(() => {
+    try {
+      const savedOrders = localStorage.getItem('meiishop_pos_active_orders_v1');
+      const savedId = localStorage.getItem('meiishop_pos_active_order_id_v1') || 'order_1';
+      if (savedOrders) {
+        const parsed = JSON.parse(savedOrders);
+        const active = parsed.find((o) => o.id === savedId) || parsed[0];
+        if (active?.customerPhone) return active.customerPhone;
+      }
+    } catch (_) {}
+    return '';
+  });
+
+  const [customerId, setCustomerId] = useState(() => {
+    try {
+      const savedOrders = localStorage.getItem('meiishop_pos_active_orders_v1');
+      const savedId = localStorage.getItem('meiishop_pos_active_order_id_v1') || 'order_1';
+      if (savedOrders) {
+        const parsed = JSON.parse(savedOrders);
+        const active = parsed.find((o) => o.id === savedId) || parsed[0];
+        if (active?.customerId) return active.customerId;
+      }
+    } catch (_) {}
+    return null;
+  });
+
   const [globalPriceTier, setGlobalPriceTier] = useState(() => {
     try {
       const savedOrders = localStorage.getItem('meiishop_pos_active_orders_v1');
@@ -329,6 +361,8 @@ export default function App() {
         existing &&
         existing.cart === cart &&
         existing.customerName === customerName &&
+        existing.customerPhone === customerPhone &&
+        existing.customerId === customerId &&
         existing.priceTier === globalPriceTier &&
         existing.label === newLabel
       ) {
@@ -342,6 +376,8 @@ export default function App() {
             defaultLabel: o.defaultLabel || defaultLabel,
             cart,
             customerName,
+            customerPhone,
+            customerId,
             priceTier: globalPriceTier,
           };
         }
@@ -351,7 +387,7 @@ export default function App() {
       safeSetItem('meiishop_pos_active_order_id_v1', activeOrderId);
       return updated;
     });
-  }, [cart, customerName, globalPriceTier, activeOrderId]);
+  }, [cart, customerName, customerPhone, customerId, globalPriceTier, activeOrderId]);
 
   // Switch to another order tab
   const handleSelectOrderTab = (targetOrderId) => {
@@ -366,6 +402,8 @@ export default function App() {
           ...o,
           cart,
           customerName,
+          customerPhone,
+          customerId,
           priceTier: globalPriceTier,
         };
       }
@@ -376,6 +414,8 @@ export default function App() {
     setActiveOrderId(targetOrderId);
     setCart(targetOrder.cart || []);
     setCustomerName(targetOrder.customerName || 'ລູກຄ້າທົ່ວໄປ');
+    setCustomerPhone(targetOrder.customerPhone || '');
+    setCustomerId(targetOrder.customerId || null);
     setGlobalPriceTier(targetOrder.priceTier || 1);
     safeSetItem('meiishop_pos_active_orders_v1', updatedOrders);
     safeSetItem('meiishop_pos_active_order_id_v1', targetOrderId);
@@ -401,13 +441,15 @@ export default function App() {
       defaultLabel: defaultLabel,
       cart: [],
       customerName: 'ລູກຄ້າທົ່ວໄປ',
+      customerPhone: '',
+      customerId: null,
       priceTier: 1,
       createdAt: Date.now(),
     };
 
     // Save current active order before switching
     const updatedOrders = [
-      ...posOrders.map((o) => (o.id === activeOrderId ? { ...o, cart, customerName, priceTier: globalPriceTier } : o)),
+      ...posOrders.map((o) => (o.id === activeOrderId ? { ...o, cart, customerName, customerPhone, customerId, priceTier: globalPriceTier } : o)),
       newOrder,
     ];
 
@@ -415,6 +457,8 @@ export default function App() {
     setActiveOrderId(newId);
     setCart([]);
     setCustomerName('ລູກຄ້າທົ່ວໄປ');
+    setCustomerPhone('');
+    setCustomerId(null);
     setGlobalPriceTier(1);
 
     safeSetItem('meiishop_pos_active_orders_v1', updatedOrders);
@@ -429,6 +473,8 @@ export default function App() {
       // Just clear current order instead of deleting only tab
       setCart([]);
       setCustomerName('ລູກຄ້າທົ່ວໄປ');
+      setCustomerPhone('');
+      setCustomerId(null);
       setGlobalPriceTier(1);
       return;
     }
@@ -446,6 +492,8 @@ export default function App() {
     setActiveOrderId(nextActive.id);
     setCart(nextActive.cart || []);
     setCustomerName(nextActive.customerName || 'ລູກຄ້າທົ່ວໄປ');
+    setCustomerPhone(nextActive.customerPhone || '');
+    setCustomerId(nextActive.customerId || null);
     setGlobalPriceTier(nextActive.priceTier || 1);
 
     safeSetItem('meiishop_pos_active_orders_v1', remainingOrders);
@@ -457,6 +505,15 @@ export default function App() {
   const [transactions, setTransactions] = useState(() => {
     return safeGetJSON('meiishop_transactions_v7', []);
   });
+
+  // Customer Directory State (Loaded from Supabase 'customers' table + calculated from sales transactions)
+  const [savedCustomersList, setSavedCustomersList] = useState([]);
+  useEffect(() => {
+    fetchSavedCustomers().then((data) => setSavedCustomersList(data || []));
+  }, []);
+  const customerDirectory = useMemo(() => {
+    return buildCustomerDirectory(savedCustomersList, transactions);
+  }, [savedCustomersList, transactions]);
 
   // Modals
   const [unitSelectorProduct, setUnitSelectorProduct] = useState(null);
@@ -476,6 +533,25 @@ export default function App() {
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [selectedReceiptForView, setSelectedReceiptForView] = useState(null);
   const [receiptPaperWidth, setReceiptPaperWidth] = useState(80); // 80mm vs 58mm
+
+  const [customerFormModalOpen, setCustomerFormModalOpen] = useState(false);
+  const handleSaveNewCustomer = async (custData) => {
+    try {
+      const saved = await saveCustomerRecord(custData);
+      const nextCusts = await fetchSavedCustomers();
+      setSavedCustomersList(nextCusts || []);
+      if (saved) {
+        setCustomerName(saved.name);
+        setCustomerPhone(saved.phone || '');
+        setCustomerId(saved.id);
+      }
+      setCustomerFormModalOpen(false);
+      openAlert(`ບັນທຶກຂໍ້ມູນລູກຄ້າ "${custData.name}" ສຳເລັດ!`, 'ສຳເລັດ', 'success');
+    } catch (err) {
+      console.error('Save customer error:', err);
+      openAlert(`ເກີດຂໍ້ຜິດພາດ: ${err.message || 'ຜິດພາດ'}`, 'ຂໍ້ຜິດພາດ', 'error');
+    }
+  };
   const [editingOldTransaction, setEditingOldTransaction] = useState(null); // Re-checkout old order mode
 
   // Dashboard Timeframe: 'daily' | 'weekly' | 'monthly' | 'all'
@@ -585,12 +661,20 @@ export default function App() {
     onConfirm: null,
   });
 
-  const openAlert = (message, title = 'ແຈ້ງເຕືອນລະບົບ', type = 'info') => {
+  const openAlert = (messageOrObj, title = 'ແຈ້ງເຕືອນລະບົບ', type = 'info') => {
+    let msg = messageOrObj;
+    let ttl = title;
+    let typ = type;
+    if (typeof messageOrObj === 'object' && messageOrObj !== null) {
+      msg = messageOrObj.message || messageOrObj.msg || JSON.stringify(messageOrObj);
+      ttl = messageOrObj.title || title;
+      typ = messageOrObj.type || type;
+    }
     setDialogState({
       isOpen: true,
-      type,
-      title,
-      message,
+      type: typ,
+      title: ttl,
+      message: String(msg || ''),
       confirmText: 'ຕົກລົງ',
       cancelText: 'ຍົກເລີກ',
       isConfirm: false,
@@ -1852,7 +1936,7 @@ export default function App() {
       !productFormModalOpen &&
       !checkoutModalOpen &&
       !receiptModalOpen,
-    maxInterval: 50,
+    maxInterval: 180,
     minLength: 3,
     preventDefaultOnEnter: true,
     cleanActiveInput: true,
@@ -2449,6 +2533,10 @@ export default function App() {
         cashier_name: activeCashier?.full_name || 'Meii',
         cashier_id: activeCashier?.id || null,
         customerName: customerName.trim() || (isDebt ? 'ລູກຄ້າຄ້າງຊຳລະ' : 'ລູກຄ້າທົ່ວໄປ'),
+        customerId: customerId || null,
+        customer_id: customerId || null,
+        customerPhone: (customerPhone || '').trim(),
+        customer_phone: (customerPhone || '').trim(),
         items: receiptItems,
         isWholesale: false,
         subtotal: cartSubtotal,
@@ -2489,6 +2577,8 @@ export default function App() {
       safeSetItem(`meiishop_tx_meta_${txId}`, {
         items: receiptItems,
         receiptNumber: receiptNo,
+        customerId: customerId || null,
+        customerPhone: (customerPhone || '').trim(),
         debtNote: debtNote.trim(),
         debtDueDate: isDebt ? (debtDueDate || null) : null,
       });
@@ -2662,6 +2752,8 @@ export default function App() {
         setActiveOrderId(nextOrder.id);
         setCart(nextOrder.cart || []);
         setCustomerName(nextOrder.customerName || 'ລູກຄ້າທົ່ວໄປ');
+        setCustomerPhone(nextOrder.customerPhone || '');
+        setCustomerId(nextOrder.customerId || null);
         setGlobalPriceTier(nextOrder.priceTier || 1);
         safeSetItem('meiishop_pos_active_orders_v1', remainingOrders);
         safeSetItem('meiishop_pos_active_order_id_v1', nextOrder.id);
@@ -2669,9 +2761,11 @@ export default function App() {
         // Only 1 order open, reset it cleanly
         setCart([]);
         setCustomerName('ລູກຄ້າທົ່ວໄປ');
+        setCustomerPhone('');
+        setCustomerId(null);
         setGlobalPriceTier(1);
         const resetOrders = [
-          { id: activeOrderId, label: posOrders[0]?.label || 'Order 1', cart: [], customerName: 'ລູກຄ້າທົ່ວໄປ', priceTier: 1, createdAt: Date.now() }
+          { id: activeOrderId, label: posOrders[0]?.label || 'Order 1', cart: [], customerName: 'ລູກຄ້າທົ່ວໄປ', customerPhone: '', customerId: null, priceTier: 1, createdAt: Date.now() }
         ];
         setPosOrders(resetOrders);
         safeSetItem('meiishop_pos_active_orders_v1', resetOrders);
@@ -2777,6 +2871,8 @@ export default function App() {
 
     setCart(loadedCart);
     setCustomerName(custName);
+    setCustomerPhone(tx.customerPhone || tx.customer_phone || '');
+    setCustomerId(tx.customerId || tx.customer_id || null);
     setEditingOldTransaction(enrichedTx);
 
     if (pMethod === 'DEBT') {
@@ -2803,6 +2899,8 @@ export default function App() {
     setEditingOldTransaction(null);
     setCart([]);
     setCustomerName('ລູກຄ້າທົ່ວໄປ');
+    setCustomerPhone('');
+    setCustomerId(null);
     openAlert('ຍົກເລີກການແກ້ໄຂບິນເກົ່າແລ້ວ', 'ແຈ້ງເຕືອນ', 'info');
   };
 
@@ -3294,7 +3392,7 @@ export default function App() {
 
   return (
     <div 
-      className={`flex flex-col md:flex-row h-full h-dvh min-h-screen w-full min-w-full max-w-full bg-slate-100 text-slate-900 overflow-hidden font-sans ${
+      className={`flex flex-col md:flex-row h-dvh w-full min-w-full max-w-full bg-slate-100 text-slate-900 overflow-hidden font-sans ${
         isNativeApp ? 'native-safe-area-shell' : ''
       }`}
     >
@@ -3312,10 +3410,10 @@ export default function App() {
       />
 
       {/* 2. MAIN VIEW AREA */}
-      <div className={`flex-1 h-full h-dvh min-h-0 overflow-hidden flex flex-col min-w-0 ${
+      <div className={`flex-1 min-h-0 overflow-hidden flex flex-col min-w-0 ${
         activeMainTab === 'pos'
           ? 'pb-0 md:!pb-0'
-          : 'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:!pb-0'
+          : 'pb-[calc(3.8rem+env(safe-area-inset-bottom,0px))] md:!pb-0'
       } touch-scroll-container`}>
         {/* Offline Sync Banner placed at the top of content */}
         <OfflineSyncBanner
@@ -3343,6 +3441,12 @@ export default function App() {
             setExchangeRate={setExchangeRate}
             customerName={customerName}
             setCustomerName={setCustomerName}
+            customerPhone={customerPhone}
+            setCustomerPhone={setCustomerPhone}
+            customerId={customerId}
+            setCustomerId={setCustomerId}
+            customers={customerDirectory}
+            onOpenNewCustomerModal={() => setCustomerFormModalOpen(true)}
             updateCartQuantity={updateCartQuantity}
             removeFromCart={removeFromCart}
             setCart={setCart}
@@ -3505,6 +3609,17 @@ export default function App() {
             <StaffManagementView onAlert={openAlert} />
           </RouteGuard>
         )}
+
+        {activeMainTab === 'customers' && (
+          <RouteGuard routeId="customers" onRedirect={handleTabChange}>
+            <CustomersView
+              transactions={transactions}
+              products={products}
+              onUpdateTransaction={handleUpdateTransaction}
+              onAlert={openAlert}
+            />
+          </RouteGuard>
+        )}
       </div>
 
       {/* 3. MODALS */}
@@ -3656,6 +3771,11 @@ export default function App() {
         onClose={() => setCheckoutModalOpen(false)}
         customerName={customerName}
         setCustomerName={setCustomerName}
+        customerPhone={customerPhone}
+        setCustomerPhone={setCustomerPhone}
+        setCustomerId={setCustomerId}
+        customers={customerDirectory}
+        onOpenNewCustomerModal={() => setCustomerFormModalOpen(true)}
         cartSubtotal={cartSubtotal}
         cart={cart}
         paymentMethod={paymentMethod}
@@ -3692,6 +3812,14 @@ export default function App() {
         confirmText={dialogState.confirmText}
         cancelText={dialogState.cancelText}
         isConfirm={dialogState.isConfirm}
+      />
+
+      {/* Quick Add / Edit Customer Modal */}
+      <CustomerFormModal
+        isOpen={customerFormModalOpen}
+        onClose={() => setCustomerFormModalOpen(false)}
+        customer={null}
+        onSave={handleSaveNewCustomer}
       />
 
       {/* 4. REAL DATABASE LOADING OVERLAY */}

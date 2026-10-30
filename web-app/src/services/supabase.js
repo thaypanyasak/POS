@@ -756,6 +756,10 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     updatedAt: t.updated_at || t.created_at,
     date: new Date(t.created_at).toLocaleString('lo-LA'),
     customerName: t.customer_name || 'ລູກຄ້າທົ່ວໄປ',
+    customerId: t.customer_id || cachedMeta?.customerId || null,
+    customer_id: t.customer_id || cachedMeta?.customerId || null,
+    customerPhone: t.customer_phone || cachedMeta?.customerPhone || '',
+    customer_phone: t.customer_phone || cachedMeta?.customerPhone || '',
     cashierName: sanitizeCashierName(t.cashier_name),
     cashierId: t.cashier_id || null,
     isWholesale: Boolean(t.is_wholesale),
@@ -779,22 +783,27 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
       t.payment_status === 'DEBT' ||
         t.payment_status === 'PARTIAL' ||
         cleanPaymentMethod === 'debt' ||
-        Number(t.remaining_debt) > 0
+        Number(t.remaining_debt) > 0 ||
+        Boolean(t.debt_due_date || t.due_date || cachedMeta?.debtDueDate || cachedMeta?.receipt?.debtDueDate)
     ),
     remainingDebt: (() => {
       const grand = Number(t.grand_total) || 0;
-      const isD = cleanPaymentMethod === 'debt' || t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL';
+      const isD =
+        cleanPaymentMethod === 'debt' ||
+        t.payment_status === 'DEBT' ||
+        t.payment_status === 'PARTIAL' ||
+        Boolean(t.debt_due_date || t.due_date || cachedMeta?.debtDueDate || cachedMeta?.receipt?.debtDueDate);
       const paid = Number(
         t.paid_amount !== null && t.paid_amount !== undefined
           ? t.paid_amount
           : (t.amount_tendered !== null && t.amount_tendered !== undefined
               ? t.amount_tendered
-              : (cleanPaymentMethod === 'debt' ? 0 : grand))
+              : (isD ? 0 : grand))
       );
       let rem = Number(
         t.remaining_debt !== null && t.remaining_debt !== undefined
           ? t.remaining_debt
-          : (cachedMeta?.receipt?.debtAmount ?? (cleanPaymentMethod === 'debt' ? Math.max(0, grand - paid) : 0))
+          : (cachedMeta?.receipt?.debtAmount ?? (isD ? Math.max(0, grand - paid) : 0))
       );
       if (isD && rem <= 0 && paid < grand) {
         rem = Math.max(0, grand - paid);
@@ -803,18 +812,22 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     })(),
     debtAmount: (() => {
       const grand = Number(t.grand_total) || 0;
-      const isD = cleanPaymentMethod === 'debt' || t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL';
+      const isD =
+        cleanPaymentMethod === 'debt' ||
+        t.payment_status === 'DEBT' ||
+        t.payment_status === 'PARTIAL' ||
+        Boolean(t.debt_due_date || t.due_date || cachedMeta?.debtDueDate || cachedMeta?.receipt?.debtDueDate);
       const paid = Number(
         t.paid_amount !== null && t.paid_amount !== undefined
           ? t.paid_amount
           : (t.amount_tendered !== null && t.amount_tendered !== undefined
               ? t.amount_tendered
-              : (cleanPaymentMethod === 'debt' ? 0 : grand))
+              : (isD ? 0 : grand))
       );
       let rem = Number(
         t.remaining_debt !== null && t.remaining_debt !== undefined
           ? t.remaining_debt
-          : (cachedMeta?.receipt?.debtAmount ?? (cleanPaymentMethod === 'debt' ? Math.max(0, grand - paid) : 0))
+          : (cachedMeta?.receipt?.debtAmount ?? (isD ? Math.max(0, grand - paid) : 0))
       );
       if (isD && rem <= 0 && paid < grand) {
         rem = Math.max(0, grand - paid);
@@ -823,19 +836,27 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     })(),
     paidAmount: (() => {
       const grand = Number(t.grand_total) || 0;
-      const isD = cleanPaymentMethod === 'debt' || t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL';
+      const isD =
+        cleanPaymentMethod === 'debt' ||
+        t.payment_status === 'DEBT' ||
+        t.payment_status === 'PARTIAL' ||
+        Boolean(t.debt_due_date || t.due_date || cachedMeta?.debtDueDate || cachedMeta?.receipt?.debtDueDate);
       const raw = Number(
         t.paid_amount !== null && t.paid_amount !== undefined
           ? t.paid_amount
           : (t.amount_tendered !== null && t.amount_tendered !== undefined
               ? t.amount_tendered
-              : (cleanPaymentMethod === 'debt' ? 0 : grand))
+              : (isD ? 0 : grand))
       );
       return isD ? Math.min(grand, Math.max(0, raw)) : (Number(t.amount_tendered) || grand);
     })(),
     paymentStatus: (() => {
       const grand = Number(t.grand_total) || 0;
-      const isD = cleanPaymentMethod === 'debt' || t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL';
+      const isD =
+        cleanPaymentMethod === 'debt' ||
+        t.payment_status === 'DEBT' ||
+        t.payment_status === 'PARTIAL' ||
+        Boolean(t.debt_due_date || t.due_date || cachedMeta?.debtDueDate || cachedMeta?.receipt?.debtDueDate);
       if (!isD) return t.payment_status || 'PAID';
       const paid = Number(
         t.paid_amount !== null && t.paid_amount !== undefined
@@ -1099,6 +1120,8 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       created_at: tx.createdAt,
       is_wholesale: Boolean(tx.isWholesale),
       customer_name: tx.customerName || 'ລູກຄ້າທົ່ວໄປ',
+      customer_id: tx.customerId || tx.customer_id || null,
+      customer_phone: tx.customerPhone || tx.customer_phone || null,
       payment_method: tx.paymentMethod || 'cash',
       subtotal: Number(tx.subtotal) || 0,
       discount_total: Number(tx.discountTotal) || 0,
@@ -1124,33 +1147,38 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
     // 1. GỌI POSTGRES RPC NGUYÊN TỬ VỚI KHÓA HÀNG FOR UPDATE VÀ GHI THẺ KHO
     const { data: rpcData, error: rpcErr } = await supabase.rpc('process_pos_checkout', { payload: checkoutPayload });
     if (!rpcErr && rpcData?.success) {
-      // Ensure debt tracking fields (remaining_debt, paid_amount, payment_status, debt_due_date) are updated in DB
-      // because process_pos_checkout RPC on the server might have omitted them in its INSERT statement
-      if (checkoutPayload.payment_method === 'debt') {
-        try {
-          const debtUpdate = {
-            paid_amount: Number(checkoutPayload.paid_amount || 0),
-            remaining_debt: Number(checkoutPayload.remaining_debt || 0),
-            payment_status: checkoutPayload.payment_status || 'DEBT',
-            debt_due_date: checkoutPayload.debt_due_date || null,
-          };
-          const { error: debtErr } = await supabase
-            .from('sale_transactions')
-            .update(debtUpdate)
-            .eq('id', tx.id);
-          if (debtErr && (debtErr.code === '42703' || debtErr.message?.includes('debt_due_date'))) {
-            await supabase
-              .from('sale_transactions')
-              .update({
-                paid_amount: debtUpdate.paid_amount,
-                remaining_debt: debtUpdate.remaining_debt,
-                payment_status: debtUpdate.payment_status,
-              })
-              .eq('id', tx.id);
-          }
-        } catch (e) {
-          console.warn('[createSaleTransactionInSupabase] Error ensuring debt fields:', e);
+      // Ensure customer tracking and debt tracking fields are updated in DB
+      // because process_pos_checkout RPC on the server might have omitted customer_id or debt fields in its INSERT statement
+      try {
+        const extraUpdate = {};
+        if (checkoutPayload.customer_id) extraUpdate.customer_id = checkoutPayload.customer_id;
+        if (checkoutPayload.customer_phone) extraUpdate.customer_phone = checkoutPayload.customer_phone;
+        if (checkoutPayload.payment_method === 'debt') {
+          extraUpdate.paid_amount = Number(checkoutPayload.paid_amount || 0);
+          extraUpdate.remaining_debt = Number(checkoutPayload.remaining_debt || 0);
+          extraUpdate.payment_status = checkoutPayload.payment_status || 'DEBT';
+          extraUpdate.debt_due_date = checkoutPayload.debt_due_date || null;
         }
+
+        if (Object.keys(extraUpdate).length > 0) {
+          const { error: updErr } = await supabase
+            .from('sale_transactions')
+            .update(extraUpdate)
+            .eq('id', tx.id);
+
+          // If debt_due_date or customer_id columns don't exist yet in DB, retry safely with remaining fields
+          if (updErr && (updErr.code === '42703' || updErr.message?.includes('debt_due_date') || updErr.message?.includes('customer_id') || updErr.message?.includes('customer_phone'))) {
+            const { debt_due_date, customer_id, customer_phone, ...safeFallback } = extraUpdate;
+            if (Object.keys(safeFallback).length > 0) {
+              await supabase
+                .from('sale_transactions')
+                .update(safeFallback)
+                .eq('id', tx.id);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[createSaleTransactionInSupabase] Error ensuring extra fields:', e);
       }
       return { success: true, via: 'atomic_rpc' };
     }
@@ -1179,6 +1207,8 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       created_at: tx.createdAt,
       is_wholesale: Boolean(tx.isWholesale),
       customer_name: tx.customerName || 'ລູກຄ້າທົ່ວໄປ',
+      customer_id: tx.customerId || tx.customer_id || null,
+      customer_phone: tx.customerPhone || tx.customer_phone || null,
       payment_method: tx.paymentMethod || 'cash',
       subtotal: Number(tx.subtotal) || 0,
       discount_total: Number(tx.discountTotal) || 0,
@@ -1204,9 +1234,9 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
 
     let { error: txErr } = await supabase.from('sale_transactions').insert(baseTxRow);
 
-    // If debt_due_date or cashier_id columns cause type mismatch or do not exist yet, retry safely
-    if (txErr && (txErr.code === '42703' || txErr.code === '42804' || txErr.message?.includes('debt_due_date') || txErr.message?.includes('cashier_id'))) {
-      const { debt_due_date, cashier_id, ...withoutFields } = baseTxRow;
+    // If debt_due_date, cashier_id, customer_id, or customer_phone columns cause type mismatch or do not exist yet, retry safely
+    if (txErr && (txErr.code === '42703' || txErr.code === '42804' || txErr.message?.includes('debt_due_date') || txErr.message?.includes('cashier_id') || txErr.message?.includes('customer_id') || txErr.message?.includes('customer_phone'))) {
+      const { debt_due_date, cashier_id, customer_id, customer_phone, ...withoutFields } = baseTxRow;
       const retryResult = await supabase.from('sale_transactions').insert(withoutFields);
       txErr = retryResult.error;
     }
@@ -2416,6 +2446,8 @@ export async function updateExistingSaleTransactionInSupabase(
       .update({
         is_wholesale: Boolean(newTxData.isWholesale),
         customer_name: newTxData.customerName || 'ລູກຄ້າທົ່ວໄປ',
+        customer_id: newTxData.customerId || newTxData.customer_id || null,
+        customer_phone: newTxData.customerPhone || newTxData.customer_phone || null,
         payment_method: newTxData.paymentMethod || 'cash',
         subtotal: Number(newTxData.subtotal) || 0,
         discount_total: Number(newTxData.discountTotal) || 0,

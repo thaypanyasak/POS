@@ -400,10 +400,10 @@ export default function DashboardView({
 
   return (
     <main
-      className="flex-1 w-full max-w-full p-3 sm:p-5 md:p-6 overflow-y-auto overflow-x-hidden font-sans min-h-0 pb-20 touch-pan-y bg-slate-50/60"
+      className="flex-1 w-full max-w-full p-3 sm:p-5 md:p-6 overflow-y-auto overflow-x-hidden font-sans min-h-0 pb-4 md:pb-6 touch-pan-y bg-slate-50/60"
       style={{
         paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
-        paddingBottom: 'max(4.5rem, calc(3.5rem + env(safe-area-inset-bottom, 0px)))',
+        paddingBottom: '1rem',
         overscrollBehaviorX: 'none',
       }}
     >

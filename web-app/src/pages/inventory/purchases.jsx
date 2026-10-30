@@ -1009,9 +1009,6 @@ export default function PurchasesView({
   return (
     <main
       className="flex-1 w-full overflow-y-auto bg-slate-50 select-none font-sans min-h-0 pb-4 sm:pb-6 touch-pan-y"
-      style={{
-        paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
-      }}
     >
       {/* Top Header Bar */}
       <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5 shadow-2xs">

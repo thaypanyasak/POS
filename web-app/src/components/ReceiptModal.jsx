@@ -170,6 +170,7 @@ export default function ReceiptModal({
       cashier: 'ຜູ້ຂາຍ :',
       customer: 'ລູກຄ້າ:',
       defaultCustomer: 'ລູກຄ້າທົ່ວໄປ',
+      phone: 'ເບີໂທ :',
       date: 'ວັນທີ:',
       payment: 'ຊຳລະ:',
       payCash: 'ເງິນສົດ',
@@ -238,6 +239,7 @@ export default function ReceiptModal({
       cashier: 'Thu ngân :',
       customer: 'Khách hàng:',
       defaultCustomer: 'Khách lẻ',
+      phone: 'Số ĐT :',
       date: 'Ngày in:',
       payment: 'Thanh toán:',
       payCash: 'Tiền mặt',
@@ -971,8 +973,8 @@ export default function ReceiptModal({
               </div>
             )}
 
-            {/* Row 1: Cashier/Seller (Left) + Customer (Right) */}
-            <div className="flex justify-between items-center">
+            {/* Row 1: Seller/Cashier (Left) + Date & Time (Right) */}
+            <div className="flex justify-between items-center text-[10.5px]">
               <div className="flex items-center gap-1 truncate max-w-[48%] pt-0.5">
                 <span className="text-slate-500 font-normal">{L.cashier}</span>
                 <span className="font-medium text-slate-800 truncate">
@@ -982,7 +984,15 @@ export default function ReceiptModal({
                   })()}
                 </span>
               </div>
-              <div className="flex items-center justify-end gap-1 truncate max-w-[50%] pt-0.5">
+              <div className="flex items-center justify-end gap-1 font-mono text-[10px] text-slate-700 pt-0.5">
+                <span className="font-sans text-slate-500 font-normal">{L.date}</span>
+                <span>{new Date(receipt.createdAt || receipt.created_at || Date.now()).toLocaleString(receiptLanguage === 'vi' ? 'vi-VN' : 'lo-LA')}</span>
+              </div>
+            </div>
+
+            {/* Row 2: Customer Name (Left) + Payment Method (Right) */}
+            <div className="flex justify-between items-center text-[10.5px] pt-0.5">
+              <div className="flex items-center gap-1 truncate max-w-[50%] pt-0.5">
                 <span className="text-slate-500 font-normal">{L.customer}</span>
                 <span className="font-medium text-slate-800 truncate">
                   {(!receipt.customerName || receipt.customerName === 'ລູກຄ້າທົ່ວໄປ' || receipt.customerName === 'Khách lẻ / Khách vãng lai')
@@ -990,16 +1000,8 @@ export default function ReceiptModal({
                     : receipt.customerName}
                 </span>
               </div>
-            </div>
-
-            {/* Row 2: Date & Time (Left) + Payment Method (Right) */}
-            <div className="flex justify-between items-center pt-0.5">
-              <div className="flex items-center gap-1 font-mono text-[10px] text-slate-700 pt-0.5">
-                <span className="font-sans text-slate-500 font-normal">{L.date}</span>
-                <span>{new Date(receipt.createdAt).toLocaleString(receiptLanguage === 'vi' ? 'vi-VN' : 'lo-LA')}</span>
-              </div>
               {!isQuotation && (
-                <div className="flex items-center gap-1 text-[10.5px] pt-0.5">
+                <div className="flex items-center justify-end gap-1 text-[10.5px] pt-0.5">
                   <span className="text-slate-500 font-normal">{L.payment}</span>
                   <span className="font-bold text-teal-700">
                     {receipt.paymentMethod === 'cash'
@@ -1013,6 +1015,14 @@ export default function ReceiptModal({
                 </div>
               )}
             </div>
+
+            {/* Row 3: Customer Phone Number (if available) */}
+            {(receipt.customerPhone || receipt.customer_phone) && (
+              <div className="flex items-center gap-1 text-[10px] font-mono text-slate-700 pt-0.5">
+                <span className="font-sans text-slate-500 font-normal">{L.phone}</span>
+                <span className="font-bold">{receipt.customerPhone || receipt.customer_phone}</span>
+              </div>
+            )}
           </div>
 
           {/* Items Divider (Clean non-bordered visual) */}

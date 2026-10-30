@@ -434,10 +434,10 @@ export default function StaffManagementView() {
 
   return (
     <main
-      className="flex-1 w-full max-w-full p-3 sm:p-5 md:p-6 overflow-y-auto overflow-x-hidden font-sans min-h-0 pb-24 touch-pan-y"
+      className="flex-1 w-full max-w-full p-3 sm:p-5 md:p-6 overflow-y-auto overflow-x-hidden font-sans min-h-0 pb-4 md:pb-6 touch-pan-y"
       style={{
         paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
-        paddingBottom: 'max(5.5rem, calc(4.5rem + env(safe-area-inset-bottom, 0px)))',
+        paddingBottom: '1rem',
         overscrollBehaviorX: 'none',
       }}
     >

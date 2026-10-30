@@ -111,7 +111,9 @@ export default function ConfirmDialogModal({
 
         <div className="p-6 pt-4">
           <div className="text-xs text-slate-600 font-medium whitespace-pre-line leading-relaxed text-center">
-            {message}
+            {typeof message === 'object' && message !== null
+              ? (message.message || message.msg || JSON.stringify(message))
+              : String(message || '')}
           </div>
 
           <div className="flex items-center gap-3 mt-6">
