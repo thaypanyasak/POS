@@ -330,11 +330,11 @@ export default function MixedCartonSelectorModal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[999] flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200"
+      className="fixed inset-0 z-[9999] flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[90dvh] sm:h-auto max-h-[92dvh] sm:max-h-[88vh] overflow-hidden border border-slate-200"
+        className="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[88dvh] sm:h-auto max-h-[90dvh] sm:max-h-[88vh] overflow-hidden border border-slate-200"
         onClick={(e) => e.stopPropagation()}
       >
         

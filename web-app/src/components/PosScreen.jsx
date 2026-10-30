@@ -193,6 +193,27 @@ export default function PosScreen({
   const searchInputRef = useRef(null);
   const lastHardwareScanTimeRef = useRef(0);
 
+  // Local search state with debounce to prevent re-rendering the entire App during high-speed hardware barcode scans
+  const [localSearch, setLocalSearch] = useState(searchQuery || '');
+  const searchDebounceRef = useRef(null);
+
+  // Sync with external searchQuery changes (e.g. cleared on scan or category change)
+  useEffect(() => {
+    setLocalSearch(searchQuery || '');
+  }, [searchQuery]);
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setLocalSearch(val);
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      setSearchQuery?.(val);
+    }, 120);
+  };
+
   // High-performance Infinite Scroll / Lazy Load for product catalog (Optimized for 3000+ items)
   const INITIAL_BATCH_SIZE = 48;
   const LOAD_MORE_STEP = 36;
@@ -267,16 +288,28 @@ export default function PosScreen({
   }, [bundles, activeCategory, searchQuery]);
 
   const handleClearSearch = () => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    setLocalSearch('');
     if (setSearchQuery) {
       setSearchQuery('');
     }
+    setScanToast(null);
     if (searchInputRef.current) {
-      searchInputRef.current.focus();
+      searchInputRef.current.value = '';
+      try {
+        searchInputRef.current.focus();
+      } catch (_) {}
     }
   };
 
   const handleScanBarcode = (barcode) => {
     if (!barcode) return;
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    setLocalSearch('');
     lastHardwareScanTimeRef.current = Date.now();
     const cleanCode = String(barcode).trim().toLowerCase();
 
@@ -334,7 +367,7 @@ export default function PosScreen({
       addToCart(matched, targetUnit, 1, { silent: true });
       playSuccessBeep();
       setScannerOpen(false);
-      setSearchQuery('');
+      setSearchQuery?.('');
       if (searchInputRef.current) {
         searchInputRef.current.value = '';
         try {
@@ -362,6 +395,7 @@ export default function PosScreen({
     onScan: handleScanBarcode,
     enabled: true,
     maxInterval: 180,
+    maxAvgInterval: 85,
     minLength: 3,
     preventDefaultOnEnter: true,
     cleanActiveInput: true,
@@ -370,15 +404,20 @@ export default function PosScreen({
 
   const handleSearchKeyDown = (e) => {
     if (e.key === 'Enter') {
-      // Ignore Enter if a hardware barcode scan just fired in the last 800ms to avoid double firing
-      if (Date.now() - lastHardwareScanTimeRef.current < 800) {
+      // Ignore Enter if a hardware barcode scan just fired in the last 1000ms to avoid double firing
+      if (Date.now() - lastHardwareScanTimeRef.current < 1000) {
         e.preventDefault();
         e.stopPropagation();
         return;
       }
-      if (searchQuery.trim()) {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+      const q = (localSearch || searchQuery || '').trim();
+      if (q) {
         e.preventDefault();
-        handleScanBarcode(searchQuery);
+        setSearchQuery?.(q);
+        handleScanBarcode(q);
       }
     }
   };
@@ -1805,14 +1844,14 @@ export default function PosScreen({
                 autoCorrect="off"
                 spellCheck="false"
                 autoComplete="off"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={localSearch}
+                onChange={handleSearchChange}
                 onKeyDown={handleSearchKeyDown}
                 placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ ຫຼື ສະແກນບາໂຄດ..."
                 className="w-full h-11 pl-9 pr-10 bg-slate-100/80 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-600 focus:bg-white font-medium shadow-2xs transition-all"
               />
               
-              {searchQuery && (
+              {localSearch && (
                 <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center">
                   <button
                     type="button"

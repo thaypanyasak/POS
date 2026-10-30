@@ -262,11 +262,29 @@ export default function ProductFormModal({
     const activeEl = document.activeElement;
     const activeId = activeEl ? activeEl.id : '';
 
-    if (scannerTarget === 'carton' || activeId === 'carton-barcode-input') {
+    // 1. Highest Priority: Exact barcode input currently focused by user
+    if (activeId === 'carton-barcode-input') {
       setCartonBarcode?.(clean);
-    } else if (scannerTarget === 'pack' || activeId === 'pack-barcode-input') {
+      setScannerOpen(false);
+      return;
+    }
+    if (activeId === 'pack-barcode-input') {
       setPackBarcode?.(clean);
-    } else if (scannerTarget === 'piece' || activeId === 'piece-barcode-input') {
+      setScannerOpen(false);
+      return;
+    }
+    if (activeId === 'piece-barcode-input') {
+      setPieceBarcode?.(clean);
+      setScannerOpen(false);
+      return;
+    }
+
+    // 2. Secondary Priority: Target explicitly selected (e.g. via camera scanner button)
+    if (scannerTarget === 'carton') {
+      setCartonBarcode?.(clean);
+    } else if (scannerTarget === 'pack') {
+      setPackBarcode?.(clean);
+    } else if (scannerTarget === 'piece') {
       setPieceBarcode?.(clean);
     } else {
       if (enablePiece && setPieceBarcode) {

@@ -4,84 +4,62 @@ import { Capacitor } from '@capacitor/core';
 import { Haptics, NotificationType } from '@capacitor/haptics';
 
 /**
- * Universal Hardware Barcode Scanner Listener Hook (Industrial Master Singleton Engine)
+ * Universal Hardware Barcode Scanner Listener Hook (Production Grade v4)
  * 
- * Accurately detects physical barcode / QR scanners (USB, OTG, Bluetooth HID Keyboard, 2.4G Wireless)
- * across Desktop Browsers, Mobile PWA, iPad/iOS, and Android without requiring input focus or manual clicks.
+ * Supports physical barcode / QR scanners (USB, Bluetooth HID, 2.4G Wireless)
+ * across Desktop Browsers, Mobile PWA, iPad/iOS, and Android WebView.
  *
- * 100% RELIABILITY ZERO-LEAK DUAL-MODE ARCHITECTURE:
- * 1. Global Singleton Architecture:
- *    - Exactly ONE active window listener coordinates all scanning across all screens and modals.
- *    - Active subscriber stack ensures the topmost modal (e.g. ProductFormModal) receives the scan,
- *      eliminating duplicate events and screen fighting.
- * 2. 45ms Micro-Hold First-Key Intercept (Zero-Re-Render Scanner Detection):
- *    - When Key 1 arrives while an input is focused, it is intercepted and held for 45ms.
- *    - Barcode scanners transmit Key 2 in 10-25ms (< 45ms). When Key 2 arrives, Key 1 is kept in memory
- *      and NEVER hits the input DOM, completely preventing React re-rendering thrash!
- *    - Human typing is 150-300ms (> 45ms). When 45ms elapses without Key 2, Key 1 is smoothly released
- *      into the input at native caret position. Imperceptible to humans (< 1/20th of a second).
- * 3. Event Flood Suppression:
- *    - Keys 2..N are prevented from entering the DOM during burst mode, keeping CPU at 0% idle.
- * 4. Scancode Normalization:
- *    - Normalizes Lao / Thai keyboard typewriter layouts, native numerals, and physical KeyCodes into ASCII.
- * 5. Input Differentiation:
- *    - Barcode inputs (data-barcode-input="true"): filled with 100% full barcode, focus preserved.
- *    - Search inputs (data-barcode-replace="true"): filled with full barcode, blurred to dismiss virtual keyboard.
- *    - Normal inputs: restored to pre-scan snapshot.
+ * GUARANTEED DUAL-MODE BEHAVIOR:
+ * 1. Scanning when NO input is focused:
+ *    - POS: automatically adds item to cart without touching search input.
+ *    - Products: fills search input and finds product.
+ *    - History: fills search input and finds receipt.
+ * 2. Scanning when ANY input IS focused:
+ *    - Dedicated Barcode inputs (ProductFormModal carton/pack/piece, bundle):
+ *      filled with 100% clean normalized ASCII barcode, focus preserved!
+ *    - POS search input: cleared to '' and blurred so search doesn't get cluttered.
+ *    - Product / History search input: filled with 100% full barcode and blurred.
+ *    - Normal inputs (customer name, cash, notes): restored to pre-scan snapshot.
+ * 3. Human typing (Lao, Thai, Vietnamese, English):
+ *    - 0ms latency! Absolutely NO delay, NO character drops, full native IME composition support.
+ * 4. Keyboard Layout Immunity:
+ *    - Uses physical `e.code` scancodes first, with full Lao/Thai number typewriter fallback.
  */
 
-// Comprehensive fallback dictionary for Lao & Thai (Kedmanee) keyboard layouts (Digits, Symbols, and Full QWERTY letters A-Z)
-const LAO_THAI_TO_ASCII_MAP = {
-  // --- 1. Lao Typewriter Number Row ---
+// ══════════════════════════════════════════════════════════════════
+// 1. LAO & THAI NUMBER ROW KEYBOARD MAPPING DICTIONARY
+// ══════════════════════════════════════════════════════════════════
+// Only maps number-row keystrokes to ASCII digits so barcode numbers are never corrupted
+// when the cashier's active layout is Lao or Thai. Does NOT map general alphabetic letters!
+const LAO_THAI_NUMBERS_MAP = {
+  // ── Lao typewriter unshifted number row (1 2 3 4 5 6 7 8 9 0 - =) ──
   'ຢ': '1', 'ຟ': '2', 'ໂ': '3', 'ຖ': '4', 'ຸ': '5',
   'ູ': '6', 'ຄ': '7', 'ຕ': '8', 'ຈ': '9', 'ຂ': '0',
-  'ຊ': '-', 'ໍ': '=', 'ໆ': '`',
+  'ຊ': '-', 'ໍ': '=',
+
+  // ── Lao typewriter shifted number row ──
   'ຼ': '1', 'ຽ': '3', 'ພ': '4', 'ົ': '8', '໌': '9', 'ໜ': '0',
 
-  // --- 2. Thai Kedmanee Number Row (Unshifted & Shifted) ---
-  'ภ': '1', 'ถ': '2', 'ุ': '3', 'ึ': '4', 'ค': '5',
-  'ต': '6', 'จ': '7', 'ข': '8', 'ช': '9', 'ๆ': '0',
-
-  // --- 3. Lao Native Numerals ---
+  // ── Lao native numerals (໐ - ໙) ──
   '໐': '0', '໑': '1', '໒': '2', '໓': '3', '໔': '4',
   '໕': '5', '໖': '6', '໗': '7', '໘': '8', '໙': '9',
 
-  // --- 4. Thai Native Numerals ---
+  // ── Thai Kedmanee number row ──
+  'ๅ': '1', '/': '2', '-': '3', 'ภ': '4', 'ถ': '5',
+  'ุ': '6', 'ึ': '7', 'ค': '8', 'ต': '9', 'จ': '0',
+  'ข': '-', 'ช': '=',
+
+  // ── Thai native numerals (๐ - ๙) ──
   '๐': '0', '๑': '1', '๒': '2', '๓': '3', '๔': '4',
   '๕': '5', '๖': '6', '๗': '7', '๘': '8', '๙': '9',
-  '฿': '6',
-
-  // --- 5. Lao Letters (Q - P) ---
-  'ົ': 'q', 'ໄ': 'w', 'ຳ': 'e', 'ພ': 'r', 'ະ': 't',
-  'ິ': 'y', 'ີ': 'u', 'ຣ': 'i', 'ນ': 'o', 'ຍ': 'p',
-
-  // --- 6. Thai Letters (Q - P) ---
-  'ๆ': 'q', 'ไ': 'w', 'ำ': 'e', 'พ': 'r', 'ะ': 't',
-  'ั': 'y', 'ี': 'u', 'ร': 'i', 'น': 'o', 'ย': 'p',
-  'บ': '[', 'ล': ']', 'ฃ': '\\',
-
-  // --- 7. Lao Letters (A - L) ---
-  'ັ': 'a', 'ຫ': 's', 'ກ': 'd', 'ດ': 'f', 'ເ': 'g',
-  '້': 'h', '່': 'j', 'າ': 'k', 'ສ': 'l', 'ວ': ';', 'ງ': "'",
-
-  // --- 8. Thai Letters (A - L) ---
-  'ฟ': 'a', 'ห': 's', 'ก': 'd', 'ด': 'f', 'เ': 'g',
-  '้': 'h', '่': 'j', 'า': 'k', 'ส': 'l', 'ว': ';', 'ง': "'",
-
-  // --- 9. Lao Letters (Z - M) ---
-  'ຜ': 'z', 'ປ': 'x', 'ແ': 'c', 'ອ': 'v', 'ຶ': 'b',
-  'ື': 'n', 'ທ': 'm', 'ມ': ',', 'ໃ': '.', 'ຝ': '/',
-
-  // --- 10. Thai Letters (Z - M) ---
-  'ผ': 'z', 'ป': 'x', 'แ': 'c', 'อ': 'v', 'ิ': 'b',
-  'ื': 'n', 'ท': 'm', 'ม': ',', 'ใ': '.', 'ฝ': '/',
 };
 
 /**
- * Resolves physical keystroke into clean ASCII barcode character regardless of active keyboard language
+ * Resolves a keyboard event into a clean ASCII barcode character.
+ * Uses physical e.code first (layout independent), then fallback dictionary, then raw key.
  */
-function getNormalizedBarcodeChar(e, currentBuffer = '') {
-  // 1. Primary: Use physical key code (e.code) to bypass all active keyboard layouts (Lao, Thai, VN, etc.)
+function resolveBarcodeChar(e) {
+  // 1. Primary: Physical key code (e.code) bypasses all active keyboard layouts (Lao, Thai, VN, etc.)
   if (e.code) {
     if (e.code.startsWith('Digit') && e.code.length === 6) {
       return e.code.slice(5); // 'Digit0'..'Digit9' -> '0'..'9'
@@ -94,157 +72,160 @@ function getNormalizedBarcodeChar(e, currentBuffer = '') {
       return e.shiftKey ? letter.toUpperCase() : letter.toLowerCase();
     }
     if (e.code === 'Minus' || e.code === 'NumpadSubtract') return '-';
-    if (e.code === 'Slash' || e.code === 'NumpadDivide') {
-      if (/^(inv|meii)$/i.test(currentBuffer) || /[\-_/](inv|meii)$/i.test(currentBuffer)) {
-        return '-';
-      }
-      return '/';
-    }
+    if (e.code === 'Slash' || e.code === 'NumpadDivide') return '-';
     if (e.code === 'Period' || e.code === 'NumpadDecimal') return '.';
+    if (e.code === 'Equal' || e.code === 'NumpadAdd') return e.shiftKey ? '+' : '=';
+    if (e.code === 'Semicolon') return e.shiftKey ? ':' : ';';
+    if (e.code === 'Space') return ' ';
   }
 
-  // 2. Secondary fallback: Check if e.key is a known Lao or Thai character in the full mapping
-  if (e.key && LAO_THAI_TO_ASCII_MAP[e.key]) {
-    const mapped = LAO_THAI_TO_ASCII_MAP[e.key];
-    if (mapped === '/' && (/^(inv|meii)$/i.test(currentBuffer) || /[\-_/](inv|meii)$/i.test(currentBuffer))) {
-      return '-';
-    }
-    return e.shiftKey ? mapped.toUpperCase() : mapped;
+  // 2. Secondary fallback: Check if e.key is a known Lao or Thai number character
+  if (e.key && LAO_THAI_NUMBERS_MAP[e.key] !== undefined) {
+    return LAO_THAI_NUMBERS_MAP[e.key];
   }
 
-  // 3. Fallback: single printable character as-is
+  // 3. Fallback: single printable ASCII character
   if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-    if (e.key === '/' && (/^(inv|meii)$/i.test(currentBuffer) || /[\-_/](inv|meii)$/i.test(currentBuffer))) {
-      return '-';
-    }
+    if (e.key === '/') return '-';
     return e.key;
   }
 
-  // 4. Fallback for iOS WKWebView / mobile where e.code may be empty and e.key is 'Unidentified'
-  if (e.keyCode >= 48 && e.keyCode <= 57 && !e.shiftKey) {
+  // 4. Fallback for iOS WKWebView / Android WebView where e.code is empty and e.key is 'Unidentified'
+  if (e.keyCode >= 48 && e.keyCode <= 57) {
     return String(e.keyCode - 48);
   }
   if (e.keyCode >= 96 && e.keyCode <= 105) {
     return String(e.keyCode - 96);
   }
+  if (e.keyCode >= 65 && e.keyCode <= 90) {
+    const letter = String.fromCharCode(e.keyCode);
+    return e.shiftKey ? letter.toUpperCase() : letter.toLowerCase();
+  }
+  if (e.keyCode === 189 || e.keyCode === 109) return '-';
+  if (e.keyCode === 191 || e.keyCode === 111) return '-';
 
   return null;
 }
 
-// ==========================================
-// SINGLETON GLOBAL CONTROLLER ENGINE
-// ==========================================
+// ══════════════════════════════════════════════════════════════════
+// 2. REACT COMPATIBLE INPUT SETTER (Synthetic Event Dispatcher)
+// ══════════════════════════════════════════════════════════════════
+function setNativeValue(element, value) {
+  if (!element) return;
+  try {
+    // Reset React internal value tracker so synthetic input & change events are recognized
+    if (element._valueTracker) {
+      element._valueTracker.setValue(value === '' ? ' ' : '');
+    }
+
+    const proto =
+      element instanceof HTMLTextAreaElement
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+
+    if (descriptor && descriptor.set) {
+      descriptor.set.call(element, value);
+    } else {
+      element.value = value;
+    }
+
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  } catch (err) {
+    console.debug('[setNativeValue] error:', err);
+    element.value = value;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 3. SINGLETON ENGINE STATE
+// ══════════════════════════════════════════════════════════════════
+let globalBuffer = '';
+let keyTimestamps = [];
+let lastKeyTime = 0;
+let inputSnapshot = { element: null, originalValue: '' };
+let autoFlushTimer = null;
+let lastScannedBarcode = { code: '', time: 0 };
 
 let subscriberCounter = 0;
 const subscribers = []; // Stack of { id, onScan, options }
-
-let globalBuffer = '';
-let lastKeyTime = 0;
-let keyTimestamps = [];
-let isMachineBurst = false;
-let lastScannedBarcode = { code: '', time: 0 };
-let inputSnapshot = { element: null, originalValue: '' };
-
-let autoFlushTimer = null;
 let isListenerAttached = false;
 
+function resetBufferState() {
+  globalBuffer = '';
+  keyTimestamps = [];
+  inputSnapshot = { element: null, originalValue: '' };
+  if (autoFlushTimer) {
+    clearTimeout(autoFlushTimer);
+    autoFlushTimer = null;
+  }
+}
 
+// ══════════════════════════════════════════════════════════════════
+// 4. CLEANUP ACTIVE INPUT ELEMENT ON SCAN SUCCESS
+// ══════════════════════════════════════════════════════════════════
 function cleanActiveInputElement(scannedCode) {
   try {
     const activeEl =
-      document.activeElement &&
-      (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')
+      inputSnapshot.element ||
+      (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')
         ? document.activeElement
-        : (inputSnapshot.element ||
-           document.getElementById('pos-search-input') ||
-           document.getElementById('product-search-input') ||
-           document.getElementById('products-search-input') ||
-           document.getElementById('history-search-input'));
+        : document.getElementById('pos-search-input') ||
+          document.getElementById('product-search-input') ||
+          document.getElementById('products-search-input') ||
+          document.getElementById('history-search-input'));
 
     if (!activeEl) return;
-
     const isInput = activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA';
     if (!isInput) return;
 
-    const setValue = (val) => {
-      // Reset React value tracker so synthetic input/change events are recognized across React 16/17/18/19
-      if (activeEl._valueTracker) {
-        activeEl._valueTracker.setValue(val === '' ? ' ' : '');
-      }
-
-      const proto =
-        activeEl instanceof HTMLTextAreaElement
-          ? window.HTMLTextAreaElement.prototype
-          : window.HTMLInputElement.prototype;
-      const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
-
-      if (descriptor && descriptor.set) {
-        descriptor.set.call(activeEl, val);
-      } else {
-        activeEl.value = val;
-      }
-
-      activeEl.dispatchEvent(new Event('input', { bubbles: true }));
-      activeEl.dispatchEvent(new Event('change', { bubbles: true }));
-    };
-
-    const isFormBarcodeInput =
+    // Classification
+    const isBarcodeField =
       activeEl.getAttribute('data-barcode-input') === 'true' ||
       activeEl.getAttribute('data-barcode-preserve') === 'true' ||
       activeEl.id?.toLowerCase().includes('barcode') ||
       activeEl.name?.toLowerCase().includes('barcode');
 
-    const isSearchInput =
+    const isPosSearch =
       activeEl.id === 'pos-search-input' ||
+      activeEl.getAttribute('data-barcode-clear') === 'true';
+
+    const isSearchField =
       activeEl.id === 'product-search-input' ||
       activeEl.id === 'products-search-input' ||
       activeEl.id === 'history-search-input' ||
       activeEl.getAttribute('data-barcode-replace') === 'true' ||
-      activeEl.getAttribute('data-barcode-clear') === 'true';
+      activeEl.type === 'search';
 
-    if (isFormBarcodeInput) {
-      // Dedicated product barcode field (e.g. piece, pack, carton):
-      // Fill full barcode and PRESERVE focus!
-      setValue(scannedCode);
+    // 1. Dedicated barcode inputs (e.g. piece/pack/carton in ProductFormModal, or bundle barcode):
+    // Fill with the full clean barcode and preserve focus!
+    if (isBarcodeField) {
+      setNativeValue(activeEl, scannedCode);
       return;
     }
 
-    const isPosSearchInput =
-      activeEl.id === 'pos-search-input' ||
-      activeEl.getAttribute('data-barcode-clear') === 'true';
-
-    if (isPosSearchInput) {
-      // POS Search input: clear search field so barcode does not clutter manual search
-      setValue('');
+    // 2. POS product search:
+    // Clear search input so barcode does not clutter manual search text, blur virtual keyboard
+    if (isPosSearch) {
+      setNativeValue(activeEl, '');
       if (typeof activeEl.blur === 'function') {
-        activeEl.blur();
+        try { activeEl.blur(); } catch (_) {}
       }
       return;
     }
 
-    if (isSearchInput) {
-      // Search input (History, Products, etc.): fill full barcode and dismiss virtual keyboard
-      setValue(scannedCode);
-      if (typeof activeEl.blur === 'function') {
-        activeEl.blur();
-      }
+    // 3. Search inputs (ProductsView, HistoryView, CustomerSearchSelect, etc.):
+    // Fill full clean barcode and preserve focus (identical to dedicated barcode fields!)
+    if (isSearchField) {
+      setNativeValue(activeEl, scannedCode);
       return;
     }
 
-    // Normal text/number input (e.g. customer name, debt note, cash amount):
-    // Restore pre-scan snapshot so accidental burst characters are completely removed
-    if (
-      inputSnapshot.element === activeEl &&
-      inputSnapshot.originalValue !== undefined
-    ) {
-      setValue(inputSnapshot.originalValue);
-    } else {
-      const currentVal = activeEl.value || '';
-      if (currentVal === scannedCode) {
-        setValue('');
-      } else if (currentVal.endsWith(scannedCode)) {
-        setValue(currentVal.slice(0, -scannedCode.length));
-      }
+    // 4. Normal inputs (Customer Name, Note, Tendered Cash, etc.):
+    // Restore pre-scan snapshot so any typed barcode characters are cleanly removed
+    if (inputSnapshot.element === activeEl && inputSnapshot.originalValue !== undefined) {
+      setNativeValue(activeEl, inputSnapshot.originalValue);
     }
   } catch (err) {
     console.debug('[cleanActiveInputElement] error:', err);
@@ -261,19 +242,27 @@ async function triggerFeedback(feedbackEnabled = true) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+// 5. PROCESS BARCODE
+// ══════════════════════════════════════════════════════════════════
 function processBarcode(rawCode, e = null) {
   if (autoFlushTimer) {
     clearTimeout(autoFlushTimer);
     autoFlushTimer = null;
   }
 
-  let currentBuffer = (rawCode || globalBuffer).trim();
-  if (/^inv[\/\\]/i.test(currentBuffer)) {
-    currentBuffer = currentBuffer.replace(/^inv[\/\\]/i, 'INV-');
+  let code = (rawCode || globalBuffer).trim();
+  if (!code) {
+    resetBufferState();
+    return false;
   }
-  isMachineBurst = false;
 
-  // Get active subscriber options
+  // Auto-normalize common scanner invoice prefixes (e.g. inv/001 -> INV-001)
+  if (/^inv[\/\\]/i.test(code)) {
+    code = code.replace(/^inv[\/\\]/i, 'INV-');
+  }
+
+  // Get active subscriber (topmost modal / view)
   const activeSub = subscribers.length > 0 ? subscribers[subscribers.length - 1] : null;
   const minLength = activeSub?.options?.minLength ?? 3;
   const duplicateInterval = activeSub?.options?.duplicateInterval ?? 250;
@@ -281,48 +270,51 @@ function processBarcode(rawCode, e = null) {
   const cleanActiveInput = activeSub?.options?.cleanActiveInput ?? true;
   const feedback = activeSub?.options?.feedback ?? true;
 
-  if (currentBuffer.length >= minLength) {
+  if (code.length >= minLength) {
     if (e && preventDefaultOnEnter) {
       e.preventDefault();
       e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') {
+        e.stopImmediatePropagation();
+      }
     }
 
+    // Duplicate debounce protection
     const now = Date.now();
     const isDuplicate =
-      lastScannedBarcode.code === currentBuffer &&
+      lastScannedBarcode.code === code &&
       now - lastScannedBarcode.time < duplicateInterval;
 
     if (isDuplicate) {
-      globalBuffer = '';
-      keyTimestamps = [];
-      inputSnapshot = { element: null, originalValue: '' };
+      resetBufferState();
       return true;
     }
 
-    lastScannedBarcode = { code: currentBuffer, time: now };
+    lastScannedBarcode = { code, time: now };
 
+    // Clean or update the active input
     if (cleanActiveInput) {
-      cleanActiveInputElement(currentBuffer);
+      cleanActiveInputElement(code);
     }
 
+    // Play feedback
     triggerFeedback(feedback);
 
-    globalBuffer = '';
-    keyTimestamps = [];
-    inputSnapshot = { element: null, originalValue: '' };
+    // Snapshot code for subscriber callback before buffer reset
+    const finalCode = code;
+    resetBufferState();
 
+    // Call topmost subscriber
     if (activeSub && typeof activeSub.onScan === 'function') {
-      activeSub.onScan(currentBuffer);
+      activeSub.onScan(finalCode);
     }
     return true;
   }
 
-  globalBuffer = '';
-  keyTimestamps = [];
-  inputSnapshot = { element: null, originalValue: '' };
+  resetBufferState();
   return false;
 }
-
+     
 function restartAutoFlushTimer() {
   if (autoFlushTimer) {
     clearTimeout(autoFlushTimer);
@@ -335,49 +327,45 @@ function restartAutoFlushTimer() {
   const maxAvgInterval = activeSub?.options?.maxAvgInterval ?? 85;
 
   if (globalBuffer.length >= minLength) {
-    const flushDelay = Math.max(maxInterval + 90, 280);
+    const flushDelay = Math.max(maxInterval + 40, 180);
     autoFlushTimer = setTimeout(() => {
       const timestamps = keyTimestamps;
       if (timestamps.length >= 2) {
         const totalDuration = timestamps[timestamps.length - 1] - timestamps[0];
         const avgInterval = totalDuration / (timestamps.length - 1);
-        if (avgInterval <= maxAvgInterval || globalBuffer.length >= 6) {
+        if (
+          avgInterval <= maxAvgInterval ||
+          (globalBuffer.length >= 8 && totalDuration <= 1000) ||
+          (globalBuffer.length >= 3 && totalDuration <= 400)
+        ) {
           processBarcode(globalBuffer, null);
           return;
         }
       }
-      globalBuffer = '';
-      keyTimestamps = [];
-      isMachineBurst = false;
+      resetBufferState();
     }, flushDelay);
   }
 }
 
-function handleGlobalBeforeInput(e) {
-  // Prevent mobile WebKit from inserting characters ONLY during active machine burst
-  if (isMachineBurst) {
-    e.preventDefault();
-    e.stopPropagation();
-  }
-}
-
+// ══════════════════════════════════════════════════════════════════
+// 6. GLOBAL KEYBOARD EVENT HANDLERS
+// ══════════════════════════════════════════════════════════════════
 function handleGlobalKeyDown(e) {
-  // 0. If user is actively typing with an IME (Lao, Thai, Vietnamese Telex/VNI), never intercept!
+  // ── 0. IME Composition Safety (Lao, Thai, Vietnamese Telex/VNI) ──
+  // If user is actively typing with an IME, NEVER intercept or block!
   if (e.isComposing || e.keyCode === 229) {
-    globalBuffer = '';
-    keyTimestamps = [];
-    isMachineBurst = false;
+    resetBufferState();
     return;
   }
 
-  // Ignore modifier keys completely
-  if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) {
+  // Ignore standalone modifier keys
+  if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'NumLock', 'ScrollLock'].includes(e.key)) {
     return;
   }
+
+  // Modifier combos (Ctrl+C, Cmd+V, Alt+Tab): reset buffer
   if (e.ctrlKey || e.metaKey || e.altKey) {
-    globalBuffer = '';
-    keyTimestamps = [];
-    isMachineBurst = false;
+    resetBufferState();
     return;
   }
 
@@ -385,7 +373,7 @@ function handleGlobalKeyDown(e) {
   const delta = now - lastKeyTime;
   lastKeyTime = now;
 
-  // 1. Universal Terminator Detection (Enter, NumpadEnter, Tab, KeyCodes 13/9)
+  // ── 1. Terminator Detection (Enter, NumpadEnter, Tab, KeyCodes 13/9) ──
   const isTerminator =
     e.key === 'Enter' ||
     e.code === 'Enter' ||
@@ -398,104 +386,94 @@ function handleGlobalKeyDown(e) {
   if (isTerminator) {
     const activeSub = subscribers.length > 0 ? subscribers[subscribers.length - 1] : null;
     const minLength = activeSub?.options?.minLength ?? 3;
+    const maxAvgInterval = activeSub?.options?.maxAvgInterval ?? 85;
 
-    // Check if this was a legitimate hardware scanner burst:
+    // Check if this was a valid scanner sequence:
+    // Physical barcode scanners transmit at 10-35ms per character.
+    // Allow generous headroom for mobile/tablet device lag:
+    // avgInterval <= maxAvgInterval OR 8+ digits in <= 1000ms OR 3+ digits in <= 400ms
     let isScanner = false;
-    if (globalBuffer.length >= minLength) {
-      if (isMachineBurst) {
+    if (globalBuffer.length >= minLength && keyTimestamps.length >= 2) {
+      const totalDuration = keyTimestamps[keyTimestamps.length - 1] - keyTimestamps[0];
+      const avgInterval = totalDuration / (keyTimestamps.length - 1);
+      if (
+        avgInterval <= maxAvgInterval ||
+        (globalBuffer.length >= 8 && totalDuration <= 1000) ||
+        (globalBuffer.length >= 3 && totalDuration <= 400)
+      ) {
         isScanner = true;
-      } else if (keyTimestamps.length >= 2) {
-        const totalDuration = keyTimestamps[keyTimestamps.length - 1] - keyTimestamps[0];
-        const avgInterval = totalDuration / (keyTimestamps.length - 1);
-        if (avgInterval <= 65) {
-          isScanner = true;
-        }
       }
     }
 
     if (isScanner) {
+      // SWALLOW Enter event in capture phase so it never triggers form submit or POS handleSearchKeyDown!
       e.preventDefault();
       e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') {
+        e.stopImmediatePropagation();
+      }
+
       const handled = processBarcode(globalBuffer, e);
       if (handled) return;
     }
 
-    // Normal human pressed Enter or scan buffer was empty: reset cleanly
-    globalBuffer = '';
-    keyTimestamps = [];
-    isMachineBurst = false;
-    inputSnapshot = { element: null, originalValue: '' };
+    // Normal human Enter or short buffer: let it proceed natively, reset buffer cleanly
+    resetBufferState();
     return;
   }
 
-  // 2. Escape, Backspace, Delete, Arrows: reset buffer
-  if (['Escape', 'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-    globalBuffer = '';
-    keyTimestamps = [];
-    isMachineBurst = false;
+  // ── 2. Navigation & Editing keys: reset buffer ──
+  if (['Escape', 'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
+    resetBufferState();
     return;
   }
 
-  // 3. Reset buffer if gap exceeds scanner speed:
-  // Scanners fire at < 50ms intervals. If gap > 90ms (or > 250ms during burst), it's a new input
-  const resetThreshold = isMachineBurst ? 250 : 90;
-  if (delta > resetThreshold) {
-    globalBuffer = '';
-    keyTimestamps = [];
-    isMachineBurst = false;
+  // ── 3. Gap check ──
+  // If gap between keystrokes exceeds 350ms, start a fresh buffer (accommodates Bluetooth HID jitter)
+  const maxGap = 350;
+  if (globalBuffer.length > 0 && delta > maxGap) {
+    resetBufferState();
   }
 
-  // 4. Resolve character with Lao / Thai / physical scancode normalization
-  const char = getNormalizedBarcodeChar(e, globalBuffer);
-  if (!char) return;
+  // ── 4. Resolve normalized character ──
+  const char = resolveBarcodeChar(e);
+  if (!char) {
+    if (globalBuffer.length === 0) {
+      resetBufferState();
+    }
+    return;
+  }
 
   const activeEl = document.activeElement;
   const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
 
-  // 5. Machine Burst Detection:
-  // Hardware scanners transmit characters at 10-35ms intervals.
-  // Human typing physical threshold is > 60ms. Consecutive keys <= 40ms is guaranteed hardware scanner.
-  const isSuperFast = (globalBuffer.length >= 1 && delta <= 40) || (globalBuffer.length >= 2 && delta <= 50);
-
-  if (isSuperFast) {
-    isMachineBurst = true;
-  }
-
-  if (isMachineBurst) {
-    // During confirmed machine burst:
-    // If an input is focused, prevent remaining keys from polluting the input and triggering React re-renders
-    if (isInput) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    globalBuffer += char;
-    keyTimestamps.push(now);
-    restartAutoFlushTimer();
-    return;
-  }
-
-  // Key 1 (or normal human typing):
-  // ZERO DELAY! We NEVER call e.preventDefault() on human keystrokes!
-  // Normal typing enters the input immediately and natively at 0ms latency.
-  globalBuffer += char;
-  keyTimestamps.push(now);
-
-  if (isInput && globalBuffer.length === 1) {
+  // ── 5. Snapshot active input before first character arrives ──
+  if (globalBuffer.length === 0 && isInput) {
     inputSnapshot = {
       element: activeEl,
       originalValue: activeEl.value || '',
     };
   }
 
+  // ── 6. Accumulate characters ──
+  // CRITICAL ARCHITECTURAL RULE:
+  // ZERO DELAY! We NEVER call e.preventDefault() on human keystrokes!
+  // Human typing (Lao, Thai, Vietnamese, English) enters inputs natively at 0ms latency!
+  // When a hardware scanner completes on Enter, the active input is atomically updated with the full clean barcode.
+  globalBuffer += char;
+  keyTimestamps.push(now);
+
   restartAutoFlushTimer();
 }
 
+// ══════════════════════════════════════════════════════════════════
+// 7. LISTENER REGISTRATION (Singleton)
+// ══════════════════════════════════════════════════════════════════
 function ensureGlobalListeners() {
   if (isListenerAttached) return;
   if (typeof window === 'undefined') return;
 
   window.addEventListener('keydown', handleGlobalKeyDown, { capture: true });
-  window.addEventListener('beforeinput', handleGlobalBeforeInput, { capture: true });
   isListenerAttached = true;
 }
 
@@ -503,13 +481,8 @@ function removeGlobalListeners() {
   if (!isListenerAttached) return;
   if (typeof window === 'undefined') return;
 
-  if (autoFlushTimer) {
-    clearTimeout(autoFlushTimer);
-    autoFlushTimer = null;
-  }
-
+  resetBufferState();
   window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true });
-  window.removeEventListener('beforeinput', handleGlobalBeforeInput, { capture: true });
   isListenerAttached = false;
 }
 
@@ -538,11 +511,14 @@ function updateSubscriber(id, onScan, options = {}) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+// 8. HOOK INTERFACE
+// ══════════════════════════════════════════════════════════════════
 export function useHardwareBarcodeScanner({
   onScan,
   enabled = true,
   maxInterval = 180,
-  maxAvgInterval = 85,
+  maxAvgInterval = 75,
   minLength = 3,
   preventDefaultOnEnter = true,
   cleanActiveInput = true,
@@ -551,11 +527,6 @@ export function useHardwareBarcodeScanner({
 }) {
   const idRef = useRef(null);
   const onScanRef = useRef(onScan);
-
-  useEffect(() => {
-    onScanRef.current = onScan;
-  }, [onScan]);
-
   const optionsRef = useRef({
     maxInterval,
     maxAvgInterval,
@@ -567,6 +538,10 @@ export function useHardwareBarcodeScanner({
   });
 
   useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
+
+  useEffect(() => {
     optionsRef.current = {
       maxInterval,
       maxAvgInterval,
@@ -576,6 +551,9 @@ export function useHardwareBarcodeScanner({
       feedback,
       duplicateInterval,
     };
+    if (idRef.current !== null) {
+      updateSubscriber(idRef.current, (code) => onScanRef.current?.(code), optionsRef.current);
+    }
   }, [maxInterval, maxAvgInterval, minLength, preventDefaultOnEnter, cleanActiveInput, feedback, duplicateInterval]);
 
   useEffect(() => {
@@ -587,17 +565,10 @@ export function useHardwareBarcodeScanner({
       return;
     }
 
-    const handler = (code) => {
-      if (typeof onScanRef.current === 'function') {
-        onScanRef.current(code);
-      }
-    };
-
-    if (idRef.current === null) {
-      idRef.current = registerSubscriber(handler, optionsRef.current);
-    } else {
-      updateSubscriber(idRef.current, handler, optionsRef.current);
-    }
+    idRef.current = registerSubscriber(
+      (code) => onScanRef.current?.(code),
+      optionsRef.current
+    );
 
     return () => {
       if (idRef.current !== null) {

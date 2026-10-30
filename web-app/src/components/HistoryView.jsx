@@ -64,9 +64,13 @@ export default function HistoryView({
 
   const handleClearSearch = () => {
     setSearchTerm('');
+    setScannedHighlightId(null);
+    setScanToast(null);
     if (searchInputRef.current) {
       searchInputRef.current.value = '';
-      searchInputRef.current.focus();
+      try {
+        searchInputRef.current.focus();
+      } catch (_) {}
     }
   };
   // 3 Primary Tabs: 'cash' | 'transfer' | 'debt' + 'all' | 'cancelled'
@@ -1041,6 +1045,7 @@ export default function HistoryView({
               ref={searchInputRef}
               id="history-search-input"
               type="text"
+              data-barcode-input="true"
               data-barcode-replace="true"
               autoCapitalize="off"
               autoCorrect="off"

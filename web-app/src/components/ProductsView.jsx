@@ -237,10 +237,42 @@ export default function ProductsView({
   const searchInputRef = useRef(null);
   const categoryDropdownRef = useRef(null);
 
+  // Local search state with debounce to prevent re-rendering catalog during high-speed scanner bursts
+  const [localSearch, setLocalSearch] = useState(searchTerm || '');
+  const searchDebounceRef = useRef(null);
+
+  // Sync with external searchTerm changes (e.g. cleared or scanned)
+  useEffect(() => {
+    setLocalSearch(searchTerm || '');
+  }, [searchTerm]);
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setLocalSearch(val);
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      setSearchTerm(val);
+      setCurrentPage(1);
+    }, 120);
+  };
+
   const handleClearSearch = () => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    setLocalSearch('');
     setSearchTerm('');
+    setScannedHighlightId(null);
+    setScanToast(null);
+    setCurrentPage(1);
     if (searchInputRef.current) {
-      searchInputRef.current.focus();
+      searchInputRef.current.value = '';
+      try {
+        searchInputRef.current.focus();
+      } catch (_) {}
     }
   };
 
@@ -412,26 +444,16 @@ export default function ProductsView({
     const cleanCode = String(barcode).replace(/[\r\n\t\x00-\x1F\x7F]/g, '').trim();
     if (!cleanCode) return;
 
-    setSearchTerm(cleanCode);
-
-    // Direct DOM sync so input displays value immediately even without focus
-    const inputEl = searchInputRef.current || document.getElementById('product-search-input');
-    if (inputEl) {
-      const proto = window.HTMLInputElement.prototype;
-      const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
-      if (descriptor && descriptor.set) {
-        descriptor.set.call(inputEl, cleanCode);
-      } else {
-        inputEl.value = cleanCode;
-      }
-      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
     }
-
+    setLocalSearch(cleanCode);
+    setSearchTerm(cleanCode);
+    setCurrentPage(1);
     setScannerOpen(false);
 
     const cleanLower = cleanCode.toLowerCase();
-    const matched = products.find(
+    const matched = (products || []).find(
       (p) =>
         (p.barcode && String(p.barcode).trim().toLowerCase() === cleanLower) ||
         (p.units &&
@@ -471,11 +493,27 @@ export default function ProductsView({
     onScan: handleScanBarcode,
     enabled: true,
     maxInterval: 180,
+    maxAvgInterval: 85,
     minLength: 3,
     preventDefaultOnEnter: true,
     cleanActiveInput: true,
-    duplicateInterval: 300,
+    duplicateInterval: 250,
   });
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+      const q = (localSearch || searchTerm || '').trim();
+      if (q) {
+        e.preventDefault();
+        setSearchTerm(q);
+        setCurrentPage(1);
+        handleScanBarcode(q);
+      }
+    }
+  };
 
   // Auto-close category dropdown when clicking outside
   useEffect(() => {
@@ -641,20 +679,22 @@ export default function ProductsView({
               ref={searchInputRef}
               id="product-search-input"
               type="text"
+              data-barcode-input="true"
               data-barcode-replace="true"
               autoCapitalize="off"
               autoCorrect="off"
               spellCheck="false"
               autoComplete="off"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={localSearch}
+              onChange={handleSearchChange}
+              onKeyDown={handleSearchKeyDown}
               placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ, ໝວດໝູ່ ຫຼື ສະແກນບາໂຄດ..."
               className="w-full pl-9 pr-32 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium shadow-2xs min-h-[40px] sm:min-h-[36px]"
             />
 
             {/* Action Buttons: Quick Clear 'X' and Camera Scan - Compact height with breathing room */}
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-              {searchTerm.length > 0 && (
+              {localSearch.length > 0 && (
                 <button
                   type="button"
                   onClick={handleClearSearch}
