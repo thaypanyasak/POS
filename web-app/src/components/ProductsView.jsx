@@ -452,6 +452,12 @@ export default function ProductsView({
     setCurrentPage(1);
     setScannerOpen(false);
 
+    if (searchInputRef.current && typeof searchInputRef.current.blur === 'function') {
+      try {
+        searchInputRef.current.blur();
+      } catch (_) {}
+    }
+
     const cleanLower = cleanCode.toLowerCase();
     const matched = (products || []).find(
       (p) =>
@@ -506,11 +512,40 @@ export default function ProductsView({
         clearTimeout(searchDebounceRef.current);
       }
       const q = (localSearch || searchTerm || '').trim();
-      if (q) {
-        e.preventDefault();
+      if (!q) {
+        if (searchInputRef.current) {
+          try {
+            searchInputRef.current.blur();
+          } catch (_) {}
+        }
+        return;
+      }
+
+      e.preventDefault();
+
+      // Check if user manually typed an exact barcode
+      const cleanLower = q.toLowerCase();
+      const matched = (products || []).find(
+        (p) =>
+          (p.barcode && String(p.barcode).trim().toLowerCase() === cleanLower) ||
+          (p.units &&
+            p.units.some(
+              (u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanLower
+            ))
+      );
+
+      if (matched) {
+        // Exact barcode match: highlight & scroll to product
+        handleScanBarcode(q);
+      } else {
+        // Normal text/name search: filter list, blur keyboard, do NOT fire barcode error toast
         setSearchTerm(q);
         setCurrentPage(1);
-        handleScanBarcode(q);
+        if (searchInputRef.current) {
+          try {
+            searchInputRef.current.blur();
+          } catch (_) {}
+        }
       }
     }
   };

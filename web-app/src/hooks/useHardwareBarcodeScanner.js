@@ -198,14 +198,7 @@ function cleanActiveInputElement(scannedCode) {
       activeEl.getAttribute('data-barcode-replace') === 'true' ||
       activeEl.type === 'search';
 
-    // 1. Dedicated barcode inputs (e.g. piece/pack/carton in ProductFormModal, or bundle barcode):
-    // Fill with the full clean barcode and preserve focus!
-    if (isBarcodeField) {
-      setNativeValue(activeEl, scannedCode);
-      return;
-    }
-
-    // 2. POS product search:
+    // 1. POS product search:
     // Clear search input so barcode does not clutter manual search text, blur virtual keyboard
     if (isPosSearch) {
       setNativeValue(activeEl, '');
@@ -215,9 +208,19 @@ function cleanActiveInputElement(scannedCode) {
       return;
     }
 
-    // 3. Search inputs (ProductsView, HistoryView, CustomerSearchSelect, etc.):
-    // Fill full clean barcode and preserve focus (identical to dedicated barcode fields!)
+    // 2. Search inputs (ProductsView, HistoryView, CustomerSearchSelect, etc.):
+    // Overwrite full clean barcode and blur so virtual keyboard dismisses and search results are visible!
     if (isSearchField) {
+      setNativeValue(activeEl, scannedCode);
+      if (typeof activeEl.blur === 'function') {
+        try { activeEl.blur(); } catch (_) {}
+      }
+      return;
+    }
+
+    // 3. Dedicated barcode inputs in forms (e.g. piece/pack/carton in ProductFormModal, or bundle barcode):
+    // Fill with the full clean barcode and preserve focus so cashier can continue entering info!
+    if (isBarcodeField) {
       setNativeValue(activeEl, scannedCode);
       return;
     }
@@ -321,11 +324,22 @@ function restartAutoFlushTimer() {
     autoFlushTimer = null;
   }
 
-  const activeSub = subscribers.length > 0 ? subscribers[subscribers.length - 1] : null;
-  const minLength = activeSub?.options?.minLength ?? 3;
-  const maxInterval = activeSub?.options?.maxInterval ?? 180;
-  const maxAvgInterval = activeSub?.options?.maxAvgInterval ?? 85;
+  // CRITICAL CONTEXT ISOLATION:
+  // If an INPUT or TEXTAREA is actively focused, DO NOT use autoFlush timer!
+  // Hardware barcode scanners emit an Enter terminator. Running autoFlush on focused inputs
+  // causes fast human typing (e.g. typing '500') to be falsely intercepted after ~200ms.
+  const activeEl = document.activeElement;
+  const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+  if (isInputFocused) {
+    return;
+  }
 
+  const activeSub = subscribers.length > 0 ? subscribers[subscribers.length - 1] : null;
+  const minLength = activeSub?.options?.minLength ?? 4;
+  const maxInterval = activeSub?.options?.maxInterval ?? 180;
+  const maxAvgInterval = activeSub?.options?.maxAvgInterval ?? 65;
+
+  // Only run autoFlush fallback when NO input is focused (e.g. background POS scanning)
   if (globalBuffer.length >= minLength) {
     const flushDelay = Math.max(maxInterval + 40, 180);
     autoFlushTimer = setTimeout(() => {
@@ -333,10 +347,10 @@ function restartAutoFlushTimer() {
       if (timestamps.length >= 2) {
         const totalDuration = timestamps[timestamps.length - 1] - timestamps[0];
         const avgInterval = totalDuration / (timestamps.length - 1);
+        // Strict hardware scanner burst: avgInterval <= 65ms or 8+ digits in <= 600ms
         if (
           avgInterval <= maxAvgInterval ||
-          (globalBuffer.length >= 8 && totalDuration <= 1000) ||
-          (globalBuffer.length >= 3 && totalDuration <= 400)
+          (globalBuffer.length >= 8 && totalDuration <= 600)
         ) {
           processBarcode(globalBuffer, null);
           return;
@@ -385,23 +399,42 @@ function handleGlobalKeyDown(e) {
 
   if (isTerminator) {
     const activeSub = subscribers.length > 0 ? subscribers[subscribers.length - 1] : null;
-    const minLength = activeSub?.options?.minLength ?? 3;
-    const maxAvgInterval = activeSub?.options?.maxAvgInterval ?? 85;
+    const activeEl = document.activeElement;
+    const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
 
-    // Check if this was a valid scanner sequence:
-    // Physical barcode scanners transmit at 10-35ms per character.
-    // Allow generous headroom for mobile/tablet device lag:
-    // avgInterval <= maxAvgInterval OR 8+ digits in <= 1000ms OR 3+ digits in <= 400ms
+    // Context-aware Hardware Scanner Fingerprint Validation:
     let isScanner = false;
-    if (globalBuffer.length >= minLength && keyTimestamps.length >= 2) {
+    if (keyTimestamps.length >= 2) {
       const totalDuration = keyTimestamps[keyTimestamps.length - 1] - keyTimestamps[0];
       const avgInterval = totalDuration / (keyTimestamps.length - 1);
-      if (
-        avgInterval <= maxAvgInterval ||
-        (globalBuffer.length >= 8 && totalDuration <= 1000) ||
-        (globalBuffer.length >= 3 && totalDuration <= 400)
-      ) {
-        isScanner = true;
+
+      if (isInput) {
+        // ── CONTEXT A: AN INPUT IS ACTIVELY FOCUSED ──
+        // Protect fast human typing ('500', Lao text, etc.) from false positives:
+        // 1. Must have at least 6 characters (EAN-13, UPC-A, Code128, barcode fields are >= 6).
+        //    Humans typing 3-digit prices/numbers ('500') will NEVER be flagged as a barcode!
+        // 2. Must meet true hardware scanner burst speed: avgInterval <= 45ms
+        //    (Physical scanners emit at 10-25ms/key, human typing is >= 80-120ms/key).
+        // 3. Or a full 10+ digit barcode received in <= 750ms.
+        if (
+          (globalBuffer.length >= 6 && avgInterval <= 45) ||
+          (globalBuffer.length >= 4 && avgInterval <= 30) ||
+          (globalBuffer.length >= 10 && totalDuration <= 750)
+        ) {
+          isScanner = true;
+        }
+      } else {
+        // ── CONTEXT B: NO INPUT FOCUSED (Free scanning in POS / Products / History) ──
+        // Standard scanner burst when standing freely at the screen:
+        const minLen = activeSub?.options?.minLength ?? 3;
+        const maxAvg = activeSub?.options?.maxAvgInterval ?? 75;
+        if (
+          (globalBuffer.length >= minLen && avgInterval <= maxAvg) ||
+          (globalBuffer.length >= 8 && totalDuration <= 800) ||
+          (globalBuffer.length >= 4 && totalDuration <= 300)
+        ) {
+          isScanner = true;
+        }
       }
     }
 
@@ -417,7 +450,7 @@ function handleGlobalKeyDown(e) {
       if (handled) return;
     }
 
-    // Normal human Enter or short buffer: let it proceed natively, reset buffer cleanly
+    // Normal human Enter or human typing: let it proceed natively, reset buffer cleanly
     resetBufferState();
     return;
   }

@@ -414,10 +414,41 @@ export default function PosScreen({
         clearTimeout(searchDebounceRef.current);
       }
       const q = (localSearch || searchQuery || '').trim();
-      if (q) {
-        e.preventDefault();
-        setSearchQuery?.(q);
+      if (!q) {
+        if (searchInputRef.current) {
+          try {
+            searchInputRef.current.blur();
+          } catch (_) {}
+        }
+        return;
+      }
+
+      e.preventDefault();
+
+      // Check if user manually typed an EXACT barcode of a product or bundle
+      const cleanCode = q.toLowerCase();
+      const productPool = products && products.length > 0 ? products : filteredProducts;
+      const matchedBundle = (bundles || []).find(
+        (b) => b.barcode && String(b.barcode).trim().toLowerCase() === cleanCode
+      );
+      const matchedProduct = productPool.find(
+        (p) =>
+          (p.barcode && String(p.barcode).trim().toLowerCase() === cleanCode) ||
+          (p.units && p.units.some((u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanCode))
+      );
+
+      if (matchedBundle || matchedProduct) {
+        // Intentional manual barcode entry: add product or bundle directly to cart!
         handleScanBarcode(q);
+      } else {
+        // Normal text/name search (e.g. "Thay", "Bia", "Sting"):
+        // Sync search filter, dismiss virtual keyboard, keep query text intact in search bar
+        setSearchQuery?.(q);
+        if (searchInputRef.current) {
+          try {
+            searchInputRef.current.blur();
+          } catch (_) {}
+        }
       }
     }
   };
@@ -2260,6 +2291,16 @@ export default function PosScreen({
                       ? 'ບໍ່ພົບສິນຄ້າທີ່ຄົ້ນຫາ'
                       : 'ຍັງບໍ່ມີສິນຄ້າໃນລະບົບ (ບໍ່ມີຂໍ້ມູນ)'}
                   </p>
+                  {(searchQuery || localSearch) && (
+                    <button
+                      type="button"
+                      onClick={handleClearSearch}
+                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg shadow-2xs transition-all cursor-pointer"
+                    >
+                      <X size={14} weight="bold" />
+                      <span>ລຶບການຄົ້ນຫາ (Clear search)</span>
+                    </button>
+                  )}
                 </div>
               )}
             </>

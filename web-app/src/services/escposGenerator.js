@@ -13,6 +13,22 @@ export const ESC_DRAWER_KICK = [0x1b, 0x70, 0x00, 0x19, 0xfa]; // ESC p 0 25 250
 export const GS_CUT_PARTIAL = [0x1d, 0x56, 0x42, 0x00]; // GS V 66 0 (Partial cut with feed)
 export const ESC_FEED_LINES = (n = 3) => [0x1b, 0x64, n]; // ESC d n (Feed n lines)
 
+/**
+ * Hardware State Machine Rescue & Initialization Sequence:
+ * 1) 0x18 (CAN): Cancel any pending page/line buffer
+ * 2) 8x 0x00 (Null bytes): Absorb any missing pixel bytes if previous print was cut off mid-raster,
+ *    safely concluding the prior image without burning or printing garbage
+ * 3) 0x1B 0x40 (ESC @): Hardware reset of all registers, code pages, and character modes
+ * 4) 0x1B 0x53 (ESC S): Force Standard Line Mode (exits Page Mode if stuck)
+ */
+export const ESC_RESCUE_HEADER = [
+  0x10, 0x05, 0x02, // DLE ENQ 2: Real-time clear receive/print buffer
+  0x18,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x1b, 0x40,
+  0x1b, 0x53,
+];
+
 // ─── K80 Constants ───────────────────────────────────────────────────────────
 export const PRINT_WIDTH_DOTS = 576; // 80mm thermal paper = 576 dots
 export const WIDTH_BYTES = 72;       // 576 / 8 = 72 bytes per line
@@ -244,8 +260,9 @@ export function canvasToEscPosRaster(sourceCanvas, {
   // ─── Step 5: Assemble ESC/POS Commands ──────────────────────────────
   const bytes = [];
 
-  // ESC @: Initialize printer (resets mode, clears errors)
-  bytes.push(...ESC_INIT);
+  // Hardware State Machine Rescue & Initialization:
+  // Clears any hanging raster data from a previously interrupted print job, preventing garbage characters
+  bytes.push(...ESC_RESCUE_HEADER);
 
   // ESC p: Kick cash drawer if enabled
   if (kickCashDrawer) {

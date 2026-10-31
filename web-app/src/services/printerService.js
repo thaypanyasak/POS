@@ -9,6 +9,7 @@ import {
 } from './printerConfigService';
 import {
   ESC_INIT,
+  ESC_RESCUE_HEADER,
   ESC_HEAT_DENSITY,
   ESC_DRAWER_KICK,
   GS_CUT_PARTIAL,
@@ -345,6 +346,16 @@ export async function printReceiptSmart({
  * Automatically retries silently up to `maxRetries` times with 1.0-1.2s sleep intervals.
  * Only bubbles an error up to the UI if all retry attempts are exhausted.
  */
+// Singleton Promise Mutex for serializing all print calls on the local device
+let _devicePrintMutex = Promise.resolve();
+let _activeJobKey = null;
+
+/**
+ * Multi-device Resilient Print Wrapper:
+ * Handles concurrent printing collisions on Port 9100 across 2-3 devices.
+ * Automatically retries silently up to `maxRetries` times with 1.0-1.2s sleep intervals.
+ * Only bubbles an error up to the UI if all retry attempts are exhausted.
+ */
 export async function printReceiptWithRetry({
   elementId = 'thermal-receipt-print-area',
   receipt = null,
@@ -358,48 +369,67 @@ export async function printReceiptWithRetry({
   retryDelayMs = 1100,
   onRetryAttempt = null,
 } = {}) {
-  let attempt = 0;
-  let lastError = null;
-
-  while (attempt <= maxRetries) {
-    try {
-      const res = await printReceiptSmart({
-        elementId,
-        receipt,
-        language,
-        allowFallback,
-        method,
-        products,
-        pageInfo,
-        kickCashDrawer,
-      });
-      return res;
-    } catch (err) {
-      lastError = err;
-      attempt++;
-
-      if (attempt > maxRetries) {
-        break;
-      }
-
-      console.warn(
-        `[printerService] Socket busy/collision detected on attempt ${attempt}/${maxRetries}. Retrying in ${retryDelayMs}ms...`,
-        err?.message || err
-      );
-
-      if (typeof onRetryAttempt === 'function') {
-        try {
-          onRetryAttempt(attempt, maxRetries);
-        } catch (_) {}
-      }
-
-      // Add a slight random jitter (50ms - 200ms) to desynchronize concurrent devices
-      const jitter = Math.floor(Math.random() * 150) + 50;
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs + jitter));
-    }
+  // Deduplication check: prevent rapid double-clicks on the same receipt
+  const jobKey = receipt ? `${receipt.receiptNumber || receipt.id || 'pos'}_p${pageInfo?.currentPage || 1}` : null;
+  if (jobKey && _activeJobKey === jobKey) {
+    console.warn(`[printerService] Print job ${jobKey} is already active, ignoring duplicate trigger.`);
+    return { success: true, message: 'Print job already in progress' };
   }
 
-  throw lastError || new Error('ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມໄດ້ຫຼັງຈາກພະຍາຍາມຫຼາຍຄັ້ງ.');
+  // Serial execution via Device Mutex Queue
+  const runPrintWithLock = async () => {
+    _activeJobKey = jobKey;
+    let attempt = 0;
+    let lastError = null;
+
+    try {
+      while (attempt <= maxRetries) {
+        try {
+          const res = await printReceiptSmart({
+            elementId,
+            receipt,
+            language,
+            allowFallback,
+            method,
+            products,
+            pageInfo,
+            kickCashDrawer,
+          });
+          return res;
+        } catch (err) {
+          lastError = err;
+          attempt++;
+
+          if (attempt > maxRetries) {
+            break;
+          }
+
+          console.warn(
+            `[printerService] Socket busy/collision detected on attempt ${attempt}/${maxRetries}. Retrying in ${retryDelayMs}ms...`,
+            err?.message || err
+          );
+
+          if (typeof onRetryAttempt === 'function') {
+            try {
+              onRetryAttempt(attempt, maxRetries);
+            } catch (_) {}
+          }
+
+          // Add a slight random jitter (50ms - 200ms) to desynchronize concurrent devices
+          const jitter = Math.floor(Math.random() * 150) + 50;
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs + jitter));
+        }
+      }
+
+      throw lastError || new Error('ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມໄດ້ຫຼັງຈາກພະຍາຍາມຫຼາຍຄັ້ງ.');
+    } finally {
+      _activeJobKey = null;
+    }
+  };
+
+  const nextPromise = _devicePrintMutex.then(runPrintWithLock, runPrintWithLock);
+  _devicePrintMutex = nextPromise.catch(() => {});
+  return nextPromise;
 }
 
 /**
@@ -489,6 +519,15 @@ export async function openCashDrawerDirect() {
 /**
  * Send raw binary byte array over TCP Socket directly to thermal printer
  */
+// Hardware flow control constants for thermal printing
+const SOCKET_CHUNK_SIZE = 4096; // 4KB per chunk (fits perfectly in 4KB-16KB Wi-Fi UART FIFO buffers)
+const SOCKET_PACING_DELAY_MS = 25; // 25ms pacing rest between chunks to match head burning rate and eliminate UART buffer overflow
+const TAIL_DRAIN_DELAY_MS = 1000; // 1000ms tail drain delay so paper feed & cutter complete mechanical cycle before TCP FIN/RST
+
+/**
+ * Send raw binary byte array over TCP Socket directly to thermal printer
+ * Uses Micro-Chunking (4KB) and Pacing (25ms) to eliminate UART buffer overflow and mid-print freezes
+ */
 export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 4.0 } = {}) {
   const cleanIp = String(ip || '').trim();
   if (!cleanIp) {
@@ -496,7 +535,7 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 4.
   }
 
   const targetPort = parseInt(port, 10) || 9100;
-  const timeoutMs = Math.max(1500, Math.min(8000, Math.round((timeoutSec || 4) * 1000)));
+  const timeoutMs = Math.max(2000, Math.min(8000, Math.round((timeoutSec || 4) * 1000)));
   const timeoutSecondsInt = Math.max(2, Math.round(timeoutMs / 1000));
 
   const isNative = Capacitor.isNativePlatform();
@@ -506,7 +545,6 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 4.
     throw new Error('ການພິມຜ່ານ TCP Socket ຮອງຮັບສະເພາະແອັບ Native (iOS / iPadOS).');
   }
 
-  const base64Data = uint8ArrayToBase64(uint8Bytes);
   let client = null;
 
   const withTimeout = (promise, ms, errorMsg) => {
@@ -520,6 +558,7 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 4.
   };
 
   try {
+    // 1. Establish connection to Port 9100
     const connectRes = await withTimeout(
       socketPlugin.connect({
         ipAddress: cleanIp,
@@ -535,18 +574,47 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 4.
       throw new Error(`ບໍ່ສາມາດສ້າງການເຊື່ອມຕໍ່ກັບເຄື່ອງພິມ ${cleanIp}:${targetPort}`);
     }
 
-    await withTimeout(
-      socketPlugin.send({
-        client,
-        data: base64Data,
-        timeout: timeoutSecondsInt,
-      }),
-      timeoutMs,
-      `ໝົດເວລາສົ່ງຂໍ້ມູນໄປຍັງເຄື່ອງພິມ ${cleanIp}:${targetPort}`
-    );
+    // 2. Transmit via Micro-Chunking with Pacing
+    const totalBytes = uint8Bytes.length;
 
-    // Give thermal printer Wi-Fi buffer sufficient time to receive all raster chunks before disconnecting
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    if (totalBytes <= SOCKET_CHUNK_SIZE) {
+      // Single small payload (e.g. drawer kick, test ping)
+      const base64Data = uint8ArrayToBase64(uint8Bytes);
+      await withTimeout(
+        socketPlugin.send({
+          client,
+          data: base64Data,
+          timeout: timeoutSecondsInt,
+        }),
+        timeoutMs,
+        `ໝົດເວລາສົ່ງຂໍ້ມູນໄປຍັງເຄື່ອງພິມ ${cleanIp}:${targetPort}`
+      );
+    } else {
+      // Large raster payload: slice into 4KB chunks with 25ms rest intervals
+      for (let offset = 0; offset < totalBytes; offset += SOCKET_CHUNK_SIZE) {
+        const chunkEnd = Math.min(offset + SOCKET_CHUNK_SIZE, totalBytes);
+        const chunkUint8 = uint8Bytes.subarray(offset, chunkEnd);
+        const chunkBase64 = uint8ArrayToBase64(chunkUint8);
+
+        await withTimeout(
+          socketPlugin.send({
+            client,
+            data: chunkBase64,
+            timeout: 3, // 3s watchdog per 4KB chunk
+          }),
+          3500,
+          `ໝົດເວລາສົ່ງຂໍ້ມູນໄປຍັງເຄື່ອງພິມ ${cleanIp}:${targetPort} (chunk ${Math.floor(offset / SOCKET_CHUNK_SIZE) + 1})`
+        );
+
+        // Hardware pacing rest: gives printer MCU time to burn dots without filling UART FIFO
+        if (chunkEnd < totalBytes) {
+          await new Promise((resolve) => setTimeout(resolve, SOCKET_PACING_DELAY_MS));
+        }
+      }
+    }
+
+    // 3. Tail Drain Delay: Keep socket open so cutter and last raster lines execute before TCP disconnect
+    await new Promise((resolve) => setTimeout(resolve, TAIL_DRAIN_DELAY_MS));
 
     return { success: true, message: `Sent ${uint8Bytes.length} bytes to ${cleanIp}:${targetPort}` };
   } catch (err) {
@@ -555,7 +623,7 @@ export async function sendRawBytesViaTcp(ip, port, uint8Bytes, { timeoutSec = 4.
   } finally {
     if (client !== null && client !== undefined) {
       try {
-        socketPlugin.disconnect({ client }).catch(() => {});
+        await socketPlugin.disconnect({ client });
       } catch (_) {}
     }
   }

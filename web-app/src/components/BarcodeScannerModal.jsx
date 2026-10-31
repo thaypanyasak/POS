@@ -29,6 +29,9 @@ async function triggerScanFeedback() {
   }
 }
 
+// Stable unique container ID for html5-qrcode viewfinder
+const SCANNER_CONTAINER_ID = 'meii-html5qr-viewfinder';
+
 export default function BarcodeScannerModal({
   isOpen,
   onClose,
@@ -39,6 +42,7 @@ export default function BarcodeScannerModal({
 }) {
   const [errorMsg, setErrorMsg] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isCameraReady, setIsCameraReady] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [lastScanned, setLastScanned] = useState(null);
@@ -51,7 +55,6 @@ export default function BarcodeScannerModal({
   const scannerRef = useRef(null);
   const isOperatingRef = useRef(false);
   const lastScannedTimeRef = useRef(0);
-  const containerId = useRef(`html5qr-viewfinder-${Math.random().toString(36).slice(2, 8)}`);
 
   useEffect(() => {
     if (!isOpen) {
@@ -61,20 +64,19 @@ export default function BarcodeScannerModal({
 
     let isMounted = true;
     setIsInitializing(true);
+    setIsCameraReady(false);
     setErrorMsg(null);
     setLastScanned(null);
     setIsTorchOn(false);
     setShowManualInput(false);
     setManualCode('');
     setFocusPoint(null);
-    // Assign fresh unique container ID for this modal session
-    containerId.current = `html5qr-viewfinder-${Math.random().toString(36).slice(2, 8)}`;
 
-    // Short delay to ensure modal DOM is mounted and painted
+    // Allow modal DOM to mount and paint before initializing camera
     const timer = setTimeout(() => {
       if (!isMounted) return;
       startEmbeddedScanner();
-    }, 120);
+    }, 100);
 
     return () => {
       isMounted = false;
@@ -104,23 +106,69 @@ export default function BarcodeScannerModal({
 
     // Clean DOM node if present
     try {
-      const el = document.getElementById(containerId.current);
+      const el = document.getElementById(SCANNER_CONTAINER_ID);
       if (el) el.innerHTML = '';
     } catch (_) {}
 
+    setIsCameraReady(false);
     isOperatingRef.current = false;
   };
 
   /**
    * Helper to wait for container DOM element to appear
    */
-  const waitForContainer = async (maxAttempts = 10, intervalMs = 60) => {
+  const waitForContainer = async (maxAttempts = 20, intervalMs = 30) => {
     for (let i = 0; i < maxAttempts; i++) {
-      const el = document.getElementById(containerId.current);
+      const el = document.getElementById(SCANNER_CONTAINER_ID);
       if (el) return el;
       await new Promise(resolve => setTimeout(resolve, intervalMs));
     }
-    return document.getElementById(containerId.current);
+    return document.getElementById(SCANNER_CONTAINER_ID);
+  };
+
+  /**
+   * Enforces mandatory iOS Safari & WKWebView inline playback attributes on video element
+   * and triggers play() when metadata or first data frame is ready.
+   */
+  const setupVideoElement = (containerEl, onReady) => {
+    if (!containerEl) return null;
+    const video = containerEl.querySelector('video');
+    if (!video) return null;
+
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
+    video.setAttribute('autoplay', 'true');
+    video.setAttribute('muted', 'true');
+    video.playsInline = true;
+    video.muted = true;
+    video.autoplay = true;
+
+    const tryPlay = () => {
+      if (video.paused) {
+        video.play().catch((err) => {
+          console.debug('[BarcodeScanner] Video play caught:', err);
+        });
+      }
+    };
+
+    tryPlay();
+
+    const handleReady = () => {
+      tryPlay();
+      if (typeof onReady === 'function') {
+        onReady();
+      }
+    };
+
+    if (video.readyState >= 2) {
+      handleReady();
+    } else {
+      video.addEventListener('loadeddata', handleReady, { once: true });
+      video.addEventListener('playing', handleReady, { once: true });
+      video.addEventListener('canplay', handleReady, { once: true });
+    }
+
+    return video;
   };
 
   /**
@@ -130,6 +178,7 @@ export default function BarcodeScannerModal({
     if (isOperatingRef.current) return;
     isOperatingRef.current = true;
     setIsInitializing(true);
+    setIsCameraReady(false);
     setErrorMsg(null);
 
     try {
@@ -141,51 +190,20 @@ export default function BarcodeScannerModal({
         console.warn('[BarcodeScanner] Target DOM container not found');
         isOperatingRef.current = false;
         setIsInitializing(false);
+        setIsCameraReady(false);
+        setErrorMsg('ບໍ່ສາມາດເຊື່ອມຕໍ່ກອບກ້ອງຖ່າຍຮູບໄດ້. ກະລຸນາລອງໃໝ່.');
         return;
       }
 
-      // Step 1: Handle Camera Discovery & Permission
-      // In iOS Safari / Capacitor WebView, calling Html5Qrcode.getCameras() *before* 
-      // camera permission is granted often fails or returns empty array [].
-      // To guarantee instant launch on first click:
-      // - First request stream permission via getUserMedia or fallback directly to { facingMode: 'environment' }
-      let chosenCameraId = overrideCameraId;
-      
-      if (!chosenCameraId) {
-        // If native getUserMedia exists, warm up permission first to unlock device enumeration
-        if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
-          try {
-            const tempStream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: { ideal: 'environment' } }
-            });
-            // Immediately stop temporary warmup tracks so Html5Qrcode can claim the camera
-            tempStream.getTracks().forEach(track => track.stop());
-          } catch (permErr) {
-            console.debug('[BarcodeScanner] getUserMedia warmup note:', permErr);
-          }
-        }
+      // Step 1: Preferred target: specific deviceId if switching camera, or direct environment facingMode
+      // Bypasses the destructive tempStream warmup that previously killed camera session on first open!
+      const cameraTarget = overrideCameraId
+        ? overrideCameraId
+        : { facingMode: 'environment' };
 
-        // Now enumerate cameras with labels unlocked
-        try {
-          const cameras = await Html5Qrcode.getCameras();
-          if (cameras && cameras.length > 0) {
-            setAvailableCameras(cameras);
-            const backCam = cameras.find(c => /back|rear|environment|sau|หลัง/i.test(c.label));
-            chosenCameraId = backCam ? backCam.id : (cameras[cameras.length - 1]?.id || cameras[0].id);
-          }
-        } catch (enumErr) {
-          console.debug('[BarcodeScanner] getCameras fallback to facingMode:', enumErr);
-        }
-      }
-
-      setActiveCameraId(chosenCameraId);
-
-      // Preferred target: specific deviceId if resolved, or direct environment constraint
-      const cameraTarget = chosenCameraId ? chosenCameraId : { facingMode: 'environment' };
-
-      // 2. Instantiate a fresh Html5Qrcode instance with targetedFormats:
+      // Step 2: Instantiate a fresh Html5Qrcode instance with targetedFormats:
       // Strictly restricted to EAN-13, EAN-8, CODE-128, UPC-A, and QR_CODE for maximum decode speed & accuracy
-      const html5QrCode = new Html5Qrcode(containerId.current, {
+      const html5QrCode = new Html5Qrcode(SCANNER_CONTAINER_ID, {
         formatsToSupport: [
           Html5QrcodeSupportedFormats.EAN_13,
           Html5QrcodeSupportedFormats.EAN_8,
@@ -199,7 +217,21 @@ export default function BarcodeScannerModal({
 
       scannerRef.current = html5QrCode;
 
-      // 3. Ultra-wide 90-95% full-frame scanning area for effortless scanning from 20-40cm
+      // Monitor container to attach iOS inline video attributes as soon as video DOM node is injected
+      const markReady = () => {
+        setIsCameraReady(true);
+        setIsInitializing(false);
+      };
+
+      const observer = new MutationObserver(() => {
+        const vid = setupVideoElement(element, markReady);
+        if (vid) {
+          observer.disconnect();
+        }
+      });
+      observer.observe(element, { childList: true, subtree: true });
+
+      // Step 3: Ultra-wide 90-95% full-frame scanning area for effortless scanning from 20-40cm
       const config = {
         fps: 25,
         qrbox: (viewfinderWidth, viewfinderHeight) => {
@@ -238,7 +270,7 @@ export default function BarcodeScannerModal({
 
       const qrCodeErrorCallback = () => {};
 
-      // 4. Start camera feed directly on the chosen camera device
+      // Step 4: Start camera feed directly in ONE SINGLE SHOT (No warmup, no sensor power-cycle conflict)
       await html5QrCode.start(
         cameraTarget,
         config,
@@ -246,9 +278,31 @@ export default function BarcodeScannerModal({
         qrCodeErrorCallback
       );
 
-      ensureVideoElementAttributes(containerId.current);
+      observer.disconnect();
+      setupVideoElement(element, markReady);
 
-      // 5. Fine-tune continuous auto focus & auto-zoom (20-40cm distance) if supported
+      // Fallback timer: ensure spinner dismisses within 500ms even if browser omits events
+      setTimeout(() => {
+        markReady();
+      }, 500);
+
+      // Step 5: Enumerate available cameras in background (camera permission is now naturally granted!)
+      setTimeout(async () => {
+        try {
+          const cameras = await Html5Qrcode.getCameras();
+          if (cameras && cameras.length > 0) {
+            setAvailableCameras(cameras);
+            if (!overrideCameraId) {
+              const backCam = cameras.find(c => /back|rear|environment|sau|หลัง/i.test(c.label));
+              setActiveCameraId(backCam ? backCam.id : (cameras[cameras.length - 1]?.id || cameras[0].id));
+            } else {
+              setActiveCameraId(overrideCameraId);
+            }
+          }
+        } catch (_) {}
+      }, 250);
+
+      // Step 6: Fine-tune continuous auto focus & auto-zoom (20-40cm distance) if supported
       try {
         const capabilities = html5QrCode.getRunningTrackCapabilities?.() || {};
         const constraints = {
@@ -262,7 +316,7 @@ export default function BarcodeScannerModal({
         await html5QrCode.applyVideoConstraints(constraints);
       } catch (_) {}
 
-      // 6. Check for flashlight / torch support
+      // Step 7: Check for flashlight / torch support
       try {
         const capabilities = html5QrCode.getRunningTrackCapabilities();
         if (capabilities && capabilities.torch) {
@@ -270,12 +324,12 @@ export default function BarcodeScannerModal({
         }
       } catch (_) {}
 
-      setIsInitializing(false);
       isOperatingRef.current = false;
     } catch (err) {
       console.error('[BarcodeScanner] Camera start error:', err);
       await cleanupScanner();
       setIsInitializing(false);
+      setIsCameraReady(false);
       isOperatingRef.current = false;
 
       let friendly = 'ບໍ່ສາມາດເປີດກ້ອງໄດ້: ';
@@ -410,13 +464,13 @@ export default function BarcodeScannerModal({
         >
           {/* HTML5 QR Code Mount Element */}
           <div
-            id={containerId.current}
-            className="w-full h-full [&_video]:w-full [&_video]:h-full [&_video]:object-cover"
+            id={SCANNER_CONTAINER_ID}
+            className="w-full h-full [&_video]:!w-full [&_video]:!h-full [&_video]:!object-cover [&_video]:!block"
           />
 
           {/* Aiming Reticle Framing Box - Expanded Full-Frame Recognition Zone (90-95%) */}
-          {!errorMsg && !isInitializing && !showManualInput && (
-            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-3">
+          {!errorMsg && isCameraReady && !showManualInput && (
+            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-3 animate-in fade-in duration-150">
               {/* Outer Shadow Mask creates dark cutout with crisp transparent center reticle */}
               <div
                 className="relative w-[92%] h-[72%] rounded-2xl border-2 border-teal-400 shadow-[0_0_0_9999px_rgba(15,23,42,0.55),0_0_24px_rgba(20,184,166,0.35)] flex items-center justify-center overflow-hidden"
@@ -452,8 +506,8 @@ export default function BarcodeScannerModal({
             </div>
           )}
 
-          {/* Loading Camera State */}
-          {isInitializing && !errorMsg && (
+          {/* Loading Camera State: Clean centered spinner covers viewfinder until video is actively playing frames */}
+          {(!isCameraReady || isInitializing) && !errorMsg && !showManualInput && (
             <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center gap-3 p-4 z-10">
               <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin" />
               <span className="text-xs font-bold text-slate-300">
