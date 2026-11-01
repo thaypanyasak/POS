@@ -1185,7 +1185,14 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
 
     if (rpcErr) {
       const errMsg = rpcErr.message || '';
-      const isRpcMissing = rpcErr.code === '42883' || rpcErr.code === 'PGRST202' || errMsg.includes('Could not find the function') || errMsg.includes('function process_pos_checkout');
+      const isRpcMissing =
+        rpcErr.code === '42883' ||
+        rpcErr.code === 'PGRST202' ||
+        rpcErr.code === '42703' || // Undefined column inside RPC (e.g. column "quantity" does not exist)
+        rpcErr.code === '42P01' || // Undefined table inside RPC
+        errMsg.includes('Could not find the function') ||
+        errMsg.includes('function process_pos_checkout') ||
+        (errMsg.includes('column') && errMsg.includes('does not exist'));
       
       if (!isRpcMissing) {
         // Business logic exception thrown by Postgres (e.g. insufficient stock)!
@@ -1197,7 +1204,7 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
         return { success: false, error: userFriendly, code: rpcErr.code };
       }
 
-      console.warn('process_pos_checkout RPC not available yet in Supabase, using standard client fallback:', rpcErr.message);
+      console.warn('process_pos_checkout RPC not available or schema mismatch in Supabase, using standard client fallback:', rpcErr.message);
     }
 
     // 2. Fallback thủ công nếu RPC chưa được chạy migration trong SQL Editor

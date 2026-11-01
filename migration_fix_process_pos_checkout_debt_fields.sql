@@ -271,13 +271,30 @@ BEGIN
                         updated_at = now()
                     WHERE id = v_prod_id;
 
-                    v_movement_id := 'mov_sale_' || floor(extract(epoch from now()) * 1000)::text || '_' || v_prod_id;
                     INSERT INTO public.inventory_movements (
-                        id, product_id, movement_type, quantity,
-                        stock_before, stock_after, reference_id, reference_type, notes, created_at
+                        product_id,
+                        product_name,
+                        movement_type,
+                        reference_type,
+                        reference_id,
+                        quantity_change,
+                        balance_before,
+                        balance_after,
+                        note,
+                        created_at,
+                        created_by
                     ) VALUES (
-                        v_movement_id, v_prod_id, 'sale', -v_units_to_deduct,
-                        v_current_stock, v_new_stock, v_tx_id, 'sale_transaction', 'POS Checkout Sale', now()
+                        v_prod_id,
+                        COALESCE(v_item.product_name, v_item.productName, 'ສິນຄ້າ'),
+                        'OUT_SALE',
+                        'SALE_TRANSACTION',
+                        v_tx_id,
+                        -v_units_to_deduct,
+                        v_current_stock,
+                        v_new_stock,
+                        'Xuất bán đơn hàng POS: ' || v_receipt_number,
+                        now(),
+                        COALESCE(v_cashier_name, 'ໄມ້ຄຳ (Meii)')
                     );
                 END IF;
             END IF;
