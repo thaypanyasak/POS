@@ -31,6 +31,7 @@ export default function CheckoutModal({
   setCustomerId = null,
   customers = [],
   onOpenNewCustomerModal = null,
+  onQuickCreateCustomer = null,
   cartSubtotal,
   cart = [],
   paymentMethod,
@@ -147,6 +148,7 @@ export default function CheckoutModal({
                 }}
                 customers={customers}
                 onOpenNewCustomerModal={onOpenNewCustomerModal}
+                onQuickCreateCustomer={onQuickCreateCustomer}
               />
             </div>
             {paymentMethod === 'debt' && (!customerName || customerName.trim() === 'ລູກຄ້າທົ່ວໄປ') && (

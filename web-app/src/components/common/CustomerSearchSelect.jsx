@@ -9,6 +9,7 @@ export default function CustomerSearchSelect({
   onChangeCustomer,
   customers = [],
   onOpenNewCustomerModal = null,
+  onQuickCreateCustomer = null,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,12 +28,18 @@ export default function CustomerSearchSelect({
     return () => window.removeEventListener('click', handleOutsideClick);
   }, [isOpen]);
 
-  // Focus search input when popover opens
+  // Focus search input when popover opens without triggering native window jump
   useEffect(() => {
     if (isOpen) {
       setSearchTerm('');
       setTimeout(() => {
-        if (inputSearchRef.current) inputSearchRef.current.focus();
+        if (inputSearchRef.current) {
+          try {
+            inputSearchRef.current.focus({ preventScroll: true });
+          } catch (_) {
+            inputSearchRef.current.focus();
+          }
+        }
       }, 50);
     }
   }, [isOpen]);
@@ -65,15 +72,36 @@ export default function CustomerSearchSelect({
   };
 
   const handleUseCustomName = (customName) => {
+    const cleanName = (customName || '').trim();
+    if (!cleanName) return;
     playActionClickBeep();
+
+    // 1. Áp dụng ngay tức thì vào giỏ hàng và đóng dropdown ngay lập tức (0ms latency, không chờ đợi)
+    setIsOpen(false);
     if (onChangeCustomer) {
       onChangeCustomer({
-        name: customName.trim(),
+        name: cleanName,
         phone: '',
         id: null,
       });
     }
-    setIsOpen(false);
+
+    // 2. Tạo ngầm (background) vào database/Supabase, khi xong tự cập nhật lại ID
+    if (onQuickCreateCustomer) {
+      onQuickCreateCustomer(cleanName)
+        .then((saved) => {
+          if (saved?.id && onChangeCustomer) {
+            onChangeCustomer({
+              name: saved.name || cleanName,
+              phone: saved.phone || '',
+              id: saved.id,
+            });
+          }
+        })
+        .catch((err) => {
+          console.debug('[CustomerSearchSelect] Background save customer error:', err);
+        });
+    }
   };
 
   const isDefault = !customerName || customerName === 'ລູກຄ້າທົ່ວໄປ';
@@ -125,7 +153,7 @@ export default function CustomerSearchSelect({
           {/* Search Header */}
           <div className="p-2 border-b border-slate-100 bg-slate-50 flex items-center gap-1.5">
             <div className="relative flex-1">
-              <MagnifyingGlass size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <MagnifyingGlass size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 ref={inputSearchRef}
                 type="text"
@@ -138,7 +166,10 @@ export default function CustomerSearchSelect({
                   }
                 }}
                 placeholder="ຄົ້ນຫາຊື່ ຫຼື ເບີໂທ..."
-                className="w-full h-8 pl-8 pr-2.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-teal-600 shadow-2xs"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                className="w-full h-7 pl-7 pr-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder:text-[11px] placeholder:text-slate-400 focus:outline-none focus:border-teal-600 shadow-2xs"
               />
             </div>
 
@@ -149,10 +180,10 @@ export default function CustomerSearchSelect({
                   setIsOpen(false);
                   onOpenNewCustomerModal();
                 }}
-                className="h-8 px-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shrink-0 transition-all active:scale-95 shadow-2xs cursor-pointer"
+                className="h-7 px-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shrink-0 transition-all active:scale-95 shadow-2xs cursor-pointer"
                 title="ເພີ່ມລູກຄ້າໃໝ່ "
               >
-                <Plus size={13} weight="bold" />
+                <Plus size={12} weight="bold" />
                 <span>+ ໃໝ່</span>
               </button>
             )}
@@ -181,10 +212,13 @@ export default function CustomerSearchSelect({
               <button
                 type="button"
                 onClick={() => handleUseCustomName(searchTerm)}
-                className="w-full px-2.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center justify-between transition-colors cursor-pointer text-left shadow-2xs"
+                className="w-full px-2 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 active:scale-98 text-white text-xs font-bold flex items-center justify-between transition-all cursor-pointer text-left shadow-2xs"
               >
-                <span className="truncate">ໃຊ້ຊື່: "{searchTerm.trim()}"</span>
-                <Check size={13} weight="bold" />
+                <div className="flex items-center gap-1.5 truncate">
+                  <Check size={12} weight="bold" className="shrink-0" />
+                  <span className="truncate">ໃຊ້ຊື່: "{searchTerm.trim()}"</span>
+                </div>
+                <span className="text-[10px] text-teal-100 font-normal shrink-0">ບັນທຶກໃໝ່</span>
               </button>
             </div>
           )}

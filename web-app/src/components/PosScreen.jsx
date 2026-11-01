@@ -92,7 +92,12 @@ function CartQuantityStepper({ quantity, onUpdateQuantity, onStepQuantity }) {
   };
 
   const handleFocus = (e) => {
-    e.target.select();
+    try {
+      e.target.select();
+    } catch (_) {}
+    if (typeof window !== 'undefined' && window.scrollY !== 0) {
+      window.scrollTo(0, 0);
+    }
   };
 
   return (
@@ -109,6 +114,9 @@ function CartQuantityStepper({ quantity, onUpdateQuantity, onStepQuantity }) {
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
         value={localQty}
         onChange={handleChange}
         onBlur={handleBlur}
@@ -153,6 +161,7 @@ export default function PosScreen({
   setCustomerId = null,
   customers = [],
   onOpenNewCustomerModal = null,
+  onQuickCreateCustomer = null,
   updateCartQuantity,
   removeFromCart,
   setCart,
@@ -215,6 +224,20 @@ export default function PosScreen({
   };
 
   // High-performance Infinite Scroll / Lazy Load for product catalog (Optimized for 3000+ items)
+  // Lock body scroll when mobile cart is open to prevent underlying page from scrolling
+  useEffect(() => {
+    if (mobileCartOpen && typeof document !== 'undefined') {
+      const prevOverflow = document.body.style.overflow;
+      const prevOverscroll = document.body.style.overscrollBehavior;
+      document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehavior = 'none';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+        document.body.style.overscrollBehavior = prevOverscroll;
+      };
+    }
+  }, [mobileCartOpen]);
+
   const INITIAL_BATCH_SIZE = 48;
   const LOAD_MORE_STEP = 36;
   const [visibleLimit, setVisibleLimit] = useState(INITIAL_BATCH_SIZE);
@@ -680,6 +703,7 @@ export default function PosScreen({
               }}
               customers={customers}
               onOpenNewCustomerModal={onOpenNewCustomerModal}
+              onQuickCreateCustomer={onQuickCreateCustomer}
             />
           </div>
 
@@ -1759,9 +1783,9 @@ export default function PosScreen({
         )}
       </div>
 
-      {/* 4. Footer Tổng tiền & Nút hành động: BẮT BUỘC shrink-0 dính sát đáy, không bao giờ bị che trên iPad Safari */}
+      {/* 4. Footer Tổng tiền & Nút hành động */}
       <div 
-        className="shrink-0 p-2 sm:p-3 border-t border-slate-200 bg-slate-50/95 backdrop-blur-sm shadow-sm sticky bottom-0 z-20"
+        className="shrink-0 p-2 sm:p-3 border-t border-slate-200 bg-slate-50/95 backdrop-blur-sm shadow-sm relative z-20"
         style={{
           paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))'
         }}
@@ -2361,39 +2385,39 @@ export default function PosScreen({
       </aside>
 
       {/* =========================================================================
-          MOBILE SLIDE-OVER / BOTTOM SHEET CART DRAWER (< 768px)
-          Sử dụng createPortal gắn thẳng vào document.body với z-[90]
-          để không bao giờ bị Bottom Navigation Bar (z-40) hay bất kỳ component nào che khuất!
+          MOBILE FULL-SCREEN CART MODAL (< 768px)
+          Sử dụng fixed inset-0 toàn màn hình để triệt tiêu hoàn toàn
+          hiện tượng giật / nhảy lên xuống khi bật/đóng bàn phím ảo trên Mobile!
       ========================================================================= */}
       {mobileCartOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[90] md:hidden flex flex-col justify-end">
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity"
-            onClick={() => setMobileCartOpen(false)}
-          />
-          {/* Drawer Container */}
-          <div className="relative z-10 bg-white rounded-t-3xl max-h-[92dvh] h-[92dvh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200">
-            {/* Drawer Top Handle & Title */}
-            <div className="pt-2.5 px-4 pb-2 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50">
-              <div className="flex items-center gap-2">
-                <ShoppingCart size={18} className="text-teal-700" weight="bold" />
-                <span className="font-extrabold text-sm text-slate-900">ກະຕ່າສິນຄ້າ</span>
-                <span className="px-2 py-0.5 bg-teal-100 text-teal-800 rounded-full text-xs font-bold font-mono">
-                  {cart.length} ລາຍການ
-                </span>
+        <div className="fixed inset-0 z-[90] md:hidden bg-white flex flex-col overflow-hidden animate-in fade-in duration-150">
+          {/* Header giỏ hàng cố định trên cùng (Không bao giờ bị bàn phím dịch chuyển) */}
+          <div className="pt-[max(0.6rem,env(safe-area-inset-top,0.6rem))] px-3.5 pb-2.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 border border-teal-200/80 flex items-center justify-center font-bold shadow-2xs">
+                <ShoppingCart size={18} weight="bold" />
               </div>
-              <button
-                type="button"
-                onClick={() => setMobileCartOpen(false)}
-                className="w-7 h-7 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center cursor-pointer transition-colors"
-                title="ປິດ"
-              >
-                <X size={15} weight="bold" />
-              </button>
+              <div>
+                <div className="font-black text-sm text-slate-900 leading-tight">
+                  ກະຕ່າສິນຄ້າ
+                </div>
+                <div className="text-[10.5px] text-slate-500 font-medium">
+                  {cart.length} ລາຍການ • <span className="font-mono font-bold text-teal-700">{formatKip(cartSubtotal)}</span>
+                </div>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setMobileCartOpen(false)}
+              className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-700 flex items-center justify-center cursor-pointer transition-colors active:scale-95"
+              title="ປິດກະຕ່າ"
+            >
+              <X size={17} weight="bold" />
+            </button>
+          </div>
 
-            {/* Cart Body inside Drawer */}
+          {/* Thân giỏ hàng: Chọn khách hàng, danh sách món, nút thanh toán */}
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-white">
             {renderCartContent(true)}
           </div>
         </div>,

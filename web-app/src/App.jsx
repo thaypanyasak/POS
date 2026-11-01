@@ -552,6 +552,25 @@ export default function App() {
       openAlert(`ເກີດຂໍ້ຜິດພາດ: ${err.message || 'ຜິດພາດ'}`, 'ຂໍ້ຜິດພາດ', 'error');
     }
   };
+
+  const handleQuickCreateCustomer = async (rawName) => {
+    const trimmed = (rawName || '').trim();
+    if (!trimmed || trimmed === 'ລູກຄ້າທົ່ວໄປ') return null;
+    try {
+      const saved = await saveCustomerRecord({ name: trimmed });
+      const nextCusts = await fetchSavedCustomers();
+      setSavedCustomersList(nextCusts || []);
+      if (saved) {
+        setCustomerName(saved.name);
+        setCustomerPhone(saved.phone || '');
+        setCustomerId(saved.id);
+      }
+      return saved;
+    } catch (err) {
+      console.error('Quick create customer error:', err);
+      return null;
+    }
+  };
   const [editingOldTransaction, setEditingOldTransaction] = useState(null); // Re-checkout old order mode
 
   // Dashboard Timeframe: 'daily' | 'weekly' | 'monthly' | 'all'
@@ -3464,6 +3483,7 @@ export default function App() {
             setCustomerId={setCustomerId}
             customers={customerDirectory}
             onOpenNewCustomerModal={() => setCustomerFormModalOpen(true)}
+            onQuickCreateCustomer={handleQuickCreateCustomer}
             updateCartQuantity={updateCartQuantity}
             removeFromCart={removeFromCart}
             setCart={setCart}
@@ -3793,6 +3813,7 @@ export default function App() {
         setCustomerId={setCustomerId}
         customers={customerDirectory}
         onOpenNewCustomerModal={() => setCustomerFormModalOpen(true)}
+        onQuickCreateCustomer={handleQuickCreateCustomer}
         cartSubtotal={cartSubtotal}
         cart={cart}
         paymentMethod={paymentMethod}
