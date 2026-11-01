@@ -87,6 +87,7 @@ ADD COLUMN IF NOT EXISTS customer_phone TEXT,
 ADD COLUMN IF NOT EXISTS paid_amount INT8 DEFAULT 0,
 ADD COLUMN IF NOT EXISTS remaining_debt INT8 DEFAULT 0,
 ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'PAID',
+ADD COLUMN IF NOT EXISTS debt_note TEXT DEFAULT NULL,
 ADD COLUMN IF NOT EXISTS debt_due_date DATE DEFAULT NULL;
 
 -- ------------------------------------------------------------------------------
