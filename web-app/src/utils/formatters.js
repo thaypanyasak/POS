@@ -155,6 +155,59 @@ export const getSortedUnits = (product) => {
 };
 
 /**
+ * Returns structured unit pricing breakdown sorted from largest tier to smallest tier.
+ * For larger tiers, computes the nested quantity relative to the next smaller tier:
+ * e.g., "ແກັດ (12 ແພັກ):", "ແພັກ (24 ແກ້ວ):", "ແກ້ວ:"
+ */
+export const getProductTierBreakdown = (product) => {
+  if (!product) return [];
+  const sorted = getSortedUnits(product);
+  if (!sorted || sorted.length === 0) {
+    const fallbackName = product.baseUnit || product.base_unit || 'ລາຄາ';
+    const fallbackPrice = Number(product.retailPrice || product.price || 0);
+    return [
+      {
+        id: 'fallback_base',
+        unitName: fallbackName,
+        label: `${fallbackName}:`,
+        retailPrice: fallbackPrice,
+        multiplier: 1,
+        isBaseUnit: true,
+        ratioToNext: null,
+        nextUnitName: null,
+      },
+    ];
+  }
+
+  return sorted.map((u, idx) => {
+    const nextUnit = idx < sorted.length - 1 ? sorted[idx + 1] : null;
+    let label = `${u.unitName}:`;
+    let ratioToNext = null;
+    let nextUnitName = null;
+
+    if (nextUnit && nextUnit.unitName) {
+      const uMult = Number(u.multiplier) || 1;
+      const nMult = Number(nextUnit.multiplier) || 1;
+      ratioToNext = Math.max(1, Math.round(uMult / nMult));
+      nextUnitName = nextUnit.unitName;
+      label = `${u.unitName} (${formatDots(ratioToNext)} ${nextUnitName}):`;
+    }
+
+    return {
+      id: u.id || `unit_${idx}`,
+      unitName: u.unitName,
+      label,
+      retailPrice: Number(u.retailPrice) || 0,
+      multiplier: Number(u.multiplier) || 1,
+      isBaseUnit: Boolean(u.isBaseUnit || !nextUnit),
+      ratioToNext,
+      nextUnitName,
+      tier: u.tier,
+    };
+  });
+};
+
+/**
  * Returns raw negative compound string (e.g. "-2 ແກັດ" or "-2 ແກັດ 1 ອັນ" or "-6 ອັນ")
  */
 export const formatNegativeStockCompound = (stockOrProduct, productUnits = null, baseUnitName = 'ອັນ') => {

@@ -37,7 +37,7 @@ export default function CustomersView({
   onAlert = null,
 }) {
   const [savedCustomers, setSavedCustomers] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDebt, setFilterDebt] = useState('all'); // 'all' | 'debt' | 'nodebt'
 
@@ -394,7 +394,45 @@ export default function CustomersView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-800">
-              {filteredCustomers.length === 0 ? (
+              {isLoading ? (
+                // 1. SKELETON TABLE ROWS (Khi đang tải dữ liệu từ Supabase)
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={`cust-skel-${i}`} className="animate-pulse">
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-slate-200 shrink-0" />
+                        <div className="space-y-1.5 flex-1 max-w-[140px]">
+                          <div className="h-3.5 bg-slate-200 rounded w-full" />
+                          <div className="h-2.5 bg-slate-100 rounded w-2/3" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="h-3 bg-slate-200 rounded w-24" />
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="h-4 bg-slate-200 rounded-full w-12 mx-auto" />
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="h-3.5 bg-slate-200 rounded w-20 ml-auto" />
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="h-4 bg-slate-200 rounded-full w-16 ml-auto" />
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="h-3 bg-slate-200 rounded w-16 mx-auto" />
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <div className="w-7 h-7 bg-slate-200 rounded-lg" />
+                        <div className="w-7 h-7 bg-slate-200 rounded-lg" />
+                        <div className="w-7 h-7 bg-slate-200 rounded-lg" />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : filteredCustomers.length === 0 ? (
+                // 2. EMPTY STATE (Chỉ hiển thị khi đã load xong và thực sự không có dòng nào)
                 <tr>
                   <td colSpan={7} className="py-16 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
@@ -550,7 +588,33 @@ export default function CustomersView({
 
         {/* MOBILE CARDS (< 768px) */}
         <div className="md:hidden divide-y divide-slate-100">
-          {filteredCustomers.length === 0 ? (
+          {isLoading ? (
+            // 1. SKELETON MOBILE CARDS (Khi đang tải dữ liệu)
+            <div className="divide-y divide-slate-100">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={`cust-mob-skel-${i}`} className="p-3.5 space-y-2.5 animate-pulse">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-slate-200 shrink-0" />
+                      <div className="space-y-1">
+                        <div className="h-3.5 bg-slate-200 rounded w-28" />
+                        <div className="h-2.5 bg-slate-100 rounded w-20" />
+                      </div>
+                    </div>
+                    <div className="h-4 bg-slate-200 rounded-full w-16" />
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="h-3 bg-slate-200 rounded w-24" />
+                    <div className="flex gap-1.5">
+                      <div className="w-7 h-7 bg-slate-200 rounded-lg" />
+                      <div className="w-7 h-7 bg-slate-200 rounded-lg" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredCustomers.length === 0 ? (
+            // 2. EMPTY STATE
             <div className="py-14 px-4 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
               <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center">
                 <Users size={24} weight="duotone" />

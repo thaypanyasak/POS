@@ -648,7 +648,32 @@ export default function StaffManagementView() {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden mb-6 w-full max-w-full">
         {/* Mobile View (< md) */}
         <div className="block md:hidden">
-          {filteredStaff.length > 0 ? (
+          {isLoading ? (
+            // 1. SKELETON MOBILE CARDS (Đang tải danh sách nhân viên)
+            <div className="divide-y divide-slate-100">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={`staff-mob-skel-${i}`} className="p-3.5 space-y-2.5 animate-pulse">
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-slate-200 shrink-0" />
+                      <div className="space-y-1">
+                        <div className="h-3.5 bg-slate-200 rounded w-28" />
+                        <div className="h-2.5 bg-slate-100 rounded w-20" />
+                      </div>
+                    </div>
+                    <div className="h-4 bg-slate-200 rounded-full w-14" />
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="h-3 bg-slate-200 rounded w-20" />
+                    <div className="flex gap-1.5">
+                      <div className="w-12 h-6 bg-slate-200 rounded-lg" />
+                      <div className="w-12 h-6 bg-slate-200 rounded-lg" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredStaff.length > 0 ? (
             <div className="divide-y divide-slate-100">
               {filteredStaff.map((st, idx) => {
                 const isAdmin = st.role === 'admin';
@@ -808,7 +833,44 @@ export default function StaffManagementView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {filteredStaff.length > 0 ? (
+              {isLoading ? (
+                // 1. SKELETON DESKTOP TABLE ROWS (Đang tải danh sách nhân viên từ Supabase)
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={`staff-skel-${i}`} className="animate-pulse">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-slate-200 shrink-0" />
+                        <div className="space-y-1.5">
+                          <div className="h-3.5 bg-slate-200 rounded w-28" />
+                          <div className="h-2.5 bg-slate-100 rounded w-16" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="h-3 bg-slate-200 rounded w-36" />
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="h-4 bg-slate-200 rounded-full w-20" />
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="h-3.5 bg-slate-200 rounded w-16" />
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="h-4 bg-slate-200 rounded-full w-14" />
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="h-3 bg-slate-200 rounded w-20" />
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <div className="w-14 h-6 bg-slate-200 rounded-lg" />
+                        <div className="w-12 h-6 bg-slate-200 rounded-lg" />
+                        <div className="w-10 h-6 bg-slate-200 rounded-lg" />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : filteredStaff.length > 0 ? (
                 filteredStaff.map((st, idx) => {
                   const isAdmin = st.role === 'admin';
                   const isRevealed = Boolean(revealedPins[st.id]);

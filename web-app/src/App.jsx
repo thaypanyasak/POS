@@ -510,6 +510,22 @@ export default function App() {
   const [savedCustomersList, setSavedCustomersList] = useState([]);
   useEffect(() => {
     fetchSavedCustomers().then((data) => setSavedCustomersList(data || []));
+
+    // Realtime sync for customers across multiple POS terminals
+    const custChannel = supabase
+      .channel('realtime_customers_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'customers' },
+        () => {
+          fetchSavedCustomers().then((data) => setSavedCustomersList(data || []));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(custChannel);
+    };
   }, []);
   const customerDirectory = useMemo(() => {
     return buildCustomerDirectory(savedCustomersList, transactions);

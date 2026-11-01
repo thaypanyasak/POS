@@ -11,7 +11,7 @@ import {
   Package,
   ArrowClockwise,
 } from '@phosphor-icons/react';
-import { formatKip, normalizeLao, getSortedUnits, sanitizeImageUrl } from '../../utils/formatters';
+import { formatKip, normalizeLao, getSortedUnits, getProductTierBreakdown, sanitizeImageUrl } from '../../utils/formatters';
 import CustomerProductDetailModal from './CustomerProductDetailModal';
 
 export default function CustomerCatalogView({
@@ -145,7 +145,7 @@ export default function CustomerCatalogView({
     <div
       ref={scrollContainerRef}
       onScroll={handleContainerScroll}
-      className="fixed inset-0 w-full h-full h-dvh overflow-y-auto touch-scroll-container bg-slate-50 text-slate-900 font-sans flex flex-col selection:bg-teal-500/20 selection:text-teal-900 pb-12 z-10"
+      className="fixed inset-0 w-full h-full h-dvh overflow-y-auto overscroll-contain bg-slate-50 text-slate-900 font-sans flex flex-col selection:bg-teal-500/20 selection:text-teal-900 pb-12 z-10"
       style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }}
     >
       {/* 1. TOP NAVBAR */}
@@ -402,18 +402,7 @@ export default function CustomerCatalogView({
         {viewMode === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
             {visibleProducts.map((p) => {
-              const sortedUnits = getSortedUnits(p);
-              const baseUnit = sortedUnits[sortedUnits.length - 1]; // smallest unit (e.g. piece)
-              const cartonUnit = sortedUnits.find(
-                (u) =>
-                  u.tier === 3 ||
-                  u.id?.endsWith('_carton') ||
-                  ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງ'].includes(u.unitName)
-              );
-              const packUnit = sortedUnits.find(
-                (u) => u.tier === 2 || u.id?.endsWith('_pack') || ['ແພັກ', 'ມັດ'].includes(u.unitName)
-              );
-
+              const tierBreakdown = getProductTierBreakdown(p);
               const cleanImageUrl = sanitizeImageUrl(p.imageUrl || p.image_url);
 
               return (
@@ -456,37 +445,36 @@ export default function CustomerCatalogView({
                     </div>
                   </div>
 
-                  {/* Pricing Breakdown Bottom Section */}
+                  {/* Pricing Breakdown Bottom Section: Largest tier on top, descending order */}
                   <div className="p-3 pt-2 border-t border-slate-100/90 bg-slate-50/50 space-y-1.5">
-                    {/* Primary Retail Price */}
-                    <div className="flex items-baseline justify-between gap-1">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase">
-                        {baseUnit ? baseUnit.unitName : 'ລາຄາ'}:
-                      </span>
-                      <span className="text-sm sm:text-base font-black text-teal-700 font-mono tracking-tight">
-                        {baseUnit ? formatKip(baseUnit.retailPrice) : '---'}
-                      </span>
-                    </div>
+                    {/* Primary Largest Unit Price (Top row) */}
+                    {tierBreakdown.length > 0 && (
+                      <div className="flex items-baseline justify-between gap-1">
+                        <span className="text-[10px] sm:text-[11px] text-slate-700 font-bold uppercase truncate" title={tierBreakdown[0].label}>
+                          {tierBreakdown[0].label}
+                        </span>
+                        <span className="text-sm sm:text-base font-black text-teal-700 font-mono tracking-tight shrink-0">
+                          {formatKip(tierBreakdown[0].retailPrice)}
+                        </span>
+                      </div>
+                    )}
 
-                    {/* Secondary Units (Pack / Carton) if available */}
-                    {(packUnit || cartonUnit) && (
+                    {/* Secondary Smaller Units in Descending Order */}
+                    {tierBreakdown.length > 1 && (
                       <div className="space-y-0.5 pt-1 border-t border-slate-200/60 text-[10.5px]">
-                        {packUnit && packUnit !== baseUnit && (
-                          <div className="flex items-center justify-between text-slate-600">
-                            <span className="truncate">{packUnit.unitName} ({packUnit.multiplier}):</span>
-                            <span className="font-mono font-bold text-slate-800">
-                              {formatKip(packUnit.retailPrice)}
+                        {tierBreakdown.slice(1).map((item, subIdx) => (
+                          <div
+                            key={item.id || subIdx}
+                            className="flex items-center justify-between text-slate-600 font-medium"
+                          >
+                            <span className="truncate" title={item.label}>
+                              {item.label}
+                            </span>
+                            <span className="font-mono font-bold text-slate-800 shrink-0">
+                              {formatKip(item.retailPrice)}
                             </span>
                           </div>
-                        )}
-                        {cartonUnit && cartonUnit !== baseUnit && cartonUnit !== packUnit && (
-                          <div className="flex items-center justify-between text-slate-600 font-medium">
-                            <span className="truncate">{cartonUnit.unitName} ({cartonUnit.multiplier}):</span>
-                            <span className="font-mono font-bold text-slate-900">
-                              {formatKip(cartonUnit.retailPrice)}
-                            </span>
-                          </div>
-                        )}
+                        ))}
                       </div>
                     )}
                   </div>
@@ -498,15 +486,7 @@ export default function CustomerCatalogView({
           /* LIST VIEW: Full width row items */
           <div className="space-y-2">
             {visibleProducts.map((p) => {
-              const sortedUnits = getSortedUnits(p);
-              const baseUnit = sortedUnits[sortedUnits.length - 1];
-              const cartonUnit = sortedUnits.find(
-                (u) =>
-                  u.tier === 3 ||
-                  u.id?.endsWith('_carton') ||
-                  ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງ'].includes(u.unitName)
-              );
-
+              const tierBreakdown = getProductTierBreakdown(p);
               const cleanImageUrl = sanitizeImageUrl(p.imageUrl || p.image_url);
 
               return (
@@ -546,14 +526,20 @@ export default function CustomerCatalogView({
 
                   <div className="text-right shrink-0">
                     <div className="text-sm sm:text-base font-black text-teal-700 font-mono">
-                      {baseUnit ? formatKip(baseUnit.retailPrice) : '---'}
+                      {tierBreakdown.length > 0 ? formatKip(tierBreakdown[0].retailPrice) : '---'}
                     </div>
-                    {baseUnit && (
-                      <div className="text-[10px] text-slate-400">/ {baseUnit.unitName}</div>
+                    {tierBreakdown.length > 0 && (
+                      <div className="text-[10px] text-slate-500 font-bold">
+                        {tierBreakdown[0].label.replace(/:$/, '')}
+                      </div>
                     )}
-                    {cartonUnit && (
-                      <div className="text-[10px] font-bold text-slate-600 font-mono mt-0.5">
-                        {cartonUnit.unitName}: {formatKip(cartonUnit.retailPrice)}
+                    {tierBreakdown.length > 1 && (
+                      <div className="text-[10px] font-medium text-slate-600 font-mono mt-0.5 space-y-0.5">
+                        {tierBreakdown.slice(1).map((item, subIdx) => (
+                          <div key={item.id || subIdx}>
+                            {item.label} {formatKip(item.retailPrice)}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Phone,
@@ -7,7 +8,7 @@ import {
   Tag,
   Info,
 } from '@phosphor-icons/react';
-import { formatKip, getSortedUnits, sanitizeImageUrl } from '../../utils/formatters';
+import { formatKip, formatDots, getProductTierBreakdown, sanitizeImageUrl } from '../../utils/formatters';
 
 export default function CustomerProductDetailModal({
   product,
@@ -16,9 +17,19 @@ export default function CustomerProductDetailModal({
   hotlineNumbers = ['020 56468780', '020 52228432'],
   whatsappNumber = '020 52228432',
 }) {
+  // Lock background body scroll while modal is active
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
   if (!isOpen || !product) return null;
 
-  const sortedUnits = getSortedUnits(product);
+  const tierBreakdown = getProductTierBreakdown(product);
   const cleanImageUrl = sanitizeImageUrl(product.imageUrl || product.image_url);
 
   const whatsappInternational = '8562052228432';
@@ -26,9 +37,14 @@ export default function CustomerProductDetailModal({
     `ສະບາຍດີ ຮ້ານ ສົມສັກ! ຂ້ອຍສົນໃຈສັ່ງຊື້ສິນຄ້າ: ${product.name}`
   );
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 select-none font-sans animate-in fade-in duration-150">
-      <div className="bg-white max-w-lg w-full rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150">
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 select-none font-sans animate-in fade-in duration-150"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="bg-white max-w-lg w-full rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] my-auto animate-in zoom-in-95 duration-150">
         {/* Header Bar */}
         <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
           <div className="flex items-center gap-2">
@@ -49,7 +65,7 @@ export default function CustomerProductDetailModal({
         </div>
 
         {/* Scrollable Content Body */}
-        <div className="overflow-y-auto p-5 space-y-4 no-scrollbar">
+        <div className="overflow-y-auto p-5 space-y-4 no-scrollbar flex-1">
           {/* Product Image */}
           <div className="w-full aspect-video sm:aspect-[16/10] bg-slate-100 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-200/80 relative">
             {cleanImageUrl ? (
@@ -85,7 +101,7 @@ export default function CustomerProductDetailModal({
             </h2>
           </div>
 
-          {/* Pricing Tiers Table */}
+          {/* Pricing Tiers Table: Ordered largest tier first */}
           <div className="bg-slate-50 rounded-2xl border border-slate-200/90 p-4 space-y-2.5">
             <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
               <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -95,28 +111,42 @@ export default function CustomerProductDetailModal({
               <span className="text-[11px] text-slate-400 font-medium">ລາຄາກີບ (LAK)</span>
             </div>
 
-            {sortedUnits.length > 0 ? (
+            {tierBreakdown.length > 0 ? (
               <div className="space-y-2">
-                {sortedUnits.map((u, idx) => {
-                  const mult = Number(u.multiplier) || 1;
-                  const price = Number(u.retailPrice) || 0;
+                {tierBreakdown.map((item, idx) => {
+                  const isTopTier = idx === 0;
 
                   return (
                     <div
-                      key={u.id || idx}
+                      key={item.id || idx}
                       className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-teal-300 transition-colors"
                     >
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center font-bold text-xs text-teal-700 shrink-0">
-                          {u.unitName}
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+                            isTopTier
+                              ? 'bg-teal-600 text-white shadow-2xs'
+                              : 'bg-teal-50 border border-teal-100 text-teal-700'
+                          }`}
+                        >
+                          {item.unitName}
                         </div>
                         <div>
                           <div className="text-xs font-bold text-slate-800">
-                            ຂາຍເປັນ {u.unitName}
+                            ຂາຍເປັນ {item.unitName}
                           </div>
-                          {mult > 1 && (
-                            <div className="text-[11px] text-slate-400">
-                              (1 {u.unitName} = {mult} {product.baseUnit || 'ອັນ'})
+                          {item.nextUnitName ? (
+                            <div className="text-[11px] text-teal-700 font-bold">
+                              (1 {item.unitName} = {formatDots(item.ratioToNext)} {item.nextUnitName})
+                              {item.multiplier > 1 && item.multiplier !== item.ratioToNext && (
+                                <span className="text-slate-400 font-normal ml-1">
+                                  = {formatDots(item.multiplier)} {product.baseUnit || 'ອັນ'}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-slate-400 font-medium">
+                              (ຫົວໜ່ວຍຍ່ອຍພື້ນຖານ)
                             </div>
                           )}
                         </div>
@@ -124,9 +154,9 @@ export default function CustomerProductDetailModal({
 
                       <div className="text-right">
                         <div className="text-sm font-black text-teal-700 font-mono">
-                          {formatKip(price)}
+                          {formatKip(item.retailPrice)}
                         </div>
-                        <div className="text-[10px] text-slate-400">ຕໍ່ {u.unitName}</div>
+                        <div className="text-[10px] text-slate-400">ຕໍ່ {item.unitName}</div>
                       </div>
                     </div>
                   );
@@ -149,7 +179,7 @@ export default function CustomerProductDetailModal({
         </div>
 
         {/* Footer Actions: WhatsApp & Direct Calls */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-col gap-2">
+        <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-col gap-2 shrink-0">
           {/* WhatsApp Direct Message */}
           <a
             href={`https://wa.me/${whatsappInternational}?text=${whatsappMessage}`}
@@ -182,4 +212,9 @@ export default function CustomerProductDetailModal({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 }
