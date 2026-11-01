@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Receipt,
@@ -64,6 +64,23 @@ export default function ReceiptModal({
   const [customInputValue, setCustomInputValue] = useState('15');
   const [previewPage, setPreviewPage] = useState(1);
   const [printProgressText, setPrintProgressText] = useState(null);
+
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Reset local feedback states when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setIsPrinting(false);
+      setPrintFeedback(null);
+      setPrintProgressText(null);
+    }
+  }, [isOpen]);
 
   const isQuotation = Boolean(receipt?.isQuotation);
   const isCancelled = !isQuotation && (receipt?.status === 'cancelled' || receipt?.isCancelled);
@@ -425,6 +442,14 @@ export default function ReceiptModal({
               kickCashDrawer: p === 1,
               maxRetries: 2,
               retryDelayMs: 1000,
+              onRetryAttempt: (attempt, max) => {
+                if (isMountedRef.current) {
+                  const retryMsg = receiptLanguage === 'vi'
+                    ? `Đang đợi máy in rảnh... (${attempt}/${max})`
+                    : `ກຳລັງລໍຖ້າເຄື່ອງພິມ... (${attempt}/${max})`;
+                  setPrintProgressText(retryMsg);
+                }
+              },
             });
 
             // Pause 600ms between pages to let cutter complete cut and feed
@@ -449,6 +474,14 @@ export default function ReceiptModal({
             kickCashDrawer: false,
             maxRetries: 2,
             retryDelayMs: 1000,
+            onRetryAttempt: (attempt, max) => {
+              if (isMountedRef.current) {
+                const retryMsg = receiptLanguage === 'vi'
+                  ? `Đang đợi máy in rảnh... (${attempt}/${max})`
+                  : `ກຳລັງລໍຖ້າເຄື່ອງພິມ... (${attempt}/${max})`;
+                setPrintProgressText(retryMsg);
+              }
+            },
           });
         } else {
           // Standard single-page print
@@ -466,6 +499,12 @@ export default function ReceiptModal({
             retryDelayMs: 1100,
             onRetryAttempt: (attempt, max) => {
               console.log(`[ReceiptModal] Retrying print attempt ${attempt}/${max} due to printer collision...`);
+              if (isMountedRef.current) {
+                const retryMsg = receiptLanguage === 'vi'
+                  ? `Đang đợi máy in rảnh... (${attempt}/${max})`
+                  : `ກຳລັງລໍຖ້າເຄື່ອງພິມ... (${attempt}/${max})`;
+                setPrintProgressText(retryMsg);
+              }
             },
           });
         }
@@ -476,10 +515,12 @@ export default function ReceiptModal({
           ? (receiptLanguage === 'vi' ? `In thành công toàn bộ ${totalPages} tờ hóa đơn!` : `ພິມສຳເລັດທັງໝົດ ${totalPages} ໃບ!`)
           : (res.message || (receiptLanguage === 'vi' ? 'In hóa đơn thành công!' : 'ພິມໃບບິນສຳເລັດແລ້ວ!'));
 
-        setPrintFeedback({
-          type: 'success',
-          message: successMsg,
-        });
+        if (isMountedRef.current) {
+          setPrintFeedback({
+            type: 'success',
+            message: successMsg,
+          });
+        }
         playSuccessBeep();
 
         // Synchronize 'is_printed: true' to Supabase so other POS terminals receive Realtime update
@@ -492,7 +533,9 @@ export default function ReceiptModal({
           });
         }
 
-        setTimeout(() => setPrintFeedback(null), 4000);
+        setTimeout(() => {
+          if (isMountedRef.current) setPrintFeedback(null);
+        }, 4000);
       } else {
         throw new Error(res?.message || 'ບໍ່ສາມາດເຊື່ອມຕໍ່ຫາເຄື່ອງພິມໄດ້.');
       }
@@ -500,12 +543,16 @@ export default function ReceiptModal({
       console.error('Print error:', err);
 
       const errMsg = err?.message || 'ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່ເຄື່ອງພິມ.';
-      setPrintFeedback({
-        type: 'error',
-        message: errMsg,
-      });
+      if (isMountedRef.current) {
+        setPrintFeedback({
+          type: 'error',
+          message: errMsg,
+        });
+      }
       playErrorBeep();
-      setTimeout(() => setPrintFeedback(null), 6000);
+      setTimeout(() => {
+        if (isMountedRef.current) setPrintFeedback(null);
+      }, 6000);
     } finally {
       setIsPrinting(false);
       setPrintProgressText(null);

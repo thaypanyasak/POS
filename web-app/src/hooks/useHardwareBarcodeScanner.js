@@ -62,7 +62,12 @@ function resolveBarcodeChar(e) {
   // 1. Primary: Physical key code (e.code) bypasses all active keyboard layouts (Lao, Thai, VN, etc.)
   if (e.code) {
     if (e.code.startsWith('Digit') && e.code.length === 6) {
-      return e.code.slice(5); // 'Digit0'..'Digit9' -> '0'..'9'
+      const num = e.code.slice(5);
+      if (e.shiftKey) {
+        const shiftMap = { '1': '!', '2': '@', '3': '#', '4': '$', '5': '%', '6': '^', '7': '&', '8': '*', '9': '(', '0': ')' };
+        return shiftMap[num] || num;
+      }
+      return num; // 'Digit0'..'Digit9' -> '0'..'9'
     }
     if (e.code.startsWith('Numpad') && e.code.length === 7) {
       return e.code.slice(6); // 'Numpad0'..'Numpad9' -> '0'..'9'
@@ -71,11 +76,13 @@ function resolveBarcodeChar(e) {
       const letter = e.code.slice(3);
       return e.shiftKey ? letter.toUpperCase() : letter.toLowerCase();
     }
-    if (e.code === 'Minus' || e.code === 'NumpadSubtract') return '-';
-    if (e.code === 'Slash' || e.code === 'NumpadDivide') return '-';
-    if (e.code === 'Period' || e.code === 'NumpadDecimal') return '.';
+    if (e.code === 'Minus' || e.code === 'NumpadSubtract') return e.shiftKey ? '_' : '-';
+    if (e.code === 'Slash' || e.code === 'NumpadDivide') return e.shiftKey ? '?' : '/';
+    if (e.code === 'Period' || e.code === 'NumpadDecimal') return e.shiftKey ? '>' : '.';
+    if (e.code === 'Comma') return e.shiftKey ? '<' : ',';
     if (e.code === 'Equal' || e.code === 'NumpadAdd') return e.shiftKey ? '+' : '=';
     if (e.code === 'Semicolon') return e.shiftKey ? ':' : ';';
+    if (e.code === 'Quote') return e.shiftKey ? '"' : "'";
     if (e.code === 'Space') return ' ';
   }
 
@@ -86,7 +93,6 @@ function resolveBarcodeChar(e) {
 
   // 3. Fallback: single printable ASCII character
   if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-    if (e.key === '/') return '-';
     return e.key;
   }
 
@@ -419,7 +425,8 @@ function handleGlobalKeyDown(e) {
         if (
           (globalBuffer.length >= 6 && avgInterval <= 45) ||
           (globalBuffer.length >= 4 && avgInterval <= 30) ||
-          (globalBuffer.length >= 10 && totalDuration <= 750)
+          (globalBuffer.length >= 10 && totalDuration <= 750) ||
+          (globalBuffer.length >= 20 && avgInterval <= 55)
         ) {
           isScanner = true;
         }

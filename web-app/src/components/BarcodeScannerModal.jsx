@@ -153,6 +153,14 @@ export default function BarcodeScannerModal({
 
     tryPlay();
 
+    // Auto-resume if video stream is paused or suspended by iOS WKWebView
+    video.addEventListener('pause', () => {
+      tryPlay();
+    });
+    video.addEventListener('suspend', () => {
+      tryPlay();
+    });
+
     const handleReady = () => {
       tryPlay();
       if (typeof onReady === 'function') {
@@ -286,39 +294,36 @@ export default function BarcodeScannerModal({
         markReady();
       }, 500);
 
-      // Step 5: Enumerate available cameras in background (camera permission is now naturally granted!)
-      setTimeout(async () => {
-        try {
-          const cameras = await Html5Qrcode.getCameras();
-          if (cameras && cameras.length > 0) {
-            setAvailableCameras(cameras);
-            if (!overrideCameraId) {
-              const backCam = cameras.find(c => /back|rear|environment|sau|หลัง/i.test(c.label));
-              setActiveCameraId(backCam ? backCam.id : (cameras[cameras.length - 1]?.id || cameras[0].id));
-            } else {
-              setActiveCameraId(overrideCameraId);
+      // Step 5: Safely query device list using native enumerateDevices
+      // NEVER call Html5Qrcode.getCameras() here because it invokes a secondary getUserMedia()
+      // and immediately executes track.stop() on the stream, shutting down the hardware camera sensor on iOS WKWebView!
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices && typeof navigator.mediaDevices.enumerateDevices === 'function') {
+        setTimeout(async () => {
+          try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const cameras = devices
+              .filter((d) => d.kind === 'videoinput')
+              .map((d) => ({
+                id: d.deviceId,
+                label: d.label || `Camera ${d.deviceId.slice(0, 4)}`,
+              }));
+            if (cameras && cameras.length > 0) {
+              setAvailableCameras(cameras);
+              if (!overrideCameraId) {
+                const backCam = cameras.find((c) => /back|rear|environment|sau|หลัง/i.test(c.label));
+                setActiveCameraId(backCam ? backCam.id : (cameras[cameras.length - 1]?.id || cameras[0].id));
+              } else {
+                setActiveCameraId(overrideCameraId);
+              }
             }
-          }
-        } catch (_) {}
-      }, 250);
+          } catch (_) {}
+        }, 300);
+      }
 
-      // Step 6: Fine-tune continuous auto focus & auto-zoom (20-40cm distance) if supported
+      // Step 6: Check for flashlight / torch support safely
+      // (Avoid calling applyVideoConstraints with focus/zoom as it causes iOS AVFoundation capture session to crash/blackout)
       try {
         const capabilities = html5QrCode.getRunningTrackCapabilities?.() || {};
-        const constraints = {
-          advanced: [{ focusMode: 'continuous' }]
-        };
-        // If zoom is supported, apply slight optical zoom for 20-40cm reading
-        if (capabilities.zoom && capabilities.zoom.min !== undefined && capabilities.zoom.max !== undefined) {
-          const optimalZoom = Math.min(capabilities.zoom.max, Math.max(capabilities.zoom.min, 1.25));
-          constraints.advanced.push({ zoom: optimalZoom });
-        }
-        await html5QrCode.applyVideoConstraints(constraints);
-      } catch (_) {}
-
-      // Step 7: Check for flashlight / torch support
-      try {
-        const capabilities = html5QrCode.getRunningTrackCapabilities();
         if (capabilities && capabilities.torch) {
           setHasTorch(true);
         }
@@ -382,7 +387,7 @@ export default function BarcodeScannerModal({
     }
   };
 
-  const handleTapViewfinder = async (e) => {
+  const handleTapViewfinder = (e) => {
     if (showManualInput || errorMsg || isInitializing) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -392,17 +397,6 @@ export default function BarcodeScannerModal({
     setTimeout(() => {
       setFocusPoint(null);
     }, 800);
-
-    // Re-lock continuous autofocus
-    try {
-      if (scannerRef.current) {
-        await scannerRef.current.applyVideoConstraints({
-          advanced: [
-            { focusMode: 'continuous' }
-          ]
-        });
-      }
-    } catch (_) {}
   };
 
   const handleManualSubmit = (e) => {
