@@ -47,6 +47,7 @@ export default function CheckoutModal({
   onConfirmPayment,
 }) {
   if (!isOpen) return null;
+  if (!cart || cart.length === 0) return null;
 
   const remainingDebt = Math.max(0, cartSubtotal - (Number(debtPaidKip) || 0));
 
@@ -589,11 +590,13 @@ export default function CheckoutModal({
           </button>
           <button
             type="button"
+            disabled={!cart || cart.length === 0}
             onClick={() => {
+              if (!cart || cart.length === 0) return;
               playModalConfirmBeep();
               onConfirmPayment();
             }}
-            className={`px-5 py-2.5 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-5 py-2.5 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               editingOldTransaction
                 ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'
                 : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'

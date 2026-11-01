@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Package,
   SquaresFour,
@@ -10,15 +10,17 @@ import {
   ArrowClockwise,
   CaretUp,
   CaretDown,
+  CaretLeft,
+  CaretRight,
   ArrowsDownUp,
   ChartPieSlice,
   Printer,
-  Export,
   Minus,
   FileArrowDown,
+  ClockCounterClockwise,
 } from '@phosphor-icons/react';
 import { exportSalesByUnitToExcel } from '../../utils/excelExport';
-import { formatKip, formatBaht, formatDots, normalizeLao } from '../../utils/formatters';
+import { formatKip, formatDots, normalizeLao } from '../../utils/formatters';
 import { playUnitChangeBeep, playActionClickBeep } from '../../utils/audioFeedback';
 import { SalesByUnitSkeleton } from '../common/SkeletonLoaders';
 
@@ -76,6 +78,29 @@ function classifyUnitLevel(unitName = '', multiplier = 1, product = null) {
   return 1;
 }
 
+/**
+ * Determine default unit names for a catalog product
+ */
+function getProductDefaultUnits(prod) {
+  let cUnitName = prod?.cartonUnitName;
+  let pUnitName = prod?.packUnitName;
+  let rUnitName = prod?.pieceUnitName || prod?.baseUnit || 'ອັນ';
+
+  if (Array.isArray(prod?.units)) {
+    prod.units.forEach((u) => {
+      const lvl = classifyUnitLevel(u.unitName, u.multiplier, prod);
+      if (lvl === 3 && !cUnitName) cUnitName = u.unitName;
+      if (lvl === 2 && !pUnitName) pUnitName = u.unitName;
+      if (lvl === 1 && !rUnitName) rUnitName = u.unitName;
+    });
+  }
+  return {
+    cartonUnitName: cUnitName || 'ແກັດ',
+    packUnitName: pUnitName || 'ແພັກ',
+    retailUnitName: rUnitName || 'ອັນ',
+  };
+}
+
 export default function SalesByUnitReportView({
   transactions = [],
   products = [],
@@ -84,7 +109,10 @@ export default function SalesByUnitReportView({
   isLoading = false,
   onAlert,
 }) {
-  // 1. Filter States
+  // 1. View Mode Filter: 'all' (Tất cả - Mặc định) | 'sold' (Đã bán) | 'unsold' (Chưa được bán)
+  const [viewMode, setViewMode] = useState('all');
+
+  // 1.1 Timeframe States
   // 'today' | 'yesterday' | '7days' | 'month' | 'custom'
   const [timeframe, setTimeframe] = useState('today');
   const [customStartDate, setCustomStartDate] = useState('');
@@ -94,6 +122,20 @@ export default function SalesByUnitReportView({
   // 2. Sort State: 'revenue' | 'carton' | 'pack' | 'retail' | 'name'
   const [sortField, setSortField] = useState('revenue');
   const [sortDirection, setSortDirection] = useState('desc'); // 'asc' | 'desc'
+
+  // 2.1 Pagination States (identical to HistoryView & ProductsView)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20); // 20 | 50 | 100 | 200 | 'ALL'
+  const mainScrollRef = useRef(null);
+  const tableTopRef = useRef(null);
+
+  const scrollToTableTop = () => {
+    tableTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (mainScrollRef.current) {
+      const targetTop = tableTopRef.current ? Math.max(0, tableTopRef.current.offsetTop - 16) : 0;
+      mainScrollRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
+    }
+  };
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -113,7 +155,31 @@ export default function SalesByUnitReportView({
     return map;
   }, [products]);
 
-  // 4. Date Range Filtering of Transactions
+  // 3.1 All-Time Sold Product IDs (Across all non-cancelled transactions, ignoring date filter)
+  const allTimeSoldProductIds = useMemo(() => {
+    const set = new Set();
+    transactions.forEach((tx) => {
+      const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
+      if (isCancelled) return;
+      const items = (tx.items && tx.items.length > 0)
+        ? tx.items
+        : (tx.sale_transaction_items || []);
+
+      items.forEach((item) => {
+        const prodId = item.productId || item.product?.id || item.product_id;
+        if (prodId) set.add(prodId);
+        if (item.bundle_components || item.bundleComponents) {
+          (item.bundle_components || item.bundleComponents).forEach((c) => {
+            const compId = c.productId || c.product?.id || c.product_id;
+            if (compId) set.add(compId);
+          });
+        }
+      });
+    });
+    return set;
+  }, [transactions]);
+
+  // 4. Date Range Filtering of Transactions (only for sold & all modes)
   const filteredTransactions = useMemo(() => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
@@ -135,6 +201,8 @@ export default function SalesByUnitReportView({
       if (isNaN(txDate.getTime())) return false;
 
       switch (timeframe) {
+        case 'all':
+          return true;
         case 'today':
           return txDate >= startOfToday && txDate <= endOfToday;
         case 'yesterday':
@@ -163,8 +231,17 @@ export default function SalesByUnitReportView({
   }, [transactions, timeframe, customStartDate, customEndDate]);
 
   // 5. Aggregate Sales by Product & Unit Breakdown
-  const { productSalesList, totalCartons, totalPacks, totalRetail, totalRevenue } = useMemo(() => {
-    // Map productId -> aggregated stats
+  const {
+    allProductsList,
+    soldProductsList,
+    unsoldProductsList,
+    totalCartons,
+    totalPacks,
+    totalRetail,
+    totalRevenue,
+    totalUnsoldStock,
+  } = useMemo(() => {
+    // Map of sales in filteredTransactions: productId -> aggregated sales
     const aggMap = new Map();
 
     let grandCartons = 0;
@@ -173,7 +250,6 @@ export default function SalesByUnitReportView({
     let grandRevenue = 0;
 
     filteredTransactions.forEach((tx) => {
-      // Gather all items from either items or sale_transaction_items
       const items = (tx.items && tx.items.length > 0)
         ? tx.items
         : (tx.sale_transaction_items || []);
@@ -191,13 +267,13 @@ export default function SalesByUnitReportView({
         const qty = Number(item.quantity) || 1;
         const lineTotal = Number(item.lineTotal ?? item.line_total ?? (Number(item.unitPrice ?? item.unit_price ?? 0) * qty)) || 0;
 
-        // Classify unit level (1, 2, or 3)
         const unitLevel = classifyUnitLevel(unitName, multiplier, prodInfo);
+        const defaultUnits = getProductDefaultUnits(prodInfo);
+        const cUnitName = prodInfo.cartonUnitName || (unitLevel === 3 ? unitName : defaultUnits.cartonUnitName);
+        const pUnitName = prodInfo.packUnitName || (unitLevel === 2 ? unitName : defaultUnits.packUnitName);
+        const rUnitName = prodInfo.pieceUnitName || (unitLevel === 1 ? unitName : defaultUnits.retailUnitName);
 
-        // Unit labels determination for this product
-        const cUnitName = prodInfo.cartonUnitName || (unitLevel === 3 ? unitName : 'ແກັດ');
-        const pUnitName = prodInfo.packUnitName || (unitLevel === 2 ? unitName : 'ແພັກ');
-        const rUnitName = prodInfo.pieceUnitName || (unitLevel === 1 ? unitName : 'ອັນ');
+        const isTrackStock = prodInfo.trackStock !== false && prodInfo.track_stock !== false;
 
         if (!aggMap.has(prodId)) {
           aggMap.set(prodId, {
@@ -216,6 +292,10 @@ export default function SalesByUnitReportView({
             totalBaseUnits: 0,
             revenue: 0,
             orderCount: 0,
+            currentStock: Number(prodInfo.currentStockBaseUnits ?? prodInfo.current_stock_base_units ?? 0),
+            trackStock: isTrackStock,
+            baseUnit: prodInfo.baseUnit || 'ອັນ',
+            hasEverSold: true,
           });
         }
 
@@ -241,27 +321,126 @@ export default function SalesByUnitReportView({
       });
     });
 
-    const list = Array.from(aggMap.values());
+    // 1. Build all products list combining all products in catalog
+    const fullMap = new Map(aggMap);
+
+    // Merge in all catalog products that didn't have sales in this timeframe
+    products.forEach((p) => {
+      if (!p || !p.id) return;
+      const defaultUnits = getProductDefaultUnits(p);
+      const isEverSold = allTimeSoldProductIds.has(p.id);
+      const isTrackStock = p.trackStock !== false && p.track_stock !== false;
+
+      if (!fullMap.has(p.id)) {
+        fullMap.set(p.id, {
+          id: p.id,
+          name: p.name || 'ສິນຄ້າບໍ່ມີຊື່',
+          name_vi: p.name_vi || p.nameVi || p.vietnameseName || '',
+          barcode: p.barcode || '',
+          category: p.category || p.categoryName || 'ທົ່ວໄປ',
+          imageUrl: p.imageUrl || p.image_url || '',
+          cartonUnitName: defaultUnits.cartonUnitName,
+          packUnitName: defaultUnits.packUnitName,
+          retailUnitName: defaultUnits.retailUnitName,
+          cartonQty: 0,
+          packQty: 0,
+          retailQty: 0,
+          totalBaseUnits: 0,
+          revenue: 0,
+          orderCount: 0,
+          currentStock: Number(p.currentStockBaseUnits ?? p.current_stock_base_units ?? 0),
+          trackStock: isTrackStock,
+          baseUnit: p.baseUnit || 'ອັນ',
+          hasEverSold: isEverSold,
+        });
+      } else {
+        const entry = fullMap.get(p.id);
+        entry.currentStock = Number(p.currentStockBaseUnits ?? p.current_stock_base_units ?? 0);
+        entry.trackStock = isTrackStock;
+        entry.baseUnit = p.baseUnit || 'ອັນ';
+        entry.hasEverSold = isEverSold;
+      }
+    });
+
+    const allProductsList = Array.from(fullMap.values());
+
+    // 2. Filter Sold Products in this timeframe
+    const soldProductsList = allProductsList.filter(
+      (p) => p.revenue > 0 || p.cartonQty > 0 || p.packQty > 0 || p.retailQty > 0
+    );
+
+    // 3. Filter Unsold Products all-time (KHÔNG filter theo ngày, hiển thị tất cả hàng chưa bán)
+    let totalUnsoldStock = 0;
+    const unsoldProductsList = [];
+    products.forEach((p) => {
+      if (!p || !p.id) return;
+      if (!allTimeSoldProductIds.has(p.id)) {
+        const defaultUnits = getProductDefaultUnits(p);
+        const isTrackStock = p.trackStock !== false && p.track_stock !== false;
+        const stock = Number(p.currentStockBaseUnits ?? p.current_stock_base_units ?? 0);
+        if (isTrackStock) {
+          totalUnsoldStock += stock;
+        }
+        unsoldProductsList.push({
+          id: p.id,
+          name: p.name || 'ສິນຄ້າບໍ່ມີຊື່',
+          name_vi: p.name_vi || p.nameVi || p.vietnameseName || '',
+          barcode: p.barcode || '',
+          category: p.category || p.categoryName || 'ທົ່ວໄປ',
+          imageUrl: p.imageUrl || p.image_url || '',
+          cartonUnitName: defaultUnits.cartonUnitName,
+          packUnitName: defaultUnits.packUnitName,
+          retailUnitName: defaultUnits.retailUnitName,
+          cartonQty: 0,
+          packQty: 0,
+          retailQty: 0,
+          totalBaseUnits: 0,
+          revenue: 0,
+          orderCount: 0,
+          currentStock: stock,
+          trackStock: isTrackStock,
+          baseUnit: p.baseUnit || 'ອັນ',
+          hasEverSold: false,
+        });
+      }
+    });
 
     return {
-      productSalesList: list,
+      allProductsList,
+      soldProductsList,
+      unsoldProductsList,
       totalCartons: grandCartons,
       totalPacks: grandPacks,
       totalRetail: grandRetail,
       totalRevenue: grandRevenue,
+      totalUnsoldStock,
     };
-  }, [filteredTransactions, productMap]);
+  }, [filteredTransactions, productMap, products, allTimeSoldProductIds]);
+
+  // Selected base list based on viewMode ('all' | 'sold' | 'unsold')
+  const baseListByViewMode = useMemo(() => {
+    switch (viewMode) {
+      case 'sold':
+        return soldProductsList;
+      case 'unsold':
+        return unsoldProductsList;
+      case 'all':
+      default:
+        return allProductsList;
+    }
+  }, [viewMode, allProductsList, soldProductsList, unsoldProductsList]);
 
   // 6. Filter by Search Query & Sort
   const displayedProducts = useMemo(() => {
-    let result = productSalesList;
+    let result = [...baseListByViewMode];
 
     const q = normalizeLao(searchTerm);
     if (q) {
       result = result.filter(
         (p) =>
           (p.name && normalizeLao(p.name).includes(q)) ||
-          (p.barcode && normalizeLao(p.barcode).includes(q))
+          (p.barcode && normalizeLao(p.barcode).includes(q)) ||
+          (p.category && normalizeLao(p.category).includes(q))
       );
     }
 
@@ -295,17 +474,69 @@ export default function SalesByUnitReportView({
       }
 
       if (valA === valB) {
-        return b.revenue - a.revenue;
+        if (viewMode === 'unsold') {
+          return b.currentStock - a.currentStock || a.name.localeCompare(b.name, 'lo');
+        }
+        return b.revenue - a.revenue || a.name.localeCompare(b.name, 'lo');
       }
 
       return sortDirection === 'asc' ? valA - valB : valB - valA;
     });
 
     return result;
-  }, [productSalesList, searchTerm, sortField, sortDirection]);
+  }, [baseListByViewMode, searchTerm, sortField, sortDirection, viewMode]);
 
-  // Calculate THB equivalent if exchange rate available
-  const bahtEquivalent = exchangeRate > 0 ? Math.round(totalRevenue / exchangeRate) : 0;
+  // 7. Pagination Logic (Seamless with HistoryView & ProductsView)
+  const totalItems = displayedProducts.length;
+  const totalPages = pageSize === 'ALL' ? 1 : Math.max(1, Math.ceil(totalItems / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const paginatedProducts = useMemo(() => {
+    if (pageSize === 'ALL') return displayedProducts;
+    const start = (safeCurrentPage - 1) * pageSize;
+    return displayedProducts.slice(start, start + pageSize);
+  }, [displayedProducts, safeCurrentPage, pageSize]);
+
+  // Reset pagination to page 1 whenever any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, timeframe, customStartDate, customEndDate, sortField, sortDirection, viewMode, pageSize]);
+
+  // Smart page numbers algorithm (identical to HistoryView & ProductsView)
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages = [];
+    pages.push(1);
+    if (safeCurrentPage > 3) {
+      pages.push('...');
+    }
+    const start = Math.max(2, safeCurrentPage - 1);
+    const end = Math.min(totalPages - 1, safeCurrentPage + 1);
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    if (safeCurrentPage < totalPages - 2) {
+      pages.push('...');
+    }
+    pages.push(totalPages);
+    return pages;
+  };
+
+  const handlePageChange = (newPage) => {
+    if (newPage === safeCurrentPage || newPage < 1 || newPage > totalPages) return;
+    playUnitChangeBeep('sales_report');
+    setCurrentPage(newPage);
+    scrollToTableTop();
+  };
+
+  const handlePageSizeChange = (newSize) => {
+    playUnitChangeBeep('sales_report');
+    setPageSize(newSize);
+    setCurrentPage(1);
+    scrollToTableTop();
+  };
 
   // Render sort icon on table headers
   const renderSortIndicator = (field) => {
@@ -329,15 +560,27 @@ export default function SalesByUnitReportView({
       const tfMap = {
         today: 'ມື້ນີ້ (Today)',
         yesterday: 'ມື້ວານ (Yesterday)',
-        week: '7 ມື້ຜ່ານມາ (Last 7 Days)',
+        '7days': '7 ມື້ຜ່ານມາ (Last 7 Days)',
         month: 'ເດືອນນີ້ (This Month)',
         all: 'ທັງໝົດ (All Time)',
         custom: `${customStartDate || '...'} ຫາ ${customEndDate || '...'}`,
       };
+      const modeLabel =
+        viewMode === 'unsold'
+          ? 'ສິນຄ້າບໍ່ທັນຂາຍ (Unsold)'
+          : viewMode === 'sold'
+          ? 'ຂາຍແລ້ວ (Sold)'
+          : 'ທັງໝົດ (All)';
+
+      const periodLabel =
+        viewMode === 'unsold'
+          ? 'ສິນຄ້າບໍ່ທັນຂາຍ (All-Time Unsold)'
+          : `${tfMap[timeframe] || timeframe} • ${modeLabel}`;
+
       const res = await exportSalesByUnitToExcel(displayedProducts, {
-        timeframeLabel: tfMap[timeframe] || timeframe,
-        totalTransactions: filteredTransactions.length,
-        totalRevenue: totalRevenue,
+        timeframeLabel: periodLabel,
+        totalTransactions: viewMode === 'unsold' ? 0 : filteredTransactions.length,
+        totalRevenue: viewMode === 'unsold' ? 0 : totalRevenue,
       });
       if (res?.success && onAlert) {
         onAlert(`ສົ່ງອອກໄຟລ໌ ${res.fileName || 'Excel'} ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
@@ -352,31 +595,6 @@ export default function SalesByUnitReportView({
     }
   };
 
-  // CSV Export handler
-  const handleExportCSV = () => {
-    if (!displayedProducts.length) return;
-    const headers = ['ລຳດັບ', 'ຊື່ສິນຄ້າ', 'ບາໂຄດ', 'ຂາຍແກັດ', 'ຂາຍແພັກ', 'ຂາຍຍ່ອຍ', 'ຍອດຂາຍລວມ(ກີບ)'];
-    const rows = displayedProducts.map((p, idx) => [
-      idx + 1,
-      `"${(p.name || '').replace(/"/g, '""')}"`,
-      `"${p.barcode || ''}"`,
-      p.cartonQty > 0 ? `${p.cartonQty} ${p.cartonUnitName}` : '0',
-      p.packQty > 0 ? `${p.packQty} ${p.packUnitName}` : '0',
-      p.retailQty > 0 ? `${p.retailQty} ${p.retailUnitName}` : '0',
-      p.revenue
-    ]);
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `sales_by_unit_${timeframe}_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   const handlePrint = () => {
     window.print();
   };
@@ -384,7 +602,7 @@ export default function SalesByUnitReportView({
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 bg-slate-50 font-sans overflow-hidden select-none">
       {/* 1. TOP HEADER & FILTER BAR */}
-      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 shrink-0 shadow-2xs z-10">
+      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3 shrink-0 shadow-2xs z-10">
         <div className="flex items-center justify-between gap-2.5 sm:gap-3">
           {/* Title & Description */}
           <div className="flex items-center gap-2.5 min-w-0">
@@ -398,7 +616,7 @@ export default function SalesByUnitReportView({
                   <span className="hidden sm:inline">ລາຍງານຂາຍຕາມຫົວໜ່ວຍ (Sales by Unit)</span>
                 </span>
                 <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
-                  {filteredTransactions.length} ບິນ
+                  {viewMode === 'unsold' ? 'ບໍ່ກັ່ນຕອງວັນທີ' : `${filteredTransactions.length} ບິນ`}
                 </span>
               </h2>
               <p className="text-[11.5px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block truncate">
@@ -450,80 +668,86 @@ export default function SalesByUnitReportView({
           </div>
         </div>
 
-        {/* 1.1 FILTER TOOLBAR (Timeframe Pills + Search Bar) */}
-        <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Timeframe Filter Segmented Control */}
-          <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl overflow-x-auto no-scrollbar shrink-0 border border-slate-200/60">
+        {/* 1.1 VIEW MODE TABS + SEARCH ROW */}
+        <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+          {/* View Mode Segmented Control: ທັງໝົດ (All - Mặc định) | ຂາຍແລ້ວ (Sold) | ບໍ່ທັນຂາຍ (Unsold) */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 overflow-x-auto no-scrollbar">
+            {/* Tab 1: ທັງໝົດ (All - Default) */}
             <button
               type="button"
               onClick={() => {
                 playUnitChangeBeep('sales_report');
-                setTimeframe('today');
+                setViewMode('all');
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                timeframe === 'today'
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                viewMode === 'all'
                   ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              ມື້ນີ້ (Today)
+              <SquaresFour size={15} weight="bold" />
+              <span>ທັງໝົດ</span>
+              <span
+                className={`text-[10.5px] px-1.5 py-0.2 rounded-full font-mono ${
+                  viewMode === 'all'
+                    ? 'bg-teal-100 text-teal-800 font-black'
+                    : 'bg-slate-200/70 text-slate-600'
+                }`}
+              >
+                {allProductsList.length}
+              </span>
             </button>
+
+            {/* Tab 2: ຂາຍແລ້ວ (Sold) */}
             <button
               type="button"
               onClick={() => {
                 playUnitChangeBeep('sales_report');
-                setTimeframe('yesterday');
+                setViewMode('sold');
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                timeframe === 'yesterday'
-                  ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                viewMode === 'sold'
+                  ? 'bg-white text-emerald-800 shadow-2xs font-extrabold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              ມື້ວານ (Yesterday)
+              <Tag size={15} weight="bold" />
+              <span>ຂາຍແລ້ວ</span>
+              <span
+                className={`text-[10.5px] px-1.5 py-0.2 rounded-full font-mono ${
+                  viewMode === 'sold'
+                    ? 'bg-emerald-100 text-emerald-800 font-black'
+                    : 'bg-slate-200/70 text-slate-600'
+                }`}
+              >
+                {soldProductsList.length}
+              </span>
             </button>
+
+            {/* Tab 3: ບໍ່ທັນຂາຍ (Unsold - Không filter theo ngày) */}
             <button
               type="button"
               onClick={() => {
                 playUnitChangeBeep('sales_report');
-                setTimeframe('7days');
+                setViewMode('unsold');
               }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                timeframe === '7days'
-                  ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                viewMode === 'unsold'
+                  ? 'bg-white text-rose-800 shadow-2xs font-extrabold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              7 ມື້ຜ່ານມາ (7 Days)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                playUnitChangeBeep('sales_report');
-                setTimeframe('month');
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                timeframe === 'month'
-                  ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              ເດືອນນີ້ (This Month)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                playUnitChangeBeep('sales_report');
-                setTimeframe('custom');
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer inline-flex items-center gap-1 ${
-                timeframe === 'custom'
-                  ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <CalendarBlank size={14} weight="bold" />
-              <span>ກຳນົດເອງ</span>
+              <Package size={15} weight="bold" />
+              <span>ບໍ່ທັນຂາຍ</span>
+              <span
+                className={`text-[10.5px] px-1.5 py-0.2 rounded-full font-mono ${
+                  viewMode === 'unsold'
+                    ? 'bg-rose-100 text-rose-800 font-black'
+                    : 'bg-slate-200/70 text-slate-600'
+                }`}
+              >
+                {unsoldProductsList.length}
+              </span>
             </button>
           </div>
 
@@ -538,7 +762,7 @@ export default function SalesByUnitReportView({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ / ບາໂຄດ..."
+              placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ / ບາໂຄດ / ໝວດໝູ່..."
               className="w-full pl-9 pr-8 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all font-medium"
             />
             {searchTerm && (
@@ -553,8 +777,110 @@ export default function SalesByUnitReportView({
           </div>
         </div>
 
-        {/* 1.2 Custom Date Pickers Drawer (when 'custom' is active) */}
-        {timeframe === 'custom' && (
+        {/* 1.2 TIMEFRAME TOOLBAR (When NOT in 'unsold' mode) OR Unsold Alert Banner */}
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+          {viewMode === 'unsold' ? (
+            /* Special Unsold Info Banner (No date filter) */
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">
+              <ClockCounterClockwise size={15} weight="bold" className="shrink-0 text-amber-600" />
+              <span>
+                ໂໝດສິນຄ້າບໍ່ທັນຂາຍ: ສະແດງທຸກສິນຄ້າທີ່ບໍ່ເຄີຍມີຍອດຂາຍ (ສະແດງທັງໝົດ ບໍ່ກັ່ນຕອງຕາມວັນທີ)
+              </span>
+            </div>
+          ) : (
+            /* Timeframe Filter Segmented Control */
+            <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl overflow-x-auto no-scrollbar shrink-0 border border-slate-200/60">
+              <button
+                type="button"
+                onClick={() => {
+                  playUnitChangeBeep('sales_report');
+                  setTimeframe('all');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  timeframe === 'all'
+                    ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                ທັງໝົດ (All)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playUnitChangeBeep('sales_report');
+                  setTimeframe('today');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  timeframe === 'today'
+                    ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                ມື້ນີ້ (Today)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playUnitChangeBeep('sales_report');
+                  setTimeframe('yesterday');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  timeframe === 'yesterday'
+                    ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                ມື້ວານ (Yesterday)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playUnitChangeBeep('sales_report');
+                  setTimeframe('7days');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  timeframe === '7days'
+                    ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                7 ມື້ຜ່ານມາ (7 Days)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playUnitChangeBeep('sales_report');
+                  setTimeframe('month');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  timeframe === 'month'
+                    ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                ເດືອນນີ້ (This Month)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playUnitChangeBeep('sales_report');
+                  setTimeframe('custom');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer inline-flex items-center gap-1 ${
+                  timeframe === 'custom'
+                    ? 'bg-white text-teal-800 shadow-2xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <CalendarBlank size={14} weight="bold" />
+                <span>ກຳນົດເອງ</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 1.3 Custom Date Pickers Drawer (when 'custom' is active and NOT in 'unsold' mode) */}
+        {viewMode !== 'unsold' && timeframe === 'custom' && (
           <div className="mt-2.5 p-2.5 bg-teal-50/50 border border-teal-100 rounded-xl flex flex-wrap items-center gap-3 text-xs animate-in fade-in duration-150">
             <span className="font-bold text-teal-900">ເລືອກຊ່ວງວັນທີ:</span>
             <div className="flex items-center gap-2">
@@ -592,85 +918,174 @@ export default function SalesByUnitReportView({
       </div>
 
       {/* 2. MAIN SCROLLABLE CONTENT */}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4 pb-28 md:pb-6 min-h-0">
-        {/* 2.1 4 COMPACT STATS CARDS (REDESIGNED MATCHING STAFF STATS) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-          {/* Card 1: Total Cartons */}
-          <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black shrink-0">
-              <Package size={20} weight="duotone" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] sm:text-[11px] text-amber-600 font-bold uppercase tracking-wider truncate">
-                ຂາຍຕາມແກັດ
+      <div
+        ref={mainScrollRef}
+        className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4 pb-28 md:pb-6 min-h-0"
+      >
+        {/* 2.1 4 COMPACT STATS CARDS */}
+        {viewMode === 'unsold' ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+            {/* Card 1: Unsold Products Count */}
+            <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center font-black shrink-0">
+                <Package size={20} weight="duotone" />
               </div>
-              <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">
-                {formatDots(totalCartons)}{' '}
-                <span className="text-xs font-bold font-sans text-slate-500">ແກັດ</span>
+              <div className="min-w-0">
+                <div className="text-[10px] sm:text-[11px] text-rose-600 font-bold uppercase tracking-wider truncate">
+                  ສິນຄ້າບໍ່ທັນຂາຍ
+                </div>
+                <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">
+                  {formatDots(unsoldProductsList.length)}{' '}
+                  <span className="text-xs font-bold font-sans text-slate-500">ລາຍການ</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Total Unsold Stock Units */}
+            <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black shrink-0">
+                <SquaresFour size={20} weight="duotone" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] sm:text-[11px] text-amber-600 font-bold uppercase tracking-wider truncate">
+                  ສະຕັອກຄົງເຫຼືອ
+                </div>
+                <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">
+                  {formatDots(totalUnsoldStock)}{' '}
+                  <span className="text-xs font-bold font-sans text-slate-500">ໜ່ວຍ</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Status */}
+            <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-black shrink-0">
+                <ClockCounterClockwise size={20} weight="duotone" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] sm:text-[11px] text-slate-500 font-bold uppercase tracking-wider truncate">
+                  ປະຫວັດການຂາຍ
+                </div>
+                <div className="text-sm sm:text-base font-extrabold text-slate-800 truncate">
+                  ບໍ່ເຄີຍມີບິນ (0 ບິນ)
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Revenue */}
+            <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black shrink-0">
+                <CurrencyCircleDollar size={20} weight="duotone" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] sm:text-[11px] text-teal-600 font-bold uppercase tracking-wider truncate">
+                  ຍອດຂາຍ
+                </div>
+                <div className="text-base sm:text-lg font-black text-teal-900 font-mono truncate">
+                  0 ₭
+                </div>
               </div>
             </div>
           </div>
-
-          {/* Card 2: Total Packs */}
-          <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center font-black shrink-0">
-              <SquaresFour size={20} weight="duotone" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] sm:text-[11px] text-sky-600 font-bold uppercase tracking-wider truncate">
-                ຂາຍຕາມແພັກ
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+            {/* Card 1: Total Cartons */}
+            <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black shrink-0">
+                <Package size={20} weight="duotone" />
               </div>
-              <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">
-                {formatDots(totalPacks)}{' '}
-                <span className="text-xs font-bold font-sans text-slate-500">ແພັກ</span>
+              <div className="min-w-0">
+                <div className="text-[10px] sm:text-[11px] text-amber-600 font-bold uppercase tracking-wider truncate">
+                  ຂາຍຕາມແກັດ
+                </div>
+                <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">
+                  {formatDots(totalCartons)}{' '}
+                  <span className="text-xs font-bold font-sans text-slate-500">ແກັດ</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Total Packs */}
+            <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center font-black shrink-0">
+                <SquaresFour size={20} weight="duotone" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] sm:text-[11px] text-sky-600 font-bold uppercase tracking-wider truncate">
+                  ຂາຍຕາມແພັກ
+                </div>
+                <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">
+                  {formatDots(totalPacks)}{' '}
+                  <span className="text-xs font-bold font-sans text-slate-500">ແພັກ</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Total Retail Units */}
+            <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-black shrink-0">
+                <Tag size={20} weight="duotone" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] sm:text-[11px] text-indigo-600 font-bold uppercase tracking-wider truncate">
+                  ຂາຍຍ່ອຍ
+                </div>
+                <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">
+                  {formatDots(totalRetail)}{' '}
+                  <span className="text-xs font-bold font-sans text-slate-500">ອັນ</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Total Revenue */}
+            <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black shrink-0">
+                <CurrencyCircleDollar size={20} weight="duotone" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] sm:text-[11px] text-teal-600 font-bold uppercase tracking-wider truncate">
+                  ລວມຍອດຂາຍ
+                </div>
+                <div className="text-base sm:text-lg font-black text-teal-900 font-mono truncate">
+                  {formatKip(totalRevenue)}
+                </div>
               </div>
             </div>
           </div>
+        )}
 
-          {/* Card 3: Total Retail Units */}
-          <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-black shrink-0">
-              <Tag size={20} weight="duotone" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] sm:text-[11px] text-indigo-600 font-bold uppercase tracking-wider truncate">
-                ຂາຍຍ່ອຍ
-              </div>
-              <div className="text-base sm:text-lg font-black text-slate-900 font-mono truncate">
-                {formatDots(totalRetail)}{' '}
-                <span className="text-xs font-bold font-sans text-slate-500">ອັນ</span>
-              </div>
-            </div>
-          </div>
+        {/* Scroll anchor for pagination scroll-to-top (identical to ProductsView) */}
+        <div ref={tableTopRef} className="scroll-mt-3 sm:scroll-mt-4" />
 
-          {/* Card 4: Total Revenue */}
-          <div className="p-2.5 sm:p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black shrink-0">
-              <CurrencyCircleDollar size={20} weight="duotone" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] sm:text-[11px] text-teal-600 font-bold uppercase tracking-wider truncate">
-                ລວມຍອດຂາຍ
-              </div>
-              <div className="text-base sm:text-lg font-black text-teal-900 font-mono truncate">
-                {formatKip(totalRevenue)}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 2.2 SALES DETAILS COMPACT TABLE */}
+        {/* 2.2 SALES DETAILS TABLE & PAGINATION CONTAINER */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden flex flex-col">
           {/* Table Header Bar */}
-          <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/60">
-            <div className="flex items-center gap-2">
+          <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/60 flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
-                ລາຍການສິນຄ້າ ({displayedProducts.length} ລາຍການ)
+                ລາຍການສິນຄ້າ ({displayedProducts.length} ລາຍການ
+                {pageSize !== 'ALL' && totalPages > 1 ? ` • ໜ້າ ${safeCurrentPage}/${totalPages}` : ''})
               </span>
+              {viewMode === 'unsold' && (
+                <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-bold">
+                  ສິນຄ້າບໍ່ທັນຂາຍ (0 ບິນ)
+                </span>
+              )}
             </div>
             <div className="text-[11px] sm:text-xs text-slate-400 font-medium">
               <span className="hidden sm:inline">ຄລິກຫົວຂໍ້ຕາຕະລາງເພື່ອຈັດລຽງ</span>
-              <span className="sm:hidden">ຈັດລຽງຕາມຍອດຂາຍ</span>
+              <span className="sm:hidden">
+                ຈັດລຽງຕາມ
+                {sortField === 'name'
+                  ? 'ຊື່'
+                  : sortField === 'carton'
+                  ? 'ແກັດ'
+                  : sortField === 'pack'
+                  ? 'ແພັກ'
+                  : sortField === 'retail'
+                  ? 'ຍ່ອຍ'
+                  : 'ຍອດຂາຍ'}
+              </span>
             </div>
           </div>
 
@@ -680,19 +1095,27 @@ export default function SalesByUnitReportView({
               <div className="p-4 space-y-3">
                 <SalesByUnitSkeleton count={4} />
               </div>
-            ) : displayedProducts.length === 0 ? (
+            ) : paginatedProducts.length === 0 ? (
               <div className="py-12 text-center px-4">
                 <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
                   <Package size={24} weight="duotone" />
                 </div>
-                <p className="text-xs font-bold text-slate-700">ບໍ່ພົບລາຍການຂາຍໃນຊ່ວງເວລານີ້</p>
+                <p className="text-xs font-bold text-slate-700">
+                  {viewMode === 'unsold'
+                    ? 'ບໍ່ພົບສິນຄ້າທີ່ບໍ່ທັນຂາຍ'
+                    : 'ບໍ່ພົບລາຍການຂາຍໃນຊ່ວງເວລານີ້'}
+                </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  {searchTerm ? `ບໍ່ພົບສິນຄ້າທີ່ກົງກັບ "${searchTerm}"` : 'ລອງປ່ຽນຊ່ວງວັນທີ ຫຼື ຂາຍສິນຄ້າໃນໜ້າ POS'}
+                  {searchTerm
+                    ? `ບໍ່ພົບສິນຄ້າທີ່ກົງກັບ "${searchTerm}"`
+                    : viewMode === 'unsold'
+                    ? 'ດີຫຼາຍ! ສິນຄ້າທຸກລາຍການເຄີຍມີຍອດຂາຍແລ້ວ'
+                    : 'ລອງປ່ຽນຊ່ວງວັນທີ ຫຼື ຂາຍສິນຄ້າໃນໜ້າ POS'}
                 </p>
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {displayedProducts.map((p) => {
+                {paginatedProducts.map((p) => {
                   const hasCarton = p.cartonQty > 0;
                   const hasPack = p.packQty > 0;
                   const hasRetail = p.retailQty > 0;
@@ -723,8 +1146,29 @@ export default function SalesByUnitReportView({
                             <div className="font-extrabold text-slate-900 text-xs leading-snug line-clamp-2">
                               {p.name}
                             </div>
-                            <div className="flex items-center gap-2 mt-0.5 text-[10.5px] text-slate-400 font-mono">
-                              {p.barcode ? <span>{p.barcode}</span> : <span>{p.orderCount} ຄັ້ງທີ່ຂາຍ</span>}
+                            <div className="flex items-center gap-2 mt-0.5 text-[10.5px] text-slate-400 font-mono flex-wrap">
+                              {p.barcode && <span>{p.barcode}</span>}
+                              {viewMode === 'unsold' ? (
+                                p.trackStock ? (
+                                  p.currentStock > 0 ? (
+                                    <span className="text-amber-800 font-sans font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/70">
+                                      ສະຕັອກ: {formatDots(p.currentStock)} {p.baseUnit}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 font-sans font-medium bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                                      ໝົດສະຕັອກ (0 {p.baseUnit})
+                                    </span>
+                                  )
+                                ) : null
+                              ) : p.orderCount > 0 ? (
+                                <span className="text-teal-700 font-sans font-semibold">
+                                  {p.orderCount} ບິນ
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-sans">
+                                  ຍັງບໍ່ມີຍອດຂາຍ
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -739,33 +1183,39 @@ export default function SalesByUnitReportView({
 
                       {/* 3 Unit Breakdown Badges */}
                       <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-slate-100/80">
-                        <div className={`p-1.5 rounded-xl border flex flex-col items-center justify-center text-center ${
-                          hasCarton
-                            ? 'bg-amber-50/80 border-amber-200/80 text-amber-900'
-                            : 'bg-slate-50 border-slate-200/60 text-slate-400'
-                        }`}>
+                        <div
+                          className={`p-1.5 rounded-xl border flex flex-col items-center justify-center text-center ${
+                            hasCarton
+                              ? 'bg-amber-50/80 border-amber-200/80 text-amber-900'
+                              : 'bg-slate-50 border-slate-200/60 text-slate-400'
+                          }`}
+                        >
                           <span className="text-[9.5px] font-bold uppercase tracking-wider">ແກັດ</span>
                           <span className="text-xs font-mono font-black mt-0.5">
                             {hasCarton ? `${formatDots(p.cartonQty)} ${p.cartonUnitName}` : '-'}
                           </span>
                         </div>
 
-                        <div className={`p-1.5 rounded-xl border flex flex-col items-center justify-center text-center ${
-                          hasPack
-                            ? 'bg-sky-50/80 border-sky-200/80 text-sky-900'
-                            : 'bg-slate-50 border-slate-200/60 text-slate-400'
-                        }`}>
+                        <div
+                          className={`p-1.5 rounded-xl border flex flex-col items-center justify-center text-center ${
+                            hasPack
+                              ? 'bg-sky-50/80 border-sky-200/80 text-sky-900'
+                              : 'bg-slate-50 border-slate-200/60 text-slate-400'
+                          }`}
+                        >
                           <span className="text-[9.5px] font-bold uppercase tracking-wider">ແພັກ</span>
                           <span className="text-xs font-mono font-black mt-0.5">
                             {hasPack ? `${formatDots(p.packQty)} ${p.packUnitName}` : '-'}
                           </span>
                         </div>
 
-                        <div className={`p-1.5 rounded-xl border flex flex-col items-center justify-center text-center ${
-                          hasRetail
-                            ? 'bg-slate-100 border-slate-200/80 text-slate-900'
-                            : 'bg-slate-50 border-slate-200/60 text-slate-400'
-                        }`}>
+                        <div
+                          className={`p-1.5 rounded-xl border flex flex-col items-center justify-center text-center ${
+                            hasRetail
+                              ? 'bg-slate-100 border-slate-200/80 text-slate-900'
+                              : 'bg-slate-50 border-slate-200/60 text-slate-400'
+                          }`}
+                        >
                           <span className="text-[9.5px] font-bold uppercase tracking-wider">ຍ່ອຍ</span>
                           <span className="text-xs font-mono font-black mt-0.5">
                             {hasRetail ? `${formatDots(p.retailQty)} ${p.retailUnitName}` : '-'}
@@ -780,20 +1230,88 @@ export default function SalesByUnitReportView({
                 <div className="p-3 bg-slate-100/90 border-t-2 border-slate-200 flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-700">
                     <span>ລວມທັງໝົດ ({displayedProducts.length} ລາຍການ):</span>
-                    <span className="font-mono text-teal-800 font-black text-sm">{formatKip(totalRevenue)}</span>
+                    <span className="font-mono text-teal-800 font-black text-sm">
+                      {viewMode === 'unsold' ? '0 ₭' : formatKip(totalRevenue)}
+                    </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5 text-center text-[10.5px] font-mono">
-                    <span className="p-1 rounded-lg bg-amber-50 text-amber-900 font-bold border border-amber-200/60">
-                      ແກັດ: {formatDots(totalCartons)}
-                    </span>
-                    <span className="p-1 rounded-lg bg-sky-50 text-sky-900 font-bold border border-sky-200/60">
-                      ແພັກ: {formatDots(totalPacks)}
-                    </span>
-                    <span className="p-1 rounded-lg bg-slate-200/70 text-slate-900 font-bold border border-slate-300/60">
-                      ຍ່ອຍ: {formatDots(totalRetail)}
-                    </span>
+                  {viewMode !== 'unsold' && (
+                    <div className="grid grid-cols-3 gap-1.5 text-center text-[10.5px] font-mono">
+                      <span className="p-1 rounded-lg bg-amber-50 text-amber-900 font-bold border border-amber-200/60">
+                        ແກັດ: {formatDots(totalCartons)}
+                      </span>
+                      <span className="p-1 rounded-lg bg-sky-50 text-sky-900 font-bold border border-sky-200/60">
+                        ແພັກ: {formatDots(totalPacks)}
+                      </span>
+                      <span className="p-1 rounded-lg bg-slate-200/70 text-slate-900 font-bold border border-slate-300/60">
+                        ຍ່ອຍ: {formatDots(totalRetail)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Mobile-only pagination bar (< 768px) */}
+            {displayedProducts.length > 0 && (
+              <div className="md:hidden bg-slate-50/90 border-t border-slate-200 p-3 flex flex-col items-center gap-3">
+                <div className="flex items-center gap-2 w-full justify-between">
+                  <span className="text-xs text-slate-500 font-medium">ຈຳນວນຕໍ່ໜ້າ:</span>
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                    {[20, 50, 100, 'ALL'].map((size) => {
+                      const isActive = pageSize === size;
+                      return (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => handlePageSizeChange(size)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-teal-600 text-white shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {size === 'ALL' ? 'ທັງໝົດ' : size}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
+
+                {pageSize !== 'ALL' && totalPages > 1 && (
+                  <div className="flex items-center justify-between w-full pt-1">
+                    <button
+                      type="button"
+                      disabled={safeCurrentPage === 1}
+                      onClick={() => handlePageChange(safeCurrentPage - 1)}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1 ${
+                        safeCurrentPage === 1
+                          ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                          : 'border-slate-200 text-slate-700 hover:bg-white active:scale-95 cursor-pointer'
+                      }`}
+                    >
+                      <CaretLeft size={13} weight="bold" />
+                      <span>ກ່ອນໜ້າ</span>
+                    </button>
+
+                    <span className="text-xs font-mono font-bold text-slate-700">
+                      {safeCurrentPage} / {totalPages}
+                    </span>
+
+                    <button
+                      type="button"
+                      disabled={safeCurrentPage === totalPages}
+                      onClick={() => handlePageChange(safeCurrentPage + 1)}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1 ${
+                        safeCurrentPage === totalPages
+                          ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                          : 'border-slate-200 text-slate-700 hover:bg-white active:scale-95 cursor-pointer'
+                      }`}
+                    >
+                      <span>ຕໍ່ໄປ</span>
+                      <CaretRight size={13} weight="bold" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -863,24 +1381,28 @@ export default function SalesByUnitReportView({
               <tbody className="divide-y divide-[#F1F5F9]">
                 {isLoading && transactions.length === 0 ? (
                   <SalesByUnitSkeleton count={8} />
-                ) : displayedProducts.length === 0 ? (
+                ) : paginatedProducts.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-12 text-center">
                       <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
                         <Package size={24} weight="duotone" />
                       </div>
                       <p className="text-xs font-bold text-slate-700">
-                        ບໍ່ພົບລາຍການຂາຍໃນຊ່ວງເວລານີ້
+                        {viewMode === 'unsold'
+                          ? 'ບໍ່ພົບສິນຄ້າທີ່ບໍ່ທັນຂາຍ'
+                          : 'ບໍ່ພົບລາຍການຂາຍໃນຊ່ວງເວລານີ້'}
                       </p>
                       <p className="text-[11px] text-slate-400 mt-0.5">
                         {searchTerm
                           ? `ບໍ່ພົບສິນຄ້າທີ່ກົງກັບ "${searchTerm}"`
+                          : viewMode === 'unsold'
+                          ? 'ດີຫຼາຍ! ສິນຄ້າທຸກລາຍການເຄີຍມີຍອດຂາຍແລ້ວ'
                           : 'ລອງປ່ຽນຊ່ວງວັນທີ ຫຼື ຂາຍສິນຄ້າໃນໜ້າ POS'}
                       </p>
                     </td>
                   </tr>
                 ) : (
-                  displayedProducts.map((p) => {
+                  paginatedProducts.map((p) => {
                     const hasCarton = p.cartonQty > 0;
                     const hasPack = p.packQty > 0;
                     const hasRetail = p.retailQty > 0;
@@ -916,15 +1438,30 @@ export default function SalesByUnitReportView({
                               <div className="font-semibold text-slate-800 text-xs md:text-sm truncate max-w-[200px] md:max-w-xs leading-snug">
                                 {p.name}
                               </div>
-                              {p.barcode ? (
-                                <div className="text-[10px] font-mono text-slate-400 truncate leading-none mt-0.5">
-                                  {p.barcode}
-                                </div>
-                              ) : (
-                                <div className="text-[10px] text-slate-400 leading-none mt-0.5">
-                                  {p.orderCount} ຄັ້ງທີ່ຂາຍ
-                                </div>
-                              )}
+                              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400 font-mono flex-wrap">
+                                {p.barcode && <span>{p.barcode}</span>}
+                                {viewMode === 'unsold' ? (
+                                  p.trackStock ? (
+                                    p.currentStock > 0 ? (
+                                      <span className="text-amber-800 font-sans font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/70">
+                                        ສະຕັອກ: {formatDots(p.currentStock)} {p.baseUnit}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400 font-sans font-medium bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                                        ໝົດສະຕັອກ (0 {p.baseUnit})
+                                      </span>
+                                    )
+                                  ) : null
+                                ) : p.orderCount > 0 ? (
+                                  <span className="text-teal-700 font-sans font-semibold">
+                                    • {p.orderCount} ບິນ
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 font-sans">
+                                    • ບໍ່ມີຍອດຂາຍ
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -1006,7 +1543,11 @@ export default function SalesByUnitReportView({
                       <span>ລວມທັງໝົດ ({displayedProducts.length} ລາຍການ):</span>
                     </td>
                     <td className="py-3 px-3 text-center tabular-nums text-amber-900 font-mono">
-                      {totalCartons > 0 ? (
+                      {viewMode === 'unsold' ? (
+                        <span className="inline-flex items-center justify-center w-6 h-5 rounded-md bg-slate-200/60 text-slate-400">
+                          <Minus size={11} weight="bold" />
+                        </span>
+                      ) : totalCartons > 0 ? (
                         `${formatDots(totalCartons)} ແກັດ`
                       ) : (
                         <span className="inline-flex items-center justify-center w-6 h-5 rounded-md bg-slate-200/60 text-slate-400">
@@ -1015,7 +1556,11 @@ export default function SalesByUnitReportView({
                       )}
                     </td>
                     <td className="py-3 px-3 text-center tabular-nums text-sky-900 font-mono">
-                      {totalPacks > 0 ? (
+                      {viewMode === 'unsold' ? (
+                        <span className="inline-flex items-center justify-center w-6 h-5 rounded-md bg-slate-200/60 text-slate-400">
+                          <Minus size={11} weight="bold" />
+                        </span>
+                      ) : totalPacks > 0 ? (
                         `${formatDots(totalPacks)} ແພັກ`
                       ) : (
                         <span className="inline-flex items-center justify-center w-6 h-5 rounded-md bg-slate-200/60 text-slate-400">
@@ -1024,7 +1569,11 @@ export default function SalesByUnitReportView({
                       )}
                     </td>
                     <td className="py-3 px-3 text-center tabular-nums text-slate-900 font-mono">
-                      {totalRetail > 0 ? (
+                      {viewMode === 'unsold' ? (
+                        <span className="inline-flex items-center justify-center w-6 h-5 rounded-md bg-slate-200/60 text-slate-400">
+                          <Minus size={11} weight="bold" />
+                        </span>
+                      ) : totalRetail > 0 ? (
                         `${formatDots(totalRetail)} ອັນ`
                       ) : (
                         <span className="inline-flex items-center justify-center w-6 h-5 rounded-md bg-slate-200/60 text-slate-400">
@@ -1033,13 +1582,131 @@ export default function SalesByUnitReportView({
                       )}
                     </td>
                     <td className="py-3 px-4 text-right tabular-nums font-mono text-teal-800 font-black text-sm">
-                      {formatKip(totalRevenue)}
+                      {viewMode === 'unsold' ? '0 ₭' : formatKip(totalRevenue)}
                     </td>
                   </tr>
                 </tfoot>
               )}
             </table>
           </div>
+
+          {/* Attached Desktop Pagination Bar (Seamless with table, 0 gap - Identical to HistoryView) */}
+          {displayedProducts.length > 0 && (
+            <div className="hidden md:flex border-t border-slate-200 bg-slate-50/80 px-4 py-3 items-center justify-between gap-3">
+              {/* Left: Page Size Selector (20 | 50 | 100 | 200 | ALL) */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 font-medium">ຈຳນວນຕໍ່ໜ້າ:</span>
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                  {[20, 50, 100, 200, 'ALL'].map((size) => {
+                    const isActive = pageSize === size;
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => handlePageSizeChange(size)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-teal-600 text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                        }`}
+                      >
+                        {size === 'ALL' ? 'ທັງໝົດ' : size}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Middle: Summary Text */}
+              <div className="text-xs text-slate-600 font-medium text-center whitespace-nowrap shrink-0 px-2">
+                {pageSize === 'ALL' ? (
+                  <span>
+                    ທັງໝົດ{' '}
+                    <strong className="text-slate-900 font-bold font-mono">
+                      {displayedProducts.length}
+                    </strong>{' '}
+                    ລາຍການ
+                  </span>
+                ) : (
+                  <span>
+                    ສະແດງ{' '}
+                    <strong className="text-slate-900 font-bold font-mono">
+                      {Math.min((safeCurrentPage - 1) * pageSize + 1, displayedProducts.length)} -{' '}
+                      {Math.min(safeCurrentPage * pageSize, displayedProducts.length)}
+                    </strong>{' '}
+                    ຈາກ{' '}
+                    <strong className="text-slate-900 font-bold font-mono">
+                      {displayedProducts.length}
+                    </strong>{' '}
+                    ລາຍການ
+                  </span>
+                )}
+              </div>
+
+              {/* Right: Page Navigation (Only shown when not ALL and totalPages > 1) */}
+              {pageSize !== 'ALL' && totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  {/* Previous Page */}
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage === 1}
+                    onClick={() => handlePageChange(safeCurrentPage - 1)}
+                    className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                      safeCurrentPage === 1
+                        ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                        : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                    }`}
+                  >
+                    <CaretLeft size={13} weight="bold" />
+                    <span>ກ່ອນໜ້າ</span>
+                  </button>
+
+                  {/* Page Numbers */}
+                  <div className="flex items-center gap-1">
+                    {getPageNumbers().map((page, idx) => {
+                      if (page === '...') {
+                        return (
+                          <span key={`dots-${idx}`} className="px-1 text-slate-400 font-bold text-xs">
+                            ...
+                          </span>
+                        );
+                      }
+                      const isCurrent = safeCurrentPage === page;
+                      return (
+                        <button
+                          key={page}
+                          type="button"
+                          onClick={() => handlePageChange(page)}
+                          className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                            isCurrent
+                              ? 'bg-teal-600 text-white shadow-2xs font-black'
+                              : 'text-slate-700 hover:bg-slate-100 border border-slate-200'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Next Page */}
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage === totalPages}
+                    onClick={() => handlePageChange(safeCurrentPage + 1)}
+                    className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1 ${
+                      safeCurrentPage === totalPages
+                        ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                        : 'border-slate-200 text-slate-700 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 cursor-pointer active:scale-95'
+                    }`}
+                  >
+                    <span>ຕໍ່ໄປ</span>
+                    <CaretRight size={13} weight="bold" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

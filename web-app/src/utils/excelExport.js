@@ -267,10 +267,7 @@ export async function exportProductsToExcel(filteredProducts, { category = 'ALL'
     let cartonPriceDisplay = '-';
     if (cartonUnit) {
       const cRetail = Number(cartonUnit.retailPrice || 0);
-      const cWholesale = Number(cartonUnit.wholesalePrice || 0);
-      if (cWholesale > 0 && cWholesale !== cRetail) {
-        cartonPriceDisplay = `${cRetail.toLocaleString()} / ${cartonName} (ສີ່: ${cWholesale.toLocaleString()})`;
-      } else if (cRetail > 0) {
+      if (cRetail > 0) {
         cartonPriceDisplay = `${cRetail.toLocaleString()} / ${cartonName}`;
       } else {
         cartonPriceDisplay = `0 / ${cartonName}`;
@@ -279,11 +276,8 @@ export async function exportProductsToExcel(filteredProducts, { category = 'ALL'
 
     // 6. Retail Selling Price
     const pRetail = Number(baseUnit.retailPrice || 0);
-    const pWholesale = Number(baseUnit.wholesalePrice || 0);
     let retailPriceDisplay = '';
-    if (pWholesale > 0 && pWholesale !== pRetail) {
-      retailPriceDisplay = `${pRetail.toLocaleString()} / ${baseName} (ສີ່: ${pWholesale.toLocaleString()})`;
-    } else if (pRetail > 0) {
+    if (pRetail > 0) {
       retailPriceDisplay = `${pRetail.toLocaleString()} / ${baseName}`;
     } else {
       retailPriceDisplay = `0 / ${baseName}`;

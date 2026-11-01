@@ -2428,7 +2428,7 @@ export async function updateExistingSaleTransactionInSupabase(
           const rawUnitName = item.unit?.unitName || item.unitName || 'ອັນ';
           const unitName = item.isHalfCarton && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
 
-          return {
+          const row = {
             id: generateUUID(),
             transaction_id: txId,
             product_id: prodId,
@@ -2441,45 +2441,83 @@ export async function updateExistingSaleTransactionInSupabase(
             line_cost: lineCost,
             line_profit: lineProfit,
           };
+          if (item.bundle_components || item.bundleComponents) {
+            row.bundle_components = item.bundle_components || item.bundleComponents;
+          }
+          return row;
         })
       : [];
 
-    const insertItemsPromise = itemsPayload.length > 0
-      ? supabase.from('sale_transaction_items').insert(itemsPayload)
-      : Promise.resolve({ error: null });
+    // Step 4: Insert new sale_transaction_items (with automatic schema fallback)
+    let insRes = null;
+    if (itemsPayload.length > 0) {
+      insRes = await supabase.from('sale_transaction_items').insert(itemsPayload);
+      // Fallback: If bundle_components column has not been added to Supabase schema cache yet, retry without it
+      if (insRes?.error && (insRes.error.code === '42703' || insRes.error.message?.includes('bundle_components') || insRes.error.message?.includes('schema cache'))) {
+        const strippedPayload = itemsPayload.map(({ bundle_components, ...rest }) => rest);
+        insRes = await supabase.from('sale_transaction_items').insert(strippedPayload);
+      }
+      if (insRes?.error) {
+        console.error('Error inserting new sale_transaction_items:', insRes.error);
+        return { success: false, error: insRes.error.message };
+      }
+    }
 
-    const updateHeaderPromise = supabase
-      .from('sale_transactions')
-      .update({
-        is_wholesale: Boolean(newTxData.isWholesale),
-        customer_name: newTxData.customerName || 'ລູກຄ້າທົ່ວໄປ',
-        customer_id: newTxData.customerId || newTxData.customer_id || null,
-        customer_phone: newTxData.customerPhone || newTxData.customer_phone || null,
-        payment_method: newTxData.paymentMethod || 'cash',
-        subtotal: Number(newTxData.subtotal) || 0,
-        discount_total: Number(newTxData.discountTotal) || 0,
-        grand_total: Number(newTxData.grandTotal) || 0,
-        amount_tendered: Number(newTxData.amountTendered) || 0,
-        change_amount: Number(newTxData.changeAmount) || 0,
-        total_cost: Number(newTxData.totalCost) || 0,
-        gross_profit: Number(newTxData.grossProfit) || 0,
-        paid_amount: Number(newTxData.paidAmount ?? newTxData.amountTendered ?? 0),
-        remaining_debt: Number(newTxData.remainingDebt ?? 0),
-        payment_status: newTxData.paymentStatus || 'PAID',
-        exchange_rate: Number(newTxData.exchange_rate || newTxData.exchangeRate || 0),
-        total_lak: Number(newTxData.total_lak ?? newTxData.totalLak ?? newTxData.grandTotal ?? 0),
-        total_thb: Number(newTxData.total_thb ?? newTxData.totalThb ?? 0),
-        gross_profit_lak: Number(newTxData.gross_profit_lak ?? newTxData.grossProfitLak ?? newTxData.grossProfit ?? 0),
-        gross_profit_thb: Number(newTxData.gross_profit_thb ?? newTxData.grossProfitThb ?? 0),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', txId);
+    // Step 5: Update sale_transactions header
+    const headerPayload = {
+      is_wholesale: Boolean(newTxData.isWholesale),
+      customer_name: newTxData.customerName || 'ລູກຄ້າທົ່ວໄປ',
+      customer_id: newTxData.customerId || newTxData.customer_id || null,
+      customer_phone: newTxData.customerPhone || newTxData.customer_phone || null,
+      payment_method: newTxData.paymentMethod || 'cash',
+      subtotal: Number(newTxData.subtotal) || 0,
+      discount_total: Number(newTxData.discountTotal) || 0,
+      grand_total: Number(newTxData.grandTotal) || 0,
+      amount_tendered: Number(newTxData.amountTendered) || 0,
+      change_amount: Number(newTxData.changeAmount) || 0,
+      total_cost: Number(newTxData.totalCost) || 0,
+      gross_profit: Number(newTxData.grossProfit) || 0,
+      paid_amount: Number(newTxData.paidAmount ?? newTxData.amountTendered ?? 0),
+      remaining_debt: Number(newTxData.remainingDebt ?? 0),
+      payment_status: newTxData.paymentStatus || 'PAID',
+      debt_due_date: newTxData.debtDueDate || newTxData.debt_due_date || null,
+      exchange_rate: Number(newTxData.exchange_rate || newTxData.exchangeRate || 0),
+      total_lak: Number(newTxData.total_lak ?? newTxData.totalLak ?? newTxData.grandTotal ?? 0),
+      total_thb: Number(newTxData.total_thb ?? newTxData.totalThb ?? 0),
+      gross_profit_lak: Number(newTxData.gross_profit_lak ?? newTxData.grossProfitLak ?? newTxData.grossProfit ?? 0),
+      gross_profit_thb: Number(newTxData.gross_profit_thb ?? newTxData.grossProfitThb ?? 0),
+      updated_at: new Date().toISOString(),
+    };
 
-    const [insRes, headerRes] = await Promise.all([insertItemsPromise, updateHeaderPromise]);
+    let headerRes = await supabase.from('sale_transactions').update(headerPayload).eq('id', txId);
 
-    if (insRes?.error) {
-      console.error('Error inserting new sale_transaction_items:', insRes.error);
-      return { success: false, error: insRes.error.message };
+    // Schema cache fallback: if any column causes missing schema cache error or 42703, strip and retry
+    if (headerRes?.error) {
+      const errMsg = headerRes.error.message || '';
+      console.warn('Initial update sale_transactions error, attempting safe fallback:', headerRes.error);
+
+      // 1. Try stripping the specific missing column if identified in the error message
+      const colMatch = errMsg.match(/Could not find the '([^']+)' column/i);
+      if (colMatch && colMatch[1] && headerPayload[colMatch[1]] !== undefined) {
+        delete headerPayload[colMatch[1]];
+        headerRes = await supabase.from('sale_transactions').update(headerPayload).eq('id', txId);
+      }
+
+      // 2. If still failing (e.g. debt_due_date, customer_id, customer_phone not yet in schema), retry with essential core columns
+      if (headerRes?.error) {
+        const {
+          debt_due_date,
+          customer_id,
+          customer_phone,
+          gross_profit_lak,
+          gross_profit_thb,
+          total_lak,
+          total_thb,
+          exchange_rate,
+          ...corePayload
+        } = headerPayload;
+        headerRes = await supabase.from('sale_transactions').update(corePayload).eq('id', txId);
+      }
     }
 
     if (headerRes?.error) {

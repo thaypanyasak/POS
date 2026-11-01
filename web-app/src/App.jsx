@@ -2381,6 +2381,13 @@ export default function App() {
   };
 
   const handleConfirmPayment = async () => {
+    // 0. Safety Guard: Do not allow confirming payment if cart is empty
+    if (!cart || cart.length === 0) {
+      console.warn('[handleConfirmPayment] Cart is empty, aborting checkout.');
+      setCheckoutModalOpen(false);
+      return;
+    }
+
     confetti({
       particleCount: 80,
       spread: 70,
@@ -2603,6 +2610,7 @@ export default function App() {
 
         if (!res.success) {
           openAlert('ແຈ້ງເຕືອນ: ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກການແກ້ໄຂ: ' + res.error, 'ຂໍ້ຜິດພາດ', 'error');
+          return;
         } else {
           // Optimistically update local transactions state immediately
           setTransactions((prev) =>
@@ -2624,6 +2632,15 @@ export default function App() {
           setUnreadOrderIds((prev) => new Set([...prev, savedOldTxId]));
           setUpdatedOrderIds((prev) => new Set([...prev, savedOldTxId]));
           triggerHighlight?.(savedOldTxId, 'updated');
+
+          // Tự động chuyển sang giao diện Hóa Đơn (Receipt Modal) để xem/in bill y hệt như đơn mới!
+          setSelectedReceiptForView({
+            ...receipt,
+            products: products && products.length > 0 ? products : undefined,
+          });
+          setCheckoutModalOpen(false);
+          setReceiptModalOpen(true);
+          playSuccessBeep();
         }
 
         setEditingOldTransaction(null);
