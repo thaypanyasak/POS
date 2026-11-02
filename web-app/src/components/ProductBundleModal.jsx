@@ -19,7 +19,7 @@ import {
 } from '@phosphor-icons/react';
 import { formatKip, formatBaht, normalizeLao } from '../utils/formatters';
 import { playActionClickBeep, playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
-import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
+import { useHardwareBarcodeScanner, sanitizeBarcode } from '../hooks/useHardwareBarcodeScanner';
 
 /**
  * Helper to safely extract carton specification & wholesale price from a product record
@@ -180,7 +180,7 @@ export default function ProductBundleModal({
   useHardwareBarcodeScanner({
     onScan: (scannedCode) => {
       if (!scannedCode) return;
-      const clean = String(scannedCode).trim();
+      const clean = sanitizeBarcode(scannedCode).trim();
       setBarcode(clean);
       playSuccessBeep();
     },

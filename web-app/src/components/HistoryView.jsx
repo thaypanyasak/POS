@@ -32,7 +32,7 @@ import { exportTransactionsToExcel } from '../utils/excelExport';
 import { formatKip, normalizeLao, getDueDateStatus } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
-import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
+import { useHardwareBarcodeScanner, sanitizeBarcode } from '../hooks/useHardwareBarcodeScanner';
 import { playUnitChangeBeep, playActionClickBeep, playErrorBeep, playSuccessBeep } from '../utils/audioFeedback';
 import { HistoryListSkeleton } from './common/SkeletonLoaders';
 import { useAuthRole } from '../contexts/AuthContext';
@@ -110,6 +110,20 @@ export default function HistoryView({
     return () => window.removeEventListener('click', handleOutsideClick);
   }, [openActionTxId]);
 
+  // Filter out all online orders: HistoryView is strictly for direct POS in-store sales (#INV-...)
+  // Online orders (#ONL-...) are managed and viewed exclusively in OnlineOrdersView!
+  const directTransactions = useMemo(() => {
+    return (transactions || []).filter((tx) => {
+      const isOnline =
+        tx.order_source === 'online' ||
+        tx.orderSource === 'online' ||
+        String(tx.id || '').startsWith('onl_') ||
+        String(tx.receiptNumber || tx.receipt_number || '').startsWith('ONL-') ||
+        (tx.cashierName || tx.cashier_name) === 'Online Web';
+      return !isOnline;
+    });
+  }, [transactions]);
+
   // 1. Transactions filtered strictly by the currently selected date range (today, yesterday, 7days, all, custom)
   const dateFilteredTransactions = useMemo(() => {
     const now = new Date();
@@ -118,13 +132,7 @@ export default function HistoryView({
     const endOfYesterday = new Date(startOfToday.getTime() - 1);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // Exclude in-flight online orders (PENDING, PREPARING, READY are managed exclusively in OnlineOrdersView)
-    let list = (transactions || []).filter((tx) => {
-      const isOnline = tx.order_source === 'online' || tx.orderSource === 'online';
-      if (!isOnline) return true;
-      const st = (tx.online_status || tx.onlineStatus || 'PENDING').toUpperCase();
-      return st === 'COMPLETED' || st === 'CANCELLED';
-    });
+    let list = directTransactions;
     if (dateFilter === 'today') {
       list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) >= startOfToday);
     } else if (dateFilter === 'yesterday') {
@@ -147,7 +155,7 @@ export default function HistoryView({
       }
     }
     return list;
-  }, [transactions, dateFilter, startDate, endDate]);
+  }, [directTransactions, dateFilter, startDate, endDate]);
 
   // 2. Tab count calculations (Badges on tabs: ທັງໝົດ, ເງິນສົດ, ເງິນໂອນ, ຕິດໜີ້, ຍົກເລີກແລ້ວ)
   // Strictly filtered by the currently selected date range (ມື້ນີ້, ທັງໝົດ, ມື້ວານ, 7 ມື້...)
@@ -218,12 +226,12 @@ export default function HistoryView({
     const endOfYesterday = new Date(startOfToday.getTime() - 1);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    let all = transactions.length;
+    let all = directTransactions.length;
     let today = 0;
     let yesterday = 0;
     let sevenDays = 0;
 
-    transactions.forEach((tx) => {
+    directTransactions.forEach((tx) => {
       const createdAt = new Date(tx.createdAt || tx.created_at || Date.now());
       if (createdAt >= startOfToday) {
         today++;
@@ -237,7 +245,7 @@ export default function HistoryView({
     });
 
     return { all, today, yesterday, sevenDays };
-  }, [transactions]);
+  }, [directTransactions]);
 
   // Dynamic statistics calculated specifically for the CURRENTLY SELECTED timeframe
   const selectedPeriodStats = useMemo(() => {
@@ -390,7 +398,7 @@ export default function HistoryView({
     if (!cleanQ) return list;
 
     // If searching by barcode / code and not found in date-filtered list, search across all transactions
-    const searchPool = (dateFilter !== 'all' && rawSearch.length >= 3) ? transactions : list;
+    const searchPool = (dateFilter !== 'all' && rawSearch.length >= 3) ? directTransactions : list;
 
     return searchPool.filter((tx) => {
       // 3.1. Tìm theo thông tin chung của đơn hàng (receiptNumber, receipt_number, id, customerName, ...)
@@ -427,7 +435,7 @@ export default function HistoryView({
 
       return matchItem;
     });
-  }, [dateFilteredTransactions, activeTab, searchTerm, transactions, unreadOrderIds, updatedOrderIds, realtimeHighlights, dateFilter]);
+  }, [dateFilteredTransactions, activeTab, searchTerm, directTransactions, unreadOrderIds, updatedOrderIds, realtimeHighlights, dateFilter]);
 
   // Configurable Pagination States (Default 50, with 20 | 50 | 100 | 200 | ALL options)
   const [pageSize, setPageSize] = useState(50);
@@ -543,7 +551,7 @@ export default function HistoryView({
   // Replaces the search term without requiring manual clear or backspace
   const handleScanBarcode = (barcode) => {
     if (!barcode) return;
-    let cleanCode = String(barcode).replace(/[\r\n\t\x00-\x1F\x7F]/g, '').trim();
+    let cleanCode = sanitizeBarcode(barcode).trim();
     if (!cleanCode) return;
 
     // 0. Auto-fix common scanner artifacts (e.g. INV/0644095 -> INV-0644095)
@@ -551,7 +559,7 @@ export default function HistoryView({
 
     // If scanner only captured digits e.g. 0644095, resolve to INV-0644095
     if (/^\d{6,8}$/.test(cleanCode)) {
-      const foundTx = transactions.find((t) => {
+      const foundTx = directTransactions.find((t) => {
         const num = (t.receiptNumber || t.receipt_number || '').trim();
         return num === `INV-${cleanCode}` || num.endsWith(cleanCode);
       });
@@ -590,7 +598,7 @@ export default function HistoryView({
     const cleanRaw = cleanCode.replace(/^#/, '');
     const q = normalizeLao(cleanRaw);
 
-    const matched = transactions.find((tx) => {
+    const matched = directTransactions.find((tx) => {
       const txNum = normalizeLao(tx.receiptNumber || tx.receipt_number || '').replace(/^#/, '');
       const txId = normalizeLao(tx.id || '').replace(/^#/, '');
       if ((txNum && (txNum === q || txNum.includes(q) || q.includes(txNum))) ||
@@ -683,7 +691,7 @@ export default function HistoryView({
                 <span className="hidden sm:inline">ປະຫວັດບິນຂາຍ & ໜີ້ສິນ</span>
               </span>
               <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
-                {transactions.length} ບິນ
+                {directTransactions.length} ບິນ
               </span>
             </h2>
             <p className="text-[11.5px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block truncate">
@@ -1163,7 +1171,7 @@ export default function HistoryView({
       )}
 
       {/* Skeleton Loading State */}
-      {isLoading && transactions.length === 0 ? (
+      {isLoading && directTransactions.length === 0 ? (
         <HistoryListSkeleton count={6} />
       ) : (
         <>

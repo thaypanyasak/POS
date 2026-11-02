@@ -399,7 +399,8 @@ export default function Navbar({
             <nav
               className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/98 backdrop-blur-md border-t border-slate-200 flex items-stretch justify-around px-1 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] select-none"
               style={{
-                paddingBottom: 'max(0.4rem, env(safe-area-inset-bottom, 0px))',
+                height: 'calc(3.25rem + env(safe-area-inset-bottom, 0px))',
+                paddingBottom: 'env(safe-area-inset-bottom, 0px)',
               }}
             >
               {/* Buttons 1-4: Primary Tabs (POS, History, Products, Purchases) */}

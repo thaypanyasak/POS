@@ -73,7 +73,7 @@ import {
 } from './services/offlineSyncService';
 
 import { formatDots, parseDots, parseCurrencyInput, formatCompoundStock, getEffectiveUnitPrice, PRICE_TIERS, normalizeLao } from './utils/formatters';
-import { useHardwareBarcodeScanner } from './hooks/useHardwareBarcodeScanner';
+import { useHardwareBarcodeScanner, sanitizeBarcode } from './hooks/useHardwareBarcodeScanner';
 import {
   playSuccessBeep,
   playErrorBeep,
@@ -618,14 +618,24 @@ export default function App() {
       return [newTx, ...prev];
     });
 
-    // Mark as unread so user sees new order badge until printed or marked all read
-    setUnreadOrderIds((prev) => new Set([...prev, newTx.id]));
-    setUpdatedOrderIds((prev) => {
-      if (!prev.has(newTx.id)) return prev;
-      const next = new Set(prev);
-      next.delete(newTx.id);
-      return next;
-    });
+    const isOnline =
+      newTx.order_source === 'online' ||
+      newTx.orderSource === 'online' ||
+      String(newTx.id || '').startsWith('onl_') ||
+      String(newTx.receiptNumber || newTx.receipt_number || '').startsWith('ONL-') ||
+      (newTx.cashierName || newTx.cashier_name) === 'Online Web';
+
+    // Only direct in-person POS sales mark unread in HistoryView!
+    // Online orders are handled exclusively with their own badge on the Online Orders tab
+    if (!isOnline) {
+      setUnreadOrderIds((prev) => new Set([...prev, newTx.id]));
+      setUpdatedOrderIds((prev) => {
+        if (!prev.has(newTx.id)) return prev;
+        const next = new Set(prev);
+        next.delete(newTx.id);
+        return next;
+      });
+    }
   }, []);
 
   const handleRealtimeUpdateOrder = useCallback((updatedTx) => {
@@ -637,9 +647,18 @@ export default function App() {
       return prev.map((t) => (t.id === updatedTx.id ? updatedTx : t));
     });
 
-    // When an order is edited, keep it in unread (for sidebar badge) and mark as updated (for amber highlight)
-    setUnreadOrderIds((prev) => new Set([...prev, updatedTx.id]));
-    setUpdatedOrderIds((prev) => new Set([...prev, updatedTx.id]));
+    const isOnline =
+      updatedTx.order_source === 'online' ||
+      updatedTx.orderSource === 'online' ||
+      String(updatedTx.id || '').startsWith('onl_') ||
+      String(updatedTx.receiptNumber || updatedTx.receipt_number || '').startsWith('ONL-') ||
+      (updatedTx.cashierName || updatedTx.cashier_name) === 'Online Web';
+
+    // Only direct in-person POS sales update unread & amber highlight in HistoryView
+    if (!isOnline) {
+      setUnreadOrderIds((prev) => new Set([...prev, updatedTx.id]));
+      setUpdatedOrderIds((prev) => new Set([...prev, updatedTx.id]));
+    }
   }, []);
 
   const handleMarkOrderAsRead = useCallback((orderId) => {
@@ -2019,17 +2038,17 @@ export default function App() {
   // Global Hardware Barcode Scanner Fallback (Triggered on any screen, e.g. Dashboard or History)
   useHardwareBarcodeScanner({
     onScan: (barcode) => {
-      const cleanCode = String(barcode).trim().toLowerCase();
+      const cleanCode = sanitizeBarcode(barcode).toLowerCase();
       const matched = products.find(
         (p) =>
-          (p.barcode && String(p.barcode).trim().toLowerCase() === cleanCode) ||
-          (p.units && p.units.some((u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanCode))
+          (p.barcode && sanitizeBarcode(p.barcode).toLowerCase() === cleanCode) ||
+          (p.units && p.units.some((u) => u.barcode && sanitizeBarcode(u.barcode).toLowerCase() === cleanCode))
       );
 
       if (matched) {
         let targetUnit = matched.units?.[0];
         const matchingUnit = matched.units?.find(
-          (u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanCode
+          (u) => u.barcode && sanitizeBarcode(u.barcode).toLowerCase() === cleanCode
         );
         if (matchingUnit) {
           targetUnit = matchingUnit;
@@ -3551,10 +3570,10 @@ export default function App() {
       />
 
       {/* 2. MAIN VIEW AREA */}
-      <div className={`flex-1 min-h-0 overflow-hidden flex flex-col min-w-0 ${
+      <div className={`flex-1 min-h-0 overflow-hidden flex flex-col min-w-0 bg-white md:bg-transparent ${
         activeMainTab === 'pos'
           ? 'pb-0 md:!pb-0'
-          : 'pb-[calc(3.8rem+env(safe-area-inset-bottom,0px))] md:!pb-0'
+          : 'pb-[calc(3.25rem+env(safe-area-inset-bottom,0px))] md:!pb-0'
       } touch-scroll-container`}>
         {/* Offline Sync Banner placed at the top of content */}
         <OfflineSyncBanner

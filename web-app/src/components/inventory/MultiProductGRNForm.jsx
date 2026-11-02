@@ -35,7 +35,7 @@ import {
   normalizeLao,
 } from '../../utils/formatters';
 import BarcodeScannerModal from '../BarcodeScannerModal';
-import { useHardwareBarcodeScanner } from '../../hooks/useHardwareBarcodeScanner';
+import { useHardwareBarcodeScanner, sanitizeBarcode } from '../../hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep, playErrorBeep, playActionClickBeep, playUnitChangeBeep } from '../../utils/audioFeedback';
 import { updateExchangeRateInSupabase, fetchExchangeRate } from '../../services/supabase';
 import queryClient from '../../services/queryClient';
@@ -522,10 +522,10 @@ export default function MultiProductGRNForm({
   const handleBarcodeScanned = (code) => {
     setScannerOpen(false);
     if (!code) return;
-    const trimmed = code.trim().toLowerCase();
+    const trimmed = sanitizeBarcode(code).toLowerCase();
     const matched = products.find((p) => {
-      if (p.barcode && p.barcode.toLowerCase() === trimmed) return true;
-      if (p.units && p.units.some((u) => u.barcode && u.barcode.toLowerCase() === trimmed)) return true;
+      if (p.barcode && sanitizeBarcode(p.barcode).toLowerCase() === trimmed) return true;
+      if (p.units && p.units.some((u) => u.barcode && sanitizeBarcode(u.barcode).toLowerCase() === trimmed)) return true;
       return false;
     });
 

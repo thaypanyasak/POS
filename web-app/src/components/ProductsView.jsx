@@ -24,7 +24,7 @@ import {
 import { exportProductsToExcel } from '../utils/excelExport';
 import { formatKip, formatBaht, getCartonUnitInfo, formatStockDisplay, formatNegativeStockCompound, normalizeLao } from '../utils/formatters';
 import BarcodeScannerModal from './BarcodeScannerModal';
-import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
+import { useHardwareBarcodeScanner, sanitizeBarcode } from '../hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep, playErrorBeep, playActionClickBeep, playUnitChangeBeep } from '../utils/audioFeedback';
 import { ProductsListSkeleton } from './common/SkeletonLoaders';
 import { useAuthRole } from '../contexts/AuthContext';
@@ -441,7 +441,7 @@ export default function ProductsView({
 
   const handleScanBarcode = (barcode) => {
     if (!barcode) return;
-    const cleanCode = String(barcode).replace(/[\r\n\t\x00-\x1F\x7F]/g, '').trim();
+    const cleanCode = sanitizeBarcode(barcode).trim();
     if (!cleanCode) return;
 
     if (searchDebounceRef.current) {
@@ -461,10 +461,10 @@ export default function ProductsView({
     const cleanLower = cleanCode.toLowerCase();
     const matched = (products || []).find(
       (p) =>
-        (p.barcode && String(p.barcode).trim().toLowerCase() === cleanLower) ||
+        (p.barcode && sanitizeBarcode(p.barcode).trim().toLowerCase() === cleanLower) ||
         (p.units &&
           p.units.some(
-            (u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanLower
+            (u) => u.barcode && sanitizeBarcode(u.barcode).trim().toLowerCase() === cleanLower
           ))
     );
 
@@ -524,19 +524,19 @@ export default function ProductsView({
       e.preventDefault();
 
       // Check if user manually typed an exact barcode
-      const cleanLower = q.toLowerCase();
+      const cleanLower = sanitizeBarcode(q).toLowerCase();
       const matched = (products || []).find(
         (p) =>
-          (p.barcode && String(p.barcode).trim().toLowerCase() === cleanLower) ||
+          (p.barcode && sanitizeBarcode(p.barcode).trim().toLowerCase() === cleanLower) ||
           (p.units &&
             p.units.some(
-              (u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanLower
+              (u) => u.barcode && sanitizeBarcode(u.barcode).trim().toLowerCase() === cleanLower
             ))
       );
 
       if (matched) {
         // Exact barcode match: highlight & scroll to product
-        handleScanBarcode(q);
+        handleScanBarcode(cleanLower);
       } else {
         // Normal text/name search: filter list, blur keyboard, do NOT fire barcode error toast
         setSearchTerm(q);

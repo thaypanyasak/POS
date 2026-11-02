@@ -38,7 +38,7 @@ import ExchangeRateBadge from './common/ExchangeRateBadge';
 import { PosProductGridSkeleton } from './common/SkeletonLoaders';
 import BundleCollage from './common/BundleCollage';
 import queryClient from '../services/queryClient';
-import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
+import { useHardwareBarcodeScanner, sanitizeBarcode } from '../hooks/useHardwareBarcodeScanner';
 import {
   playSuccessBeep,
   playErrorBeep,
@@ -334,11 +334,11 @@ export default function PosScreen({
     }
     setLocalSearch('');
     lastHardwareScanTimeRef.current = Date.now();
-    const cleanCode = String(barcode).trim().toLowerCase();
+    const cleanCode = sanitizeBarcode(barcode).trim().toLowerCase();
 
     // Check if barcode matches any mixed carton bundle
     const matchedBundle = (bundles || []).find(
-      (b) => b.barcode && String(b.barcode).trim().toLowerCase() === cleanCode
+      (b) => b.barcode && sanitizeBarcode(b.barcode).trim().toLowerCase() === cleanCode
     );
     if (matchedBundle) {
       setSelectedBundleForModal(matchedBundle);
@@ -363,15 +363,15 @@ export default function PosScreen({
     const productPool = products && products.length > 0 ? products : filteredProducts;
     const matched = productPool.find(
       (p) =>
-        (p.barcode && String(p.barcode).trim().toLowerCase() === cleanCode) ||
-        (p.units && p.units.some((u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanCode))
+        (p.barcode && sanitizeBarcode(p.barcode).trim().toLowerCase() === cleanCode) ||
+        (p.units && p.units.some((u) => u.barcode && sanitizeBarcode(u.barcode).trim().toLowerCase() === cleanCode))
     );
 
     if (matched) {
       // Find matching unit or default to piece / first unit
       let targetUnit = matched.units?.[0];
       const matchingUnit = matched.units?.find(
-        (u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanCode
+        (u) => u.barcode && sanitizeBarcode(u.barcode).trim().toLowerCase() === cleanCode
       );
       if (matchingUnit) {
         targetUnit = matchingUnit;
@@ -406,7 +406,7 @@ export default function PosScreen({
       playErrorBeep();
       setScanToast({
         type: 'error',
-        message: `ບໍ່ພົບສິນຄ້າທີ່ມີບາໂຄດ: "${barcode}"`,
+        message: `ບໍ່ພົບສິນຄ້າທີ່ມີບາໂຄດ: "${sanitizeBarcode(barcode)}"`,
       });
       setTimeout(() => setScanToast(null), 4000);
     }
@@ -448,21 +448,21 @@ export default function PosScreen({
 
       e.preventDefault();
 
-      // Check if user manually typed an EXACT barcode of a product or bundle
-      const cleanCode = q.toLowerCase();
+      // Check if user manually typed an EXACT barcode of a product or bundle (defensive shift-unmapping)
+      const cleanCode = sanitizeBarcode(q).toLowerCase();
       const productPool = products && products.length > 0 ? products : filteredProducts;
       const matchedBundle = (bundles || []).find(
-        (b) => b.barcode && String(b.barcode).trim().toLowerCase() === cleanCode
+        (b) => b.barcode && sanitizeBarcode(b.barcode).trim().toLowerCase() === cleanCode
       );
       const matchedProduct = productPool.find(
         (p) =>
-          (p.barcode && String(p.barcode).trim().toLowerCase() === cleanCode) ||
-          (p.units && p.units.some((u) => u.barcode && String(u.barcode).trim().toLowerCase() === cleanCode))
+          (p.barcode && sanitizeBarcode(p.barcode).trim().toLowerCase() === cleanCode) ||
+          (p.units && p.units.some((u) => u.barcode && sanitizeBarcode(u.barcode).trim().toLowerCase() === cleanCode))
       );
 
       if (matchedBundle || matchedProduct) {
         // Intentional manual barcode entry: add product or bundle directly to cart!
-        handleScanBarcode(q);
+        handleScanBarcode(cleanCode);
       } else {
         // Normal text/name search (e.g. "Thay", "Bia", "Sting"):
         // Sync search filter, dismiss virtual keyboard, keep query text intact in search bar
@@ -2332,7 +2332,7 @@ export default function PosScreen({
         </div>
 
         {/* Mobile Floating Cart Summary Bar (< 768px): Nằm ngay phía trên Bottom Navigation Bar, không bị che khuất và khít hoàn hảo trên Native App & Browser */}
-        <div className="md:hidden bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-3 py-2.5 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] flex items-center justify-between gap-2 shrink-0 z-30 mb-[calc(3.5rem+env(safe-area-inset-bottom,0px))]">
+        <div className="md:hidden bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-3 py-2.5 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] flex items-center justify-between gap-2 shrink-0 z-30 mb-[calc(3.25rem+env(safe-area-inset-bottom,0px))]">
           <button
             type="button"
             onClick={() => setMobileCartOpen(true)}

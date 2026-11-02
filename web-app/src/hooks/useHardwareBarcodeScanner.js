@@ -27,11 +27,18 @@ import { Haptics, NotificationType } from '@capacitor/haptics';
  */
 
 // ══════════════════════════════════════════════════════════════════
-// 1. LAO & THAI NUMBER ROW KEYBOARD MAPPING DICTIONARY
+// 1. LAO & THAI NUMBER ROW & SHIFT REVERSAL DICTIONARIES
 // ══════════════════════════════════════════════════════════════════
+// Reverse US-keyboard Shift numbers (!@#$%^&*() -> 1234567890)
+// Barcode scanners often emit Shift pulses or CapsLock-inverted characters
+export const REVERSE_SHIFT_DIGITS = {
+  '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
+  '^': '6', '&': '7', '*': '8', '(': '9', ')': '0'
+};
+
 // Only maps number-row keystrokes to ASCII digits so barcode numbers are never corrupted
 // when the cashier's active layout is Lao or Thai. Does NOT map general alphabetic letters!
-const LAO_THAI_NUMBERS_MAP = {
+export const LAO_THAI_NUMBERS_MAP = {
   // ── Lao typewriter unshifted number row (1 2 3 4 5 6 7 8 9 0 - =) ──
   'ຢ': '1', 'ຟ': '2', 'ໂ': '3', 'ຖ': '4', 'ຸ': '5',
   'ູ': '6', 'ຄ': '7', 'ຕ': '8', 'ຈ': '9', 'ຂ': '0',
@@ -55,6 +62,20 @@ const LAO_THAI_NUMBERS_MAP = {
 };
 
 /**
+ * Universal Barcode Sanitizer
+ * Strips non-printable ASCII and repairs shifted symbols (!@#$%^&*()) back to numeric digits.
+ */
+export function sanitizeBarcode(raw) {
+  if (!raw) return '';
+  let str = String(raw).trim();
+  str = str.replace(/[\r\n\t\x00-\x1F\x7F]/g, '');
+  return str
+    .split('')
+    .map((ch) => REVERSE_SHIFT_DIGITS[ch] || LAO_THAI_NUMBERS_MAP[ch] || ch)
+    .join('');
+}
+
+/**
  * Resolves a keyboard event into a clean ASCII barcode character.
  * Uses physical e.code first (layout independent), then fallback dictionary, then raw key.
  */
@@ -62,41 +83,44 @@ function resolveBarcodeChar(e) {
   // 1. Primary: Physical key code (e.code) bypasses all active keyboard layouts (Lao, Thai, VN, etc.)
   if (e.code) {
     if (e.code.startsWith('Digit') && e.code.length === 6) {
-      const num = e.code.slice(5);
-      if (e.shiftKey) {
-        const shiftMap = { '1': '!', '2': '@', '3': '#', '4': '$', '5': '%', '6': '^', '7': '&', '8': '*', '9': '(', '0': ')' };
-        return shiftMap[num] || num;
-      }
-      return num; // 'Digit0'..'Digit9' -> '0'..'9'
+      // Physical number row key: ALWAYS return '0'..'9'!
+      // Hardware barcode scanners frequently emit Shift or CapsLock flags.
+      // Product barcodes in retail are ALWAYS numbers, never shifted punctuation (!@#$%^&*()).
+      return e.code.slice(5);
     }
     if (e.code.startsWith('Numpad') && e.code.length === 7) {
       return e.code.slice(6); // 'Numpad0'..'Numpad9' -> '0'..'9'
     }
     if (e.code.startsWith('Key') && e.code.length === 4) {
       const letter = e.code.slice(3);
-      return e.shiftKey ? letter.toUpperCase() : letter.toLowerCase();
+      return e.shiftKey ? letter.toUpperCase() : letter.toUpperCase();
     }
-    if (e.code === 'Minus' || e.code === 'NumpadSubtract') return e.shiftKey ? '_' : '-';
-    if (e.code === 'Slash' || e.code === 'NumpadDivide') return e.shiftKey ? '?' : '/';
-    if (e.code === 'Period' || e.code === 'NumpadDecimal') return e.shiftKey ? '>' : '.';
-    if (e.code === 'Comma') return e.shiftKey ? '<' : ',';
-    if (e.code === 'Equal' || e.code === 'NumpadAdd') return e.shiftKey ? '+' : '=';
-    if (e.code === 'Semicolon') return e.shiftKey ? ':' : ';';
-    if (e.code === 'Quote') return e.shiftKey ? '"' : "'";
+    if (e.code === 'Minus' || e.code === 'NumpadSubtract') return '-';
+    if (e.code === 'Slash' || e.code === 'NumpadDivide') return '/';
+    if (e.code === 'Period' || e.code === 'NumpadDecimal') return '.';
+    if (e.code === 'Comma') return ',';
+    if (e.code === 'Equal' || e.code === 'NumpadAdd') return '+';
+    if (e.code === 'Semicolon') return ':';
+    if (e.code === 'Quote') return "'";
     if (e.code === 'Space') return ' ';
   }
 
-  // 2. Secondary fallback: Check if e.key is a known Lao or Thai number character
+  // 2. Secondary fallback: Check if e.key is a shifted digit symbol (!@#$%^&*())
+  if (e.key && REVERSE_SHIFT_DIGITS[e.key] !== undefined) {
+    return REVERSE_SHIFT_DIGITS[e.key];
+  }
+
+  // 3. Tertiary fallback: Check if e.key is a known Lao or Thai number character
   if (e.key && LAO_THAI_NUMBERS_MAP[e.key] !== undefined) {
     return LAO_THAI_NUMBERS_MAP[e.key];
   }
 
-  // 3. Fallback: single printable ASCII character
+  // 4. Fallback: single printable ASCII character
   if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
     return e.key;
   }
 
-  // 4. Fallback for iOS WKWebView / Android WebView where e.code is empty and e.key is 'Unidentified'
+  // 5. Fallback for iOS WKWebView / Android WebView where e.code is empty and e.key is 'Unidentified'
   if (e.keyCode >= 48 && e.keyCode <= 57) {
     return String(e.keyCode - 48);
   }
@@ -173,6 +197,7 @@ function resetBufferState() {
 // ══════════════════════════════════════════════════════════════════
 function cleanActiveInputElement(scannedCode) {
   try {
+    const cleanCode = sanitizeBarcode(scannedCode);
     const activeEl =
       inputSnapshot.element ||
       (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')
@@ -217,7 +242,7 @@ function cleanActiveInputElement(scannedCode) {
     // 2. Search inputs (ProductsView, HistoryView, CustomerSearchSelect, etc.):
     // Overwrite full clean barcode and blur so virtual keyboard dismisses and search results are visible!
     if (isSearchField) {
-      setNativeValue(activeEl, scannedCode);
+      setNativeValue(activeEl, cleanCode);
       if (typeof activeEl.blur === 'function') {
         try { activeEl.blur(); } catch (_) {}
       }
@@ -227,7 +252,7 @@ function cleanActiveInputElement(scannedCode) {
     // 3. Dedicated barcode inputs in forms (e.g. piece/pack/carton in ProductFormModal, or bundle barcode):
     // Fill with the full clean barcode and preserve focus so cashier can continue entering info!
     if (isBarcodeField) {
-      setNativeValue(activeEl, scannedCode);
+      setNativeValue(activeEl, cleanCode);
       return;
     }
 
@@ -265,6 +290,9 @@ function processBarcode(rawCode, e = null) {
     resetBufferState();
     return false;
   }
+
+  // Defensive sanitization: unmap any shifted number symbols or Lao/Thai numerals
+  code = sanitizeBarcode(code);
 
   // Auto-normalize common scanner invoice prefixes (e.g. inv/001 -> INV-001)
   if (/^inv[\/\\]/i.test(code)) {
@@ -330,22 +358,14 @@ function restartAutoFlushTimer() {
     autoFlushTimer = null;
   }
 
-  // CRITICAL CONTEXT ISOLATION:
-  // If an INPUT or TEXTAREA is actively focused, DO NOT use autoFlush timer!
-  // Hardware barcode scanners emit an Enter terminator. Running autoFlush on focused inputs
-  // causes fast human typing (e.g. typing '500') to be falsely intercepted after ~200ms.
   const activeEl = document.activeElement;
   const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
-  if (isInputFocused) {
-    return;
-  }
 
   const activeSub = subscribers.length > 0 ? subscribers[subscribers.length - 1] : null;
   const minLength = activeSub?.options?.minLength ?? 4;
   const maxInterval = activeSub?.options?.maxInterval ?? 180;
   const maxAvgInterval = activeSub?.options?.maxAvgInterval ?? 65;
 
-  // Only run autoFlush fallback when NO input is focused (e.g. background POS scanning)
   if (globalBuffer.length >= minLength) {
     const flushDelay = Math.max(maxInterval + 40, 180);
     autoFlushTimer = setTimeout(() => {
@@ -353,13 +373,26 @@ function restartAutoFlushTimer() {
       if (timestamps.length >= 2) {
         const totalDuration = timestamps[timestamps.length - 1] - timestamps[0];
         const avgInterval = totalDuration / (timestamps.length - 1);
-        // Strict hardware scanner burst: avgInterval <= 65ms or 8+ digits in <= 600ms
-        if (
-          avgInterval <= maxAvgInterval ||
-          (globalBuffer.length >= 8 && totalDuration <= 600)
-        ) {
-          processBarcode(globalBuffer, null);
-          return;
+
+        if (isInputFocused) {
+          // Strict hardware scanner burst: avgInterval <= 45ms or 8+ digits in <= 500ms
+          // Guarantees human typing is never intercepted, while hardware scanners without Enter still succeed!
+          if (
+            (globalBuffer.length >= 6 && avgInterval <= 45) ||
+            (globalBuffer.length >= 8 && totalDuration <= 500)
+          ) {
+            processBarcode(globalBuffer, null);
+            return;
+          }
+        } else {
+          // Free scanning when no input is focused
+          if (
+            avgInterval <= maxAvgInterval ||
+            (globalBuffer.length >= 8 && totalDuration <= 600)
+          ) {
+            processBarcode(globalBuffer, null);
+            return;
+          }
         }
       }
       resetBufferState();
@@ -496,10 +529,14 @@ function handleGlobalKeyDown(e) {
   }
 
   // ── 6. Accumulate characters ──
-  // CRITICAL ARCHITECTURAL RULE:
-  // ZERO DELAY! We NEVER call e.preventDefault() on human keystrokes!
-  // Human typing (Lao, Thai, Vietnamese, English) enters inputs natively at 0ms latency!
-  // When a hardware scanner completes on Enter, the active input is atomically updated with the full clean barcode.
+  // High-Speed Hardware Scanner Burst Suppression on Active Inputs:
+  // If an input is focused and keystrokes are arriving at physical scanner burst speed (<= 50ms),
+  // suppress native character insertion so the input is not flooded with transient corrupted characters (!@#$%^&*()).
+  // The full clean ASCII barcode is atomically applied upon completion (via Enter or AutoFlush).
+  if (isInput && globalBuffer.length >= 1 && delta <= 50) {
+    e.preventDefault();
+  }
+
   globalBuffer += char;
   keyTimestamps.push(now);
 

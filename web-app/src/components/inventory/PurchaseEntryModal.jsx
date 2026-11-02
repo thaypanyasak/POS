@@ -31,7 +31,7 @@ import {
 import { createPurchaseOrderInSupabase } from '../../services/supabase';
 import { queryClient } from '../../services/queryClient';
 import BarcodeScannerModal from '../BarcodeScannerModal';
-import { useHardwareBarcodeScanner } from '../../hooks/useHardwareBarcodeScanner';
+import { useHardwareBarcodeScanner, sanitizeBarcode } from '../../hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep, playErrorBeep } from '../../utils/audioFeedback';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchActiveCashiers } from '../../services/staffService';
@@ -313,10 +313,10 @@ export default function PurchaseEntryModal({
   const handleBarcodeScanned = (scannedCode) => {
     setScannerOpen(false);
     if (!scannedCode) return;
-    const trimmed = scannedCode.trim().toLowerCase();
+    const trimmed = sanitizeBarcode(scannedCode).toLowerCase();
     const matched = products.find((p) => {
-      if (p.barcode && p.barcode.toLowerCase() === trimmed) return true;
-      if (p.units && p.units.some((u) => u.barcode && u.barcode.toLowerCase() === trimmed)) return true;
+      if (p.barcode && sanitizeBarcode(p.barcode).toLowerCase() === trimmed) return true;
+      if (p.units && p.units.some((u) => u.barcode && sanitizeBarcode(u.barcode).toLowerCase() === trimmed)) return true;
       return false;
     });
 

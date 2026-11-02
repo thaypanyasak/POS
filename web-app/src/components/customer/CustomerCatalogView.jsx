@@ -13,9 +13,13 @@ import {
   ShoppingCart,
   Plus,
   ArrowRight,
+  CheckCircle,
+  Check,
+  X,
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao, getSortedUnits, getProductTierBreakdown, sanitizeImageUrl } from '../../utils/formatters';
-import { createOnlineOrderInSupabase } from '../../services/supabase';
+import { supabase, createOnlineOrderInSupabase } from '../../services/supabase';
+import { playSuccessBeep } from '../../utils/audioFeedback';
 import CustomerProductDetailModal from './CustomerProductDetailModal';
 import CustomerUnitSelectorModal from './CustomerUnitSelectorModal';
 import CustomerCartCheckoutModal from './CustomerCartCheckoutModal';
@@ -38,6 +42,7 @@ export default function CustomerCatalogView({
   const [successOrder, setSuccessOrder] = useState(null);
   const [trackingOrder, setTrackingOrder] = useState(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [dismissedOrderIds, setDismissedOrderIds] = useState(() => new Set());
 
   // Customer recent orders persisted in localStorage for live tracking
   const [recentOrders, setRecentOrders] = useState(() => {
@@ -50,6 +55,22 @@ export default function CustomerCatalogView({
     return [];
   });
 
+  // Sync order status updates from modal or realtime
+  const handleOrderStatusUpdate = useCallback((orderId, newStatus) => {
+    setRecentOrders((prev) => {
+      const updated = (prev || []).map((o) =>
+        o.id === orderId ? { ...o, online_status: newStatus, onlineStatus: newStatus } : o
+      );
+      try {
+        localStorage.setItem('meiishop_customer_recent_orders_v1', JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+    setTrackingOrder((prev) =>
+      prev && prev.id === orderId ? { ...prev, online_status: newStatus, onlineStatus: newStatus } : prev
+    );
+  }, []);
+
   // Find latest active/in-flight order (Pending, Preparing, Ready)
   const activeOrder = useMemo(() => {
     return (recentOrders || []).find((o) => {
@@ -57,6 +78,45 @@ export default function CustomerCatalogView({
       return st === 'PENDING' || st === 'PREPARING' || st === 'READY';
     });
   }, [recentOrders]);
+
+  // Order to display on floating tracking bar: Latest active in-flight order, or recently completed (if not dismissed)
+  const bannerOrder = useMemo(() => {
+    if (!recentOrders || recentOrders.length === 0) return null;
+    const latest = recentOrders[0];
+    if (dismissedOrderIds.has(latest.id)) return null;
+    return latest;
+  }, [recentOrders, dismissedOrderIds]);
+
+  // Background Realtime listener for active in-flight order (instant update on /menu without opening modal)
+  useEffect(() => {
+    if (!activeOrder?.id) return;
+    let isMounted = true;
+    const channel = supabase
+      .channel(`catalog_live_order_${activeOrder.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'sale_transactions',
+          filter: `id=eq.${activeOrder.id}`,
+        },
+        (payload) => {
+          if (!isMounted) return;
+          const newSt = (payload.new?.online_status || 'PENDING').toUpperCase();
+          playSuccessBeep();
+          handleOrderStatusUpdate(activeOrder.id, newSt);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      try {
+        supabase.removeChannel(channel);
+      } catch (_) {}
+    };
+  }, [activeOrder?.id, handleOrderStatusUpdate]);
 
   // Cart state persisted in localStorage
   const CART_STORAGE_KEY = 'meiishop_customer_cart_v1';
@@ -843,32 +903,73 @@ export default function CustomerCatalogView({
         </div>
       )}
 
-      {/* 6.5. ACTIVE ORDER LIVE TRACKING BAR (Floating Pill when customer has active order) */}
-      {activeOrder && (
+      {/* 6.5. ACTIVE / RECENT ORDER LIVE TRACKING BAR (Floating Pill) */}
+      {bannerOrder && (
         <div
-          onClick={() => setTrackingOrder(activeOrder)}
-          className={`fixed left-3 right-3 sm:left-auto sm:right-6 sm:w-88 z-40 bg-slate-900/95 text-white p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-800 transition-all border border-slate-700 backdrop-blur-md active:scale-98 ${
+          onClick={() => setTrackingOrder(bannerOrder)}
+          className={`fixed left-3 right-3 sm:left-auto sm:right-6 sm:w-92 z-40 text-white p-3 rounded-2xl shadow-xl flex items-center justify-between gap-2.5 cursor-pointer transition-all border backdrop-blur-md active:scale-98 ${
             cart.length > 0 ? 'bottom-20 sm:bottom-22' : 'bottom-3 sm:bottom-5'
+          } ${
+            (bannerOrder.online_status || bannerOrder.onlineStatus) === 'COMPLETED'
+              ? 'bg-emerald-950/95 border-emerald-500/50 hover:bg-emerald-900/95 shadow-emerald-950/40'
+              : (bannerOrder.online_status || bannerOrder.onlineStatus) === 'READY'
+              ? 'bg-teal-950/95 border-teal-500/50 hover:bg-teal-900/95 shadow-teal-950/40'
+              : (bannerOrder.online_status || bannerOrder.onlineStatus) === 'PREPARING'
+              ? 'bg-blue-950/95 border-blue-500/50 hover:bg-blue-900/95 shadow-blue-950/40'
+              : 'bg-slate-900/95 border-slate-700 hover:bg-slate-800 shadow-slate-950/40'
           }`}
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+            {(bannerOrder.online_status || bannerOrder.onlineStatus) === 'COMPLETED' ? (
+              <CheckCircle size={22} weight="fill" className="text-emerald-400 shrink-0" />
+            ) : (bannerOrder.online_status || bannerOrder.onlineStatus) === 'READY' ? (
+              <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-ping shrink-0" />
+            ) : (bannerOrder.online_status || bannerOrder.onlineStatus) === 'PREPARING' ? (
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+            ) : (
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+            )}
             <div className="min-w-0 text-xs">
-              <div className="font-mono font-black text-amber-300 truncate">
-                #{activeOrder.receiptNumber || activeOrder.receipt_number || activeOrder.id}
+              <div className="font-mono font-black truncate">
+                <span className={
+                  (bannerOrder.online_status || bannerOrder.onlineStatus) === 'COMPLETED'
+                    ? 'text-emerald-300'
+                    : 'text-amber-300'
+                }>
+                  #{bannerOrder.receiptNumber || bannerOrder.receipt_number || bannerOrder.id}
+                </span>
               </div>
-              <div className="text-[11px] text-slate-300 font-bold truncate">
-                {(activeOrder.online_status || activeOrder.onlineStatus) === 'PREPARING'
-                  ? 'ຮ້ານກຳລັງຈັດເຄື່ອງ...'
-                  : (activeOrder.online_status || activeOrder.onlineStatus) === 'READY'
+              <div className="text-[11px] text-slate-200 font-bold truncate">
+                {(bannerOrder.online_status || bannerOrder.onlineStatus) === 'COMPLETED'
+                  ? 'ອໍເດີສຳເລັດຮຽບຮ້ອຍແລ້ວ!'
+                  : (bannerOrder.online_status || bannerOrder.onlineStatus) === 'READY'
                   ? 'ສິນຄ້າພ້ອມຮັບ / ສົ່ງແລ້ວ!'
+                  : (bannerOrder.online_status || bannerOrder.onlineStatus) === 'PREPARING'
+                  ? 'ຮ້ານກຳລັງຈັດເຄື່ອງ...'
                   : 'ລໍຖ້າຮ້ານກວດສອບ...'}
               </div>
             </div>
           </div>
-          <span className="text-[11px] bg-teal-500 text-slate-950 font-black px-2.5 py-1 rounded-xl shrink-0">
-            ຕິດຕາມອໍເດີ
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`text-[11px] font-black px-2.5 py-1 rounded-xl shadow-2xs ${
+              (bannerOrder.online_status || bannerOrder.onlineStatus) === 'COMPLETED'
+                ? 'bg-emerald-500 text-slate-950'
+                : 'bg-teal-500 text-slate-950'
+            }`}>
+              {(bannerOrder.online_status || bannerOrder.onlineStatus) === 'COMPLETED' ? 'ເບິ່ງບິນ' : 'ຕິດຕາມ'}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDismissedOrderIds((prev) => new Set([...prev, bannerOrder.id]));
+              }}
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+              title="ປິດ"
+            >
+              <X size={14} weight="bold" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -913,6 +1014,7 @@ export default function CustomerCatalogView({
         isOpen={Boolean(trackingOrder)}
         order={trackingOrder}
         onClose={() => setTrackingOrder(null)}
+        onStatusUpdate={handleOrderStatusUpdate}
         hotlineNumbers={hotlineNumbers}
         whatsappInternational={whatsappInternational}
       />

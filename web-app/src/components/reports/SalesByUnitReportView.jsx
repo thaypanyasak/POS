@@ -920,7 +920,7 @@ export default function SalesByUnitReportView({
       {/* 2. MAIN SCROLLABLE CONTENT */}
       <div
         ref={mainScrollRef}
-        className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4 pb-28 md:pb-6 min-h-0"
+        className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4 pb-6 min-h-0"
       >
         {/* 2.1 4 COMPACT STATS CARDS */}
         {viewMode === 'unsold' ? (

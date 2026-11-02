@@ -26,7 +26,7 @@ import {
 import { formatDots, sanitizeImageUrl } from '../utils/formatters';
 import { compressProductImage, formatFileSize } from '../utils/imageCompressor';
 import BarcodeScannerModal from './BarcodeScannerModal';
-import { useHardwareBarcodeScanner } from '../hooks/useHardwareBarcodeScanner';
+import { useHardwareBarcodeScanner, sanitizeBarcode } from '../hooks/useHardwareBarcodeScanner';
 import { playSuccessBeep } from '../utils/audioFeedback';
 
 export default function ProductFormModal({
@@ -242,12 +242,12 @@ export default function ProductFormModal({
   // Helper to check if a barcode already exists on another product in DB
   const checkBarcodeDuplicate = (barcodeToCheck) => {
     if (!barcodeToCheck || !String(barcodeToCheck).trim() || !existingProducts || existingProducts.length === 0) return null;
-    const clean = String(barcodeToCheck).trim().toLowerCase();
+    const clean = sanitizeBarcode(barcodeToCheck).toLowerCase();
     return existingProducts.find(
       (p) =>
         p.id !== productToEdit?.id &&
-        ((p.barcode && String(p.barcode).trim().toLowerCase() === clean) ||
-          (p.units && p.units.some((u) => u.barcode && String(u.barcode).trim().toLowerCase() === clean)))
+        ((p.barcode && sanitizeBarcode(p.barcode).toLowerCase() === clean) ||
+          (p.units && p.units.some((u) => u.barcode && sanitizeBarcode(u.barcode).toLowerCase() === clean)))
     );
   };
 
@@ -258,7 +258,7 @@ export default function ProductFormModal({
 
   const handleScanBarcodeSuccess = (scannedCode) => {
     if (!scannedCode) return;
-    const clean = String(scannedCode).trim();
+    const clean = sanitizeBarcode(scannedCode);
     const activeEl = document.activeElement;
     const activeId = activeEl ? activeEl.id : '';
 

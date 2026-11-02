@@ -605,7 +605,7 @@ export default function CategoriesView({
       </div>
 
       {/* 2. Main Area: Top KPI Stats + Table */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-6 min-h-0 pb-28 sm:pb-6">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 min-h-0 pb-6">
         
         {/* Top KPI Metrics for Categories */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 shrink-0">

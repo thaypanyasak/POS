@@ -535,7 +535,7 @@ export default function MixProductsView({
         </div>
 
         {/* Scrollable Form Body */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 min-h-0 pb-28 sm:pb-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 min-h-0 pb-6">
           {/* Card 1: Basic Information */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs">
             <h2 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -965,7 +965,7 @@ export default function MixProductsView({
       </div>
 
       {/* 2. Main Table Area */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-6 min-h-0 pb-28 sm:pb-6">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 min-h-0 pb-6">
         {/* Top KPI Metrics for Mix Products */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 shrink-0">
           {/* Card 1: Total Bundles */}

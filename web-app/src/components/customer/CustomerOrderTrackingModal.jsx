@@ -23,27 +23,47 @@ export default function CustomerOrderTrackingModal({
   isOpen,
   onClose,
   order,
+  onStatusUpdate,
   hotlineNumbers = ['020 56468780', '020 52228432'],
   whatsappInternational = '8562052228432',
 }) {
   const [copied, setCopied] = useState(false);
-  const [currentStatus, setCurrentStatus] = useState(
-    (order?.online_status || order?.onlineStatus || 'PENDING').toUpperCase()
-  );
+
+  // Read latest cached status immediately from localStorage to prevent grey/green jitter
+  const getInitialStatus = () => {
+    if (!order?.id) return 'PENDING';
+    try {
+      const stored = JSON.parse(localStorage.getItem('meiishop_customer_recent_orders_v1') || '[]');
+      const found = stored.find((o) => o.id === order.id);
+      if (found?.online_status || found?.onlineStatus) {
+        return (found.online_status || found.onlineStatus).toUpperCase();
+      }
+    } catch (_) {}
+    return (order.online_status || order.onlineStatus || 'PENDING').toUpperCase();
+  };
+
+  const [currentStatus, setCurrentStatus] = useState(getInitialStatus);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(Date.now());
 
-  // Keep status in sync if order prop updates
+  // Keep status in sync immediately when modal opens or order changes (Frame 0 rendering)
   useEffect(() => {
-    if (order) {
-      const st = (order.online_status || order.onlineStatus || 'PENDING').toUpperCase();
+    if (order?.id && isOpen) {
+      const st = getInitialStatus();
       setCurrentStatus(st);
     }
-  }, [order]);
+  }, [order?.id, isOpen]);
 
   // Realtime Polling & Supabase listener when modal is open
   useEffect(() => {
     if (!isOpen || !order?.id) return;
+
+    // 1. If order is already completed or cancelled, state is terminal — ZERO Supabase requests!
+    const initialSt = getInitialStatus();
+    if (initialSt === 'COMPLETED' || initialSt === 'CANCELLED') {
+      setCurrentStatus(initialSt);
+      return;
+    }
 
     let isMounted = true;
 
@@ -61,10 +81,10 @@ export default function CustomerOrderTrackingModal({
           setCurrentStatus((prev) => {
             if (prev !== newSt) {
               playSuccessBeep();
-              // Update local storage record too
+              onStatusUpdate?.(order.id, newSt);
               try {
                 const stored = JSON.parse(localStorage.getItem('meiishop_customer_recent_orders_v1') || '[]');
-                const updated = stored.map((o) => (o.id === order.id ? { ...o, online_status: newSt } : o));
+                const updated = stored.map((o) => (o.id === order.id ? { ...o, online_status: newSt, onlineStatus: newSt } : o));
                 localStorage.setItem('meiishop_customer_recent_orders_v1', JSON.stringify(updated));
               } catch (_) {}
             }
@@ -78,10 +98,7 @@ export default function CustomerOrderTrackingModal({
     // Initial check
     fetchLatestStatus();
 
-    // Poll every 6 seconds while customer is viewing tracking
-    const interval = setInterval(fetchLatestStatus, 6000);
-
-    // Also subscribe to Supabase Realtime for instant update
+    // Also subscribe to Supabase Realtime for instant update without continuous polling
     const channel = supabase
       .channel(`customer_order_track_${order.id}`)
       .on(
@@ -97,9 +114,20 @@ export default function CustomerOrderTrackingModal({
           const newSt = (payload.new?.online_status || 'PENDING').toUpperCase();
           setCurrentStatus(newSt);
           playSuccessBeep();
+          onStatusUpdate?.(order.id, newSt);
+          try {
+            const stored = JSON.parse(localStorage.getItem('meiishop_customer_recent_orders_v1') || '[]');
+            const updated = stored.map((o) => (o.id === order.id ? { ...o, online_status: newSt, onlineStatus: newSt } : o));
+            localStorage.setItem('meiishop_customer_recent_orders_v1', JSON.stringify(updated));
+          } catch (_) {}
         }
       )
       .subscribe();
+
+    // Relaxed 15s polling fallback only while in-flight (stops immediately when terminal)
+    const interval = setInterval(() => {
+      fetchLatestStatus();
+    }, 15000);
 
     return () => {
       isMounted = false;
