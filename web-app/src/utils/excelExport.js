@@ -440,7 +440,7 @@ export async function exportTransactionsToExcel(
     const pm = (tx.paymentMethod || '').toLowerCase();
     const pmLabel =
       pm === 'debt' || tx.isDebt
-        ? 'ຕິດໜີ້ (Debt)'
+        ? 'ຄ້າງຊຳລະ (Debt)'
         : pm === 'transfer' || pm === 'qr' || pm === 'onepay'
         ? 'ໂອນເງິນ'
         : 'ເງິນສົດ';
@@ -597,7 +597,7 @@ export async function exportPurchasesToExcel(
       po.payment_status === 'PAID'
         ? 'ຈ່າຍຄົບ (PAID)'
         : po.payment_status === 'DEBT'
-        ? 'ຕິດໜີ້ (DEBT)'
+        ? 'ຄ້າງຊຳລະ (DEBT)'
         : 'ຈ່າຍບາງສ່ວນ (PARTIAL)';
 
     const rowData = [
@@ -858,7 +858,7 @@ export async function exportDashboardToExcel({
   const pmData = [
     ['ເງິນສົດ (Cash)', cashTotal, cashTotal / totalRev],
     ['ໂອນເງິນ / QR (Transfer / QR)', transferTotal, transferTotal / totalRev],
-    ['ຕິດໜີ້ (Debt / Credit)', debtTotal, debtTotal / totalRev],
+    ['ຄ້າງຊຳລະ (Debt / Credit)', debtTotal, debtTotal / totalRev],
   ];
 
   pmData.forEach((pm, idx) => {
@@ -997,7 +997,7 @@ export async function exportDashboardToExcel({
     const pm = (tx.paymentMethod || '').toLowerCase();
     const pmLabel =
       pm === 'debt' || tx.isDebt
-        ? 'ຕິດໜີ້ (Debt)'
+        ? 'ຄ້າງຊຳລະ (Debt)'
         : pm === 'transfer' || pm === 'qr' || pm === 'onepay'
         ? 'ໂອນເງິນ'
         : 'ເງິນສົດ';

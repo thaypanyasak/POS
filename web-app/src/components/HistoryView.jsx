@@ -392,9 +392,20 @@ export default function HistoryView({
     const rawSearch = String(searchTerm || '').replace(/[\r\n\t]/g, '').trim();
     if (!rawSearch) return list;
 
-    // Normalize slashes to hyphens so INV/0644095 matches INV-0644095
-    const normalizedSearch = rawSearch.replace(/[\/\\]/g, '-');
+    // Normalize slashes/underscores to hyphens and auto-repair scanner artifacts (e.g. INV-32586183 -> INV-586183)
+    let normalizedSearch = rawSearch.replace(/[\/\\]/g, '-');
+    if (/^inv[\/\\_\s-]*32(\d{6})$/i.test(normalizedSearch)) {
+      normalizedSearch = normalizedSearch.replace(/^inv[\/\\_\s-]*32(\d{6})$/i, 'INV-$1');
+    } else if (/^32(\d{6})$/.test(normalizedSearch)) {
+      normalizedSearch = normalizedSearch.replace(/^32(\d{6})$/, 'INV-$1');
+    } else if (/^inv[\/\\_\s-]*\d+/i.test(normalizedSearch)) {
+      normalizedSearch = normalizedSearch.replace(/^inv[\/\\_\s-]*(\d+)/i, 'INV-$1');
+    }
     const cleanQ = normalizeLao(normalizedSearch).replace(/^#/, '');
+    const compactQ = cleanQ.replace(/[-_\s]/g, '');
+    const stripped32Q = compactQ.startsWith('inv32') && compactQ.length === 11
+      ? 'inv' + compactQ.slice(5)
+      : (compactQ.startsWith('32') && compactQ.length === 8 ? compactQ.slice(2) : compactQ);
     if (!cleanQ) return list;
 
     // If searching by barcode / code and not found in date-filtered list, search across all transactions
@@ -404,11 +415,19 @@ export default function HistoryView({
       // 3.1. Tìm theo thông tin chung của đơn hàng (receiptNumber, receipt_number, id, customerName, ...)
       const rawNum = tx.receiptNumber || tx.receipt_number || '';
       const txNum = normalizeLao(rawNum).replace(/^#/, '').replace(/[\/\\]/g, '-');
+      const txCompact = txNum.replace(/[-_\s]/g, '');
       const txId = normalizeLao(tx.id || '').replace(/^#/, '');
+      const txIdCompact = txId.replace(/[-_\s]/g, '');
       const matchBasic =
         (txNum && (txNum === cleanQ || txNum.includes(cleanQ) || cleanQ.includes(txNum))) ||
+        (compactQ.length >= 4 && (txCompact === compactQ || txCompact.includes(compactQ) || compactQ.includes(txCompact))) ||
+        (stripped32Q.length >= 4 && (txCompact === stripped32Q || txCompact.includes(stripped32Q) || stripped32Q.includes(txCompact))) ||
         (txId && (txId === cleanQ || txId.includes(cleanQ) || cleanQ.includes(txId))) ||
+        (compactQ.length >= 4 && (txIdCompact === compactQ || txIdCompact.includes(compactQ) || compactQ.includes(txIdCompact))) ||
+        (stripped32Q.length >= 4 && (txIdCompact === stripped32Q || txIdCompact.includes(stripped32Q) || stripped32Q.includes(txIdCompact))) ||
         (cleanQ.length >= 4 && txNum && txNum.endsWith(cleanQ)) ||
+        (compactQ.length >= 4 && txCompact && txCompact.endsWith(compactQ)) ||
+        (stripped32Q.length >= 4 && txCompact && txCompact.endsWith(stripped32Q)) ||
         normalizeLao(tx.customerName).includes(cleanQ) ||
         normalizeLao(tx.paymentMethod).includes(cleanQ) ||
         normalizeLao(tx.status).includes(cleanQ) ||
@@ -487,7 +506,7 @@ export default function HistoryView({
         all: 'ທັງໝົດ',
         cash: 'ເງິນສົດ',
         transfer: 'ໂອນເງິນ',
-        debt: 'ຕິດໜີ້',
+        debt: 'ຄ້າງຊຳລະ',
         cancelled: 'ຍົກເລີກແລ້ວ',
         notifications: 'ແຈ້ງເຕືອນໃໝ່',
       };
@@ -554,10 +573,19 @@ export default function HistoryView({
     let cleanCode = sanitizeBarcode(barcode).trim();
     if (!cleanCode) return;
 
-    // 0. Auto-fix common scanner artifacts (e.g. INV/0644095 -> INV-0644095)
-    cleanCode = cleanCode.replace(/^inv[\/\\]/i, 'INV-');
+    // 0. Auto-fix common scanner artifacts (e.g. INV-32586183, INV32586183, INV-586183 -> INV-586183)
+    if (/^inv[\/\\_\s-]*32(\d{6})$/i.test(cleanCode)) {
+      cleanCode = cleanCode.replace(/^inv[\/\\_\s-]*32(\d{6})$/i, 'INV-$1');
+    } else if (/^32(\d{6})$/.test(cleanCode)) {
+      cleanCode = cleanCode.replace(/^32(\d{6})$/, 'INV-$1');
+    } else if (/^inv[\/\\_\s-]*\d+/i.test(cleanCode)) {
+      cleanCode = cleanCode.replace(/^inv[\/\\_\s-]*(\d+)/i, 'INV-$1');
+    }
+    if (/^onl[\/\\_\s-]*\d+/i.test(cleanCode)) {
+      cleanCode = cleanCode.replace(/^onl[\/\\_\s-]*(\d{6})[\/\\_\s-]*(\d+)/i, 'ONL-$1-$2');
+    }
 
-    // If scanner only captured digits e.g. 0644095, resolve to INV-0644095
+    // If scanner only captured digits e.g. 2586183, resolve to INV-2586183
     if (/^\d{6,8}$/.test(cleanCode)) {
       const foundTx = directTransactions.find((t) => {
         const num = (t.receiptNumber || t.receipt_number || '').trim();
@@ -565,6 +593,8 @@ export default function HistoryView({
       });
       if (foundTx) {
         cleanCode = foundTx.receiptNumber || foundTx.receipt_number || `INV-${cleanCode}`;
+      } else {
+        cleanCode = `INV-${cleanCode}`;
       }
     }
 
@@ -597,12 +627,24 @@ export default function HistoryView({
     // 4. Look for matching transaction in full list
     const cleanRaw = cleanCode.replace(/^#/, '');
     const q = normalizeLao(cleanRaw);
+    const compactQ = q.replace(/[-_\s]/g, '');
+    const stripped32Q = compactQ.startsWith('inv32') && compactQ.length === 11
+      ? 'inv' + compactQ.slice(5)
+      : (compactQ.startsWith('32') && compactQ.length === 8 ? compactQ.slice(2) : compactQ);
 
     const matched = directTransactions.find((tx) => {
-      const txNum = normalizeLao(tx.receiptNumber || tx.receipt_number || '').replace(/^#/, '');
+      const rawNum = tx.receiptNumber || tx.receipt_number || '';
+      const txNum = normalizeLao(rawNum).replace(/^#/, '');
+      const txCompact = txNum.replace(/[-_\s]/g, '');
       const txId = normalizeLao(tx.id || '').replace(/^#/, '');
+      const txIdCompact = txId.replace(/[-_\s]/g, '');
+
       if ((txNum && (txNum === q || txNum.includes(q) || q.includes(txNum))) ||
-          (txId && (txId === q || txId.includes(q) || q.includes(txId)))) {
+          (compactQ.length >= 4 && (txCompact === compactQ || txCompact.includes(compactQ) || compactQ.includes(txCompact))) ||
+          (stripped32Q.length >= 4 && (txCompact === stripped32Q || txCompact.includes(stripped32Q) || stripped32Q.includes(txCompact))) ||
+          (txId && (txId === q || txId.includes(q) || q.includes(txId))) ||
+          (compactQ.length >= 4 && (txIdCompact === compactQ || txIdCompact.includes(compactQ) || compactQ.includes(txIdCompact))) ||
+          (stripped32Q.length >= 4 && (txIdCompact === stripped32Q || txIdCompact.includes(stripped32Q) || stripped32Q.includes(txIdCompact)))) {
         return true;
       }
 
@@ -916,7 +958,7 @@ export default function HistoryView({
           </div>
           <div className="min-w-0">
             <div className="text-[11px] text-amber-600 font-bold uppercase tracking-wider truncate">
-              ຕິດໜີ້
+              ຄ້າງຊຳລະ
             </div>
             <div className="text-lg font-black text-amber-900 font-mono leading-tight">
               {selectedPeriodStats.debtBills} <span className="text-xs font-normal text-amber-600/70">ບິນ</span>
@@ -1015,7 +1057,7 @@ export default function HistoryView({
             }`}
           >
             <HandCoins size={15} weight="bold" />
-            <span>ຕິດໜີ້</span>
+            <span>ຄ້າງຊຳລະ</span>
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
                 activeTab === 'debt' ? 'bg-amber-700 text-amber-100' : 'bg-amber-200 text-amber-900'
@@ -1086,7 +1128,20 @@ export default function HistoryView({
               spellCheck="false"
               autoComplete="off"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                let val = e.target.value;
+                if (/^inv[\/\\_\s-]*32(\d{6})$/i.test(val)) {
+                  val = val.replace(/^inv[\/\\_\s-]*32(\d{6})$/i, 'INV-$1');
+                } else if (/^32(\d{6})$/.test(val)) {
+                  val = val.replace(/^32(\d{6})$/, 'INV-$1');
+                } else if (/^inv[\/\\_\s-]*\d+/i.test(val)) {
+                  val = val.replace(/^inv[\/\\_\s-]*(\d+)/i, 'INV-$1');
+                }
+                if (/^onl[\/\\_\s-]*\d+/i.test(val)) {
+                  val = val.replace(/^onl[\/\\_\s-]*(\d{6})[\/\\_\s-]*(\d+)/i, 'ONL-$1-$2');
+                }
+                setSearchTerm(val);
+              }}
               placeholder="ຄົ້ນຫາເລກບິນ, ລູກຄ້າ, ສິນຄ້າ..."
               className="w-full h-9 pl-8 pr-20 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium"
             />
@@ -1142,33 +1197,6 @@ export default function HistoryView({
           )}
         </div>
       </div>
-
-      {/* Scan Toast Feedback Banner */}
-      {scanToast && (
-        <div
-          className={`mb-3 p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 shadow-sm transition-all animate-in fade-in slide-in-from-top-1 ${
-            scanToast.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-rose-50 text-rose-800 border-rose-200'
-          }`}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            {scanToast.type === 'success' ? (
-              <CheckCircle size={18} weight="fill" className="text-emerald-600 shrink-0" />
-            ) : (
-              <Warning size={18} weight="fill" className="text-rose-600 shrink-0" />
-            )}
-            <span className="truncate">{scanToast.message}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setScanToast(null)}
-            className="p-1 hover:bg-black/5 rounded-lg cursor-pointer shrink-0"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
 
       {/* Skeleton Loading State */}
       {isLoading && directTransactions.length === 0 ? (
@@ -1285,7 +1313,7 @@ export default function HistoryView({
                   )}
                   {!isCancelled && hasDebt && (
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300">
-                      {remainingDebt >= total ? 'ຕິດໜີ້ 100%' : 'ຕິດໜີ້ບາງສ່ວນ'}
+                      {remainingDebt >= total ? 'ຄ້າງຊຳລະ 100%' : 'ຄ້າງຊຳລະບາງສ່ວນ'}
                     </span>
                   )}
                 </div>
@@ -1337,7 +1365,7 @@ export default function HistoryView({
                       ) : isDebtItem ? (
                         <>
                           <HandCoins size={12} weight="bold" />
-                          <span>ຕິດໜີ້</span>
+                          <span>ຄ້າງຊຳລະ</span>
                         </>
                       ) : (
                         <>
@@ -1758,7 +1786,7 @@ export default function HistoryView({
                         <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-0.5">
                           <HandCoins size={10} weight="bold" />
                           <span>
-                            {remainingDebt >= total ? 'ຕິດໜີ້ 100%' : remainingDebt > 0 ? 'ຕິດໜີ້ບາງສ່ວນ' : 'ຊຳລະຄົບແລ້ວ'}
+                            {remainingDebt >= total ? 'ຄ້າງຊຳລະ 100%' : remainingDebt > 0 ? 'ຄ້າງຊຳລະບາງສ່ວນ' : 'ຊຳລະຄົບແລ້ວ'}
                           </span>
                         </span>
                       </div>
@@ -1777,7 +1805,7 @@ export default function HistoryView({
                         <span className="px-2 py-0.5 rounded-full text-[10.5px] font-black bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
                           <HandCoins size={12} weight="bold" />
                           <span>
-                            {remainingDebt >= total ? 'ຕິດໜີ້ 100%' : remainingDebt > 0 ? 'ຕິດໜີ້ບາງສ່ວນ' : 'ຊຳລະຄົບແລ້ວ'}
+                            {remainingDebt >= total ? 'ຄ້າງຊຳລະ 100%' : remainingDebt > 0 ? 'ຄ້າງຊຳລະບາງສ່ວນ' : 'ຊຳລະຄົບແລ້ວ'}
                           </span>
                         </span>
                       ) : isOnlineOrder ? (
@@ -2318,6 +2346,24 @@ export default function HistoryView({
         onScan={handleScanBarcode}
         title="ສະແກນບາໂຄດໃບບິນ (Scan Receipt Barcode)"
       />
+
+      {/* 5. Toast Feedback for Barcode Scanning (Floating, safe below Dynamic Island) */}
+      {scanToast && (
+        <div
+          className={`fixed top-[max(3.5rem,calc(env(safe-area-inset-top,0px)+0.75rem))] left-1/2 -translate-x-1/2 z-[130] px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-black animate-in fade-in slide-in-from-top-4 duration-200 border ${
+            scanToast.type === 'success'
+              ? 'bg-emerald-600 text-white border-emerald-500'
+              : 'bg-rose-600 text-white border-rose-500'
+          }`}
+        >
+          {scanToast.type === 'success' ? (
+            <CheckCircle size={18} weight="fill" />
+          ) : (
+            <Warning size={18} weight="fill" />
+          )}
+          <span>{scanToast.message}</span>
+        </div>
+      )}
     </main>
   );
 }

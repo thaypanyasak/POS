@@ -365,8 +365,8 @@ export default function ProductFormModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col w-screen h-screen overflow-hidden animate-in fade-in duration-150 select-none font-sans">
-      {/* 1. TOP FULLSCREEN HEADER (Compact Touch POS: strictly h-14 / 56px on mobile) */}
-      <header className="bg-white border-b border-slate-200/90 px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between shrink-0 shadow-xs z-10">
+      {/* 1. TOP FULLSCREEN HEADER (Safe area aware for Dynamic Island / notch) */}
+      <header className="bg-white border-b border-slate-200/90 px-3 sm:px-6 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-2 sm:pb-0 h-[calc(3.5rem+max(0.75rem,env(safe-area-inset-top,0px)))] sm:h-16 flex items-center justify-between shrink-0 shadow-xs z-10">
         <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
           <button
             type="button"
@@ -457,7 +457,7 @@ export default function ProductFormModal({
       </header>
 
       {/* 2. FULLSCREEN SCROLLABLE CONTENT */}
-      <div className="flex-1 overflow-y-auto p-2.5 sm:p-5 md:p-6 lg:p-8 overscroll-contain">
+      <div className="flex-1 overflow-y-auto p-2.5 sm:p-5 md:p-6 lg:p-8 pb-12 sm:pb-8 overscroll-contain">
         <form
           id="product-entry-form"
           onSubmit={onSaveProduct}
@@ -1529,30 +1529,6 @@ export default function ProductFormModal({
           </div>
         </form>
       </div>
-
-      {/* 3. FULLSCREEN STICKY FOOTER (Strictly h-14 / 56px on mobile) */}
-      <footer className="bg-white border-t border-slate-200/90 px-3 sm:px-6 md:px-8 h-14 flex items-center justify-between shrink-0 shadow-xs z-10">
-        <div className="text-[11px] sm:text-xs text-slate-500 font-medium truncate max-w-[180px] xs:max-w-[240px] sm:max-w-none">
-          {productToEdit ? `ແກ້ໄຂ: ${productToEdit.name}` : 'ເພີ່ມສິນຄ້າໃໝ່ລົງລະບົບ'}
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-2.5 sm:px-4 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all cursor-pointer"
-          >
-            ຍົກເລີກ
-          </button>
-          <button
-            type="submit"
-            form="product-entry-form"
-            className="h-9 sm:h-9.5 px-3.5 sm:px-5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs rounded-lg sm:rounded-xl shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-          >
-            <CheckCircle size={15} weight="fill" />
-            <span>ບັນທຶກສິນຄ້າ<span className="hidden sm:inline"> (Save Product)</span></span>
-          </button>
-        </div>
-      </footer>
 
       {/* Barcode Camera Scanner Modal */}
       <BarcodeScannerModal

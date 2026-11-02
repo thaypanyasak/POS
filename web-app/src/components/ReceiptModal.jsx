@@ -149,8 +149,8 @@ export default function ReceiptModal({
       const isCrateEligible = !isBundleItem && Boolean(
         it.hasCrateDeposit ||
         it.product?.hasCrateDeposit ||
-        ((it.product?.category?.includes('ເບຍ') || it.product?.name?.includes('ເບຍ') || it.productName?.includes('ເບຍ')) &&
-         (it.unit?.unitName === 'ແກັດ' || it.unit?.unitName === 'ລັງ' || it.unitName === 'ແກັດ' || it.unitName === 'ລັງ'))
+        Number(it.crateDepositTotal) > 0 ||
+        it.noEmptyCrates
       );
       const fee = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
       const explicit = isCrateEligible ? (Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * fee) : 0)) : 0;
@@ -199,15 +199,15 @@ export default function ReceiptModal({
       payment: 'ຊຳລະ:',
       payCash: 'ເງິນສົດ',
       payQr: 'QR ໂອນ',
-      payDebtFull: 'ຕິດໜີ້ 100%',
-      payDebtPartial: 'ຕິດໜີ້ (ບາງສ່ວນ)',
+      payDebtFull: 'ຄ້າງຊຳລະ 100%',
+      payDebtPartial: 'ຄ້າງຊຳລະ (ບາງສ່ວນ)',
       payTransfer: 'ໂອນບັນຊີ',
       colName: 'ຊື່ລາຍການ',
       colQty: 'ຈຳນວນ',
       colPrice: 'ລາຄາ',
       colTotal: 'ລວມ (₭)',
-      missingCrate: '↳ ບໍ່ມີລັງປ່ຽນ',
-      crateDepositLabel: 'ຄ່າມັດຈຳລັງ:',
+      missingCrate: '↳ ມັດຈຳລັງ',
+      crateDepositLabel: 'ມັດຈຳລັງ:',
       subtotalLabel: 'ລວມເງິນສິນຄ້າ :',
       discountLabel: 'ສ່ວນຫຼຸດ :',
       grandTotalLabel: 'ຍອດຊຳລະສຸດທິ:',
@@ -233,7 +233,7 @@ export default function ReceiptModal({
       loadingItems: '(ກຳລັງໂຫຼດລາຍການສິນຄ້າ...)',
       defaultItemName: 'ສິນຄ້າ',
       defaultUnitName: 'ອັນ',
-      quotationTitle: 'ໃບບອກລາຄາ / QUOTATION',
+      quotationTitle: 'ໃບສະເໜີລາຄາ / QUOTATION',
       quotationWarning: '*** ໃບນີ້ບໍ່ແມ່ນໃບບິນຮັບເງິນ / NOT A RECEIPT ***',
       quotationNotice: 'ໃບສະເໜີລາຄາຊົ່ວຄາວ',
       quotationTerms: [
@@ -247,7 +247,7 @@ export default function ReceiptModal({
       btnCancelled: 'ບິນນີ້ຍົກເລີກແລ້ວ',
       btnClose: 'ປິດໜ້າຕ່າງ',
       btnPrint: 'ພິມໃບບິນ',
-      btnPrintQuotation: 'ພິມໃບບອກລາຄາ',
+      btnPrintQuotation: 'ພິມໃບສະເໜີລາຄາ',
       btnPrintProgress: 'ກຳລັງພິມ...',
     },
     vi: {
@@ -1238,8 +1238,8 @@ export default function ReceiptModal({
                 const isCrateEligible = !isBundleItem && Boolean(
                   it.hasCrateDeposit ||
                   it.product?.hasCrateDeposit ||
-                  ((it.product?.category?.includes('ເບຍ') || it.product?.name?.includes('ເບຍ') || it.productName?.includes('ເບຍ')) &&
-                   (it.unit?.unitName === 'ແກັດ' || it.unit?.unitName === 'ລັງ' || it.unitName === 'ແກັດ' || it.unitName === 'ລັງ'))
+                  Number(it.crateDepositTotal) > 0 ||
+                  it.noEmptyCrates
                 );
 
                 const feePerCrate = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
@@ -1363,8 +1363,8 @@ export default function ReceiptModal({
               const isCrateEligible = !isBundleItem && Boolean(
                 it.hasCrateDeposit ||
                 it.product?.hasCrateDeposit ||
-                ((it.product?.category?.includes('ເບຍ') || it.product?.name?.includes('ເບຍ') || it.productName?.includes('ເບຍ')) &&
-                 (it.unit?.unitName === 'ແກັດ' || it.unit?.unitName === 'ລັງ' || it.unitName === 'ແກັດ' || it.unitName === 'ລັງ'))
+                Number(it.crateDepositTotal) > 0 ||
+                it.noEmptyCrates
               );
               const fee = Number(it.crateDepositFee || it.product?.crateDepositFee) || 30000;
               const explicit = isCrateEligible ? (Number(it.crateDepositTotal) || (it.noEmptyCrates ? ((Number(it.missingCratesCount) || qty) * fee) : 0)) : 0;

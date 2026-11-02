@@ -357,7 +357,7 @@ export default function CustomersView({
             }`}
           >
             <WarningCircle size={13} weight="bold" />
-            <span>ຕິດໜີ້ ({stats.debtorsCount})</span>
+            <span>ຄ້າງຊຳລະ ({stats.debtorsCount})</span>
           </button>
           <button
             type="button"

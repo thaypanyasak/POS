@@ -573,7 +573,7 @@ export default function SettingsView({
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { key: 'cart', title: 'POS & ກະຕ່າຂາຍ' },
-                    { key: 'checkout', title: 'ຊຳລະເງິນ & ໃບບອກລາຄາ' },
+                    { key: 'checkout', title: 'ຊຳລະເງິນ & ໃບສະເໜີລາຄາ' },
                     { key: 'scanner', title: 'ສະແກນບາໂຄດ' },
                     { key: 'products', title: 'ຈັດການສິນຄ້າ' },
                     { key: 'history', title: 'ປະຫວັດການຂາຍ' },

@@ -277,7 +277,7 @@ function MonthDashboardColumn({
             <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1">
               <span className="flex items-center gap-1 text-amber-800">
                 <ClockCountdown size={14} weight="bold" className="text-amber-600" />
-                <span>3. ຕິດໜີ້ (Credit)</span>
+                <span>3. ຄ້າງຊຳລະ (Credit)</span>
               </span>
               {!isMonthA && renderGrowthBadge(comparisonSummary?.debtA || 0, summary.debt)}
             </div>

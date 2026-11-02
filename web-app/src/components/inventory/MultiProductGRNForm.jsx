@@ -1624,7 +1624,7 @@ export default function MultiProductGRNForm({
                   }`}
                 >
                   <WarningCircle size={15} weight="bold" />
-                  <span>ຕິດໜີ້ (DEBT)</span>
+                  <span>ຄ້າງຊຳລະ (DEBT)</span>
                 </button>
 
                 <button

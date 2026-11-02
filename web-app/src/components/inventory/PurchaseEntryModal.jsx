@@ -1126,7 +1126,7 @@ export default function PurchaseEntryModal({
                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                   }`}
                 >
-                  ຕິດໜີ້ 
+                  ຄ້າງຊຳລະ 
                 </button>
                 <button
                   type="button"

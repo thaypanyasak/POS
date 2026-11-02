@@ -425,7 +425,7 @@ export default function DashboardView({
                 </span>
               </h2>
               <p className="text-[11.5px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block truncate">
-                ສະຫຼຸບລາຍຮັບ, ຕົ້ນທຶນສິນຄ້າ, ຍອດເງິນສົດ/ໂອນ/ຕິດໜີ້ ແລະ ວິເຄາະທຸລະກິດ Real-time
+                ສະຫຼຸບລາຍຮັບ, ຕົ້ນທຶນສິນຄ້າ, ຍອດເງິນສົດ/ໂອນ/ຄ້າງຊຳລະ ແລະ ວິເຄາະທຸລະກິດ Real-time
               </p>
             </div>
           </div>
@@ -680,12 +680,12 @@ export default function DashboardView({
                 <ClockCountdown size={20} weight="bold" />
               </div>
               <div>
-                <span className="text-[11px] text-slate-500 font-bold block">3. ຍອດຂາຍຕິດໜີ້ (Credit)</span>
+                <span className="text-[11px] text-slate-500 font-bold block">3. ຍອດຂາຍຄ້າງຊຳລະຫ (Credit)</span>
                 <span className="text-lg sm:text-xl font-black text-amber-900 block tracking-tight">
                   {formatKip(dashboardData.debtTotal || 0)}
                 </span>
                 <span className="text-[10px] text-amber-700 font-bold block">
-                  ລວມ {dashboardData.debtCount || 0} ບິນຕິດໜີ້
+                  ລວມ {dashboardData.debtCount || 0} ບິນຄ້າງຊຳລະ
                 </span>
               </div>
             </div>
@@ -1006,7 +1006,7 @@ export default function DashboardView({
                         {formatKip(tx.debtAmount || tx.grandTotal)}
                       </span>
                       <span className="text-[9px] font-extrabold text-amber-700 bg-amber-100/70 px-1 py-0.2 rounded">
-                        ຕິດໜີ້
+                        ຄ້າງຊຳລະ
                       </span>
                     </div>
                   </div>

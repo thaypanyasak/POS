@@ -482,7 +482,7 @@ export default function PosScreen({
         if (!item.isBundle && item.product?.id === productId && (item.unit?.id === unitId || !unitId)) {
           const parsedPrice = Number(newPrice) || 0;
           const qty = Number(item.quantity) || 1;
-          const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
+          const feePerCrate = Number(item.product?.crateDepositFee || item.crateDepositFee) || 30000;
           const missingCount = item.noEmptyCrates ? (Number(item.missingCratesCount ?? qty) || 0) : 0;
           const crateFee = missingCount * feePerCrate;
           const newLineTotal = (parsedPrice * qty) + crateFee;
@@ -513,7 +513,7 @@ export default function PosScreen({
           const tierPrice = getEffectiveUnitPrice(item.unit, item.selectedPriceTier || 1);
           const standardPrice = item.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
           const qty = Number(item.quantity) || 1;
-          const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
+          const feePerCrate = Number(item.product?.crateDepositFee || item.crateDepositFee) || 30000;
           const missingCount = item.noEmptyCrates ? (Number(item.missingCratesCount ?? qty) || 0) : 0;
           const crateFee = missingCount * feePerCrate;
 
@@ -659,7 +659,7 @@ export default function PosScreen({
               style={{ backgroundColor: '#EF4444' }}
             >
               <HandCoins size={12} weight="bold" />
-              <span>ຕິດໜີ້ ({formatDots(remainingDebt)} ₭)</span>
+              <span>ຄ້າງຊຳລະ ({formatDots(remainingDebt)} ₭)</span>
             </span>
           )}
           {custName && custName !== 'ລູກຄ້າທົ່ວໄປ' && (
@@ -1178,16 +1178,17 @@ export default function PosScreen({
             item.customPrice !== standardPrice;
 
           // Specialized Crate Deposit / Missing Crate Fee Logic
+          const isCartonOrCrateUnit =
+            item.unit?.unitName === 'ລັງ' ||
+            item.unit?.unitName === 'ແກັດ' ||
+            item.unit?.unitName === 'ຖັງ' ||
+            item.unit?.unitName === 'ເປົາ' ||
+            item.unit?.id?.endsWith('_carton') ||
+            (item.unit?.multiplier && item.unit.multiplier > 1);
+
           const isCrateEligible =
-            Boolean(item.product?.hasCrateDeposit) ||
-            Boolean(
-              (item.product?.category?.includes('ເບຍ') ||
-                item.product?.name?.includes('ເບຍ')) &&
-                (item.unit?.unitName === 'ແກັດ' ||
-                  item.unit?.unitName === 'ລັງ' ||
-                  (item.unit?.multiplier && item.unit.multiplier >= 12))
-            );
-          const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
+            Boolean(item.product?.hasCrateDeposit || item.hasCrateDeposit) && isCartonOrCrateUnit;
+          const feePerCrate = Number(item.product?.crateDepositFee || item.crateDepositFee) || 30000;
           const missingCount = item.noEmptyCrates
             ? Math.max(1, Math.min(item.quantity, Number(item.missingCratesCount) || item.quantity))
             : 0;
@@ -1720,7 +1721,7 @@ export default function PosScreen({
                       className="w-3.5 h-3.5 rounded text-teal-600 focus:ring-teal-500 cursor-pointer shrink-0 accent-teal-600"
                     />
                     <span className="text-[11px] font-semibold text-amber-900 ml-1.5 truncate">
-                      ບໍ່ມີແກັດປ່ຽນ (+{formatDots(feePerCrate)} ₭)
+                      ມັດຈຳລັງ (+{formatDots(feePerCrate)} ₭)
                     </span>
                   </label>
 
@@ -1818,10 +1819,10 @@ export default function PosScreen({
                 ? 'border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs'
                 : 'border-slate-200 bg-slate-100 text-slate-300 cursor-not-allowed'
             }`}
-            title="ພິມໃບບອກລາຄາ / ໃບສະເໜີລາຄາຊົ່ວຄາວ (ບໍ່ຕັດສະຕັອກ)"
+            title="ໃບສະເໜີລາຄາ"
           >
             <FileText size={16} weight="bold" />
-            <span>ໃບບອກລາຄາ</span>
+            <span>ໃບສະເໜີລາຄາ</span>
           </button>
 
           {/* Nút Thanh toán Checkout */}
@@ -1859,7 +1860,7 @@ export default function PosScreen({
           ? item.customPrice
           : standardPrice;
       const baseLine = price * item.quantity;
-      const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
+      const feePerCrate = Number(item.product?.crateDepositFee || item.crateDepositFee) || 30000;
       const crateFee = item.noEmptyCrates
         ? (Number(item.missingCratesCount ?? item.quantity) || 0) * feePerCrate
         : 0;
@@ -2436,7 +2437,7 @@ export default function PosScreen({
       {/* Toast Feedback for Barcode Scanning */}
       {scanToast && (
         <div
-          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[130] px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-black animate-in fade-in slide-in-from-top-4 duration-200 border ${
+          className={`fixed top-[max(3.5rem,calc(env(safe-area-inset-top,0px)+0.75rem))] left-1/2 -translate-x-1/2 z-[130] px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-black animate-in fade-in slide-in-from-top-4 duration-200 border ${
             scanToast.type === 'success'
               ? 'bg-emerald-600 text-white border-emerald-500'
               : 'bg-rose-600 text-white border-rose-500'

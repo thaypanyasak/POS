@@ -1475,8 +1475,8 @@ export default function App() {
     }
     setLastModifiedCostField(null);
 
-    // Crate Deposit setting
-    setHasCrateDeposit(Boolean(p.hasCrateDeposit || p.category === 'ເບຍ/ເຄື່ອງດື່ມມີທາດເຫຼົ້າ' || p.name?.includes('ເບຍ')));
+    // Crate Deposit setting strictly configured from product metadata
+    setHasCrateDeposit(Boolean(p.hasCrateDeposit));
     setCrateDepositFee(formatDots(p.crateDepositFee || 30000));
 
     // 2. Identify distinct tier units strictly from p.units
@@ -1986,12 +1986,15 @@ export default function App() {
       return;
     }
 
-    const isCrateEligible =
-      Boolean(product?.hasCrateDeposit) ||
-      Boolean(
-        (product?.category?.includes('ເບຍ') || product?.name?.includes('ເບຍ')) &&
-          (unit?.unitName === 'ແກັດ' || unit?.unitName === 'ລັງ' || (unit?.multiplier && unit.multiplier >= 12))
-      );
+    const isCartonOrCrateUnit =
+      unit?.unitName === 'ລັງ' ||
+      unit?.unitName === 'ແກັດ' ||
+      unit?.unitName === 'ຖັງ' ||
+      unit?.unitName === 'ເປົາ' ||
+      unit?.id?.endsWith('_carton') ||
+      (unit?.multiplier && unit.multiplier > 1);
+
+    const isCrateEligible = Boolean(product?.hasCrateDeposit) && isCartonOrCrateUnit;
     const feePerCrate = Number(product?.crateDepositFee) || 30000;
 
     const existingIndex = cart.findIndex(

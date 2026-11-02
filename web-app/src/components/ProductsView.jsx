@@ -591,28 +591,31 @@ export default function ProductsView({
       }}
     >
       {/* 1. Header Toolbar: Standardized responsive header matching GRN */}
-      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 -mx-3 sm:-mx-5 md:-mx-6 -mt-3 sm:-mt-5 md:-mt-6 mb-3 sm:mb-4 flex items-center justify-between gap-2.5 sm:gap-3 shrink-0 shadow-2xs">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0">
-            <Warehouse size={20} className="sm:w-5 sm:h-5" weight="duotone" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span className="truncate">
-                <span className="sm:hidden">ລາຍການສິນຄ້າ</span>
-                <span className="hidden sm:inline">ລາຍການສິນຄ້າ & ຕົ້ນທຶນບາດ</span>
-              </span>
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
-                {products.length}
-              </span>
-            </h2>
-            <p className="text-[11.5px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block truncate">
-              ສະແດງລາຄາຕົ້ນທຶນບາດ ແລະ ກີບ ຍົກລັງ/ແກັດ (Carton), ພ້ອມຫົວໜ່ວຍຂາຍ ແລະ ສະຕັອກສິນຄ້າ
-            </p>
+      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-6 py-2.5 sm:py-3.5 -mx-3 sm:-mx-5 md:-mx-6 -mt-3 sm:-mt-5 md:-mt-6 mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 shrink-0 shadow-2xs">
+        {/* Row 1 on mobile: Title, Icon & Count */}
+        <div className="flex items-center justify-between w-full sm:w-auto min-w-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0">
+              <Warehouse size={20} className="sm:w-5 sm:h-5" weight="duotone" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span className="truncate">
+                  <span className="sm:hidden">ລາຍການສິນຄ້າ</span>
+                  <span className="hidden sm:inline">ລາຍການສິນຄ້າ & ຕົ້ນທຶນບາດ</span>
+                </span>
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                  {products.length}
+                </span>
+              </h2>
+              <p className="text-[11.5px] sm:text-xs text-slate-500 mt-0.5 hidden sm:block truncate">
+                ສະແດງລາຄາຕົ້ນທຶນບາດ ແລະ ກີບ ຍົກລັງ/ແກັດ (Carton), ພ້ອມຫົວໜ່ວຍຂາຍ ແລະ ສະຕັອກສິນຄ້າ
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Row 2 on mobile, Right side on sm+: Action Buttons */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {onRefreshProducts && (
             <button
@@ -622,7 +625,7 @@ export default function ProductsView({
                 onRefreshProducts();
               }}
               disabled={isLoading}
-              className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
+              className="p-2 sm:p-2.5 h-9 sm:h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 border border-slate-200 shadow-2xs shrink-0"
               title="ໂຫຼດຂໍ້ມູນຄືນຈາກ Supabase"
             >
               <ArrowClockwise size={15} className={isLoading ? 'animate-spin' : ''} weight="bold" />
@@ -635,7 +638,7 @@ export default function ProductsView({
             type="button"
             onClick={handleExportExcel}
             disabled={isExportingExcel || filteredProducts.length === 0}
-            className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 h-9 sm:h-10 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 rounded-xl text-xs font-bold shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 h-9 sm:h-10 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 rounded-xl text-xs font-bold shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
             title={`ດາວໂຫຼດ Excel (${filteredProducts.length} ສິນຄ້າ)`}
           >
             <FileArrowDown size={16} weight="bold" />
@@ -649,7 +652,7 @@ export default function ProductsView({
               playActionClickBeep('products');
               onAddNewProduct?.();
             }}
-            className="px-3 sm:px-4 py-2 sm:py-2.5 h-9 sm:h-10 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+            className="px-3 sm:px-4 py-2 sm:py-2.5 h-9 sm:h-10 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
           >
             <Plus size={16} weight="bold" />
             <span>+ ເພີ່ມສິນຄ້າໃໝ່</span>
@@ -1556,7 +1559,7 @@ export default function ProductsView({
       {/* Toast Feedback for Barcode Scanning */}
       {scanToast && (
         <div
-          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[130] px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-black animate-in fade-in slide-in-from-top-4 duration-200 border ${
+          className={`fixed top-[max(3.5rem,calc(env(safe-area-inset-top,0px)+0.75rem))] left-1/2 -translate-x-1/2 z-[130] px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-black animate-in fade-in slide-in-from-top-4 duration-200 border ${
             scanToast.type === 'success'
               ? 'bg-emerald-600 text-white border-emerald-500'
               : 'bg-rose-600 text-white border-rose-500'

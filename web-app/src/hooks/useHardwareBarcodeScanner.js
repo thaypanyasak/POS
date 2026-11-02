@@ -52,7 +52,7 @@ export const LAO_THAI_NUMBERS_MAP = {
   '໕': '5', '໖': '6', '໗': '7', '໘': '8', '໙': '9',
 
   // ── Thai Kedmanee number row ──
-  'ๅ': '1', '/': '2', '-': '3', 'ภ': '4', 'ถ': '5',
+  'ๅ': '1', 'ภ': '4', 'ถ': '5',
   'ุ': '6', 'ึ': '7', 'ค': '8', 'ต': '9', 'จ': '0',
   'ข': '-', 'ช': '=',
 
@@ -69,10 +69,24 @@ export function sanitizeBarcode(raw) {
   if (!raw) return '';
   let str = String(raw).trim();
   str = str.replace(/[\r\n\t\x00-\x1F\x7F]/g, '');
-  return str
+  str = str
     .split('')
     .map((ch) => REVERSE_SHIFT_DIGITS[ch] || LAO_THAI_NUMBERS_MAP[ch] || ch)
     .join('');
+
+  // Auto-normalize invoice and online order codes (e.g. INV-32586183, INV32586183, INV2586183 -> INV-586183)
+  if (/^inv[\/\\_\s-]*32(\d{6})$/i.test(str)) {
+    str = str.replace(/^inv[\/\\_\s-]*32(\d{6})$/i, 'INV-$1');
+  } else if (/^32(\d{6})$/.test(str)) {
+    str = str.replace(/^32(\d{6})$/, 'INV-$1');
+  } else if (/^inv[\/\\_\s-]*\d+/i.test(str)) {
+    str = str.replace(/^inv[\/\\_\s-]*(\d+)/i, 'INV-$1');
+  }
+  if (/^onl[\/\\_\s-]*\d+/i.test(str)) {
+    str = str.replace(/^onl[\/\\_\s-]*(\d{6})[\/\\_\s-]*(\d+)/i, 'ONL-$1-$2');
+  }
+
+  return str;
 }
 
 /**
@@ -95,7 +109,7 @@ function resolveBarcodeChar(e) {
       const letter = e.code.slice(3);
       return e.shiftKey ? letter.toUpperCase() : letter.toUpperCase();
     }
-    if (e.code === 'Minus' || e.code === 'NumpadSubtract') return '-';
+    if (e.code === 'Minus' || e.code === 'NumpadSubtract' || e.key === '-' || e.key === '_') return '-';
     if (e.code === 'Slash' || e.code === 'NumpadDivide') return '/';
     if (e.code === 'Period' || e.code === 'NumpadDecimal') return '.';
     if (e.code === 'Comma') return ',';
@@ -294,9 +308,16 @@ function processBarcode(rawCode, e = null) {
   // Defensive sanitization: unmap any shifted number symbols or Lao/Thai numerals
   code = sanitizeBarcode(code);
 
-  // Auto-normalize common scanner invoice prefixes (e.g. inv/001 -> INV-001)
-  if (/^inv[\/\\]/i.test(code)) {
-    code = code.replace(/^inv[\/\\]/i, 'INV-');
+  // Auto-normalize common scanner invoice / online order prefixes (e.g. INV-32586183, INV32586183, INV-586183 -> INV-586183)
+  if (/^inv[\/\\_\s-]*32(\d{6})$/i.test(code)) {
+    code = code.replace(/^inv[\/\\_\s-]*32(\d{6})$/i, 'INV-$1');
+  } else if (/^32(\d{6})$/.test(code)) {
+    code = code.replace(/^32(\d{6})$/, 'INV-$1');
+  } else if (/^inv[\/\\_\s-]*\d+/i.test(code)) {
+    code = code.replace(/^inv[\/\\_\s-]*(\d+)/i, 'INV-$1');
+  }
+  if (/^onl[\/\\_\s-]*\d+/i.test(code)) {
+    code = code.replace(/^onl[\/\\_\s-]*(\d{6})[\/\\_\s-]*(\d+)/i, 'ONL-$1-$2');
   }
 
   // Get active subscriber (topmost modal / view)

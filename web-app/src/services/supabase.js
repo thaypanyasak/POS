@@ -133,6 +133,33 @@ export async function updateExchangeRateInSupabase(newRate) {
   });
 }
 
+// Global cached crate deposit settings from store_settings (synchronized across all devices)
+let cachedCrateDeposits = null;
+
+export async function fetchProductCrateDeposits() {
+  if (cachedCrateDeposits) return cachedCrateDeposits;
+  const map = await fetchStoreSetting('product_crate_deposits', {});
+  cachedCrateDeposits = map && typeof map === 'object' ? map : {};
+  return cachedCrateDeposits;
+}
+
+export async function saveProductCrateDepositSetting(productId, hasCrateDeposit, crateDepositFee = 30000) {
+  try {
+    const current = await fetchProductCrateDeposits();
+    const updated = {
+      ...current,
+      [productId]: {
+        hasCrateDeposit: Boolean(hasCrateDeposit),
+        crateDepositFee: Number(crateDepositFee) || 30000,
+      },
+    };
+    cachedCrateDeposits = updated;
+    await updateStoreSetting('product_crate_deposits', updated);
+  } catch (err) {
+    console.warn('saveProductCrateDepositSetting error:', err);
+  }
+}
+
 /**
  * Safely fetches all rows from a Supabase query using range-based chunking.
  * Bypasses the default 1,000 row hard limit of PostgREST to guarantee complete data loading.
@@ -210,6 +237,9 @@ export async function fetchProductsFromSupabase() {
       console.warn('Could not fetch product_units from Supabase:', unitsErr);
       return null;
     }
+
+    // Fetch product_crate_deposits synchronized settings from store_settings
+    const crateDepositsMap = await fetchProductCrateDeposits().catch(() => ({}));
 
     // 3. O(N) Hash Map Indexing for units by product_id (eliminates O(N*M) 27-million iteration loop)
     const unitsByProductId = new Map();
@@ -393,10 +423,10 @@ export async function fetchProductsFromSupabase() {
         tierSettings,
         currentStockBaseUnits: stockValue,
         trackStock: isTrackStock,
-        hasCrateDeposit: localMeta?.hasCrateDeposit !== undefined
-          ? Boolean(localMeta.hasCrateDeposit)
-          : Boolean(p.category === 'ເບຍ/ເຄື່ອງດື່ມມີທາດເຫຼົ້າ' || p.name.includes('ເບຍ')),
-        crateDepositFee: Number(localMeta?.crateDepositFee) || 30000,
+        hasCrateDeposit: p.has_crate_deposit !== undefined && p.has_crate_deposit !== null
+          ? Boolean(p.has_crate_deposit)
+          : Boolean(crateDepositsMap?.[p.id]?.hasCrateDeposit ?? localMeta?.hasCrateDeposit ?? false),
+        crateDepositFee: Number(p.crate_deposit_fee ?? crateDepositsMap?.[p.id]?.crateDepositFee ?? localMeta?.crateDepositFee) || 30000,
         _searchKey: searchKey,
         units: pUnits.length > 0 ? pUnits : [
           {
@@ -551,6 +581,15 @@ export async function saveProductToSupabase(product) {
 
     // Save metadata locally for fast instant recall
     saveProductMetaLocal(product);
+
+    // Save crate deposit settings in store_settings for multi-device sync
+    if (product.hasCrateDeposit !== undefined || product.crateDepositFee !== undefined) {
+      saveProductCrateDepositSetting(
+        product.id,
+        Boolean(product.hasCrateDeposit),
+        Number(product.crateDepositFee) || 30000
+      );
+    }
 
     return { success: true };
   } catch (e) {
@@ -717,8 +756,8 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     const isCrateEligible = !isBundle && Boolean(
       i.hasCrateDeposit ||
       matchedProd?.hasCrateDeposit ||
-      ((matchedProd?.category?.includes('ເບຍ') || matchedProd?.name?.includes('ເບຍ') || i.product_name?.includes('ເບຍ')) &&
-       (i.unit_name === 'ແກັດ' || i.unit_name === 'ລັງ'))
+      Number(i.crateDepositTotal) > 0 ||
+      i.noEmptyCrates
     );
     const diff = (isCrateEligible && rawLineTotal > baseTotal) ? (rawLineTotal - baseTotal) : 0;
     const fee = Number(matchedProd?.crateDepositFee) || 30000;

@@ -91,7 +91,7 @@ export default function CheckoutModal({
   return (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                         <HandCoins size={12} weight="bold" />
-                        <span>ຕິດໜີ້ (ຄ້າງ: {formatDots(remaining)} ₭)</span>
+                        <span>ຄ້າງຊຳລະ (ຄ້າງ: {formatDots(remaining)} ₭)</span>
                       </span>
                     );
                   }
@@ -193,7 +193,7 @@ export default function CheckoutModal({
                       ? item.customPrice
                       : standardPrice;
                   const baseTotal = effectivePrice * item.quantity;
-                  const feePerCrate = Number(item.product?.crateDepositFee) || 30000;
+                  const feePerCrate = Number(item.product?.crateDepositFee || item.crateDepositFee) || 30000;
                   const missingCount = item.noEmptyCrates
                     ? Math.max(1, Math.min(item.quantity, Number(item.missingCratesCount) || item.quantity))
                     : 0;
@@ -220,7 +220,7 @@ export default function CheckoutModal({
 
                       {item.noEmptyCrates && missingCount > 0 && (
                         <div className="flex justify-between items-center text-amber-900 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-bold mt-1 border border-amber-200/80">
-                          <span>* ບໍ່ມີແກັດປ່ຽນ: ({missingCount} ແກັດ)</span>
+                          <span>* ມັດຈຳລັງ: ({missingCount} ລັງ)</span>
                           <div className="text-right whitespace-nowrap font-mono">
                             <span className="text-[9.5px] text-amber-700 mr-2 font-normal">
                               {missingCount} x {formatKip(feePerCrate).replace(' ₭', '')}

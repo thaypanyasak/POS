@@ -140,8 +140,9 @@ export function formatReceiptForNative(receipt, language = 'lo') {
     const isCrateEligible = !isBundle && Boolean(
       item.hasCrateDeposit ||
       item.product?.hasCrateDeposit ||
-      ((item.product?.category?.includes('ເບຍ') || item.product?.name?.includes('ເບຍ')) &&
-       (unit === 'ແກັດ' || unit === 'ລັງ'))
+      Number(item.crateDepositTotal) > 0 ||
+      item.noEmptyCrates ||
+      Number(item.missingCrateCount) > 0
     );
     const hasCrate = isCrateEligible && Boolean(item.hasCrateDeposit || item.missingCrateCount > 0);
     const missingCrateCount = isCrateEligible ? Number(item.missingCrateCount ?? (item.missingCrates || 0)) : 0;
