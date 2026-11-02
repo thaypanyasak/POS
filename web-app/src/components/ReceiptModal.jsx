@@ -91,9 +91,16 @@ export default function ReceiptModal({
       : (receipt?.sale_transaction_items && receipt.sale_transaction_items.length > 0
           ? receipt.sale_transaction_items
           : []);
+  const isOnlineOrder = Boolean(
+    receipt?.order_source === 'online' ||
+    receipt?.orderSource === 'online' ||
+    String(receipt?.id || '').startsWith('onl_') ||
+    String(receipt?.receiptNumber || receipt?.receipt_number || '').startsWith('ONL-') ||
+    (receipt?.cashierName || receipt?.cashier_name) === 'Online Web'
+  );
   const pm = String(receipt?.paymentMethod || receipt?.payment_method || 'cash').toLowerCase();
-  const isDebt = pm === 'debt' || Boolean(receipt?.isDebt);
-  const isCash = pm === 'cash';
+  const isCash = pm === 'cash' || pm === 'cod' || pm === 'ເງິນສົດ';
+  const isDebt = !isOnlineOrder && (pm === 'debt' || Boolean(receipt?.isDebt));
   const isTransferPayment = !isQuotation && (pm === 'transfer' || pm === 'onepay' || pm === 'qrtransfer' || pm === 'qr' || (!isCash && !isDebt));
 
   const handlePerPageSelect = (e) => {
@@ -1042,22 +1049,27 @@ export default function ReceiptModal({
               <div className="flex items-center gap-1 truncate max-w-[50%] pt-0.5">
                 <span className="text-slate-500 font-normal">{L.customer}</span>
                 <span className="font-medium text-slate-800 truncate">
-                  {(!receipt.customerName || receipt.customerName === 'ລູກຄ້າທົ່ວໄປ' || receipt.customerName === 'Khách lẻ / Khách vãng lai')
+                  {(!receipt.customerName && !receipt.customer_name) ||
+                  receipt.customerName === 'ລູກຄ້າທົ່ວໄປ' ||
+                  receipt.customer_name === 'ລູກຄ້າທົ່ວໄປ' ||
+                  receipt.customerName === 'Khách lẻ / Khách vãng lai'
                     ? L.defaultCustomer
-                    : receipt.customerName}
+                    : receipt.customerName || receipt.customer_name}
                 </span>
               </div>
               {!isQuotation && (
                 <div className="flex items-center justify-end gap-1 text-[10.5px] pt-0.5">
                   <span className="text-slate-500 font-normal">{L.payment}</span>
                   <span className="font-bold text-teal-700">
-                    {receipt.paymentMethod === 'cash'
-                      ? L.payCash
-                      : (receipt.paymentMethod === 'transfer' || receipt.paymentMethod === 'qrTransfer' || receipt.paymentMethod === 'onepay')
-                      ? L.payQr
-                      : receipt.paymentMethod === 'debt'
-                      ? (Number(receipt.paidAmount || 0) === 0 ? L.payDebtFull : L.payDebtPartial)
-                      : L.payTransfer}
+                    {(() => {
+                      if (isCash) return isOnlineOrder ? (receiptLanguage === 'vi' ? 'Tiền mặt (COD)' : 'ເງິນສົດ (COD)') : L.payCash;
+                      if (pm === 'transfer' || pm === 'qrtransfer' || pm === 'onepay' || pm === 'qr') return L.payQr;
+                      if (isDebt) {
+                        const pAmt = Number(receipt.paidAmount ?? receipt.paid_amount ?? 0);
+                        return pAmt === 0 ? L.payDebtFull : L.payDebtPartial;
+                      }
+                      return L.payTransfer;
+                    })()}
                   </span>
                 </div>
               )}
@@ -1068,6 +1080,31 @@ export default function ReceiptModal({
               <div className="flex items-center gap-1 text-[10px] font-mono text-slate-700 pt-0.5">
                 <span className="font-sans text-slate-500 font-normal">{L.phone}</span>
                 <span className="font-bold">{receipt.customerPhone || receipt.customer_phone}</span>
+              </div>
+            )}
+
+            {/* Row 4: Online Order Fulfillment & Delivery Info (if online order) */}
+            {isOnlineOrder && (
+              <div className="pt-1 text-[10px] text-slate-800 space-y-0.5 border-t border-dotted border-slate-200 mt-1">
+                <div className="flex items-center justify-between font-bold">
+                  <span>ຮູບແບບຮັບສິນຄ້າ:</span>
+                  <span className="text-teal-700">
+                    {(receipt.fulfillment_type === 'delivery' || receipt.fulfillmentType === 'delivery')
+                      ? 'ສົ່ງຮອດບ່ອນ'
+                      : `ມາຮັບເອງ ${receipt.pickup_time || receipt.pickupTime ? `(${receipt.pickup_time || receipt.pickupTime})` : ''}`}
+                  </span>
+                </div>
+                {(receipt.delivery_address || receipt.deliveryAddress) && (
+                  <div className="text-[9.5px]">
+                    <span className="text-slate-500 font-normal">ທີ່ຢູ່ສົ່ງ: </span>
+                    <span className="font-semibold">{receipt.delivery_address || receipt.deliveryAddress}</span>
+                  </div>
+                )}
+                {(receipt.delivery_note || receipt.deliveryNote) && (
+                  <div className="text-[9.5px] italic text-slate-500">
+                    ໝາຍເຫດ: "{receipt.delivery_note || receipt.deliveryNote}"
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1404,14 +1441,14 @@ export default function ReceiptModal({
                     <div className="flex justify-between text-slate-700 leading-normal text-xs py-0.5">
                       <span className="pt-0.5">{L.tenderedLabel}</span>
                       <span className="font-bold font-mono text-slate-900 pt-0.5">
-                        {formatKip(receipt.amountTendered)}
+                        {formatKip(receipt.amountTendered ?? receipt.amount_tendered ?? receipt.paidAmount ?? receipt.paid_amount ?? finalGrandTotal)}
                       </span>
                     </div>
-                    {receipt.paymentMethod === 'cash' && (
+                    {isCash && (
                       <div className="flex justify-between text-slate-900 font-bold leading-normal text-xs py-0.5">
                         <span className="pt-0.5">{L.changeLabel}</span>
                         <span className="font-mono text-emerald-600 font-bold text-xs pt-0.5">
-                          {formatKip(receipt.changeAmount)}
+                          {formatKip(receipt.changeAmount ?? receipt.change_amount ?? 0)}
                         </span>
                       </div>
                     )}
@@ -1422,7 +1459,7 @@ export default function ReceiptModal({
           })()}
 
           {/* QR Code in receipt for transfer payments or unpaid debt - Large & Scannable */}
-          {!isQuotation && (isTransferPayment || (receipt.paymentMethod === 'debt' && (receipt.debtAmount ?? receipt.grandTotal) > 0)) && (
+          {!isQuotation && (isTransferPayment || (isDebt && (receipt.debtAmount ?? receipt.grandTotal) > 0)) && (
             <div className="my-2 py-1 text-center flex flex-col items-center leading-normal">
               <div className="w-44 h-44 sm:w-52 sm:h-52 bg-white p-2 rounded-xl border border-slate-300 shadow-xs flex items-center justify-center">
                 <img
@@ -1465,7 +1502,9 @@ export default function ReceiptModal({
 
           {/* Barcode & Footer Strip */}
           {(() => {
-            const bc = generateBarcode128(receipt.receiptNumber || 'MEII-POS');
+            const rawBcCode = String(receipt.receiptNumber || receipt.receipt_number || receipt.id || 'MEII-POS').trim();
+            const bc = generateBarcode128(rawBcCode.replace(/^#/, ''));
+            const displayCode = rawBcCode.startsWith('#') ? rawBcCode : `#${rawBcCode}`;
             return (
               <div className="border-t border-dashed border-slate-300 pt-3 text-center leading-normal">
                 {/* Standard Code 128 Barcode with uniform equal height */}
@@ -1478,7 +1517,7 @@ export default function ReceiptModal({
                   ))}
                 </div>
                 <span className="text-[12px] text-slate-900 font-mono tracking-widest block font-black pt-1">
-                  {receipt.receiptNumber || 'MEII-POS'}
+                  {displayCode}
                 </span>
                 <div className="mt-5 space-y-1">
                   {(Array.isArray(L.thankYou) ? L.thankYou : [L.thankYou]).map((tLine, idx) => (

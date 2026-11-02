@@ -665,6 +665,14 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     Boolean(cachedMeta?.isCancelled) ||
     cachedMeta?.status === 'cancelled';
 
+  const isOnlineOrder = Boolean(
+    t.order_source === 'online' ||
+    cachedMeta?.order_source === 'online' ||
+    String(t.id || '').startsWith('onl_') ||
+    String(t.receipt_number || '').startsWith('ONL-') ||
+    t.cashier_name === 'Online Web'
+  );
+
   let cleanPaymentMethod = t.payment_method || 'cash';
   if (cleanPaymentMethod.startsWith('cancelled:')) {
     cleanPaymentMethod = cleanPaymentMethod.replace('cancelled:', '');
@@ -751,11 +759,15 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
 
   return {
     id: t.id,
-    receiptNumber: t.receipt_number,
+    receiptNumber: t.receipt_number || t.id,
+    receipt_number: t.receipt_number || t.id,
     createdAt: t.created_at,
+    created_at: t.created_at,
     updatedAt: t.updated_at || t.created_at,
+    updated_at: t.updated_at || t.created_at,
     date: new Date(t.created_at).toLocaleString('lo-LA'),
     customerName: t.customer_name || 'ລູກຄ້າທົ່ວໄປ',
+    customer_name: t.customer_name || 'ລູກຄ້າທົ່ວໄປ',
     customerId: t.customer_id || cachedMeta?.customerId || null,
     customer_id: t.customer_id || cachedMeta?.customerId || null,
     customerPhone: t.customer_phone || cachedMeta?.customerPhone || '',
@@ -771,6 +783,7 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     subtotal: Number(t.subtotal) || 0,
     discountTotal: Number(t.discount_total) || 0,
     grandTotal: Number(t.grand_total) || 0,
+    grand_total: Number(t.grand_total) || 0,
     amountTendered: Number(t.amount_tendered) || 0,
     changeAmount: Number(t.change_amount) || 0,
     totalCost: Number(t.total_cost) || 0,
@@ -779,7 +792,7 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     isPrinted: Boolean(t.is_printed),
     printed_at: t.printed_at || null,
     printedAt: t.printed_at || null,
-    isDebt: Boolean(
+    isDebt: !isOnlineOrder && Boolean(
       t.payment_status === 'DEBT' ||
         t.payment_status === 'PARTIAL' ||
         cleanPaymentMethod === 'debt' ||
@@ -787,6 +800,7 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
         Boolean(t.debt_due_date || t.due_date || cachedMeta?.debtDueDate || cachedMeta?.receipt?.debtDueDate)
     ),
     remainingDebt: (() => {
+      if (isOnlineOrder) return 0;
       const grand = Number(t.grand_total) || 0;
       const isD =
         cleanPaymentMethod === 'debt' ||
@@ -811,6 +825,7 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
       return isD ? rem : 0;
     })(),
     debtAmount: (() => {
+      if (isOnlineOrder) return 0;
       const grand = Number(t.grand_total) || 0;
       const isD =
         cleanPaymentMethod === 'debt' ||
@@ -836,6 +851,9 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     })(),
     paidAmount: (() => {
       const grand = Number(t.grand_total) || 0;
+      if (isOnlineOrder) {
+        return Number(t.paid_amount || t.amount_tendered || grand);
+      }
       const isD =
         cleanPaymentMethod === 'debt' ||
         t.payment_status === 'DEBT' ||
@@ -851,6 +869,9 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
       return isD ? Math.min(grand, Math.max(0, raw)) : (Number(t.amount_tendered) || grand);
     })(),
     paymentStatus: (() => {
+      if (isOnlineOrder) {
+        return 'PAID';
+      }
       const grand = Number(t.grand_total) || 0;
       const isD =
         cleanPaymentMethod === 'debt' ||
@@ -875,6 +896,7 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     debtDueDate: t.debt_due_date || t.due_date || cachedMeta?.debtDueDate || cachedMeta?.receipt?.debtDueDate || null,
     debt_due_date: t.debt_due_date || t.due_date || cachedMeta?.debtDueDate || cachedMeta?.receipt?.debtDueDate || null,
     debtStatus: (() => {
+      if (isOnlineOrder) return 'paid';
       const isD = cleanPaymentMethod === 'debt' || t.payment_status === 'DEBT' || t.payment_status === 'PARTIAL';
       if (!isD) return 'paid';
       const grand = Number(t.grand_total) || 0;
@@ -896,6 +918,20 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
       cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0
         ? cachedMeta.items
         : rawItems,
+    order_source: isOnlineOrder ? 'online' : (t.order_source || cachedMeta?.order_source || 'pos'),
+    orderSource: isOnlineOrder ? 'online' : (t.order_source || cachedMeta?.order_source || 'pos'),
+    fulfillment_type: t.fulfillment_type || cachedMeta?.fulfillment_type || 'in_store',
+    fulfillmentType: t.fulfillment_type || cachedMeta?.fulfillment_type || 'in_store',
+    delivery_address: t.delivery_address || cachedMeta?.delivery_address || null,
+    deliveryAddress: t.delivery_address || cachedMeta?.delivery_address || null,
+    delivery_note: t.delivery_note || cachedMeta?.delivery_note || null,
+    deliveryNote: t.delivery_note || cachedMeta?.delivery_note || null,
+    pickup_time: t.pickup_time || cachedMeta?.pickup_time || null,
+    pickupTime: t.pickup_time || cachedMeta?.pickup_time || null,
+    online_status: t.online_status || cachedMeta?.online_status || 'COMPLETED',
+    onlineStatus: t.online_status || cachedMeta?.online_status || 'COMPLETED',
+    payment_slip_url: t.payment_slip_url || cachedMeta?.payment_slip_url || null,
+    paymentSlipUrl: t.payment_slip_url || cachedMeta?.payment_slip_url || null,
   };
 }
 
@@ -2991,6 +3027,138 @@ export async function deleteProductBundleInSupabase(bundleId) {
     return { success: true };
   } catch (err) {
     console.error('deleteProductBundleInSupabase exception:', err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Tạo đơn đặt hàng Online từ Web khách hàng (/menu)
+ * Hỗ trợ 2 hình thức: Tự ghé lấy (pickup) và Giao hàng (delivery)
+ */
+export async function createOnlineOrderInSupabase(orderData) {
+  try {
+    const txId = orderData.id || `onl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const now = new Date();
+    const dateStr = now.toISOString().slice(2, 10).replace(/-/g, '');
+    const randSuffix = Math.floor(1000 + Math.random() * 9000);
+    const receiptNumber = orderData.receiptNumber || `ONL-${dateStr}-${randSuffix}`;
+
+    const grandTotal = Number(orderData.grandTotal) || Number(orderData.totalLak) || 0;
+    const isTransfer = orderData.paymentMethod === 'transfer';
+
+    const newTx = {
+      id: txId,
+      receipt_number: receiptNumber,
+      created_at: now.toISOString(),
+      is_wholesale: false,
+      customer_name: orderData.customerName || 'ລູກຄ້າອອນລາຍ',
+      customer_phone: orderData.customerPhone || null,
+      payment_method: orderData.paymentMethod || 'cash',
+      subtotal: Number(orderData.subtotal) || grandTotal,
+      discount_total: 0,
+      grand_total: grandTotal,
+      amount_tendered: grandTotal,
+      change_amount: 0,
+      total_cost_lak: 0,
+      total_cost_thb: 0,
+      gross_profit_lak: 0,
+      gross_profit_thb: 0,
+      cashier_name: 'Online Web',
+      paid_amount: grandTotal,
+      remaining_debt: 0,
+      payment_status: 'PAID',
+      total_lak: grandTotal,
+      total_thb: 0,
+      order_source: 'online',
+      fulfillment_type: orderData.fulfillmentType || 'pickup', // 'pickup' | 'delivery'
+      delivery_address: orderData.deliveryAddress || null,
+      delivery_note: orderData.deliveryNote || null,
+      pickup_time: orderData.pickupTime || null,
+      online_status: 'PENDING',
+      payment_slip_url: orderData.paymentSlipUrl || null,
+    };
+
+    // 1. Ghi đơn hàng vào bảng sale_transactions
+    let insertedTx = null;
+    const { data: txRecord, error: txErr } = await supabase
+      .from('sale_transactions')
+      .insert(newTx)
+      .select()
+      .single();
+
+    if (txErr) {
+      console.warn('[OnlineOrder] Primary insert fallback (ignoring new fields if not migrated):', txErr.message);
+      // Fallback nếu database chưa chạy migration các cột online mới
+      const { order_source, fulfillment_type, delivery_address, delivery_note, pickup_time, online_status, payment_slip_url, ...fallbackTx } = newTx;
+      const { data: fallbackRecord, error: fallbackErr } = await supabase
+        .from('sale_transactions')
+        .insert(fallbackTx)
+        .select()
+        .single();
+      if (fallbackErr) throw fallbackErr;
+      insertedTx = fallbackRecord;
+    } else {
+      insertedTx = txRecord;
+    }
+
+    // 2. Ghi chi tiết các món vào bảng sale_transaction_items
+    const itemsToInsert = (orderData.items || []).map((it) => ({
+      id: generateUUID(),
+      transaction_id: txId,
+      product_id: it.productId || it.id || 'prod_custom',
+      product_name: it.productName || it.name || 'ສິນຄ້າ',
+      unit_name: it.unitName || 'ອັນ',
+      multiplier: Number(it.multiplier) || 1,
+      quantity: Number(it.quantity) || 1,
+      unit_price: Number(it.unitPrice || it.price) || 0,
+      line_total: Number(it.lineTotal || (Number(it.unitPrice || it.price || 0) * (Number(it.quantity) || 1))) || 0,
+      line_cost: 0,
+      line_profit: 0,
+    }));
+
+    if (itemsToInsert.length > 0) {
+      const { error: itemsErr } = await supabase
+        .from('sale_transaction_items')
+        .insert(itemsToInsert);
+      if (itemsErr) console.warn('[OnlineOrder] Insert items warning:', itemsErr.message);
+    }
+
+    return {
+      success: true,
+      order: {
+        ...newTx,
+        items: itemsToInsert,
+      },
+    };
+  } catch (err) {
+    console.error('[OnlineOrder] Error placing online order:', err);
+    return { success: false, error: err.message || 'Error creating online order' };
+  }
+}
+
+/**
+ * Cập nhật trạng thái đơn hàng Online (Duyệt, Đóng gói, Sẵn sàng, Hoàn tất, Hủy)
+ */
+export async function updateOnlineOrderStatusInSupabase(orderId, newStatus, extraData = {}) {
+  try {
+    const updatePayload = {
+      online_status: newStatus,
+      ...extraData,
+    };
+    if (newStatus === 'COMPLETED') {
+      updatePayload.payment_status = 'PAID';
+      updatePayload.remaining_debt = 0;
+    }
+
+    const { error } = await supabase
+      .from('sale_transactions')
+      .update(updatePayload)
+      .eq('id', orderId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    console.error('[OnlineOrder] Error updating online order status:', err);
     return { success: false, error: err.message || String(err) };
   }
 }

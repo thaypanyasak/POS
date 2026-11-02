@@ -37,6 +37,7 @@ export default function Navbar({
   isCloudSynced = false,
   cartCount = 0,
   unreadOrdersCount = 0,
+  onlineOrdersCount = 0,
   exchangeRate = 0,
   offlineQueueCount = 0,
   isCollapsed,
@@ -65,6 +66,8 @@ export default function Navbar({
     let badge = null;
     if (item.badgeKey === 'cartCount' && cartCount > 0) {
       badge = cartCount;
+    } else if (item.badgeKey === 'onlineOrdersCount') {
+      badge = onlineOrdersCount > 0 ? onlineOrdersCount : null;
     } else if (item.id === 'history' || item.badgeKey === 'transactionsCount') {
       // ONLY show unread/new orders count, NEVER the total count of all orders
       badge = unreadOrdersCount > 0 ? unreadOrdersCount : null;

@@ -23,6 +23,7 @@ import {
   fetchProductBundlesFromSupabase,
   saveProductBundleToSupabase,
   deleteProductBundleInSupabase,
+  updateOnlineOrderStatusInSupabase,
   supabase
 } from './services/supabase';
 import queryClient from './services/queryClient';
@@ -36,6 +37,7 @@ import DashboardView from './components/DashboardView';
 import SalesByUnitReportView from './components/reports/SalesByUnitReportView';
 import ProductsView from './components/ProductsView';
 import HistoryView from './components/HistoryView';
+import OnlineOrdersView from './components/OnlineOrdersView';
 import PurchasesView from './pages/inventory/purchases';
 import SettingsView from './components/SettingsView';
 import PurchaseEntryModal from './components/inventory/PurchaseEntryModal';
@@ -81,6 +83,7 @@ import {
   playUnitChangeBeep,
   playPriceTierBeep,
   playActionClickBeep,
+  playOrderDingSound,
 } from './utils/audioFeedback';
 
 export default function App() {
@@ -683,6 +686,91 @@ export default function App() {
     onDeleteOrder: handleRealtimeDeleteOrder,
     localEchoIdsRef,
   });
+
+  // Pending Online Orders Count for Navbar Badge
+  const pendingOnlineOrdersCount = useMemo(() => {
+    return (transactions || []).filter((tx) => {
+      const isOnline = tx.order_source === 'online' || tx.orderSource === 'online';
+      const status = (tx.online_status || tx.onlineStatus || 'PENDING').toUpperCase();
+      return isOnline && status === 'PENDING';
+    }).length;
+  }, [transactions]);
+
+  const handleUpdateOnlineStatus = useCallback(async (order, newStatus) => {
+    const isCompleted = newStatus === 'COMPLETED';
+    const grandTotal = Number(order.grand_total || order.grandTotal || order.total_lak || 0);
+
+    const extraData = {};
+    if (isCompleted) {
+      extraData.payment_status = 'PAID';
+      extraData.remaining_debt = 0;
+      extraData.paid_amount = grandTotal;
+      extraData.amount_tendered = grandTotal;
+    }
+
+    await updateOnlineOrderStatusInSupabase(order.id, newStatus, extraData);
+
+    // Update locally in transactions state
+    setTransactions((prev) =>
+      prev.map((t) => {
+        if (t.id !== order.id) return t;
+        const updated = {
+          ...t,
+          online_status: newStatus,
+          onlineStatus: newStatus,
+        };
+        if (isCompleted) {
+          updated.payment_status = 'PAID';
+          updated.paymentStatus = 'PAID';
+          updated.remaining_debt = 0;
+          updated.remainingDebt = 0;
+          updated.paid_amount = grandTotal;
+          updated.paidAmount = grandTotal;
+          updated.amount_tendered = grandTotal;
+          updated.amountTendered = grandTotal;
+          updated.isDebt = false;
+        }
+        return updated;
+      })
+    );
+
+    // If marked as COMPLETED, deduct stock if inventory tracking is enabled
+    if (newStatus === 'COMPLETED') {
+      const items = order.sale_transaction_items && order.sale_transaction_items.length > 0
+        ? order.sale_transaction_items
+        : order.items || [];
+
+      if (items.length > 0) {
+        setProducts((prevProducts) => {
+          if (!prevProducts || prevProducts.length === 0) return prevProducts;
+          const itemMap = new Map();
+          items.forEach((it) => {
+            const pId = it.productId || it.product_id;
+            const mult = Number(it.multiplier) || 1;
+            const qty = Number(it.quantity) || 1;
+            const baseQty = mult * qty;
+            itemMap.set(pId, (itemMap.get(pId) || 0) + baseQty);
+          });
+
+          const updated = prevProducts.map((prod) => {
+            if (prod.trackStock === false || !itemMap.has(prod.id)) return prod;
+            const soldBase = itemMap.get(prod.id);
+            const current = prod.currentStockBaseUnits ?? 0;
+            return {
+              ...prod,
+              currentStockBaseUnits: Math.max(0, current - soldBase),
+            };
+          });
+
+          try {
+            safeSetItem('meiishop_products_v5', JSON.stringify(updated));
+          } catch (_) {}
+
+          return updated;
+        });
+      }
+    }
+  }, []);
 
   // Custom Alert & Confirm Dialog State
   const [dialogState, setDialogState] = useState({
@@ -3457,6 +3545,7 @@ export default function App() {
         isCloudSynced={isCloudSynced}
         cartCount={cart.length}
         unreadOrdersCount={unreadOrderIds.size}
+        onlineOrdersCount={pendingOnlineOrdersCount}
         exchangeRate={exchangeRate}
         offlineQueueCount={offlineQueue.length}
       />
@@ -3578,6 +3667,18 @@ export default function App() {
               onSaveBundle={handleSaveBundle}
               onDeleteBundle={handleDeleteBundle}
               onAlert={openAlert}
+            />
+          </RouteGuard>
+        )}
+
+        {activeMainTab === 'online-orders' && (
+          <RouteGuard routeId="online-orders" onRedirect={handleTabChange}>
+            <OnlineOrdersView
+              transactions={transactions}
+              onUpdateOnlineStatus={handleUpdateOnlineStatus}
+              onOpenReceipt={handleOpenReceipt}
+              onRefresh={handleRefreshAllFromSupabase}
+              isLoading={isLoadingProducts || isRefreshing}
             />
           </RouteGuard>
         )}

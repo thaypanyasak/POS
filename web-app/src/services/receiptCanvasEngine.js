@@ -646,18 +646,33 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
   y += 34;
 
   // Row 2: Customer Name (Left) & Payment Method (Right)
-  const custName = (!receipt.customerName || receipt.customerName === 'ລູກຄ້າທົ່ວໄປ' || receipt.customerName === 'Khách lẻ / Khách vãng lai')
+  const rawCust = receipt.customerName || receipt.customer_name || '';
+  const custName = (!rawCust || rawCust === 'ລູກຄ້າທົ່ວໄປ' || rawCust === 'Khách lẻ / Khách vãng lai')
     ? L.defaultCustomer
-    : receipt.customerName;
+    : rawCust;
   drawLeft(`${L.customer} ${custName}`, K80.LEFT_MARGIN, y, FONTS.META_VAL);
 
+  const isOnline = Boolean(
+    receipt.order_source === 'online' ||
+    receipt.orderSource === 'online' ||
+    String(receipt.id || '').startsWith('onl_') ||
+    String(receipt.receiptNumber || receipt.receipt_number || '').startsWith('ONL-') ||
+    (receipt.cashierName || receipt.cashier_name) === 'Online Web'
+  );
+
   if (!isQuotation) {
+    const rawMethod = String(receipt.paymentMethod || receipt.payment_method || 'cash').toLowerCase();
     let payLabel = L.payCash;
-    if (receipt.paymentMethod === 'cash') payLabel = L.payCash;
-    else if (['transfer', 'qrTransfer', 'onepay'].includes(receipt.paymentMethod)) payLabel = L.payQr;
-    else if (receipt.paymentMethod === 'debt') {
-      payLabel = Number(receipt.paidAmount || 0) === 0 ? L.payDebtFull : L.payDebtPartial;
-    } else payLabel = L.payTransfer;
+    if (rawMethod === 'cash' || rawMethod === 'cod' || rawMethod === 'ເງິນສົດ') {
+      payLabel = isOnline ? (lang === 'vi' ? 'Tiền mặt (COD)' : 'ເງິນສົດ (COD)') : L.payCash;
+    } else if (['transfer', 'qrtransfer', 'onepay', 'qr'].includes(rawMethod)) {
+      payLabel = L.payQr;
+    } else if (rawMethod === 'debt' || receipt.isDebt) {
+      const pAmt = Number(receipt.paidAmount ?? receipt.paid_amount ?? 0);
+      payLabel = pAmt === 0 ? L.payDebtFull : L.payDebtPartial;
+    } else {
+      payLabel = L.payTransfer;
+    }
     drawRight(`${L.payment} ${payLabel}`, K80.RIGHT_EDGE, y, FONTS.META_VAL);
   }
   y += 34;
@@ -667,6 +682,49 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
   if (custPhone) {
     drawLeft(`${L.phone} ${custPhone}`, K80.LEFT_MARGIN, y, FONTS.META_LABEL);
     y += 34;
+  }
+
+  // Row 4: Online Order Fulfillment (Pickup or Delivery)
+  if (isOnline) {
+    const isPickup = (receipt.fulfillment_type || receipt.fulfillmentType) === 'pickup';
+    const pickupTime = receipt.pickup_time || receipt.pickupTime;
+    const fulLabel = isPickup
+      ? (lang === 'vi' ? `Hình thức: Tự ghé lấy ${pickupTime ? `(${pickupTime})` : ''}` : `ຮູບແບບ: ມາຮັບເອງ ${pickupTime ? `(${pickupTime})` : ''}`)
+      : (lang === 'vi' ? 'Hình thức: Giao hàng (Delivery)' : 'ຮູບແບບ: ສົ່ງຮອດບ່ອນ (Delivery)');
+    drawLeft(fulLabel, K80.LEFT_MARGIN, y, FONTS.META_LABEL);
+    y += 34;
+
+    const delivAddr = receipt.delivery_address || receipt.deliveryAddress;
+    if (!isPickup && delivAddr) {
+      const addrPrefix = lang === 'vi' ? 'Địa chỉ: ' : 'ທີ່ຢູ່: ';
+      if (measureCtx) {
+        measureCtx.font = FONTS.META_LABEL;
+        const addrLines = wrapText(measureCtx, `${addrPrefix}${delivAddr}`, K80.PRINTABLE_WIDTH);
+        for (const line of addrLines) {
+          drawLeft(line, K80.LEFT_MARGIN, y, FONTS.META_LABEL);
+          y += 28;
+        }
+      } else {
+        drawLeft(`${addrPrefix}${delivAddr}`, K80.LEFT_MARGIN, y, FONTS.META_LABEL);
+        y += 28;
+      }
+    }
+
+    const delivNote = receipt.delivery_note || receipt.deliveryNote;
+    if (delivNote) {
+      const notePrefix = lang === 'vi' ? 'Ghi chú: ' : 'ໝາຍເຫດ: ';
+      if (measureCtx) {
+        measureCtx.font = FONTS.META_LABEL;
+        const noteLines = wrapText(measureCtx, `${notePrefix}${delivNote}`, K80.PRINTABLE_WIDTH);
+        for (const line of noteLines) {
+          drawLeft(line, K80.LEFT_MARGIN, y, FONTS.META_LABEL);
+          y += 28;
+        }
+      } else {
+        drawLeft(`${notePrefix}${delivNote}`, K80.LEFT_MARGIN, y, FONTS.META_LABEL);
+        y += 28;
+      }
+    }
   }
 
   // 5. COLUMN HEADERS (4 Columns)
@@ -1029,13 +1087,16 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
         }
       }
     } else {
+      const tendered = receipt.amountTendered ?? receipt.amount_tendered ?? receipt.paidAmount ?? receipt.paid_amount ?? receipt.grandTotal ?? receipt.grand_total ?? 0;
       drawLeft(L.tenderedLabel, K80.LEFT_MARGIN, y, FONTS.TENDER_LABEL);
-      drawRight(fmtKip(receipt.amountTendered), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
+      drawRight(fmtKip(tendered), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
       y += 34;
 
-      if (receipt.paymentMethod === 'cash') {
+      const rawMethod = String(receipt.paymentMethod || receipt.payment_method || 'cash').toLowerCase();
+      if (rawMethod === 'cash' || rawMethod === 'cod' || rawMethod === 'ເງິນສົດ') {
+        const change = receipt.changeAmount ?? receipt.change_amount ?? 0;
         drawLeft(L.changeLabel, K80.LEFT_MARGIN, y, FONTS.TENDER_LABEL);
-        drawRight(fmtKip(receipt.changeAmount), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
+        drawRight(fmtKip(change), K80.RIGHT_EDGE, y, FONTS.TENDER_NUM);
         y += 34;
       }
     }
@@ -1133,7 +1194,8 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
   drawDashedLine(y);
   y += 22;
 
-  const barcodeData = generateBarcode128(receipt.receiptNumber || 'MEII-POS');
+  const rawReceiptNo = String(receipt.receiptNumber || receipt.receipt_number || receipt.id || 'MEII-POS').trim();
+  const barcodeData = generateBarcode128(rawReceiptNo.replace(/^#/, ''));
   const moduleW = 2; // Crisp 2px module width (4 physical px on 2X canvas)
   const barcodeTotalW = barcodeData.totalModules * moduleW;
   const startX = Math.round(K80.CENTER_X - barcodeTotalW / 2);
@@ -1157,7 +1219,8 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
   y += barcodeH + 16; // Clean gap below uniform barcode bars
 
   // Receipt Number (24px bold monospace, clear separation - EXACT bill code)
-  drawCenter(receipt.receiptNumber || 'MEII-POS', y, FONTS.BARCODE_NUM);
+  const displayReceiptCode = rawReceiptNo.startsWith('#') ? rawReceiptNo : `#${rawReceiptNo}`;
+  drawCenter(displayReceiptCode, y, FONTS.BARCODE_NUM);
   y += 54; // Spacious gap between barcode bill code & thank you (User: dính nhau quá cách xa nhau một chút)
 
   // 12. FOOTER (Multi-line Thank You & Inspection / Return Policy)
@@ -1300,8 +1363,15 @@ export async function renderReceiptCanvas(receipt, lang = 'lo', options = {}) {
   // Pre-load QR code if transfer payment or debt
   let qrImg = null;
   const pm = String(receipt.paymentMethod || receipt.payment_method || 'cash').toLowerCase();
-  const isDebt = pm === 'debt' || Boolean(receipt.isDebt);
-  const isCash = pm === 'cash';
+  const isOnlineOrder = Boolean(
+    receipt.order_source === 'online' ||
+    receipt.orderSource === 'online' ||
+    String(receipt.id || '').startsWith('onl_') ||
+    String(receipt.receiptNumber || receipt.receipt_number || '').startsWith('ONL-') ||
+    (receipt.cashierName || receipt.cashier_name) === 'Online Web'
+  );
+  const isCash = pm === 'cash' || pm === 'cod' || pm === 'ເງິນສົດ';
+  const isDebt = !isOnlineOrder && (pm === 'debt' || Boolean(receipt.isDebt));
   const isTransfer = pm === 'transfer' || pm === 'onepay' || pm === 'qrtransfer' || pm === 'qr' || (!isCash && !isDebt);
   const showQr = !receipt.isQuotation && (isTransfer || (isDebt && (Number(receipt.debtAmount ?? receipt.grandTotal) > 0)));
   if (showQr) {

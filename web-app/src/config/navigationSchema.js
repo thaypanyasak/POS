@@ -14,6 +14,7 @@ import {
   Users,
   Folders,
   Intersect,
+  ShoppingBag,
 } from '@phosphor-icons/react';
 
 export const USER_ROLES = {
@@ -124,6 +125,16 @@ export const NAVIGATION_SCHEMA = [
     adminOnly: true,
   },
   {
+    id: 'online-orders',
+    path: '#online-orders',
+    label: 'ອໍເດີອອນລາຍ',
+    sub: 'ລູກຄ້າສັ່ງຜ່ານເວັບ /menu',
+    shortLabel: 'ອໍເດີເວັບ',
+    icon: ShoppingBag,
+    allowedRoles: [USER_ROLES.ADMIN, USER_ROLES.CASHIER],
+    badgeKey: 'onlineOrdersCount',
+  },
+  {
     id: 'settings',
     path: '#settings',
     label: 'ຕັ້ງຄ່າລະບົບ',
@@ -138,6 +149,7 @@ export const NAVIGATION_SCHEMA = [
 export const DEFAULT_ROLE_PERMISSIONS = {
   [USER_ROLES.ADMIN]: [
     'pos',
+    'online-orders',
     'history',
     'products',
     'categories',
@@ -151,6 +163,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   ],
   [USER_ROLES.CASHIER]: [
     'pos',
+    'online-orders',
     'history',
     'products',
     'categories',

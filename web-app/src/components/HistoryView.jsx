@@ -118,7 +118,13 @@ export default function HistoryView({
     const endOfYesterday = new Date(startOfToday.getTime() - 1);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    let list = transactions;
+    // Exclude in-flight online orders (PENDING, PREPARING, READY are managed exclusively in OnlineOrdersView)
+    let list = (transactions || []).filter((tx) => {
+      const isOnline = tx.order_source === 'online' || tx.orderSource === 'online';
+      if (!isOnline) return true;
+      const st = (tx.online_status || tx.onlineStatus || 'PENDING').toUpperCase();
+      return st === 'COMPLETED' || st === 'CANCELLED';
+    });
     if (dateFilter === 'today') {
       list = list.filter((tx) => new Date(tx.createdAt || tx.created_at) >= startOfToday);
     } else if (dateFilter === 'yesterday') {
@@ -157,17 +163,24 @@ export default function HistoryView({
       if (isCancelled) {
         cancelled++;
       } else {
+        const isOnlineOrder =
+          tx.order_source === 'online' ||
+          tx.orderSource === 'online' ||
+          String(tx.id || '').startsWith('onl_') ||
+          String(tx.receiptNumber || tx.receipt_number || '').startsWith('ONL-') ||
+          (tx.cashierName || tx.cashier_name) === 'Online Web';
         const method = (tx.paymentMethod || '').toLowerCase();
         const status = (tx.paymentStatus || '').toUpperCase();
         const total = Number(tx.grandTotal || tx.finalTotalKip || 0);
         const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
         let remainingDebt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
         const isDebtOrder =
-          status === 'DEBT' ||
+          !isOnlineOrder &&
+          (status === 'DEBT' ||
           status === 'PARTIAL' ||
           remainingDebt > 0 ||
           method === 'debt' ||
-          Boolean(tx.debtDueDate || tx.debt_due_date);
+          Boolean(tx.debtDueDate || tx.debt_due_date));
         if (isDebtOrder && remainingDebt <= 0 && paid < total) {
           remainingDebt = Math.max(0, total - paid);
         }
@@ -251,7 +264,13 @@ export default function HistoryView({
       const total = Number(tx.grandTotal || tx.finalTotalKip || tx.totalKip || 0);
       const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
       let remainingDebt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
-      const isDebt = status === 'DEBT' || status === 'PARTIAL' || remainingDebt > 0 || method === 'debt';
+      const isOnline =
+        tx.order_source === 'online' ||
+        tx.orderSource === 'online' ||
+        String(tx.id || '').startsWith('onl_') ||
+        String(tx.receiptNumber || tx.receipt_number || '').startsWith('ONL-') ||
+        (tx.cashierName || tx.cashier_name) === 'Online Web';
+      const isDebt = !isOnline && (status === 'DEBT' || status === 'PARTIAL' || remainingDebt > 0 || method === 'debt');
       if (isDebt && remainingDebt <= 0 && paid < total) {
         remainingDebt = Math.max(0, total - paid);
       }
@@ -337,6 +356,13 @@ export default function HistoryView({
       list = list.filter((tx) => {
         const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
         if (isCancelled) return false;
+        const isOnline =
+          tx.order_source === 'online' ||
+          tx.orderSource === 'online' ||
+          String(tx.id || '').startsWith('onl_') ||
+          String(tx.receiptNumber || tx.receipt_number || '').startsWith('ONL-') ||
+          (tx.cashierName || tx.cashier_name) === 'Online Web';
+        if (isOnline) return false;
         const method = (tx.paymentMethod || '').toLowerCase();
         const status = (tx.paymentStatus || '').toUpperCase();
         const debt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
@@ -1151,27 +1177,31 @@ export default function HistoryView({
           const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
           const method = (tx.paymentMethod || '').toLowerCase();
           const status = (tx.paymentStatus || '').toUpperCase();
+          const isOnlineOrder = tx.order_source === 'online' || tx.orderSource === 'online';
+          const isOnlineCompleted = isOnlineOrder && ((tx.online_status || tx.onlineStatus || '').toUpperCase() === 'COMPLETED');
           const isDebtOrder =
-            method === 'debt' ||
+            !isOnlineCompleted &&
+            (method === 'debt' ||
             tx.isDebt ||
             status === 'DEBT' ||
             status === 'PARTIAL' ||
-            Boolean(tx.debtDueDate || tx.debt_due_date);
+            Boolean(tx.debtDueDate || tx.debt_due_date));
 
-          let remainingDebt = Number(
-            tx.remainingDebt ?? tx.debtAmount ?? Math.max(0, total - paid)
-          );
+          let remainingDebt = isOnlineCompleted
+            ? 0
+            : Number(tx.remainingDebt ?? tx.debtAmount ?? Math.max(0, total - paid));
           if (isDebtOrder && remainingDebt <= 0 && paid < total) {
             remainingDebt = Math.max(0, total - paid);
           }
 
           const isDebtItem =
-            status === 'DEBT' ||
+            !isOnlineCompleted &&
+            (status === 'DEBT' ||
             status === 'PARTIAL' ||
             remainingDebt > 0 ||
             isDebtOrder ||
-            (tx.debtPayments && tx.debtPayments.length > 0);
-          const hasDebt = remainingDebt > 0;
+            (tx.debtPayments && tx.debtPayments.length > 0));
+          const hasDebt = !isOnlineCompleted && remainingDebt > 0;
 
           const highlightType = realtimeHighlights?.[tx.id];
           const isRealtimeNew = highlightType === 'new';
@@ -1211,6 +1241,11 @@ export default function HistoryView({
                   >
                     #{tx.receiptNumber}
                   </span>
+                  {(tx.order_source === 'online' || tx.orderSource === 'online') && (
+                    <span className="px-1.5 py-0.5 rounded-md text-[9.5px] font-black bg-teal-50 text-teal-800 border border-teal-200 shadow-2xs inline-flex items-center gap-1">
+                      <span>ອອນລາຍ</span>
+                    </span>
+                  )}
                   {Boolean(tx.isOfflinePending) && (
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white shadow-xs inline-flex items-center gap-1" title="ບິນນີ້ຖືກບັນທຶກຕອນບໍ່ມີເນັດ, ລະບົບຈະຊິ້ງຂຶ້ນ Cloud ອັດຕະໂນມັດເມື່ອມີເນັດ">
                       <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
@@ -1579,27 +1614,36 @@ export default function HistoryView({
               const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
               const method = (tx.paymentMethod || '').toLowerCase();
               const status = (tx.paymentStatus || '').toUpperCase();
+              const isOnlineOrder =
+                tx.order_source === 'online' ||
+                tx.orderSource === 'online' ||
+                String(tx.id || '').startsWith('onl_') ||
+                String(tx.receiptNumber || tx.receipt_number || '').startsWith('ONL-') ||
+                (tx.cashierName || tx.cashier_name) === 'Online Web';
+              const isOnlineCompleted = isOnlineOrder && ((tx.online_status || tx.onlineStatus || '').toUpperCase() === 'COMPLETED');
               const isDebtOrder =
-            method === 'debt' ||
-            tx.isDebt ||
-            status === 'DEBT' ||
-            status === 'PARTIAL' ||
-            Boolean(tx.debtDueDate || tx.debt_due_date);
+                !isOnlineOrder &&
+                (method === 'debt' ||
+                tx.isDebt ||
+                status === 'DEBT' ||
+                status === 'PARTIAL' ||
+                Boolean(tx.debtDueDate || tx.debt_due_date));
 
-              let remainingDebt = Number(
-                tx.remainingDebt ?? tx.debtAmount ?? Math.max(0, total - paid)
-              );
+              let remainingDebt = isOnlineOrder
+                ? 0
+                : Number(tx.remainingDebt ?? tx.debtAmount ?? Math.max(0, total - paid));
               if (isDebtOrder && remainingDebt <= 0 && paid < total) {
                 remainingDebt = Math.max(0, total - paid);
               }
 
               const isDebtItem =
-                status === 'DEBT' ||
+                !isOnlineOrder &&
+                (status === 'DEBT' ||
                 status === 'PARTIAL' ||
                 remainingDebt > 0 ||
                 isDebtOrder ||
-                (tx.debtPayments && tx.debtPayments.length > 0);
-              const hasDebt = remainingDebt > 0;
+                (tx.debtPayments && tx.debtPayments.length > 0));
+              const hasDebt = !isOnlineOrder && remainingDebt > 0;
 
               const highlightType = realtimeHighlights?.[tx.id];
               const isRealtimeNew = highlightType === 'new';
@@ -1637,6 +1681,11 @@ export default function HistoryView({
                       >
                         #{tx.receiptNumber}
                       </span>
+                      {(tx.order_source === 'online' || tx.orderSource === 'online') && (
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-teal-50 text-teal-800 border border-teal-200 inline-flex items-center gap-1">
+                          <span>ອອນລາຍ</span>
+                        </span>
+                      )}
                       {isOrderNew && (
                         <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_2px_6px_rgba(5,150,105,0.3)] inline-flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-white" />
@@ -1722,6 +1771,26 @@ export default function HistoryView({
                           <span>
                             {remainingDebt >= total ? 'ຕິດໜີ້ 100%' : remainingDebt > 0 ? 'ຕິດໜີ້ບາງສ່ວນ' : 'ຊຳລະຄົບແລ້ວ'}
                           </span>
+                        </span>
+                      ) : isOnlineOrder ? (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold inline-flex items-center gap-1 ${
+                            tx.paymentMethod === 'transfer' || tx.payment_method === 'transfer'
+                              ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                              : 'bg-teal-50 text-teal-800 border border-teal-200'
+                          }`}
+                        >
+                          {tx.paymentMethod === 'transfer' || tx.payment_method === 'transfer' ? (
+                            <>
+                              <QrCode size={12} weight="bold" />
+                              <span>QR ໂອນ</span>
+                            </>
+                          ) : (
+                            <>
+                              <Money size={12} weight="bold" />
+                              <span>ເງິນສົດ (COD)</span>
+                            </>
+                          )}
                         </span>
                       ) : (
                         <span

@@ -7,6 +7,7 @@ import {
   Package,
   Tag,
   Info,
+  ShoppingCart,
 } from '@phosphor-icons/react';
 import { formatKip, formatDots, getProductTierBreakdown, sanitizeImageUrl } from '../../utils/formatters';
 
@@ -14,6 +15,7 @@ export default function CustomerProductDetailModal({
   product,
   isOpen,
   onClose,
+  onOpenUnitSelector,
   hotlineNumbers = ['020 56468780', '020 52228432'],
   whatsappNumber = '020 52228432',
 }) {
@@ -178,8 +180,23 @@ export default function CustomerProductDetailModal({
           </div>
         </div>
 
-        {/* Footer Actions: WhatsApp & Direct Calls */}
+        {/* Footer Actions: Add to Cart, WhatsApp & Direct Calls */}
         <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-col gap-2 shrink-0">
+          {/* Add to Cart button */}
+          {onOpenUnitSelector && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenUnitSelector(product);
+              }}
+              className="w-full h-11 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-98 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+            >
+              <ShoppingCart size={18} weight="bold" />
+              <span>ເລືອກຫົວໜ່ວຍ & ເພີ່ມໃສ່ກະຕ່າ</span>
+            </button>
+          )}
+
           {/* WhatsApp Direct Message */}
           <a
             href={`https://wa.me/${whatsappInternational}?text=${whatsappMessage}`}

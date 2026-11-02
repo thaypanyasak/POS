@@ -10,9 +10,17 @@ import {
   ListDashes,
   Package,
   ArrowClockwise,
+  ShoppingCart,
+  Plus,
+  ArrowRight,
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao, getSortedUnits, getProductTierBreakdown, sanitizeImageUrl } from '../../utils/formatters';
+import { createOnlineOrderInSupabase } from '../../services/supabase';
 import CustomerProductDetailModal from './CustomerProductDetailModal';
+import CustomerUnitSelectorModal from './CustomerUnitSelectorModal';
+import CustomerCartCheckoutModal from './CustomerCartCheckoutModal';
+import CustomerOrderSuccessModal from './CustomerOrderSuccessModal';
+import CustomerOrderTrackingModal from './CustomerOrderTrackingModal';
 
 export default function CustomerCatalogView({
   products = [],
@@ -25,6 +33,144 @@ export default function CustomerCatalogView({
   const [activeCategory, setActiveCategory] = useState('ທັງໝົດ');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectorProduct, setSelectorProduct] = useState(null);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [successOrder, setSuccessOrder] = useState(null);
+  const [trackingOrder, setTrackingOrder] = useState(null);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+
+  // Customer recent orders persisted in localStorage for live tracking
+  const [recentOrders, setRecentOrders] = useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = localStorage.getItem('meiishop_customer_recent_orders_v1');
+        if (saved) return JSON.parse(saved);
+      }
+    } catch (_) {}
+    return [];
+  });
+
+  // Find latest active/in-flight order (Pending, Preparing, Ready)
+  const activeOrder = useMemo(() => {
+    return (recentOrders || []).find((o) => {
+      const st = (o.online_status || o.onlineStatus || 'PENDING').toUpperCase();
+      return st === 'PENDING' || st === 'PREPARING' || st === 'READY';
+    });
+  }, [recentOrders]);
+
+  // Cart state persisted in localStorage
+  const CART_STORAGE_KEY = 'meiishop_customer_cart_v1';
+  const [cart, setCart] = useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = localStorage.getItem(CART_STORAGE_KEY);
+        if (saved) return JSON.parse(saved);
+      }
+    } catch (_) {}
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+      }
+    } catch (_) {}
+  }, [cart]);
+
+  const totalCartQuantity = useMemo(() => {
+    return cart.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+  }, [cart]);
+
+  const cartGrandTotal = useMemo(() => {
+    return cart.reduce((sum, item) => sum + (Number(item.price || item.unitPrice) || 0) * (Number(item.quantity) || 1), 0);
+  }, [cart]);
+
+  const handleAddToCart = ({ product, unit, quantity }) => {
+    setCart((prev) => {
+      const existingIdx = prev.findIndex(
+        (it) => it.productId === product.id && it.unitName === unit.unitName
+      );
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          quantity: updated[existingIdx].quantity + quantity,
+        };
+        return updated;
+      }
+      return [
+        ...prev,
+        {
+          id: `item_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          productId: product.id,
+          productName: product.name,
+          name: product.name,
+          imageUrl: product.imageUrl || product.image_url,
+          unitName: unit.unitName,
+          multiplier: unit.multiplier,
+          unitPrice: unit.retailPrice,
+          price: unit.retailPrice,
+          quantity: quantity,
+          label: unit.label,
+        },
+      ];
+    });
+  };
+
+  const handleUpdateQuantity = (index, newQty) => {
+    setCart((prev) => {
+      if (index < 0 || index >= prev.length) return prev;
+      const updated = [...prev];
+      updated[index] = { ...updated[index], quantity: newQty };
+      return updated;
+    });
+  };
+
+  const handleRemoveItem = (index) => {
+    setCart((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleClearCart = () => {
+    setCart([]);
+  };
+
+  const handleSubmitOnlineOrder = async (orderData) => {
+    setIsSubmittingOrder(true);
+    try {
+      const res = await createOnlineOrderInSupabase({
+        ...orderData,
+        items: cart,
+        grandTotal: cartGrandTotal,
+      });
+
+      if (!res || !res.success || !res.order) {
+        throw new Error(res?.error || 'ບໍ່ສາມາດບັນທຶກອໍເດີໄດ້');
+      }
+
+      const createdOrder = res.order;
+
+      // Save to recent orders for live status tracking
+      try {
+        const stored = JSON.parse(localStorage.getItem('meiishop_customer_recent_orders_v1') || '[]');
+        const updated = [createdOrder, ...stored.filter((o) => o.id !== createdOrder.id)].slice(0, 8);
+        localStorage.setItem('meiishop_customer_recent_orders_v1', JSON.stringify(updated));
+        setRecentOrders(updated);
+      } catch (_) {}
+
+      setCart([]);
+      try {
+        localStorage.removeItem(CART_STORAGE_KEY);
+      } catch (_) {}
+      setIsCheckoutOpen(false);
+      setSuccessOrder(createdOrder);
+    } catch (err) {
+      console.error('Failed to submit online order:', err);
+      alert('ຂໍອະໄພ, ລະບົບບໍ່ສາມາດສົ່ງອໍເດີໄດ້ໃນຂະນະນີ້: ' + (err.message || 'ກະລຸນາລອງໃໝ່'));
+    } finally {
+      setIsSubmittingOrder(false);
+    }
+  };
 
   const hotlineNumbers = ['020 56468780', '020 52228432'];
   const whatsappNumber = '020 52228432';
@@ -145,7 +291,9 @@ export default function CustomerCatalogView({
     <div
       ref={scrollContainerRef}
       onScroll={handleContainerScroll}
-      className="fixed inset-0 w-full h-full h-dvh overflow-y-auto overscroll-contain bg-slate-50 text-slate-900 font-sans flex flex-col selection:bg-teal-500/20 selection:text-teal-900 pb-12 z-10"
+      className={`fixed inset-0 w-full h-full h-dvh overflow-y-auto overscroll-contain bg-slate-50 text-slate-900 font-sans flex flex-col selection:bg-teal-500/20 selection:text-teal-900 z-10 ${
+        cart.length > 0 ? 'pb-28 sm:pb-24' : 'pb-12'
+      }`}
       style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }}
     >
       {/* 1. TOP NAVBAR */}
@@ -174,6 +322,42 @@ export default function CustomerCatalogView({
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Header Cart Pill (When cart has items) */}
+            {cart.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsCheckoutOpen(true)}
+                className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0"
+                title="ເບິ່ງກະຕ່າສິນຄ້າ"
+              >
+                <div className="relative">
+                  <ShoppingCart size={16} weight="fill" />
+                  <span className="absolute -top-1.5 -right-2 px-1 min-w-[15px] h-3.5 rounded-full bg-rose-500 text-[9px] font-black flex items-center justify-center">
+                    {totalCartQuantity}
+                  </span>
+                </div>
+                <span className="hidden sm:inline font-mono font-black ml-1">
+                  {formatKip(cartGrandTotal)}
+                </span>
+              </button>
+            )}
+
+            {/* My Orders Button (If customer has placed recent orders) */}
+            {recentOrders.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setTrackingOrder(activeOrder || recentOrders[0])}
+                className="h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1 border border-slate-200 shadow-2xs transition-all active:scale-95 cursor-pointer relative"
+                title="ຕິດຕາມອໍເດີຂອງຂ້ອຍ"
+              >
+                <Package size={15} weight="bold" className="text-teal-700" />
+                <span className="hidden sm:inline">ອໍເດີຂອງຂ້ອຍ</span>
+                {activeOrder && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping absolute -top-0.5 -right-0.5" />
+                )}
+              </button>
+            )}
+
             {/* WhatsApp Direct Order Button */}
             <a
               href={defaultWhatsappUrl}
@@ -477,6 +661,19 @@ export default function CustomerCatalogView({
                         ))}
                       </div>
                     )}
+
+                    {/* Quick Add To Cart / Select Unit */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectorProduct(p);
+                      }}
+                      className="w-full mt-1.5 h-8 rounded-xl bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-teal-200/90 hover:border-teal-600 transition-all active:scale-95 cursor-pointer shadow-2xs"
+                    >
+                      <Plus size={14} weight="bold" />
+                      <span>ເລືອກຊື້</span>
+                    </button>
                   </div>
                 </div>
               );
@@ -524,24 +721,39 @@ export default function CustomerCatalogView({
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <div className="text-sm sm:text-base font-black text-teal-700 font-mono">
-                      {tierBreakdown.length > 0 ? formatKip(tierBreakdown[0].retailPrice) : '---'}
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <div className="text-right">
+                      <div className="text-sm sm:text-base font-black text-teal-700 font-mono">
+                        {tierBreakdown.length > 0 ? formatKip(tierBreakdown[0].retailPrice) : '---'}
+                      </div>
+                      {tierBreakdown.length > 0 && (
+                        <div className="text-[10px] text-slate-500 font-bold">
+                          {tierBreakdown[0].label.replace(/:$/, '')}
+                        </div>
+                      )}
+                      {tierBreakdown.length > 1 && (
+                        <div className="text-[10px] font-medium text-slate-600 font-mono mt-0.5 space-y-0.5">
+                          {tierBreakdown.slice(1).map((item, subIdx) => (
+                            <div key={item.id || subIdx}>
+                              {item.label} {formatKip(item.retailPrice)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    {tierBreakdown.length > 0 && (
-                      <div className="text-[10px] text-slate-500 font-bold">
-                        {tierBreakdown[0].label.replace(/:$/, '')}
-                      </div>
-                    )}
-                    {tierBreakdown.length > 1 && (
-                      <div className="text-[10px] font-medium text-slate-600 font-mono mt-0.5 space-y-0.5">
-                        {tierBreakdown.slice(1).map((item, subIdx) => (
-                          <div key={item.id || subIdx}>
-                            {item.label} {formatKip(item.retailPrice)}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectorProduct(p);
+                      }}
+                      className="h-9 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer shrink-0"
+                      title="ເລືອກຫົວໜ່ວຍ & ເພີ່ມໃສ່ກະຕ່າ"
+                    >
+                      <Plus size={14} weight="bold" />
+                      <span className="hidden sm:inline">ເລືອກຊື້</span>
+                    </button>
                   </div>
                 </div>
               );
@@ -599,11 +811,118 @@ export default function CustomerCatalogView({
         </div>
       </footer>
 
-      {/* 6. PRODUCT DETAIL MODAL */}
+      {/* 6. FLOATING CART BOTTOM BAR */}
+      {cart.length > 0 && (
+        <div className="fixed bottom-3 left-3 right-3 sm:bottom-4 sm:left-auto sm:right-6 sm:w-[400px] z-40 animate-in slide-in-from-bottom-4 duration-200 select-none">
+          <div
+            onClick={() => setIsCheckoutOpen(true)}
+            className="bg-slate-900/95 backdrop-blur-md text-white p-3 sm:p-3.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-900 transition-all active:scale-98"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative w-10 h-10 rounded-xl bg-teal-500 flex items-center justify-center text-white shadow-xs shrink-0">
+                <ShoppingCart size={20} weight="fill" />
+                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-rose-500 text-white text-[11px] font-black flex items-center justify-center border-2 border-slate-900">
+                  {totalCartQuantity}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] text-teal-300 font-bold truncate">
+                  {cart.length} ລາຍການໃນກະຕ່າ
+                </div>
+                <div className="text-base sm:text-lg font-black font-mono text-white tracking-tight">
+                  {formatKip(cartGrandTotal)}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs shrink-0 shadow-xs transition-colors">
+              <span>ສັ່ງຊື້ສິນຄ້າ</span>
+              <ArrowRight size={15} weight="bold" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6.5. ACTIVE ORDER LIVE TRACKING BAR (Floating Pill when customer has active order) */}
+      {activeOrder && (
+        <div
+          onClick={() => setTrackingOrder(activeOrder)}
+          className={`fixed left-3 right-3 sm:left-auto sm:right-6 sm:w-88 z-40 bg-slate-900/95 text-white p-3 rounded-2xl shadow-xl flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-800 transition-all border border-slate-700 backdrop-blur-md active:scale-98 ${
+            cart.length > 0 ? 'bottom-20 sm:bottom-22' : 'bottom-3 sm:bottom-5'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+            <div className="min-w-0 text-xs">
+              <div className="font-mono font-black text-amber-300 truncate">
+                #{activeOrder.receiptNumber || activeOrder.receipt_number || activeOrder.id}
+              </div>
+              <div className="text-[11px] text-slate-300 font-bold truncate">
+                {(activeOrder.online_status || activeOrder.onlineStatus) === 'PREPARING'
+                  ? 'ຮ້ານກຳລັງຈັດເຄື່ອງ...'
+                  : (activeOrder.online_status || activeOrder.onlineStatus) === 'READY'
+                  ? 'ສິນຄ້າພ້ອມຮັບ / ສົ່ງແລ້ວ!'
+                  : 'ລໍຖ້າຮ້ານກວດສອບ...'}
+              </div>
+            </div>
+          </div>
+          <span className="text-[11px] bg-teal-500 text-slate-950 font-black px-2.5 py-1 rounded-xl shrink-0">
+            ຕິດຕາມອໍເດີ
+          </span>
+        </div>
+      )}
+
+      {/* 7. MODALS */}
+      {/* Unit & Quantity Selector Modal */}
+      <CustomerUnitSelectorModal
+        product={selectorProduct}
+        isOpen={Boolean(selectorProduct)}
+        onClose={() => setSelectorProduct(null)}
+        onAddToCart={handleAddToCart}
+      />
+
+      {/* Cart & Checkout Drawer Modal */}
+      <CustomerCartCheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        cart={cart}
+        onUpdateQuantity={handleUpdateQuantity}
+        onRemoveItem={handleRemoveItem}
+        onClearCart={handleClearCart}
+        onSubmitOrder={handleSubmitOnlineOrder}
+        isSubmitting={isSubmittingOrder}
+        hotlineNumbers={hotlineNumbers}
+      />
+
+      {/* Order Placement Success Modal */}
+      <CustomerOrderSuccessModal
+        isOpen={Boolean(successOrder)}
+        order={successOrder}
+        onClose={() => setSuccessOrder(null)}
+        onOpenTracking={(ord) => {
+          setSuccessOrder(null);
+          setTrackingOrder(ord);
+        }}
+        whatsappInternational={whatsappInternational}
+        whatsappNumber={whatsappNumber}
+        hotlineNumbers={hotlineNumbers}
+      />
+
+      {/* Live Order Tracking Modal */}
+      <CustomerOrderTrackingModal
+        isOpen={Boolean(trackingOrder)}
+        order={trackingOrder}
+        onClose={() => setTrackingOrder(null)}
+        hotlineNumbers={hotlineNumbers}
+        whatsappInternational={whatsappInternational}
+      />
+
+      {/* Product Detail Modal */}
       <CustomerProductDetailModal
         product={selectedProduct}
         isOpen={Boolean(selectedProduct)}
         onClose={() => setSelectedProduct(null)}
+        onOpenUnitSelector={(p) => setSelectorProduct(p)}
         hotlineNumbers={hotlineNumbers}
         whatsappNumber={whatsappNumber}
       />
