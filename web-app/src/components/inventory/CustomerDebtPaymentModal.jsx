@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Money, HandCoins, CheckCircle } from '@phosphor-icons/react';
 import { formatKip, formatDots, parseDots } from '../../utils/formatters';
 import { recordCustomerDebtPaymentInSupabase } from '../../services/supabase';
@@ -8,6 +9,7 @@ export default function CustomerDebtPaymentModal({
   onClose,
   transaction,
   onSuccess,
+  onPaymentSuccess,
   onAlert,
 }) {
   const totalAmount = Number(transaction?.grandTotal) || 0;
@@ -68,7 +70,8 @@ export default function CustomerDebtPaymentModal({
           'ສຳເລັດ',
           'success'
         );
-        onSuccess?.();
+        onSuccess?.(res.data || transaction);
+        onPaymentSuccess?.(res.data || transaction);
         onClose();
       } else {
         onAlert?.(res.error || 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກ', 'ຂໍ້ຜິດພາດ', 'error');
@@ -83,8 +86,8 @@ export default function CustomerDebtPaymentModal({
 
   if (!isOpen || !transaction) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+  const modalContent = (
+    <div className="fixed inset-0 z-[130] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
       <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col gap-4">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
@@ -248,4 +251,10 @@ export default function CustomerDebtPaymentModal({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+
+  return modalContent;
 }

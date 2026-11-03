@@ -207,12 +207,17 @@ export default function App() {
     return [];
   });
 
-  // Hydrate full catalog from high-capacity IndexedDB if localStorage was pruned or empty
+  // Hydrate full catalog & transactions from high-capacity IndexedDB if localStorage was pruned or empty
   useEffect(() => {
     let isMounted = true;
     idbGet('meiishop_products_v5').then((cached) => {
       if (isMounted && Array.isArray(cached) && cached.length > 0) {
         setProducts((prev) => (prev.length === 0 || cached.length > prev.length ? cached : prev));
+      }
+    });
+    idbGet('meiishop_transactions_v7').then((cached) => {
+      if (isMounted && Array.isArray(cached) && cached.length > 0) {
+        setTransactions((prev) => (prev.length === 0 || cached.length > prev.length ? cached : prev));
       }
     });
     return () => { isMounted = false; };
@@ -514,14 +519,27 @@ export default function App() {
   useEffect(() => {
     fetchSavedCustomers().then((data) => setSavedCustomersList(data || []));
 
-    // Realtime sync for customers across multiple POS terminals
+    // Realtime sync for customers across multiple POS terminals (In-memory updates without re-fetching entire table)
     const custChannel = supabase
       .channel('realtime_customers_sync')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'customers' },
-        () => {
-          fetchSavedCustomers().then((data) => setSavedCustomersList(data || []));
+        (payload) => {
+          if (payload?.eventType === 'DELETE' && payload.old?.id) {
+            setSavedCustomersList((prev) => prev.filter((c) => c.id !== payload.old.id));
+          } else if (payload?.eventType === 'INSERT' && payload.new) {
+            setSavedCustomersList((prev) => {
+              if (prev.some((c) => c.id === payload.new.id)) return prev;
+              return [payload.new, ...prev];
+            });
+          } else if (payload?.eventType === 'UPDATE' && payload.new) {
+            setSavedCustomersList((prev) =>
+              prev.map((c) => (c.id === payload.new.id ? { ...c, ...payload.new } : c))
+            );
+          } else {
+            fetchSavedCustomers().then((data) => setSavedCustomersList(data || []));
+          }
         }
       )
       .subscribe();
@@ -611,12 +629,73 @@ export default function App() {
   const [unreadOrderIds, setUnreadOrderIds] = useState(() => new Set());
   const [updatedOrderIds, setUpdatedOrderIds] = useState(() => new Set());
 
+  /**
+   * Bandwidth Defense & Peer-to-Peer Stock Synchronization:
+   * Applies stock deductions or restorations from a transaction directly in local memory & IndexedDB.
+   * Eliminates the need for sibling terminals to call fetchProductsFromSupabase over PostgREST REST API.
+   */
+  const applyStockDeductionsFromTx = useCallback((prevProducts, tx, direction = -1) => {
+    if (!prevProducts || !Array.isArray(prevProducts) || prevProducts.length === 0) return prevProducts;
+    const items = tx.items || tx.sale_transaction_items || [];
+    if (!items || items.length === 0) return prevProducts;
+
+    const deltaMap = new Map();
+
+    items.forEach((it) => {
+      const qty = Number(it.quantity) || 1;
+      if (it.isBundle && Array.isArray(it.bundleComponents) && it.bundleComponents.length > 0) {
+        it.bundleComponents.forEach((comp) => {
+          const compPid = comp.productId || comp.product_id || comp.product?.id;
+          if (compPid) {
+            const compQty = (Number(comp.quantity) || 1) * qty;
+            deltaMap.set(compPid, (deltaMap.get(compPid) || 0) + (compQty * direction));
+          }
+        });
+      } else {
+        const pid = it.productId || it.product_id || it.product?.id;
+        if (pid) {
+          const mult = Number(it.effectiveMultiplier ?? it.multiplier ?? it.unit?.multiplier) || 1;
+          const effMult = it.isHalfCarton ? (mult > 1 ? Math.round(mult / 2) : 1) : Math.round(mult);
+          const baseSold = effMult * qty;
+          deltaMap.set(pid, (deltaMap.get(pid) || 0) + (baseSold * direction));
+        }
+      }
+    });
+
+    if (deltaMap.size === 0) return prevProducts;
+
+    let hasChanged = false;
+    const updated = prevProducts.map((prod) => {
+      if (prod.trackStock === false || !deltaMap.has(prod.id)) return prod;
+      hasChanged = true;
+      const delta = deltaMap.get(prod.id);
+      const current = Number(prod.currentStockBaseUnits) || 0;
+      const newStock = Math.max(0, current + delta);
+      return {
+        ...prod,
+        currentStockBaseUnits: newStock,
+      };
+    });
+
+    if (hasChanged) {
+      try {
+        safeSetItem('meiishop_products_v5', updated);
+        idbSet('meiishop_products_v5', updated);
+      } catch (_) {}
+      return updated;
+    }
+    return prevProducts;
+  }, []);
+
   const handleRealtimeNewOrder = useCallback((newTx) => {
     setTransactions((prev) => {
       const exists = prev.some((t) => t.id === newTx.id);
       if (exists) return prev;
       return [newTx, ...prev];
     });
+
+    // P2P Stock Sync: Immediately deduct stock on this terminal without calling PostgREST API
+    setProducts((prev) => applyStockDeductionsFromTx(prev, newTx, -1));
 
     const isOnline =
       newTx.order_source === 'online' ||
@@ -636,16 +715,27 @@ export default function App() {
         return next;
       });
     }
-  }, []);
+  }, [applyStockDeductionsFromTx]);
 
   const handleRealtimeUpdateOrder = useCallback((updatedTx) => {
+    let wasCancelledTransition = false;
     setTransactions((prev) => {
-      const exists = prev.some((t) => t.id === updatedTx.id);
-      if (!exists) {
+      const existing = prev.find((t) => t.id === updatedTx.id);
+      const isNowCancelled = updatedTx.status === 'cancelled' || updatedTx.isCancelled || updatedTx.paymentStatus === 'CANCELLED';
+      const wasCancelled = existing && (existing.status === 'cancelled' || existing.isCancelled || existing.paymentStatus === 'CANCELLED');
+      if (isNowCancelled && !wasCancelled) {
+        wasCancelledTransition = true;
+      }
+      if (!existing) {
         return [updatedTx, ...prev];
       }
       return prev.map((t) => (t.id === updatedTx.id ? updatedTx : t));
     });
+
+    // If order was cancelled remotely, restore stock locally without calling PostgREST API
+    if (wasCancelledTransition) {
+      setProducts((prev) => applyStockDeductionsFromTx(prev, updatedTx, +1));
+    }
 
     const isOnline =
       updatedTx.order_source === 'online' ||
@@ -659,7 +749,7 @@ export default function App() {
       setUnreadOrderIds((prev) => new Set([...prev, updatedTx.id]));
       setUpdatedOrderIds((prev) => new Set([...prev, updatedTx.id]));
     }
-  }, []);
+  }, [applyStockDeductionsFromTx]);
 
   const handleMarkOrderAsRead = useCallback((orderId) => {
     if (!orderId) return;
@@ -683,7 +773,14 @@ export default function App() {
   }, []);
 
   const handleRealtimeDeleteOrder = useCallback((deletedId) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== deletedId));
+    setTransactions((prev) => {
+      const target = prev.find((t) => t.id === deletedId);
+      if (target && !target.isCancelled && target.status !== 'cancelled') {
+        // If an active bill was deleted remotely, restore stock locally
+        setProducts((currentProducts) => applyStockDeductionsFromTx(currentProducts, target, +1));
+      }
+      return prev.filter((t) => t.id !== deletedId);
+    });
     setUnreadOrderIds((prev) => {
       if (!prev.has(deletedId)) return prev;
       const next = new Set(prev);
@@ -696,7 +793,7 @@ export default function App() {
       next.delete(deletedId);
       return next;
     });
-  }, []);
+  }, [applyStockDeductionsFromTx]);
 
   const { realtimeHighlights, triggerHighlight } = useOrderRealtime({
     enabled: true,
@@ -944,13 +1041,15 @@ export default function App() {
   const [purchaseEntryModalOpen, setPurchaseEntryModalOpen] = useState(false);
   const [supplierManagerModalOpen, setSupplierManagerModalOpen] = useState(false);
 
-  // Function to refresh all data directly from Supabase
-  const handleRefreshAllFromSupabase = async () => {
-    setIsRefreshing(true);
+  // Bandwidth Defense: In-flight deduplication & debouncing locks
+  const refreshAllInFlightRef = useRef(null);
+  const lastRefreshAllTimeRef = useRef(0);
+
+  // 1. Modular Products Refresh
+  const refreshProducts = useCallback(async (force = false) => {
     try {
-      const cloudProds = await fetchProductsFromSupabase();
+      const cloudProds = await fetchProductsFromSupabase({ force });
       if (cloudProds) {
-        // Exclude legacy mock items if any
         const mockIds = new Set([
           'p_beerlao_gold',
           'p_coca_cola',
@@ -962,14 +1061,21 @@ export default function App() {
         const realProds = cloudProds.filter((p) => !mockIds.has(p.id));
         setProducts(realProds);
         setIsCloudSynced(true);
+        return realProds;
       } else {
-        // If DB returned null (offline / network error), preserve local cached products!
         setIsCloudSynced(false);
       }
+    } catch (err) {
+      console.warn('refreshProducts error:', err);
+    }
+    return null;
+  }, []);
 
-      const cloudTxs = await fetchTransactionsFromSupabase();
+  // 2. Modular Transactions Refresh
+  const refreshTransactions = useCallback(async (force = false) => {
+    try {
+      const cloudTxs = await fetchTransactionsFromSupabase({ force });
       if (cloudTxs) {
-        // Merge with pending offline queue so offline transactions remain visible in history
         const pendingQueue = getOfflineQueue();
         const pendingIds = new Set(pendingQueue.map((item) => item.id));
         const mergedTxs = [
@@ -977,80 +1083,121 @@ export default function App() {
           ...cloudTxs.filter((tx) => !pendingIds.has(tx.id)),
         ];
         setTransactions(mergedTxs);
-      }
-
-      // Fetch suppliers & purchase orders
-      try {
-        const supRes = await fetchSuppliersFromSupabase();
-        if (supRes.success) setSuppliers(supRes.data);
-
-        const poRes = await fetchPurchaseOrdersFromSupabase();
-        if (poRes.success) setPurchaseOrders(poRes.data);
-      } catch (poErr) {
-        console.warn('Suppliers/PO fetch error:', poErr);
-      }
-
-      // Fetch categories strictly from Supabase 'categories' table
-      try {
-        const cloudCats = await fetchCategoriesFromSupabase();
-        if (cloudCats && cloudCats.length > 0) {
-          setRawCategories(cloudCats);
-          const names = cloudCats.map((c) => c.name).filter(Boolean);
-          setCategoriesList(names);
-          safeSetItem('meiishop_categories_cache', names);
-        } else if (realProds && realProds.length > 0) {
-          // If table was empty, gather distinct categories from actual products
-          const fromProds = Array.from(new Set(realProds.map((p) => p.category).filter(Boolean)));
-          if (fromProds.length > 0) {
-            setRawCategories(fromProds.map((name, i) => ({ id: `cat_${i}`, name })));
-            setCategoriesList(fromProds);
-            safeSetItem('meiishop_categories_cache', fromProds);
-          }
-        }
-      } catch (catErr) {
-        console.warn('Categories fetch error:', catErr);
-      }
-
-      // Fetch mixed carton bundles
-      try {
-        const cloudBundles = await fetchProductBundlesFromSupabase();
-        if (cloudBundles) {
-          const resolved = cloudBundles.map((b) => {
-            const bItemIds = b.itemIds || (b.product_bundle_items || []).map((it) => it.product_id) || [];
-            const childs = (products || []).filter((p) => bItemIds.includes(p.id));
-            if (childs.length > 0) {
-              for (const p of childs) {
-                const units = Array.isArray(p.units) ? p.units : [];
-                const cartonUnit =
-                  units.find(
-                    (u) =>
-                      u.tier === 3 ||
-                      u.id?.endsWith('_carton') ||
-                      ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].includes(u.unitName)
-                  ) || [...units].sort((a, b) => (Number(b.multiplier) || 1) - (Number(a.multiplier) || 1))[0];
-                const price = Number(cartonUnit?.retailPrice ?? cartonUnit?.price_1 ?? cartonUnit?.price1 ?? p.cartonPrice ?? 0);
-                if (price > 0) {
-                  return { ...b, price_lak: price };
-                }
-              }
-            }
-            return b;
-          });
-          setBundles(resolved);
-        }
-      } catch (bErr) {
-        console.warn('Bundles fetch error:', bErr);
+        return mergedTxs;
       }
     } catch (err) {
-      console.warn('Supabase load error:', err);
-      setIsCloudSynced(false);
-      setProducts([]);
-      setTransactions([]);
-    } finally {
-      setIsRefreshing(false);
-      setIsLoadingProducts(false);
+      console.warn('refreshTransactions error:', err);
     }
-  };
+    return null;
+  }, []);
+
+  // 3. Modular Bundles Refresh
+  const refreshBundles = useCallback(async () => {
+    try {
+      const cloudBundles = await fetchProductBundlesFromSupabase();
+      if (cloudBundles) {
+        const resolved = cloudBundles.map((b) => {
+          const bItemIds = b.itemIds || (b.product_bundle_items || []).map((it) => it.product_id) || [];
+          const childs = (products || []).filter((p) => bItemIds.includes(p.id));
+          if (childs.length > 0) {
+            for (const p of childs) {
+              const units = Array.isArray(p.units) ? p.units : [];
+              const cartonUnit =
+                units.find(
+                  (u) =>
+                    u.tier === 3 ||
+                    u.id?.endsWith('_carton') ||
+                    ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].includes(u.unitName)
+                ) || [...units].sort((a, b) => (Number(b.multiplier) || 1) - (Number(a.multiplier) || 1))[0];
+              const price = Number(cartonUnit?.retailPrice ?? cartonUnit?.price_1 ?? cartonUnit?.price1 ?? p.cartonPrice ?? 0);
+              if (price > 0) {
+                return { ...b, price_lak: price };
+              }
+            }
+          }
+          return b;
+        });
+        setBundles(resolved);
+        return resolved;
+      }
+    } catch (bErr) {
+      console.warn('Bundles fetch error:', bErr);
+    }
+    return null;
+  }, [products]);
+
+  // 4. Modular Categories Refresh
+  const refreshCategories = useCallback(async (force = false, realProds = null) => {
+    try {
+      const cloudCats = await fetchCategoriesFromSupabase({ force });
+      if (cloudCats && cloudCats.length > 0) {
+        setRawCategories(cloudCats);
+        const names = cloudCats.map((c) => c.name).filter(Boolean);
+        setCategoriesList(names);
+        safeSetItem('meiishop_categories_cache', names);
+      } else if (realProds && realProds.length > 0) {
+        const fromProds = Array.from(new Set(realProds.map((p) => p.category).filter(Boolean)));
+        if (fromProds.length > 0) {
+          setRawCategories(fromProds.map((name, i) => ({ id: `cat_${i}`, name })));
+          setCategoriesList(fromProds);
+          safeSetItem('meiishop_categories_cache', fromProds);
+        }
+      }
+    } catch (catErr) {
+      console.warn('Categories fetch error:', catErr);
+    }
+  }, []);
+
+  // 5. Modular Purchases & Suppliers Refresh (Lazy-loaded only when on Purchases screen)
+  const refreshPurchases = useCallback(async (force = false) => {
+    try {
+      const [supRes, poRes] = await Promise.all([
+        fetchSuppliersFromSupabase({ force }),
+        fetchPurchaseOrdersFromSupabase({ force }),
+      ]);
+      if (supRes?.success) setSuppliers(supRes.data);
+      if (poRes?.success) setPurchaseOrders(poRes.data);
+    } catch (poErr) {
+      console.warn('Suppliers/PO fetch error:', poErr);
+    }
+  }, []);
+
+  // Full Refresh Orchestrator (Debounced & coalesced to defeat egress leaks)
+  const handleRefreshAllFromSupabase = useCallback(async (force = false) => {
+    const now = Date.now();
+    // If not forced and called again within 2 seconds, coalesce
+    if (!force && now - lastRefreshAllTimeRef.current < 2000 && refreshAllInFlightRef.current) {
+      return refreshAllInFlightRef.current;
+    }
+    if (refreshAllInFlightRef.current) {
+      return refreshAllInFlightRef.current;
+    }
+
+    lastRefreshAllTimeRef.current = now;
+    setIsRefreshing(true);
+
+    const task = (async () => {
+      try {
+        const realProds = await refreshProducts(force);
+        await Promise.all([
+          refreshTransactions(force),
+          refreshCategories(force, realProds),
+          refreshBundles(),
+          // Only fetch purchases if user is currently on purchases tab or forced
+          (activeMainTabRef.current === 'purchases' || force) ? refreshPurchases(force) : Promise.resolve(),
+        ]);
+      } catch (err) {
+        console.warn('handleRefreshAllFromSupabase error:', err);
+      } finally {
+        setIsRefreshing(false);
+        setIsLoadingProducts(false);
+        refreshAllInFlightRef.current = null;
+      }
+    })();
+
+    refreshAllInFlightRef.current = task;
+    return task;
+  }, [refreshProducts, refreshTransactions, refreshCategories, refreshBundles, refreshPurchases]);
 
   const handleSaveBundle = async (bundleData, childProductIds) => {
     setIsSavingDb(true);
@@ -1095,32 +1242,40 @@ export default function App() {
     handleRefreshAllFromSupabase();
   }, []);
 
-  // Subscribe to React Query Cache Invalidation
+  // Lazy load purchase orders & suppliers when Purchases tab opens (Bandwidth Defense)
+  useEffect(() => {
+    if (activeMainTab === 'purchases') {
+      refreshPurchases();
+    }
+  }, [activeMainTab, refreshPurchases]);
+
+  // Subscribe to React Query Cache Invalidation with granular dispatchers
   useEffect(() => {
     const unsubProducts = queryClient.subscribe('products', () => {
-      handleRefreshAllFromSupabase();
+      refreshProducts(true);
+    });
+    const unsubBundles = queryClient.subscribe('bundles', () => {
+      refreshBundles();
     });
     const unsubPOs = queryClient.subscribe('purchase_orders', () => {
-      handleRefreshAllFromSupabase();
+      refreshPurchases(true);
     });
     const unsubTx = queryClient.subscribe('transactions', () => {
-      handleRefreshAllFromSupabase();
+      refreshTransactions(true);
     });
     const unsubSuppliers = queryClient.subscribe('suppliers', () => {
-      handleRefreshAllFromSupabase();
+      refreshPurchases(true);
     });
-    const unsubDashboard = queryClient.subscribe('dashboard', () => {
-      handleRefreshAllFromSupabase();
-    });
+    // Note: 'dashboard' is calculated 100% in-memory; no network egress required!
 
     return () => {
       unsubProducts();
+      unsubBundles();
       unsubPOs();
       unsubTx();
       unsubSuppliers();
-      unsubDashboard();
     };
-  }, []);
+  }, [refreshProducts, refreshBundles, refreshPurchases, refreshTransactions]);
 
   // Automatic startup cleanup for obsolete localStorage keys
   useEffect(() => {
@@ -1138,13 +1293,7 @@ export default function App() {
         setTransactions((prev) =>
           prev.map((t) => (syncedIdSet.has(t.id) ? { ...t, isOfflinePending: false } : t))
         );
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['products'] }),
-          queryClient.invalidateQueries({ queryKey: ['transactions'] }),
-          queryClient.invalidateQueries({ queryKey: ['sale_transactions'] }),
-          queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
-          queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-        ]);
+        await queryClient.invalidateQueries({ queryKey: ['transactions'] });
         playSuccessBeep();
         openAlert(
           `ຊິ້ງຂໍ້ມູນບິນອອບລາຍຂຶ້ນ Cloud ສຳເລັດແລ້ວ (${res.syncedCount} ບິນ)!`,
@@ -1197,12 +1346,15 @@ export default function App() {
   }, [products]);
 
   useEffect(() => {
-    // Only cache top 30 transactions without heavy attached catalog references to guarantee quota safety
-    const slimTransactions = (transactions || []).slice(0, 30).map((t) => {
+    // Cache all transactions without heavy attached catalog references to guarantee quota safety
+    const slimTransactions = (transactions || []).map((t) => {
       const { products: _discard, ...slimTx } = t;
       return slimTx;
     });
     safeSetItem('meiishop_transactions_v7', slimTransactions);
+    if (slimTransactions.length > 0) {
+      idbSet('meiishop_transactions_v7', slimTransactions);
+    }
   }, [transactions]);
 
   // Dual Currency 2-Way Reactive Sync for Product Form (Card 2)
@@ -2402,7 +2554,7 @@ export default function App() {
         try {
           const { data: dbItems } = await supabase
             .from('sale_transaction_items')
-            .select('*')
+            .select('id, product_id, product_name, name_vi, quantity, unit_name, unit_price, effective_price, price, custom_price, line_total, line_cost, effective_multiplier, multiplier, barcode, is_half_carton, is_bundle, bundle_name, bundle_components, crate_deposit_fee, crate_deposit_total, missing_crates_count')
             .eq('transaction_id', target.id);
           if (dbItems && dbItems.length > 0) {
             target.items = dbItems.map((i) => {
@@ -2789,8 +2941,8 @@ export default function App() {
         }
 
         setEditingOldTransaction(null);
-        // Refresh silently in background without blocking UI
-        void handleRefreshAllFromSupabase();
+        // Refresh transactions silently in background without blocking UI
+        void refreshTransactions(true);
       } else {
         // Prepare stock deductions for tracked products
         const stockDeductions = [];
@@ -2888,13 +3040,6 @@ export default function App() {
         } else {
           setProducts(updatedProducts);
           setTransactions([receipt, ...transactions]);
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['products'] }),
-            queryClient.invalidateQueries({ queryKey: ['transactions'] }),
-            queryClient.invalidateQueries({ queryKey: ['sale_transactions'] }),
-            queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
-            queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-          ]);
 
           setSelectedReceiptForView({
             ...receipt,
@@ -3161,13 +3306,7 @@ export default function App() {
             return p;
           });
           setProducts(updatedProducts);
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['products'] }),
-            queryClient.invalidateQueries({ queryKey: ['transactions'] }),
-            queryClient.invalidateQueries({ queryKey: ['sale_transactions'] }),
-            queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
-            queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-          ]);
+          await queryClient.invalidateQueries({ queryKey: ['transactions'] });
 
           openAlert(`ຍົກເລີກບິນ "${tx.receiptNumber}" ສຳເລັດແລ້ວ!\n\n• ສິນຄ້າທັງໝົດໄດ້ຖືກສົ່ງຄືນສະຕັອກຮຽບຮ້ອຍ\n• ຍອດຂາຍ ແລະ ກຳໄລຖືກຫັກອອກຈາກ Dashboard ແລ້ວ`, 'ສຳເລັດ', 'success');
         } catch (err) {
@@ -3227,13 +3366,7 @@ export default function App() {
             setProducts(updatedProducts);
           }
 
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['products'] }),
-            queryClient.invalidateQueries({ queryKey: ['transactions'] }),
-            queryClient.invalidateQueries({ queryKey: ['sale_transactions'] }),
-            queryClient.invalidateQueries({ queryKey: ['inventory_movements'] }),
-            queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-          ]);
+          await queryClient.invalidateQueries({ queryKey: ['transactions'] });
 
           openAlert(`ລຶບບິນ "${tx.receiptNumber}" ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
         } catch (err) {
@@ -3596,7 +3729,7 @@ export default function App() {
             products={products}
             bundles={bundles}
             isLoading={isLoadingProducts || isRefreshing}
-            onRefreshProducts={handleRefreshAllFromSupabase}
+            onRefreshProducts={() => refreshProducts(true)}
             addToCart={addToCart}
             openUnitSelector={openUnitSelector}
             cart={cart}
@@ -3657,7 +3790,7 @@ export default function App() {
               onAddNewProduct={handleOpenNewProduct}
               onEditProduct={handleOpenEditProduct}
               onDeleteProduct={handleDeleteProduct}
-              onRefreshProducts={handleRefreshAllFromSupabase}
+              onRefreshProducts={() => refreshProducts(true)}
               onOpenCategoryManager={() => setActiveMainTab('categories')}
               onOpenBundleManager={() => setActiveMainTab('bundles')}
               isLoading={isLoadingProducts || isRefreshing}
@@ -3673,7 +3806,7 @@ export default function App() {
               onCreateCategory={handleCreateCategory}
               onUpdateCategory={handleUpdateCategory}
               onDeleteCategory={handleDeleteCategory}
-              onRefresh={handleRefreshAllFromSupabase}
+              onRefresh={() => refreshCategories(true)}
               isLoading={isLoadingProducts || isRefreshing}
               onAlert={openAlert}
             />
@@ -3699,7 +3832,7 @@ export default function App() {
               transactions={transactions}
               onUpdateOnlineStatus={handleUpdateOnlineStatus}
               onOpenReceipt={handleOpenReceipt}
-              onRefresh={handleRefreshAllFromSupabase}
+              onRefresh={() => refreshTransactions(true)}
               isLoading={isLoadingProducts || isRefreshing}
             />
           </RouteGuard>
@@ -3709,6 +3842,7 @@ export default function App() {
           <RouteGuard routeId="history" onRedirect={handleTabChange}>
             <HistoryView
               transactions={transactions}
+              products={products}
               realtimeHighlights={realtimeHighlights}
               unreadOrderIds={unreadOrderIds}
               updatedOrderIds={updatedOrderIds}
@@ -3718,7 +3852,7 @@ export default function App() {
               onCancelTransaction={handleCancelTransaction}
               onDeleteTransaction={handleDeleteTransaction}
               onUpdateTransaction={handleUpdateTransaction}
-              onRefreshTransactions={handleRefreshAllFromSupabase}
+              onRefreshTransactions={() => refreshTransactions(true)}
               onEditOrderInPos={handleEditOrderInPos}
               isLoading={isLoadingProducts || isRefreshing}
               onAlert={openAlert}
@@ -3734,11 +3868,11 @@ export default function App() {
               products={products}
               exchangeRate={exchangeRate}
               onOpenNewGRN={() => {
-                handleRefreshAllFromSupabase();
+                refreshPurchases(true);
                 setPurchaseEntryModalOpen(true);
               }}
               onOpenSupplierManager={() => setSupplierManagerModalOpen(true)}
-              onRefresh={handleRefreshAllFromSupabase}
+              onRefresh={() => refreshPurchases(true)}
               isLoading={isLoadingProducts || isRefreshing}
               onAlert={openAlert}
             />
@@ -3751,7 +3885,12 @@ export default function App() {
               transactions={transactions}
               products={products}
               exchangeRate={exchangeRate}
-              onRefresh={handleRefreshAllFromSupabase}
+              onRefresh={async () => {
+                await Promise.all([
+                  refreshTransactions(true),
+                  refreshProducts(true),
+                ]);
+              }}
               isLoading={isLoadingProducts || isRefreshing}
               onAlert={openAlert}
             />
@@ -3793,6 +3932,7 @@ export default function App() {
               products={products}
               onUpdateTransaction={handleUpdateTransaction}
               onAlert={openAlert}
+              onRefresh={() => fetchSavedCustomers({ force: true }).then((data) => setSavedCustomersList(data || []))}
             />
           </RouteGuard>
         )}
@@ -3814,7 +3954,7 @@ export default function App() {
         isOpen={supplierManagerModalOpen}
         onClose={() => setSupplierManagerModalOpen(false)}
         suppliers={suppliers}
-        onRefreshSuppliers={handleRefreshAllFromSupabase}
+        onRefreshSuppliers={() => refreshPurchases(true)}
         onAlert={openAlert}
       />
       <UnitSelectorModal

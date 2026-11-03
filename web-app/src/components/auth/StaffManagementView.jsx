@@ -85,9 +85,9 @@ export default function StaffManagementView() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const loadStaff = async () => {
+  const loadStaff = async (force = false) => {
     setIsLoading(true);
-    const { data, error } = await fetchStaffProfiles();
+    const { data, error } = await fetchStaffProfiles({ force });
     if (error) {
       showToast('error', error);
     } else {
@@ -463,7 +463,7 @@ export default function StaffManagementView() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={loadStaff}
+            onClick={() => loadStaff(true)}
             disabled={isLoading}
             className="p-2 sm:px-3 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
             title="ຣີເຟຣຊ"

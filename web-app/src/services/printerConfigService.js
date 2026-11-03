@@ -70,41 +70,51 @@ export function getPrinterConfig() {
   return normalizeConfig(DEFAULT_PRINTER_CONFIG);
 }
 
+import { fetchStoreSetting } from './supabase';
+
+let inFlightPrinterConfigPromise = null;
+
 /**
  * Fetch shared printer settings from Supabase database and update local cache
+ * Features in-flight deduplication and explicit column projection.
  */
 export async function fetchPrinterConfigFromDb() {
-  try {
-    // 1. Primary: Query the dedicated printer_settings table
-    const { data, error } = await supabase
-      .from('printer_settings')
-      .select('*')
-      .eq('id', 'default_printer')
-      .maybeSingle();
-
-    if (!error && data) {
-      const config = normalizeConfig(data);
-      saveLocalCache(config);
-      return config;
-    }
-
-    // 2. Fallback: Check store_settings table if printer_settings table is not yet created
-    const { data: storeSetting, error: storeErr } = await supabase
-      .from('store_settings')
-      .select('value')
-      .eq('key', 'printer_settings')
-      .maybeSingle();
-
-    if (!storeErr && storeSetting?.value) {
-      const config = normalizeConfig(storeSetting.value);
-      saveLocalCache(config);
-      return config;
-    }
-  } catch (err) {
-    console.warn('[printerConfigService] Supabase fetch error, using local cache:', err);
+  if (inFlightPrinterConfigPromise) {
+    return inFlightPrinterConfigPromise;
   }
 
-  return getPrinterConfig();
+  inFlightPrinterConfigPromise = (async () => {
+    try {
+      // 1. Primary: Query the dedicated printer_settings table with explicit projection
+      const { data, error } = await supabase
+        .from('printer_settings')
+        .select('id, printer_ip, printer_port, paper_width, auto_cut, drawer_kick, updated_at')
+        .eq('id', 'default_printer')
+        .maybeSingle();
+
+      if (!error && data) {
+        const config = normalizeConfig(data);
+        saveLocalCache(config);
+        return config;
+      }
+
+      // 2. Fallback: Check store_settings table via shared batched cache
+      const storeSettingValue = await fetchStoreSetting('printer_settings', null);
+      if (storeSettingValue) {
+        const config = normalizeConfig(storeSettingValue);
+        saveLocalCache(config);
+        return config;
+      }
+    } catch (err) {
+      console.warn('[printerConfigService] Supabase fetch error, using local cache:', err);
+    } finally {
+      inFlightPrinterConfigPromise = null;
+    }
+
+    return getPrinterConfig();
+  })();
+
+  return inFlightPrinterConfigPromise;
 }
 
 /**

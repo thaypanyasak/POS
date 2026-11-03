@@ -11,10 +11,10 @@ export const EVENT_STAFF_CHANGED = 'meiishop:staff-updated';
  * Fetch all staff profiles (Admin view)
  * Reads cloud store_settings with local cache
  */
-export async function fetchStaffProfiles() {
+export async function fetchStaffProfiles({ force = false } = {}) {
   try {
     // 1. Check store_settings in Supabase cloud
-    const cloudStaff = await fetchStoreSetting(STAFF_STORAGE_KEY, null);
+    const cloudStaff = await fetchStoreSetting(STAFF_STORAGE_KEY, null, { force });
     if (Array.isArray(cloudStaff)) {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem(`meiishop_${STAFF_STORAGE_KEY}`, JSON.stringify(cloudStaff));
@@ -25,7 +25,7 @@ export async function fetchStaffProfiles() {
     // 2. If store_settings not seeded yet, fetch from profiles table
     const { data: dbProfiles, error: dbErr } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, full_name, role, pin_code, is_active, created_at')
       .order('created_at', { ascending: false });
 
     if (!dbErr && Array.isArray(dbProfiles) && dbProfiles.length > 0) {

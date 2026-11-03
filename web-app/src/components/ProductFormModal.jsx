@@ -553,7 +553,7 @@ export default function ProductFormModal({
                     {/* Compression Feedback Badges */}
                     {imageError ? (
                       <div className="text-[10px] text-red-700 font-bold truncate">
-                        ⚠️ {imageError}
+                         {imageError}
                       </div>
                     ) : imageCompressionStats ? (
                       <div className="text-[10px] text-emerald-800 font-bold flex items-center gap-1 truncate">

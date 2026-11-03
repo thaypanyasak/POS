@@ -13,50 +13,87 @@ export const DEFAULT_CUSTOMER = {
   createdAt: new Date().toISOString(),
 };
 
+let cachedCustomersInMemory = null;
+let cachedCustomersTimestamp = 0;
+let inFlightCustomersPromise = null;
+const CUSTOMERS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache TTL
+
+export function invalidateCustomersCache() {
+  cachedCustomersInMemory = null;
+  cachedCustomersTimestamp = 0;
+  inFlightCustomersPromise = null;
+}
+
 /**
  * Fetch saved customer profiles from Supabase and fallback to localStorage
+ * Features SWR in-memory caching, in-flight deduplication, and explicit column projection.
  */
-export async function fetchSavedCustomers() {
-  let localList = [];
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) localList = parsed;
-    }
-  } catch (err) {
-    console.debug('[customerService] Error reading localStorage:', err);
+export async function fetchSavedCustomers({ force = false } = {}) {
+  const now = Date.now();
+  if (force) {
+    cachedCustomersInMemory = null;
+    cachedCustomersTimestamp = 0;
+    inFlightCustomersPromise = null;
+  } else if (cachedCustomersInMemory && (now - cachedCustomersTimestamp < CUSTOMERS_CACHE_TTL)) {
+    return cachedCustomersInMemory;
   }
 
-  // Attempt to fetch from Supabase customers table if it exists
-  try {
-    const { data, error } = await supabase
-      .from('customers')
-      .select('*')
-      .order('name', { ascending: true });
-
-    if (!error && Array.isArray(data)) {
-      const remoteList = data.map((c) => ({
-        id: c.id,
-        name: c.name,
-        phone: c.phone || '',
-        address: c.address || '',
-        note: c.note || '',
-        createdAt: c.created_at || c.createdAt,
-      }));
-
-      // Remote DB is the single source of truth
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(remoteList));
-      } catch (_) {}
-
-      return remoteList;
-    }
-  } catch (_) {
-    // Supabase table does not exist or network offline; safely fallback to localList
+  if (inFlightCustomersPromise) {
+    return inFlightCustomersPromise;
   }
 
-  return localList;
+  inFlightCustomersPromise = (async () => {
+    let localList = [];
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) localList = parsed;
+      }
+    } catch (err) {
+      console.debug('[customerService] Error reading localStorage:', err);
+    }
+
+    // Attempt to fetch from Supabase customers table with explicit column projection
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('id, name, phone, address, note, created_at')
+        .order('name', { ascending: true });
+
+      if (!error && Array.isArray(data)) {
+        const remoteList = data.map((c) => ({
+          id: c.id,
+          name: c.name,
+          phone: c.phone || '',
+          address: c.address || '',
+          note: c.note || '',
+          createdAt: c.created_at || c.createdAt,
+        }));
+
+        // Remote DB is the single source of truth
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(remoteList));
+        } catch (_) {}
+
+        cachedCustomersInMemory = remoteList;
+        cachedCustomersTimestamp = Date.now();
+        return remoteList;
+      }
+    } catch (_) {
+      // Supabase table does not exist or network offline; safely fallback to localList
+    }
+
+    cachedCustomersInMemory = localList;
+    cachedCustomersTimestamp = Date.now();
+    return localList;
+  })();
+
+  try {
+    return await inFlightCustomersPromise;
+  } finally {
+    inFlightCustomersPromise = null;
+  }
 }
 
 /**
@@ -88,6 +125,7 @@ export async function saveCustomerRecord(customer) {
       nextList = [record, ...existing];
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(nextList));
+    cachedCustomersInMemory = nextList;
   } catch (err) {
     console.debug('[customerService] Error writing localStorage:', err);
   }
@@ -104,6 +142,9 @@ export async function saveCustomerRecord(customer) {
     }, { onConflict: 'id' });
   } catch (_) {}
 
+  // Keep cache warm with updated nextList - DO NOT invalidate!
+  cachedCustomersTimestamp = Date.now();
+  inFlightCustomersPromise = null;
   return record;
 }
 
@@ -113,17 +154,31 @@ export async function saveCustomerRecord(customer) {
 export async function deleteCustomerRecord(id) {
   if (!id) return;
 
+  let nextList = [];
   try {
     const existing = await fetchSavedCustomers();
-    const nextList = existing.filter((c) => c.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextList));
+    nextList = (existing || []).filter((c) => c.id !== id);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextList));
+    }
+    cachedCustomersInMemory = nextList;
+    cachedCustomersTimestamp = Date.now();
   } catch (err) {
     console.debug('[customerService] Error deleting from localStorage:', err);
   }
 
   try {
-    await supabase.from('customers').delete().eq('id', id);
-  } catch (_) {}
+    const { error } = await supabase.from('customers').delete().eq('id', id);
+    if (error) throw error;
+  } catch (err) {
+    console.warn('[customerService] Error deleting from Supabase:', err);
+    throw err;
+  }
+
+  // Keep cache warm with updated nextList - DO NOT invalidate to avoid full re-fetch!
+  cachedCustomersInMemory = nextList;
+  cachedCustomersTimestamp = Date.now();
+  inFlightCustomersPromise = null;
 }
 
 /**

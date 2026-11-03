@@ -1213,6 +1213,8 @@ export default function PosScreen({
                     <img
                       src={imgUrl}
                       alt={item.product.name}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover"
                       onError={(e) => {
                         e.currentTarget.style.display = 'none';
@@ -2074,6 +2076,8 @@ export default function PosScreen({
                             <img
                               src={b.image_url || b.imageUrl}
                               alt=""
+                              loading="lazy"
+                              decoding="async"
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                             />
                           ) : (

@@ -385,7 +385,7 @@ export default function ProductBundleModal({
       return;
     }
     if (duplicateInfo) {
-      showToast('error', `⚠️ ບາໂຄດ "${barcode}" ຖືກໃຊ້ແລ້ວໃນ "${duplicateInfo.name}"! ກະລຸນາປ່ຽນບາໂຄດໃໝ່.`);
+      showToast('error', `ບາໂຄດ "${barcode}" ຖືກໃຊ້ແລ້ວໃນ "${duplicateInfo.name}"! ກະລຸນາປ່ຽນບາໂຄດໃໝ່.`);
       playErrorBeep();
       return;
     }
@@ -674,7 +674,7 @@ export default function ProductBundleModal({
                 {duplicateInfo && (
                   <div className="mt-1.5 p-2 bg-rose-50 border border-rose-300 rounded-lg sm:rounded-xl flex items-center gap-1.5 text-[10.5px] text-rose-900 font-bold shadow-2xs">
                     <WarningCircle size={15} weight="fill" className="text-rose-600 shrink-0" />
-                    <span>⚠️ ບາໂຄດນີ້ມີໃນລະບົບແລ້ວ: "{duplicateInfo.name}" ({duplicateInfo.type === 'bundle' ? 'ກຸ່ມສິນຄ້າ' : 'ສິນຄ້າ'})</span>
+                    <span> ບາໂຄດນີ້ມີໃນລະບົບແລ້ວ: "{duplicateInfo.name}" ({duplicateInfo.type === 'bundle' ? 'ກຸ່ມສິນຄ້າ' : 'ສິນຄ້າ'})</span>
                   </div>
                 )}
               </div>

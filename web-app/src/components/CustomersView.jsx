@@ -35,6 +35,7 @@ export default function CustomersView({
   products = [],
   onUpdateTransaction = null,
   onAlert = null,
+  onRefresh = null,
 }) {
   const [savedCustomers, setSavedCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,11 +50,14 @@ export default function CustomersView({
   const [viewReceiptTx, setViewReceiptTx] = useState(null);
 
   // Load saved customers
-  const loadCustomers = async () => {
+  const loadCustomers = async (force = false) => {
     setIsLoading(true);
     try {
-      const data = await fetchSavedCustomers();
+      const data = await fetchSavedCustomers({ force });
       setSavedCustomers(data);
+      if (force && onRefresh) {
+        onRefresh();
+      }
     } catch (err) {
       console.debug('[CustomersView] load error:', err);
     } finally {
@@ -120,14 +124,25 @@ export default function CustomersView({
     });
   }, [customerDirectory, searchTerm, filterDebt]);
 
-  // Handle Save Customer
+  // Handle Save Customer - In-memory update without re-fetching entire table
   const handleSaveCustomer = async (custData) => {
     try {
       const saved = await saveCustomerRecord(custData);
-      await loadCustomers();
+      if (saved) {
+        setSavedCustomers((prev) => {
+          const idx = prev.findIndex((c) => c.id === saved.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = saved;
+            return next;
+          }
+          return [saved, ...prev];
+        });
+      }
       if (onAlert) {
         onAlert(`ບັນທຶກຂໍ້ມູນລູກຄ້າ "${custData.name}" ສຳເລັດ!`, 'ສຳເລັດ', 'success');
       }
+      onRefresh?.();
       return saved;
     } catch (err) {
       console.error('Save customer error:', err);
@@ -138,15 +153,26 @@ export default function CustomersView({
     }
   };
 
-  // Handle Delete Customer
+  // Handle Delete Customer - Optimistic in-memory update with rollback on failure (0ms, 0 Re-fetch)
   const handleDeleteCustomer = async (id) => {
+    if (!id) return;
+    const prevCustomers = savedCustomers;
+    // 1. Optimistic UI update: Remove immediately from in-memory state (0ms, no flicker)
+    setSavedCustomers((prev) => prev.filter((c) => c.id !== id));
+    if (selectedCustomerForDetail?.id === id) {
+      setSelectedCustomerForDetail(null);
+    }
+
     try {
+      // 2. Call delete API to remove from database and local cache (no re-fetch needed!)
       await deleteCustomerRecord(id);
-      await loadCustomers();
       if (onAlert) {
         onAlert('ລຶບຂໍ້ມູນລູກຄ້າສຳເລັດ!', 'ສຳເລັດ', 'success');
       }
+      onRefresh?.();
     } catch (err) {
+      // 3. Rollback on failure
+      setSavedCustomers(prevCustomers);
       console.error('Delete customer error:', err);
       if (onAlert) {
         onAlert(`ເກີດຂໍ້ຜິດພາດໃນການລຶບ: ${err.message || 'ຜິດພາດ'}`, 'ຂໍ້ຜິດພາດ', 'error');
@@ -211,7 +237,7 @@ export default function CustomersView({
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             type="button"
-            onClick={loadCustomers}
+            onClick={() => loadCustomers(true)}
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
             title="ໂຫຼດຂໍ້ມູນຄືນໃໝ່"
           >

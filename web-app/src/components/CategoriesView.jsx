@@ -212,6 +212,8 @@ function CategoryProductsDetailModal({ category, products = [], isOpen, onClose 
                               <img
                                 src={prod.imageUrl || prod.image_url}
                                 alt={prod.name}
+                                loading="lazy"
+                                decoding="async"
                                 className="w-10 h-10 rounded-xl object-cover bg-slate-100 border border-slate-200 transition-transform duration-200 group-hover/thumb:scale-108"
                                 onError={(e) => {
                                   e.currentTarget.style.display = 'none';

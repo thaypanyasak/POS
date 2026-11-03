@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ClockCounterClockwise,
@@ -24,6 +24,7 @@ import {
   User,
   Clock,
   ChartBar,
+  ChartLineUp,
   CaretLeft,
   CaretRight,
   Bell,
@@ -34,14 +35,18 @@ import {
 import { exportTransactionsToExcel } from '../utils/excelExport';
 import { formatKip, normalizeLao, getDueDateStatus, formatDateToDDMMYYYY, formatDateTime24h, formatTime24h } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
+import InvoiceProfitDetailModal, { calculateTxProfitMetrics } from './InvoiceProfitDetailModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner, sanitizeBarcode } from '../hooks/useHardwareBarcodeScanner';
 import { playUnitChangeBeep, playActionClickBeep, playErrorBeep, playSuccessBeep } from '../utils/audioFeedback';
 import { HistoryListSkeleton } from './common/SkeletonLoaders';
 import { useAuthRole } from '../contexts/AuthContext';
+import { fetchTransactionByIdFromSupabase, fetchArchivedTransactionFromSupabase } from '../services/supabase';
+import { getOfflineQueue } from '../services/offlineSyncService';
 
 export default function HistoryView({
   transactions = [],
+  products = [],
   realtimeHighlights = {},
   unreadOrderIds = new Set(),
   updatedOrderIds = new Set(),
@@ -56,7 +61,7 @@ export default function HistoryView({
   isLoading,
   onAlert,
 }) {
-  const { canDeleteOrders } = useAuthRole();
+  const { canDeleteOrders, canViewReports } = useAuthRole();
   const [searchTerm, setSearchTerm] = useState('');
   const searchInputRef = useRef(null);
 
@@ -65,30 +70,73 @@ export default function HistoryView({
   const [scanToast, setScanToast] = useState(null);
   const [scannedHighlightId, setScannedHighlightId] = useState(null);
 
+  // Keep track of user's active date filter tab prior to searching or barcode scanning
+  const previousDateFilterRef = useRef('today');
+  const isAutoSwitchedRef = useRef(false);
+
+  // 3 Primary Tabs: 'cash' | 'transfer' | 'debt' + 'all' | 'cancelled'
+  const [activeTab, setActiveTab] = useState('all');
+  
+  // Date range filters: 'today' | 'yesterday' | '7days' | 'all' | 'custom' (default 'today' on entry as requested)
+  const [dateFilter, setDateFilter] = useState('today');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Configurable Pagination States (Default 50, with 20 | 50 | 100 | 200 | ALL options)
+  const [pageSize, setPageSize] = useState(50);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [archivedSearchedTx, setArchivedSearchedTx] = useState(null);
+  const [isSearchingArchive, setIsSearchingArchive] = useState(false);
+
   const handleClearSearch = () => {
     setSearchTerm('');
     setScannedHighlightId(null);
     setScanToast(null);
+    setArchivedSearchedTx(null);
     if (searchInputRef.current) {
       searchInputRef.current.value = '';
       try {
         searchInputRef.current.focus();
       } catch (_) {}
     }
+    // Restore previous date filter if auto-switched by search
+    if (isAutoSwitchedRef.current) {
+      setDateFilter(previousDateFilterRef.current || 'today');
+      isAutoSwitchedRef.current = false;
+    }
+    setCurrentPage(1);
   };
-  // 3 Primary Tabs: 'cash' | 'transfer' | 'debt' + 'all' | 'cancelled'
-  const [activeTab, setActiveTab] = useState('all');
-  
-  // Date range filters: 'today' | 'yesterday' | '7days' | 'all' | 'custom' (default 'all' to show all bills immediately)
-  const [dateFilter, setDateFilter] = useState('all');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
 
-  // Always reset to 'all' on mount so entering History unconditionally shows all bills
+  // Default to 'today' whenever entering History
   useEffect(() => {
-    setDateFilter('all');
+    setDateFilter('today');
     setActiveTab('all');
+    previousDateFilterRef.current = 'today';
+    isAutoSwitchedRef.current = false;
   }, []);
+
+  const handleSelectDateFilter = (filterKey) => {
+    playUnitChangeBeep('history');
+    setDateFilter(filterKey);
+    previousDateFilterRef.current = filterKey;
+    isAutoSwitchedRef.current = false;
+    setCurrentPage(1);
+  };
+
+  const handleDeleteTransaction = (tx) => {
+    if (onDeleteTransaction) {
+      onDeleteTransaction(tx);
+      // If deleted while search-filtered, restore to previous date tab
+      if (isAutoSwitchedRef.current) {
+        setDateFilter(previousDateFilterRef.current || 'today');
+        isAutoSwitchedRef.current = false;
+        setSearchTerm('');
+        if (searchInputRef.current) {
+          searchInputRef.current.value = '';
+        }
+      }
+    }
+  };
 
   // Modals state
   const [editingTx, setEditingTx] = useState(null);
@@ -97,6 +145,19 @@ export default function HistoryView({
 
   // Customer Debt Recovery Modal state
   const [debtModalTx, setDebtModalTx] = useState(null);
+
+  // Profit & Cost Breakdown Detail Modal state
+  const [selectedProfitTx, setSelectedProfitTx] = useState(null);
+
+  // Fast Product lookup map for dynamic cost and profit computation
+  const productsMap = useMemo(() => {
+    const map = new Map();
+    (products || []).forEach((p) => {
+      if (p.id) map.set(p.id, p);
+      if (p.barcode) map.set(p.barcode, p);
+    });
+    return map;
+  }, [products]);
 
   // Row Action Menu State (for 3-dots action popover rendered via Portal to avoid overflow/z-index clipping)
   const [actionMenuState, setActionMenuState] = useState(null);
@@ -108,10 +169,10 @@ export default function HistoryView({
       return;
     }
     const rect = e.currentTarget.getBoundingClientRect();
-    const menuWidth = 155;
-    const menuHeight = canDeleteOrders ? 88 : 46;
+    const menuWidth = 165;
+    const menuHeight = canDeleteOrders ? 124 : 82;
     const spaceBelow = window.innerHeight - rect.bottom;
-    const openUpward = spaceBelow < 120 && rect.top > 120;
+    const openUpward = spaceBelow < 140 && rect.top > 140;
 
     let left = rect.right - menuWidth;
     if (left < 10) left = 10;
@@ -146,7 +207,7 @@ export default function HistoryView({
   // Filter out all online orders: HistoryView is strictly for direct POS in-store sales (#INV-...)
   // Online orders (#ONL-...) are managed and viewed exclusively in OnlineOrdersView!
   const directTransactions = useMemo(() => {
-    return (transactions || []).filter((tx) => {
+    const list = (transactions || []).filter((tx) => {
       const isOnline =
         tx.order_source === 'online' ||
         tx.orderSource === 'online' ||
@@ -155,7 +216,12 @@ export default function HistoryView({
         (tx.cashierName || tx.cashier_name) === 'Online Web';
       return !isOnline;
     });
-  }, [transactions]);
+
+    if (archivedSearchedTx && !list.some((t) => t.id === archivedSearchedTx.id)) {
+      return [archivedSearchedTx, ...list];
+    }
+    return list;
+  }, [transactions, archivedSearchedTx]);
 
   // 1. Transactions filtered strictly by the currently selected date range (today, yesterday, 7days, all, custom)
   const dateFilteredTransactions = useMemo(() => {
@@ -284,61 +350,34 @@ export default function HistoryView({
   const selectedPeriodStats = useMemo(() => {
     let totalBills = 0;
     let totalRevenue = 0;
-    let cashBills = 0;
-    let cashRevenue = 0;
-    let transferBills = 0;
-    let transferRevenue = 0;
-    let debtBills = 0;
-    let debtAmount = 0;
+    let totalCost = 0;
+    let totalProfit = 0;
 
     dateFilteredTransactions.forEach((tx) => {
       totalBills++; // Count all transactions in this timeframe
 
       const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
-      if (isCancelled) return; // Cancelled bills do not contribute to revenue or active payment categories
+      if (isCancelled) return; // Cancelled bills do not contribute to revenue, cost, or profit
 
-      const rev = Number(tx.finalTotalKip || tx.final_total_kip || tx.totalKip || tx.total_kip || 0);
+      const rev = Number(tx.finalTotalKip || tx.final_total_kip || tx.grandTotal || tx.grand_total || tx.totalKip || tx.total_kip || 0);
+      const metrics = calculateTxProfitMetrics(tx, productsMap);
+      const cost = Number(metrics?.totalCost || 0);
+
       totalRevenue += rev;
-
-      const method = (tx.paymentMethod || '').toLowerCase();
-      const status = (tx.paymentStatus || '').toUpperCase();
-      const total = Number(tx.grandTotal || tx.finalTotalKip || tx.totalKip || 0);
-      const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
-      let remainingDebt = Number(tx.remainingDebt ?? tx.debtAmount ?? 0);
-      const isOnline =
-        tx.order_source === 'online' ||
-        tx.orderSource === 'online' ||
-        String(tx.id || '').startsWith('onl_') ||
-        String(tx.receiptNumber || tx.receipt_number || '').startsWith('ONL-') ||
-        (tx.cashierName || tx.cashier_name) === 'Online Web';
-      const isDebt = !isOnline && (status === 'DEBT' || status === 'PARTIAL' || remainingDebt > 0 || method === 'debt');
-      if (isDebt && remainingDebt <= 0 && paid < total) {
-        remainingDebt = Math.max(0, total - paid);
-      }
-
-      if (isDebt) {
-        debtBills++;
-        debtAmount += remainingDebt;
-      } else if (method === 'transfer' || method === 'qrtransfer' || method === 'onepay' || method === 'qr') {
-        transferBills++;
-        transferRevenue += rev;
-      } else {
-        cashBills++;
-        cashRevenue += rev;
-      }
+      totalCost += cost;
+      totalProfit += (rev - cost);
     });
+
+    const overallMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0';
 
     return {
       totalBills,
       totalRevenue,
-      cashBills,
-      cashRevenue,
-      transferBills,
-      transferRevenue,
-      debtBills,
-      debtAmount,
+      totalCost,
+      totalProfit,
+      overallMargin,
     };
-  }, [dateFilteredTransactions]);
+  }, [dateFilteredTransactions, productsMap]);
 
   const selectedPeriodLabel = useMemo(() => {
     if (dateFilter === 'today') return 'ມື້ນີ້';
@@ -489,9 +528,6 @@ export default function HistoryView({
     });
   }, [dateFilteredTransactions, activeTab, searchTerm, directTransactions, unreadOrderIds, updatedOrderIds, realtimeHighlights, dateFilter]);
 
-  // Configurable Pagination States (Default 50, with 20 | 50 | 100 | 200 | ALL options)
-  const [pageSize, setPageSize] = useState(50);
-  const [currentPage, setCurrentPage] = useState(1);
   const tableTopRef = useRef(null);
 
   const scrollToTableTop = () => {
@@ -509,21 +545,51 @@ export default function HistoryView({
     playActionClickBeep('history');
     setPageSize(newSize);
     setCurrentPage(1);
+    scrollToTableTop();
   };
 
-  // Auto-reset currentPage to 1 when filters or search query change
+  const totalItemsCount = filteredTransactions.length;
+
+  // Background targeted search for archived transactions (> 1000 items) if not found in memory
   useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab, dateFilter, startDate, endDate, searchTerm]);
+    const rawSearch = searchTerm.trim().replace(/^#/, '');
+    if (!rawSearch || rawSearch.length < 3) {
+      if (archivedSearchedTx) setArchivedSearchedTx(null);
+      return;
+    }
+    // Check if matched in local in-memory transactions
+    const foundInMem = directTransactions.some((tx) => {
+      const rawNum = tx.receiptNumber || tx.receipt_number || '';
+      return rawNum.toLowerCase().includes(rawSearch.toLowerCase()) || tx.id?.includes(rawSearch);
+    });
+    if (foundInMem) return;
+
+    let isCurrent = true;
+    const timer = setTimeout(async () => {
+      setIsSearchingArchive(true);
+      try {
+        const archived = await fetchArchivedTransactionFromSupabase(rawSearch);
+        if (isCurrent && archived) {
+          setArchivedSearchedTx(archived);
+        }
+      } catch (_) {}
+      if (isCurrent) setIsSearchingArchive(false);
+    }, 450);
+
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
+  }, [searchTerm, directTransactions, archivedSearchedTx]);
 
   const totalPages = useMemo(() => {
     if (pageSize === 'ALL' || !pageSize) return 1;
-    return Math.max(1, Math.ceil(filteredTransactions.length / pageSize));
-  }, [filteredTransactions.length, pageSize]);
+    return Math.max(1, Math.ceil(totalItemsCount / pageSize));
+  }, [totalItemsCount, pageSize]);
 
   // Protect currentPage within bounds when items count changes
   useEffect(() => {
-    if (currentPage > totalPages) {
+    if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
@@ -531,7 +597,8 @@ export default function HistoryView({
   // Export filtered transactions to Excel (.xlsx)
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const handleExportExcel = async () => {
-    if (!filteredTransactions || filteredTransactions.length === 0) return;
+    const listToExport = displayedTransactions.length > 0 ? displayedTransactions : filteredTransactions;
+    if (!listToExport || listToExport.length === 0) return;
     try {
       setIsExportingExcel(true);
       playActionClickBeep('history');
@@ -551,7 +618,7 @@ export default function HistoryView({
         custom: `${startDate || '...'} ຫາ ${endDate || '...'}`,
       };
 
-      await exportTransactionsToExcel(filteredTransactions, {
+      await exportTransactionsToExcel(listToExport, {
         timeframeLabel: dateNames[dateFilter] || dateFilter,
         tabLabel: tabNames[activeTab] || activeTab,
         searchQuery: searchTerm,
@@ -574,10 +641,30 @@ export default function HistoryView({
     return filteredTransactions.slice(start, start + pageSize);
   }, [filteredTransactions, currentPage, pageSize]);
 
-  // Aliased to paginatedTransactions so all internal card & row maps work seamlessly
-  const displayedTransactions = paginatedTransactions;
+  // Instant In-Memory Paginated transactions + any pending offline bills on page 1
+  const displayedTransactions = useMemo(() => {
+    if (currentPage === 1 && !searchTerm) {
+      try {
+        const pendingQueue = getOfflineQueue();
+        const pendingDirect = (pendingQueue || [])
+          .filter((item) => {
+            const tx = item.receipt || item;
+            const isOnline = tx.order_source === 'online' || tx.orderSource === 'online';
+            return !isOnline;
+          })
+          .map((item) => ({ ...item.receipt, isOfflinePending: true }));
 
-  // Smart page numbers pagination algorithm (identical to ProductsView)
+        if (pendingDirect.length > 0) {
+          const ids = new Set(paginatedTransactions.map((t) => t.id));
+          const freshPending = pendingDirect.filter((t) => !ids.has(t.id));
+          return [...freshPending, ...paginatedTransactions];
+        }
+      } catch (_) {}
+    }
+    return paginatedTransactions;
+  }, [paginatedTransactions, currentPage, searchTerm]);
+
+  // Smart page numbers pagination algorithm
   const getPageNumbers = () => {
     if (totalPages <= 7) {
       return Array.from({ length: totalPages }, (_, i) => i + 1);
@@ -631,7 +718,11 @@ export default function HistoryView({
       }
     }
 
-    // 1. Immediately reset date and tab filters to 'all' so scanned bill is always visible
+    // 1. Remember current active date filter & switch to 'all' so scanned bill is always found across all history
+    if (!isAutoSwitchedRef.current) {
+      previousDateFilterRef.current = dateFilter;
+      isAutoSwitchedRef.current = true;
+    }
     setDateFilter('all');
     setActiveTab('all');
 
@@ -688,29 +779,41 @@ export default function HistoryView({
       });
     });
 
-    if (matched) {
+    const onMatchSuccess = (matchedItem) => {
       playSuccessBeep();
-      setScannedHighlightId(matched.id);
+      setScannedHighlightId(matchedItem.id);
       setScanToast({
         type: 'success',
-        message: `ພົບເຫັນບິນ #${matched.receiptNumber || matched.receipt_number || matched.id} (${matched.customerName || 'ລູກຄ້າທົ່ວໄປ'})`,
+        message: `ພົບເຫັນບິນ #${matchedItem.receiptNumber || matchedItem.receipt_number || matchedItem.id} (${matchedItem.customerName || 'ລູກຄ້າທົ່ວໄປ'})`,
       });
       setTimeout(() => setScanToast(null), 3500);
       setTimeout(() => setScannedHighlightId(null), 7000);
 
       setTimeout(() => {
-        const el = document.getElementById(`tx-card-${matched.id}`) || document.getElementById(`tx-row-${matched.id}`);
+        const el = document.getElementById(`tx-card-${matchedItem.id}`) || document.getElementById(`tx-row-${matchedItem.id}`);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-      }, 150);
+      }, 200);
+    };
+
+    if (matched) {
+      onMatchSuccess(matched);
     } else {
-      playErrorBeep();
-      setScanToast({
-        type: 'error',
-        message: `ບໍ່ພົບເຫັນບິນທີ່ມີລະຫັດບາໂຄດ: "${cleanCode}"`,
+      // If not in current local cache, targetedly fetch archive from Supabase
+      fetchArchivedTransactionFromSupabase(cleanCode).then((archivedTx) => {
+        if (archivedTx) {
+          setArchivedSearchedTx(archivedTx);
+          onMatchSuccess(archivedTx);
+        } else {
+          playErrorBeep();
+          setScanToast({
+            type: 'error',
+            message: `ບໍ່ພົບເຫັນບິນທີ່ມີລະຫັດບາໂຄດ: "${cleanCode}"`,
+          });
+          setTimeout(() => setScanToast(null), 3500);
+        }
       });
-      setTimeout(() => setScanToast(null), 3500);
     }
   };
 
@@ -791,7 +894,9 @@ export default function HistoryView({
 
           <button
             type="button"
-            onClick={onRefreshTransactions}
+            onClick={() => {
+              onRefreshTransactions?.();
+            }}
             disabled={isLoading}
             className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
             title="ໂຫຼດຂໍ້ມູນຄືນຈາກ Supabase"
@@ -810,10 +915,7 @@ export default function HistoryView({
           {/* ທັງໝົດ */}
           <button
             type="button"
-            onClick={() => {
-              playUnitChangeBeep('history');
-              setDateFilter('all');
-            }}
+            onClick={() => handleSelectDateFilter('all')}
             className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
               dateFilter === 'all'
                 ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
@@ -833,10 +935,7 @@ export default function HistoryView({
           {/* ມື້ນີ້ (Today) */}
           <button
             type="button"
-            onClick={() => {
-              playUnitChangeBeep('history');
-              setDateFilter('today');
-            }}
+            onClick={() => handleSelectDateFilter('today')}
             className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
               dateFilter === 'today'
                 ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
@@ -856,10 +955,7 @@ export default function HistoryView({
           {/* ມື້ວານ (Yesterday) */}
           <button
             type="button"
-            onClick={() => {
-              playUnitChangeBeep('history');
-              setDateFilter('yesterday');
-            }}
+            onClick={() => handleSelectDateFilter('yesterday')}
             className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
               dateFilter === 'yesterday'
                 ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
@@ -879,10 +975,7 @@ export default function HistoryView({
           {/* 7 ມື້ຜ່ານມາ (7 Days) */}
           <button
             type="button"
-            onClick={() => {
-              playUnitChangeBeep('history');
-              setDateFilter('7days');
-            }}
+            onClick={() => handleSelectDateFilter('7days')}
             className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 border ${
               dateFilter === '7days'
                 ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
@@ -902,10 +995,7 @@ export default function HistoryView({
           {/* ເລືອກວັນທີ... */}
           <button
             type="button"
-            onClick={() => {
-              playUnitChangeBeep('history');
-              setDateFilter('custom');
-            }}
+            onClick={() => handleSelectDateFilter('custom')}
             className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap border ${
               dateFilter === 'custom'
                 ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
@@ -937,9 +1027,9 @@ export default function HistoryView({
         )}
       </div>
 
-      {/* 2. STATS IN THE MIDDLE: Info-only compact cards (identical style to user/staff stats with 2 lines only) */}
+      {/* 2. STATS IN THE MIDDLE: Info-only compact cards (Box 1: Số bill, Box 2: Doanh thu, Box 3: Giá vốn, Box 4: Tiền lãi) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3.5 select-none pointer-events-none">
-        {/* Card 1: ຍອດລວມ */}
+        {/* Card 1: ຍອດລວມບິນ (Box 1: Giữ nguyên như cũ) */}
         <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black shrink-0">
             <Receipt size={20} weight="duotone" />
@@ -954,47 +1044,55 @@ export default function HistoryView({
           </div>
         </div>
 
-        {/* Card 2: ເງິນສົດ */}
+        {/* Card 2: ຍອດຂາຍລວມ (Box 2: Tổng tiền đã bán được) */}
         <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black shrink-0">
             <Money size={20} weight="duotone" />
           </div>
           <div className="min-w-0">
-            <div className="text-[11px] text-teal-600 font-bold uppercase tracking-wider truncate">
-              ເງິນສົດ
-            </div>
-            <div className="text-lg font-black text-teal-900 font-mono leading-tight">
-              {selectedPeriodStats.cashBills} <span className="text-xs font-normal text-teal-600/70">ບິນ</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: ເງິນໂອນ */}
-        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-black shrink-0">
-            <QrCode size={20} weight="duotone" />
-          </div>
-          <div className="min-w-0">
             <div className="text-[11px] text-blue-600 font-bold uppercase tracking-wider truncate">
-              ເງິນໂອນ
+              ຍອດຂາຍ ({selectedPeriodLabel})
             </div>
-            <div className="text-lg font-black text-blue-900 font-mono leading-tight">
-              {selectedPeriodStats.transferBills} <span className="text-xs font-normal text-blue-600/70">ບິນ</span>
+            <div className="text-lg font-black text-blue-900 font-mono leading-tight truncate">
+              {formatKip(selectedPeriodStats.totalRevenue)} <span className="text-xs font-normal text-blue-600/70"></span>
             </div>
           </div>
         </div>
 
-        {/* Card 4: ຕິດໜີ້ */}
+        {/* Card 3: ຕົ້ນທຶນສິນຄ້າ (Box 3: Số tiền giá nhập đã được bán) */}
         <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black shrink-0">
-            <HandCoins size={20} weight="duotone" />
+            <Tag size={20} weight="duotone" />
           </div>
           <div className="min-w-0">
             <div className="text-[11px] text-amber-600 font-bold uppercase tracking-wider truncate">
-              ຄ້າງຊຳລະ
+              ຕົ້ນທຶນສິນຄ້າ ({selectedPeriodLabel})
             </div>
-            <div className="text-lg font-black text-amber-900 font-mono leading-tight">
-              {selectedPeriodStats.debtBills} <span className="text-xs font-normal text-amber-600/70">ບິນ</span>
+            <div className="text-lg font-black text-amber-900 font-mono  truncate">
+              {formatKip(selectedPeriodStats.totalCost)} <span className="text-xs font-normal text-amber-600/70"></span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: ກຳໄລລວມ (Box 4: Tiền lãi - đã trừ với tiền giá nhập) */}
+        <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black shrink-0 ${
+            selectedPeriodStats.totalProfit < 0
+              ? 'bg-rose-50 text-rose-700'
+              : 'bg-emerald-50 text-emerald-700'
+          }`}>
+            <ChartLineUp size={20} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className={`text-[11px] font-bold uppercase tracking-wider truncate ${
+              selectedPeriodStats.totalProfit < 0 ? 'text-rose-600' : 'text-emerald-700'
+            }`}>
+              {selectedPeriodStats.totalProfit < 0 ? 'ຂາດທຶນ' : 'ກຳໄລ'} ({selectedPeriodStats.overallMargin}%)
+            </div>
+            <div className={`text-lg font-black font-mono leading-tight truncate ${
+              selectedPeriodStats.totalProfit < 0 ? 'text-rose-600' : 'text-emerald-800'
+            }`}>
+              {selectedPeriodStats.totalProfit > 0 ? '+' : ''}{formatKip(selectedPeriodStats.totalProfit)} <span className="text-xs font-normal opacity-70"></span>
             </div>
           </div>
         </div>
@@ -1146,10 +1244,17 @@ export default function HistoryView({
         {/* Search input & Barcode scanner */}
         <div className="flex items-center gap-2">
           <div className="relative w-full sm:w-80">
-            <MagnifyingGlass
-              size={15}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-            />
+            {isSearchingArchive ? (
+              <ArrowClockwise
+                size={15}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-600 animate-spin pointer-events-none"
+              />
+            ) : (
+              <MagnifyingGlass
+                size={15}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              />
+            )}
             <input
               ref={searchInputRef}
               id="history-search-input"
@@ -1173,6 +1278,23 @@ export default function HistoryView({
                 if (/^onl[\/\\_\s-]*\d+/i.test(val)) {
                   val = val.replace(/^onl[\/\\_\s-]*(\d{6})[\/\\_\s-]*(\d+)/i, 'ONL-$1-$2');
                 }
+
+                if (val.trim()) {
+                  // Auto-switch to 'all' to search across all history
+                  if (!isAutoSwitchedRef.current) {
+                    previousDateFilterRef.current = dateFilter;
+                    isAutoSwitchedRef.current = true;
+                  }
+                  setDateFilter('all');
+                  setActiveTab('all');
+                } else {
+                  // When filter input is cleared (deleted/empty), restore to previous date tab (e.g. today or yesterday)
+                  if (isAutoSwitchedRef.current) {
+                    setDateFilter(previousDateFilterRef.current || 'today');
+                    isAutoSwitchedRef.current = false;
+                  }
+                }
+
                 setSearchTerm(val);
               }}
               placeholder="ຄົ້ນຫາເລກບິນ, ລູກຄ້າ, ສິນຄ້າ..."
@@ -1232,7 +1354,7 @@ export default function HistoryView({
       </div>
 
       {/* Skeleton Loading State */}
-      {isLoading && directTransactions.length === 0 ? (
+      {isLoading && (!displayedTransactions || displayedTransactions.length === 0) ? (
         <HistoryListSkeleton count={6} />
       ) : (
         <>
@@ -1281,6 +1403,8 @@ export default function HistoryView({
 
           // 2. Phân biệt đơn mới (chỉ khi không phải đơn sửa và có unreadOrderIds hoặc realtime new)
           const isOrderNew = !isOrderUpdated && ((unreadOrderIds && unreadOrderIds.has(tx.id)) || isRealtimeNew);
+
+          const profitMetrics = calculateTxProfitMetrics(tx, productsMap);
 
           return (
             <div
@@ -1411,36 +1535,60 @@ export default function HistoryView({
 
                 {/* Amounts Breakdown: Only show ຈ່າຍແລ້ວ & ໜີ້ຄ້າງ when activeTab === 'debt' */}
                 {activeTab === 'debt' && isDebtItem ? (
-                  <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-slate-200/60 text-center">
+                  <>
+                    <div className="grid grid-cols-3 gap-1 pt-1.5 border-t border-slate-200/60 text-center">
+                      <div>
+                        <span className="text-[9.5px] text-slate-500 block uppercase">ຍອດລວມ</span>
+                        <span className="text-xs font-mono font-black text-slate-900">
+                          {formatKip(total)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9.5px] text-emerald-700 block uppercase">ຈ່າຍແລ້ວ</span>
+                        <span className="text-xs font-mono font-bold text-emerald-700">
+                          {formatKip(paid)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9.5px] text-rose-600 block uppercase">ໜີ້ຄ້າງ</span>
+                        <span
+                          className={`text-xs font-mono font-black ${
+                            remainingDebt > 0 ? 'text-rose-600' : 'text-emerald-600'
+                          }`}
+                        >
+                          {remainingDebt > 0 ? formatKip(remainingDebt) : 'ຄົບແລ້ວ'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/40 text-xs">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">ກຳໄລ:</span>
+                      <span className={`font-mono font-black ${profitMetrics.isLoss ? 'text-rose-600' : 'text-emerald-700'}`}>
+                        {profitMetrics.isProfit ? '+' : ''}{formatKip(profitMetrics.totalProfit)}
+                        <span className="text-[9.5px] font-bold ml-1 opacity-80">
+                          ({profitMetrics.isProfit ? '+' : ''}{profitMetrics.overallMargin}%)
+                        </span>
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
                     <div>
-                      <span className="text-[9.5px] text-slate-500 block uppercase">ຍອດລວມ</span>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase block">ຍອດລວມ</span>
                       <span className="text-xs font-mono font-black text-slate-900">
                         {formatKip(total)}
                       </span>
                     </div>
-                    <div>
-                      <span className="text-[9.5px] text-emerald-700 block uppercase">ຈ່າຍແລ້ວ</span>
-                      <span className="text-xs font-mono font-bold text-emerald-700">
-                        {formatKip(paid)}
+                    <div className="text-right">
+                      <span className={`text-[10px] font-bold uppercase block ${profitMetrics.isLoss ? 'text-rose-600' : 'text-emerald-700'}`}>
+                        {profitMetrics.isLoss ? ' ຂາດທຶນ' : 'ກຳໄລ'}
+                      </span>
+                      <span className={`text-xs font-mono font-black ${profitMetrics.isLoss ? 'text-rose-600' : 'text-emerald-700'}`}>
+                        {profitMetrics.isProfit ? '+' : ''}{formatKip(profitMetrics.totalProfit)}
+                        <span className="text-[9.5px] font-bold ml-1 opacity-80">
+                          ({profitMetrics.isProfit ? '+' : ''}{profitMetrics.overallMargin}%)
+                        </span>
                       </span>
                     </div>
-                    <div>
-                      <span className="text-[9.5px] text-rose-600 block uppercase">ໜີ້ຄ້າງ</span>
-                      <span
-                        className={`text-xs font-mono font-black ${
-                          remainingDebt > 0 ? 'text-rose-600' : 'text-emerald-600'
-                        }`}
-                      >
-                        {remainingDebt > 0 ? formatKip(remainingDebt) : 'ຄົບແລ້ວ'}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase">ຍອດລວມ</span>
-                    <span className="text-xs font-mono font-black text-slate-900">
-                      {formatKip(total)}
-                    </span>
                   </div>
                 )}
 
@@ -1474,11 +1622,25 @@ export default function HistoryView({
                   className={`py-2 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer ${
                     (tx.is_printed || tx.isPrinted)
                       ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                      : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
+                      : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200'
                   }`}
                 >
                   <Printer size={15} weight="bold" />
                   <span>{(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນ' : 'ພິມບິນ'}</span>
+                </button>
+
+                {/* View Profit Breakdown Modal */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    playActionClickBeep('history');
+                    setSelectedProfitTx(tx);
+                  }}
+                  className="py-2 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer"
+                  title="ເບິ່ງຕົ້ນທຶນ & ກຳໄລ"
+                >
+                  <ChartLineUp size={15} weight="bold" />
+                  <span>ກຳໄລ</span>
                 </button>
 
                 {/* Edit Order via POS (Replace & Re-checkout) */}
@@ -1534,7 +1696,7 @@ export default function HistoryView({
                 {canDeleteOrders && (
                   <button
                     type="button"
-                    onClick={() => onDeleteTransaction && onDeleteTransaction(tx)}
+                    onClick={() => handleDeleteTransaction(tx)}
                     className="p-2 rounded-xl bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-600 cursor-pointer"
                     title="ລຶບ (Admin Only)"
                   >
@@ -1548,7 +1710,7 @@ export default function HistoryView({
       </div>
 
       {/* Mobile-only pagination bar (< 768px) */}
-      {filteredTransactions.length > 0 && (
+      {totalItemsCount > 0 && (
         <div className="md:hidden bg-white rounded-2xl border border-slate-200 p-3 mb-3 flex flex-col items-center gap-3 shadow-2xs">
           {/* Top: Page Size Selector (20 | 50 | 100 | 200 | ALL) */}
           <div className="flex items-center gap-2 w-full justify-between">
@@ -1580,13 +1742,15 @@ export default function HistoryView({
           <div className="text-xs text-slate-600 font-medium text-center whitespace-nowrap shrink-0 px-1">
             {pageSize === 'ALL' ? (
               <span>
-                ທັງໝົດ <strong className="text-slate-900 font-bold font-mono">{filteredTransactions.length}</strong>
+                ທັງໝົດ <strong className="text-slate-900 font-bold font-mono">{totalItemsCount}</strong>
               </span>
             ) : (
               <span>
-                <strong className="text-slate-900 font-bold font-mono">{Math.min((currentPage - 1) * pageSize + 1, filteredTransactions.length)} - {Math.min(currentPage * pageSize, filteredTransactions.length)}</strong>{' '}
+                <strong className="text-slate-900 font-bold font-mono">
+                  {totalItemsCount > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, totalItemsCount)}
+                </strong>{' '}
                 ຈາກ{' '}
-                <strong className="text-slate-900 font-bold font-mono">{filteredTransactions.length}</strong>
+                <strong className="text-slate-900 font-bold font-mono">{totalItemsCount}</strong>
               </span>
             )}
           </div>
@@ -1656,16 +1820,15 @@ export default function HistoryView({
       {/* 4. TABLET & DESKTOP VIEW (>= 768px): Data Table */}
       <div className="hidden md:block w-full max-w-full bg-white rounded-2xl border border-slate-200 shadow-xs mb-3 overflow-hidden">
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-y">
-          <table className={`w-full text-left text-xs border-separate border-spacing-0 ${activeTab === 'debt' ? 'min-w-[760px]' : 'min-w-[700px]'}`}>
+          <table className={`w-full text-left text-xs border-separate border-spacing-0 ${activeTab === 'debt' ? 'min-w-[760px]' : 'min-w-[620px]'}`}>
           <thead>
-            <tr className="sticky top-0 z-10 text-slate-700 font-extrabold [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
+            <tr className="sticky top-0 z-10 text-slate-700 font-extrabold [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50 select-none">
               <th className="py-3 px-2 sm:px-3 w-12 text-center text-slate-500 font-bold">ລ/ດ</th>
-              <th className="py-3 px-3 sm:px-4">ເລກທີບິນ</th>
-              <th className="py-3 px-3">ວັນທີ & ເວລາ</th>
+              <th className="py-3 px-3 sm:px-4">ເລກທີບິນ / ວັນທີ</th>
               <th className="py-3 px-3">ຜູ້ຂາຍ</th>
               <th className="py-3 px-3">ຊື່ລູກຄ້າ</th>
               {activeTab !== 'debt' && <th className="py-3 px-3">ຮູບແບບ / ສະຖານະ</th>}
-              <th className="py-3 px-3 text-right">ຍອດລວມ</th>
+              <th className="py-3 px-3 text-right whitespace-nowrap">ຍອດລວມ / ກຳໄລ</th>
               {activeTab === 'debt' && (
                 <>
                   <th className="py-3 px-3 text-right">ຈ່າຍແລ້ວ</th>
@@ -1725,22 +1888,25 @@ export default function HistoryView({
               // 2. Phân biệt đơn mới (chỉ khi không phải đơn sửa và có unreadOrderIds hoặc realtime new)
               const isOrderNew = !isOrderUpdated && ((unreadOrderIds && unreadOrderIds.has(tx.id)) || isRealtimeNew);
 
+              const profitMetrics = calculateTxProfitMetrics(tx, productsMap);
+
               return (
                 <tr
                   key={tx.id}
                   id={`tx-row-${tx.id}`}
-                  className={`transition-colors duration-150 ${
+                  onClick={() => handlePrintReceipt(tx)}
+                  className={`transition-colors duration-150 cursor-pointer ${
                     isOrderUpdated
-                      ? 'bg-amber-50/80 text-slate-900 font-bold'
+                      ? 'bg-amber-50/80 hover:bg-amber-100/90 active:bg-amber-100 text-slate-900 font-bold'
                       : isOrderNew
-                      ? 'bg-emerald-50/80 text-slate-900 font-bold'
+                      ? 'bg-emerald-50/80 hover:bg-emerald-100/90 active:bg-emerald-100 text-slate-900 font-bold'
                       : scannedHighlightId === tx.id
                       ? 'bg-emerald-50/40 text-slate-900 ring-2 ring-inset ring-emerald-500'
                       : isCancelled
-                      ? 'bg-rose-50/30 hover:bg-rose-50/60 text-slate-500'
+                      ? 'bg-rose-50/30 hover:bg-rose-50/60 active:bg-rose-100/50 text-slate-500'
                       : hasDebt
-                      ? 'bg-amber-50/20 hover:bg-amber-50/40 text-slate-900'
-                      : 'hover:bg-slate-50/80 text-slate-900'
+                      ? 'bg-amber-50/20 hover:bg-amber-50/50 active:bg-amber-100/50 text-slate-900'
+                      : 'hover:bg-blue-50/40 active:bg-blue-100/50 text-slate-900'
                   }`}
                 >
                   {/* 0. STT (ລ/ດ - Số thứ tự) */}
@@ -1748,65 +1914,64 @@ export default function HistoryView({
                     {itemIndex}
                   </td>
 
-                  {/* 1. Receipt # */}
-                  <td className="py-3 px-4 font-black font-mono">
+                  {/* 1. Mã đơn & Ngày giờ gộp chung (Receipt # & Date/Time combined) */}
+                  <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-blue-50 text-primary flex items-center justify-center shrink-0 border border-blue-100 shadow-2xs">
+                      <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100 shadow-2xs">
                         <Tag size={16} weight="duotone" />
                       </div>
-                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                        <span
-                          className={isCancelled ? 'line-through text-slate-400' : 'text-slate-900'}
-                        >
-                          #{tx.receiptNumber}
-                        </span>
-                      {(tx.order_source === 'online' || tx.orderSource === 'online') && (
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-teal-50 text-teal-800 border border-teal-200 inline-flex items-center gap-1">
-                          <span>ອອນລາຍ</span>
-                        </span>
-                      )}
-                      {isOrderNew && (
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-emerald-600 text-white shadow-xs inline-flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                          <span>ບິນໃໝ່</span>
-                        </span>
-                      )}
-                      {Boolean(tx.isOfflinePending) && (
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-500 text-white shadow-xs inline-flex items-center gap-1" title="ບິນນີ້ຖືກບັນທຶກຕອນບໍ່ມີເນັດ, ລະບົບຈະຊິ້ງຂຶ້ນ Cloud ອັດຕະໂນມັດເມື່ອມີເນັດ">
-                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                          <span>ອອບລາຍ</span>
-                        </span>
-                      )}
-                      {isOrderUpdated && (
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-600 text-white shadow-xs inline-flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                          <span>ແກ້ໄຂໃໝ່</span>
-                        </span>
-                      )}
-                      {isCancelled && (
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-rose-100 text-rose-700 border border-rose-300">
-                          ຍົກເລີກແລ້ວ
-                        </span>
-                      )}
-                      {Boolean(tx.is_printed || tx.isPrinted) && !isCancelled && (
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 text-slate-700 border border-slate-300 inline-flex items-center gap-1 shadow-2xs">
-                          <Check size={10} weight="bold" className="text-emerald-600" />
-                          <span>ພິມແລ້ວ</span>
-                        </span>
-                      )}
-                    </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={isCancelled ? 'line-through text-slate-400 font-mono' : 'text-slate-900 font-mono'}
+                          >
+                            #{tx.receiptNumber}
+                          </span>
+                          {(tx.order_source === 'online' || tx.orderSource === 'online') && (
+                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-teal-50 text-teal-800 border border-teal-200 inline-flex items-center gap-1">
+                              <span>ອອນລາຍ</span>
+                            </span>
+                          )}
+                          {isOrderNew && (
+                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-emerald-600 text-white shadow-xs inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                              <span>ບິນໃໝ່</span>
+                            </span>
+                          )}
+                          {Boolean(tx.isOfflinePending) && (
+                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-500 text-white shadow-xs inline-flex items-center gap-1" title="ບິນນີ້ຖືກບັນທຶກຕອນບໍ່ມີເນັດ, ລະບົບຈະຊິ້ງຂຶ້ນ Cloud ອັດຕະໂນມັດເມື່ອມີເນັດ">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                              <span>ອອບລາຍ</span>
+                            </span>
+                          )}
+                          {isOrderUpdated && (
+                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-600 text-white shadow-xs inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                              <span>ແກ້ໄຂໃໝ່</span>
+                            </span>
+                          )}
+                          {isCancelled && (
+                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-rose-100 text-rose-700 border border-rose-300">
+                              ຍົກເລີກແລ້ວ
+                            </span>
+                          )}
+                          {Boolean(tx.is_printed || tx.isPrinted) && !isCancelled && (
+                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-slate-100 text-slate-700 border border-slate-300 inline-flex items-center gap-1 shadow-2xs">
+                              <Check size={10} weight="bold" className="text-emerald-600" />
+                              <span>ພິມແລ້ວ</span>
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-400 font-normal mt-0.5 flex items-center gap-1.5 font-mono">
+                          <span>{formatDateToDDMMYYYY(tx.createdAt || tx.created_at)}</span>
+                          <span>•</span>
+                          <span>{formatTime24h(tx.createdAt || tx.created_at)}</span>
+                        </div>
+                      </div>
                     </div>
                   </td>
 
-                  {/* Date & Time (DD/MM/YYYY & 24h HH:mm) */}
-                  <td className="py-3 px-3 text-slate-600 font-medium whitespace-nowrap font-mono">
-                    <div className="font-bold text-slate-800 text-xs">{formatDateToDDMMYYYY(tx.createdAt || tx.created_at)}</div>
-                    <div className="text-[10.5px] text-slate-400 font-medium">
-                      {formatTime24h(tx.createdAt || tx.created_at)}
-                    </div>
-                  </td>
-
-                  {/* Cashier - Separated column (Single row chip) */}
+                  {/* 2. Cashier */}
                   <td className="py-3 px-3 whitespace-nowrap">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
                       <User size={12} weight="bold" />
@@ -1814,27 +1979,16 @@ export default function HistoryView({
                     </span>
                   </td>
 
-                  {/* Customer Name */}
+                  {/* 3. Customer Name */}
                   <td
                     className={`py-3 px-3 font-bold ${
                       isCancelled ? 'text-slate-500' : 'text-slate-800'
                     }`}
                   >
                     <div>{tx.customerName || 'ລູກຄ້າທົ່ວໄປ'}</div>
-                    {/* In Debt Tab: Merge Debt status badge right under customer name */}
-                    {activeTab === 'debt' && isDebtItem && (
-                      <div className="mt-1">
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-0.5">
-                          <HandCoins size={10} weight="bold" />
-                          <span>
-                            {remainingDebt >= total ? 'ຄ້າງຊຳລະ 100%' : remainingDebt > 0 ? 'ຄ້າງຊຳລະບາງສ່ວນ' : 'ຊຳລະຄົບແລ້ວ'}
-                          </span>
-                        </span>
-                      </div>
-                    )}
                   </td>
 
-                  {/* Payment Method / Status - Hidden in Debt Tab */}
+                  {/* 4. Payment Method / Status - Hidden in Debt Tab */}
                   {activeTab !== 'debt' && (
                     <td className="py-3 px-3 whitespace-nowrap">
                       {isCancelled ? (
@@ -1893,11 +2047,35 @@ export default function HistoryView({
                     </td>
                   )}
 
-                  {/* Grand Total */}
-                  <td className="py-3 px-3 text-right font-black font-mono">
-                    <span className={isCancelled ? 'line-through text-slate-400' : 'text-slate-900'}>
-                      {formatKip(total)}
-                    </span>
+                  {/* 5. Gộp Doanh thu & Lợi nhuận (Grand Total & Profit Combined - text-right) */}
+                  <td className="py-3 px-3 text-right whitespace-nowrap">
+                    {/* Dòng trên: Doanh thu */}
+                    <div className="font-bold text-slate-900 text-sm font-mono">
+                      <span className={isCancelled ? 'line-through text-slate-400' : 'text-slate-900'}>
+                        {formatKip(total)}
+                      </span>
+                    </div>
+
+                    {/* Dòng dưới: Lợi nhuận */}
+                    {isCancelled ? (
+                      <div className="text-xs font-semibold text-slate-400 mt-0.5 font-mono line-through flex items-center justify-end gap-1">
+                        <span>{formatKip(profitMetrics.totalProfit)}</span>
+                      </div>
+                    ) : (canViewReports ?? true) ? (
+                      profitMetrics.isLoss ? (
+                        <div className="text-xs font-semibold text-rose-600 mt-0.5 flex items-center justify-end gap-1 font-mono">
+                          <span>{formatKip(profitMetrics.totalProfit)}</span>
+                        </div>
+                      ) : profitMetrics.isProfit ? (
+                        <div className="text-xs font-semibold text-emerald-600 mt-0.5 flex items-center justify-end gap-1 font-mono">
+                          <span>+{formatKip(profitMetrics.totalProfit)}</span>
+                        </div>
+                      ) : (
+                        <div className="text-xs font-medium text-slate-400 mt-0.5 flex items-center justify-end font-mono">
+                          <span>0 ₭</span>
+                        </div>
+                      )
+                    ) : null}
                   </td>
 
                   {/* Paid Amount, Remaining Debt & Due Date - ONLY DISPLAYED WHEN activeTab === 'debt' */}
@@ -1948,62 +2126,129 @@ export default function HistoryView({
                     </>
                   )}
 
-                  {/* Actions Column */}
-                  <td className="py-2.5 px-2 text-center">
-                    <div className="flex items-center justify-center gap-1 flex-nowrap relative row-action-popover-container">
-                      {/* 1. View/Print Receipt */}
-                      <button
-                        type="button"
-                        onClick={() => handlePrintReceipt(tx)}
-                        className={`h-7 px-2 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer shadow-2xs ${
-                          Boolean(tx.is_printed || tx.isPrinted)
-                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80'
-                            : 'bg-blue-50 hover:bg-primary hover:text-white text-blue-700 border border-blue-200'
-                        }`}
-                        title={Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນໃໝ່' : 'ເບິ່ງ / ພິມບິນ'}
-                      >
-                        <Printer size={13} weight="bold" />
-                        <span>{Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນ' : 'ພິມ'}</span>
-                      </button>
+                  {/* 6. Actions Column: Touch-Friendly Square Icon Buttons (w-9 h-9) */}
+                  <td className="py-2.5 px-2 sm:px-3 text-center whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-1.5 flex-nowrap relative row-action-popover-container">
+                      {activeTab === 'debt' ? (
+                        <>
+                          {/* Tab Khách nợ: Chỉ để lại nút ຊຳລະ và nút Sửa ở ngoài */}
+                          {/* Nút Thu nợ (HandCoins Icon nếu có nợ) - Square Icon Button */}
+                          {!isCancelled && hasDebt && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                playActionClickBeep('history');
+                                setDebtModalTx(tx);
+                              }}
+                              className="w-9 h-9 flex items-center justify-center bg-amber-500 hover:bg-amber-600 text-white rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                              title="ຊຳລະໜີ້"
+                            >
+                              <HandCoins size={16} weight="bold" />
+                            </button>
+                          )}
 
-                      {/* 2. Edit Order via POS */}
-                      {!isCancelled && onEditOrderInPos && (
-                        <button
-                          type="button"
-                          onClick={() => onEditOrderInPos(tx)}
-                          className="h-7 px-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer shadow-2xs"
-                          title="ແກ້ໄຂບິນໂດຍນຳເຂົ້າໜ້າ POS"
-                        >
-                          <PencilSimple size={13} weight="bold" />
-                          <span>ແກ້ໄຂ</span>
-                        </button>
+                          {/* Nút Sửa (Pencil Icon) - Square Icon Button */}
+                          {!isCancelled && onEditOrderInPos && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                playActionClickBeep('history');
+                                onEditOrderInPos(tx);
+                              }}
+                              className="w-9 h-9 flex items-center justify-center bg-slate-50 border border-slate-200 text-slate-500 hover:text-amber-600 hover:border-amber-300 rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                              title="ແກ້ໄຂ"
+                            >
+                              <PencilSimple size={16} weight="bold" />
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {/* Các Tab Khác: Giữ nguyên các nút tiêu chuẩn */}
+                          {/* Nút In (Printer Icon) - Square Icon Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePrintReceipt(tx);
+                            }}
+                            className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer ${
+                              Boolean(tx.is_printed || tx.isPrinted)
+                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80'
+                                : 'bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-600 hover:text-white'
+                            }`}
+                            title={Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນໃໝ່' : 'ພິມບິນ'}
+                          >
+                            <Printer size={16} weight="bold" />
+                          </button>
+
+                          {/* Nút Lợi nhuận (Trending/Chart Icon) - Square Icon Button */}
+                          {(canViewReports ?? true) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                playActionClickBeep('history');
+                                setSelectedProfitTx(tx);
+                              }}
+                              className="w-9 h-9 flex items-center justify-center bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                              title="ເບິ່ງກຳໄລ"
+                            >
+                              <ChartLineUp size={16} weight="bold" />
+                            </button>
+                          )}
+
+                          {/* Nút Sửa (Pencil Icon) - Square Icon Button */}
+                          {!isCancelled && onEditOrderInPos && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                playActionClickBeep('history');
+                                onEditOrderInPos(tx);
+                              }}
+                              className="w-9 h-9 flex items-center justify-center bg-slate-50 border border-slate-200 text-slate-500 hover:text-amber-600 hover:border-amber-300 rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                              title="ແກ້ໄຂ"
+                            >
+                              <PencilSimple size={16} weight="bold" />
+                            </button>
+                          )}
+
+                          {/* Nút Thu nợ (HandCoins Icon nếu có nợ) - Square Icon Button */}
+                          {!isCancelled && hasDebt && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                playActionClickBeep('history');
+                                setDebtModalTx(tx);
+                              }}
+                              className="w-9 h-9 flex items-center justify-center bg-amber-500 hover:bg-amber-600 text-white rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                              title="ຊຳລະໜີ້"
+                            >
+                              <HandCoins size={16} weight="bold" />
+                            </button>
+                          )}
+                        </>
                       )}
 
-                      {/* 3. Collect Debt Modal (Nếu có nợ) */}
-                      {!isCancelled && hasDebt && (
-                        <button
-                          type="button"
-                          onClick={() => setDebtModalTx(tx)}
-                          className="h-7 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black inline-flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer"
-                          title="ຊຳລະໜີ້ລູກຄ້າ"
-                        >
-                          <HandCoins size={13} weight="bold" />
-                          <span>ຊຳລະ</span>
-                        </button>
-                      )}
-
-                      {/* 4. Menu 3 chấm (Chứa Hủy đơn & Xóa) */}
+                      {/* Nút Menu 3 chấm (Chứa In, Xem lợi nhuận, Hủy đơn & Xóa) - Square Icon Button */}
                       <button
                         type="button"
-                        onClick={(e) => handleToggleActionMenu(e, tx)}
-                        className={`w-7 h-7 rounded-lg border transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleActionMenu(e, tx);
+                        }}
+                        className={`w-9 h-9 rounded-xl border transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-sm active:scale-95 ${
                           actionMenuState?.tx.id === tx.id
                             ? 'bg-slate-200 border-slate-300 text-slate-900 shadow-2xs'
-                            : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200 shadow-2xs'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200'
                         }`}
                         title="ຕົວເລືອກເພີ່ມເຕີມ"
                       >
-                        <DotsThreeVertical size={15} weight="bold" />
+                        <DotsThreeVertical size={16} weight="bold" />
                       </button>
                     </div>
                   </td>
@@ -2013,7 +2258,7 @@ export default function HistoryView({
           </tbody>
         </table>
 
-        {!isLoading && filteredTransactions.length === 0 && (
+        {!isLoading && totalItemsCount === 0 && (
           <div className="py-20 text-center text-slate-400">
             <Receipt size={40} className="mx-auto mb-2 opacity-50" />
             <p className="text-xs font-bold">ບໍ່ພົບລາຍການບິນຕາມເງື່ອນໄຂທີ່ເລືອກ</p>
@@ -2022,7 +2267,7 @@ export default function HistoryView({
         </div>
 
         {/* Attached Desktop Pagination Bar (Seamless with table, 0 gap) */}
-        {filteredTransactions.length > 0 && (
+        {totalItemsCount > 0 && (
           <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
             {/* Left: Page Size Selector (20 | 50 | 100 | 200 | ALL) */}
             <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
@@ -2054,13 +2299,15 @@ export default function HistoryView({
             <div className="text-xs text-slate-600 font-medium text-center whitespace-nowrap shrink-0 px-2">
               {pageSize === 'ALL' ? (
                 <span>
-                  ທັງໝົດ <strong className="text-slate-900 font-bold font-mono">{filteredTransactions.length}</strong>
+                  ທັງໝົດ <strong className="text-slate-900 font-bold font-mono">{totalItemsCount}</strong>
                 </span>
               ) : (
                 <span>
-                  <strong className="text-slate-900 font-bold font-mono">{Math.min((currentPage - 1) * pageSize + 1, filteredTransactions.length)} - {Math.min(currentPage * pageSize, filteredTransactions.length)}</strong>{' '}
+                  <strong className="text-slate-900 font-bold font-mono">
+                    {totalItemsCount > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, totalItemsCount)}
+                  </strong>{' '}
                   ຈາກ{' '}
-                  <strong className="text-slate-900 font-bold font-mono">{filteredTransactions.length}</strong>
+                  <strong className="text-slate-900 font-bold font-mono">{totalItemsCount}</strong>
                 </span>
               )}
             </div>
@@ -2132,7 +2379,7 @@ export default function HistoryView({
       </div>
 
       {/* Mobile Empty State */}
-      {!isLoading && filteredTransactions.length === 0 && (
+      {!isLoading && totalItemsCount === 0 && (
         <div className="md:hidden py-16 text-center text-slate-400 bg-white rounded-2xl border border-slate-200 mb-6">
           <Receipt size={36} className="mx-auto mb-2 opacity-50" />
           <p className="text-xs font-bold">ບໍ່ພົບລາຍການບິນຕາມເງື່ອນໄຂທີ່ເລືອກ</p>
@@ -2255,6 +2502,17 @@ export default function HistoryView({
         title="ສະແກນບາໂຄດໃບບິນ (Scan Receipt Barcode)"
       />
 
+      {/* 4.1. Invoice Profit & Cost Breakdown Detail Modal */}
+      {selectedProfitTx && (
+        <InvoiceProfitDetailModal
+          isOpen={Boolean(selectedProfitTx)}
+          onClose={() => setSelectedProfitTx(null)}
+          transaction={selectedProfitTx}
+          products={products}
+          onPrintReceipt={handlePrintReceipt}
+        />
+      )}
+
       {/* 5. Toast Feedback for Barcode Scanning (Floating, safe below Dynamic Island) */}
       {scanToast && (
         <div
@@ -2288,7 +2546,36 @@ export default function HistoryView({
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-white rounded-xl shadow-2xl border border-slate-200 py-1 min-w-[155px] text-left">
+            <div className="bg-white rounded-xl shadow-2xl border border-slate-200 py-1 min-w-[165px] text-left">
+              {/* In hóa đơn (Print Receipt) - Đặc biệt tiện cho tab khách nợ khi nút in ngoài được ẩn */}
+              <button
+                type="button"
+                onClick={() => {
+                  const currentTx = actionMenuState.tx;
+                  setActionMenuState(null);
+                  handlePrintReceipt(currentTx);
+                }}
+                className="w-full px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 flex items-center gap-2 transition-colors cursor-pointer border-b border-slate-100"
+              >
+                <Printer size={15} weight="bold" className="text-blue-600" />
+                <span>{Boolean(actionMenuState.tx.is_printed || actionMenuState.tx.isPrinted) ? 'ພິມຄືນໃໝ່' : 'ພິມບິນ'}</span>
+              </button>
+
+              {/* Xem vốn & lãi (Profit Breakdown) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const currentTx = actionMenuState.tx;
+                  setActionMenuState(null);
+                  playActionClickBeep('history');
+                  setSelectedProfitTx(currentTx);
+                }}
+                className="w-full px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 transition-colors cursor-pointer border-b border-slate-100"
+              >
+                <ChartLineUp size={15} weight="bold" className="text-emerald-600" />
+                <span>ເບິ່ງຕົ້ນທຶນ & ກຳໄລ</span>
+              </button>
+
               {/* Hủy đơn (Void / Cancel) */}
               {!actionMenuState.tx.isCancelled && actionMenuState.tx.status !== 'cancelled' ? (
                 <button
@@ -2317,7 +2604,7 @@ export default function HistoryView({
                   onClick={() => {
                     const currentTx = actionMenuState.tx;
                     setActionMenuState(null);
-                    onDeleteTransaction && onDeleteTransaction(currentTx);
+                    handleDeleteTransaction(currentTx);
                   }}
                   className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-100"
                 >
