@@ -11,7 +11,7 @@
     "postinstall": "node scripts/ensure-tcp-spm.cjs",
     "assets:generate": "npx @capacitor/assets generate --assetPath public",
     "cap:sync": "npm run build && npx @capacitor/assets generate --assetPath public && npx cap sync ios",
-    "ota:deploy": "vite build && npx @capgo/cli@latest bundle upload --channel=production --auto-bump=minor --apikey=7d88a2a7-471f-4175-be14-30353ccb8ee3"
+    "ota:deploy": "vite build && npx @capgo/cli@latest bundle upload --channel=production --auto-bump=minor --apikey=d2eb94c7-e1f1-4f13-b90c-4c303409e31f"
   },
   "dependencies": {
     "@capacitor-community/media": "^9.1.0",

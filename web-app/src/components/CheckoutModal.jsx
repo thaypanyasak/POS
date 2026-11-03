@@ -68,7 +68,7 @@ export default function CheckoutModal({
                 </>
               ) : (
                 <>
-                  <CheckCircle size={20} className="text-teal-600" weight="fill" />
+                  <CheckCircle size={20} className="text-primary" weight="fill" />
                   <span>ຊຳລະເງິນ (Checkout)</span>
                 </>
               )}
@@ -249,7 +249,7 @@ export default function CheckoutModal({
           {/* Grand Total display (STRICTLY LAO KIP ONLY) */}
           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-center">
             <span className="text-xs text-slate-500 block mb-0.5">ຍອດເງິນທີ່ຕ້ອງຊຳລະ (Total Due)</span>
-            <span className="text-2xl sm:text-3xl font-black text-teal-700 block tracking-tight font-mono">
+            <span className="text-2xl sm:text-3xl font-black text-primary block tracking-tight font-mono">
               {formatKip(cartSubtotal)}
             </span>
           </div>
@@ -265,7 +265,7 @@ export default function CheckoutModal({
               }}
               className={`py-2 px-1 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                 paymentMethod === 'cash'
-                  ? 'bg-teal-50 border-teal-500 text-teal-800 shadow-xs ring-1 ring-teal-500'
+                  ? 'bg-primary-light border-primary text-primary shadow-xs ring-1 ring-primary'
                   : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
               }`}
             >
@@ -316,7 +316,7 @@ export default function CheckoutModal({
             <div className="flex flex-col gap-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold text-slate-700">ຈຳນວນເງິນທີ່ໄດ້ຮັບ (₭):</label>
-                <span className="text-[11px] font-bold text-teal-700 font-mono">
+                <span className="text-[11px] font-bold text-primary font-mono">
                   {tenderedKip ? formatDots(tenderedKip) + ' ₭' : '0 ₭'}
                 </span>
               </div>
@@ -327,7 +327,7 @@ export default function CheckoutModal({
                   value={tenderedKip ? formatDots(tenderedKip) : ''}
                   placeholder="0"
                   onChange={(e) => setTenderedKip(parseDots(e.target.value))}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xl font-black text-slate-900 font-mono text-center focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 pr-10 shadow-inner"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xl font-black text-slate-900 font-mono text-center focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary pr-10 shadow-inner"
                 />
                 <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400 font-mono pointer-events-none">
                   ₭
@@ -346,7 +346,7 @@ export default function CheckoutModal({
                     }}
                     className={`py-1.5 px-0.5 rounded-lg text-[10.5px] font-bold font-mono transition-all cursor-pointer border ${
                       tenderedKip === amt
-                        ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
+                        ? 'bg-primary text-primary-foreground border-primary shadow-2xs'
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
                     }`}
                   >
@@ -601,7 +601,7 @@ export default function CheckoutModal({
             className={`px-5 py-2.5 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               editingOldTransaction
                 ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'
-                : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                : 'bg-primary hover:bg-primary-hover shadow-primary/20'
             }`}
           >
             {editingOldTransaction ? (

@@ -34,7 +34,6 @@ import BarcodeScannerModal from './BarcodeScannerModal';
 import QuotationPreviewModal from './inventory/QuotationPreviewModal';
 import MixedCartonSelectorModal from './MixedCartonSelectorModal';
 import CustomerSearchSelect from './common/CustomerSearchSelect';
-import ExchangeRateBadge from './common/ExchangeRateBadge';
 import { PosProductGridSkeleton } from './common/SkeletonLoaders';
 import BundleCollage from './common/BundleCollage';
 import queryClient from '../services/queryClient';
@@ -101,7 +100,7 @@ function CartQuantityStepper({ quantity, onUpdateQuantity, onStepQuantity }) {
   };
 
   return (
-    <div className="h-6.5 rounded-md border border-slate-200 bg-slate-50 flex items-center p-0.5 shrink-0 focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/30 transition-all">
+    <div className="h-6.5 rounded-md border border-slate-200 bg-slate-50 flex items-center p-0.5 shrink-0 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/30 transition-all">
       <button
         type="button"
         onClick={() => onStepQuantity?.(-1)}
@@ -122,13 +121,13 @@ function CartQuantityStepper({ quantity, onUpdateQuantity, onStepQuantity }) {
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         onFocus={handleFocus}
-        className="w-7 sm:w-11 h-5 text-center font-black text-xs font-mono text-slate-900 tabular-nums bg-transparent border-0 focus:outline-none p-0 selection:bg-teal-500 selection:text-white"
+        className="w-7 sm:w-11 h-5 text-center font-black text-xs font-mono text-slate-900 tabular-nums bg-transparent border-0 focus:outline-none p-0 selection:bg-primary selection:text-white"
         title="ກົດເພື່ອພິມຈຳນວນທີ່ຕ້ອງການ"
       />
       <button
         type="button"
         onClick={() => onStepQuantity?.(1)}
-        className="w-4 h-5.5 rounded flex items-center justify-center text-teal-800 hover:bg-white active:scale-95 transition-all cursor-pointer font-bold shrink-0"
+        className="w-4 h-5.5 rounded flex items-center justify-center text-primary hover:bg-white active:scale-95 transition-all cursor-pointer font-bold shrink-0"
         title="ເພີ່ມຈຳນວນ"
       >
         <Plus size={10} weight="bold" />
@@ -487,16 +486,15 @@ export default function PosScreen({
           const crateFee = missingCount * feePerCrate;
           const newLineTotal = (parsedPrice * qty) + crateFee;
 
+          const origProduct = (products || []).find((p) => p.id === item.product?.id) || item.product;
+          const origUnit = origProduct?.units?.find((u) => u.id === item.unit?.id || u.unitName === item.unit?.unitName) || item.unit;
+
           return {
             ...item,
             customPrice: parsedPrice,
             unitPrice: parsedPrice,
             lineTotal: newLineTotal,
-            unit: {
-              ...(item.unit || {}),
-              retailPrice: parsedPrice,
-              wholesalePrice: parsedPrice,
-            },
+            unit: origUnit,
             overrideReason: reason || 'ປັບລາຄາພິເສດ',
           };
         }
@@ -510,7 +508,9 @@ export default function PosScreen({
       cart.map((item) => {
         if (!item.isBundle && item.product?.id === productId && (item.unit?.id === unitId || !unitId)) {
           const { customPrice, overrideReason, ...rest } = item;
-          const tierPrice = getEffectiveUnitPrice(item.unit, item.selectedPriceTier || 1);
+          const origProduct = (products || []).find((p) => p.id === item.product?.id) || item.product;
+          const origUnit = origProduct?.units?.find((u) => u.id === item.unit?.id || u.unitName === item.unit?.unitName) || item.unit;
+          const tierPrice = getEffectiveUnitPrice(origUnit, item.selectedPriceTier || 1);
           const standardPrice = item.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
           const qty = Number(item.quantity) || 1;
           const feePerCrate = Number(item.product?.crateDepositFee || item.crateDepositFee) || 30000;
@@ -522,10 +522,7 @@ export default function PosScreen({
             customPrice: null,
             unitPrice: standardPrice,
             lineTotal: (standardPrice * qty) + crateFee,
-            unit: {
-              ...(item.unit || {}),
-              retailPrice: tierPrice,
-            },
+            unit: origUnit,
           };
         }
         return item;
@@ -725,7 +722,7 @@ export default function PosScreen({
             <button
               type="button"
               onClick={() => setOrderMenuOpen(!orderMenuOpen)}
-              className="h-8 px-2.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 select-none"
+              className="h-8 px-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-bold text-xs flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 select-none"
               title="ກົດເພື່ອເລືອກ Order ຫຼື ເພີ່ມ Order ໃໝ່"
             >
               <Package size={14} weight="bold" />
@@ -750,7 +747,7 @@ export default function PosScreen({
                   {/* Header popup: Tiêu đề danh sách đơn */}
                   <div className="px-1.5 py-1 border-b border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                     <span>ລາຍການ Order ({posOrders.length})</span>
-                    <span className="text-[10px] text-teal-700 font-extrabold lowercase">
+                    <span className="text-[10px] text-primary font-extrabold lowercase">
                       {posOrders.length} ກຳລັງເປີດ
                     </span>
                   </div>
@@ -770,14 +767,14 @@ export default function PosScreen({
                           }}
                           className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-colors border ${
                             isActive
-                              ? 'bg-teal-50 border-teal-300 text-teal-950 font-extrabold shadow-2xs'
+                              ? 'bg-primary-light border-primary-border text-primary font-extrabold shadow-2xs'
                               : 'bg-white hover:bg-slate-50 border-slate-100 text-slate-700'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <span
                               className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0 ${
-                                isActive ? 'bg-teal-600 text-white' : 'bg-slate-200 text-slate-600'
+                                isActive ? 'bg-primary text-white' : 'bg-slate-200 text-slate-600'
                               }`}
                             >
                               {idx + 1}
@@ -797,7 +794,7 @@ export default function PosScreen({
                               <span
                                 className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ${
                                   isActive
-                                    ? 'bg-teal-200/80 text-teal-900'
+                                    ? 'bg-primary-light text-primary'
                                     : 'bg-slate-100 text-slate-600'
                                 }`}
                               >
@@ -834,7 +831,7 @@ export default function PosScreen({
                         setOrderMenuOpen(false);
                         onAddNewOrderTab?.();
                       }}
-                      className="w-full h-9 rounded-xl bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white border border-teal-200/80 hover:border-teal-600 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 shadow-2xs"
+                      className="w-full h-9 rounded-xl bg-primary-light hover:bg-primary text-primary hover:text-white border border-primary-border hover:border-primary font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 shadow-2xs"
                       title="ເພີ່ມ Order ໃໝ່ ສຳລັບລູກຄ້າຕໍ່ໄປ"
                     >
                       <Plus size={14} weight="bold" />
@@ -856,11 +853,11 @@ export default function PosScreen({
             </span>
           </div>
 
-          <div className="inline-flex items-center bg-slate-200/90 p-0.5 rounded-lg border border-slate-300 gap-1">
+          <div className="inline-flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 gap-1">
             {[
-              { id: 1, label: 'ລາຄາ 1', desc: 'ມາດຕະຖານ', activeClass: 'bg-teal-600 text-white shadow-xs font-black ring-1 ring-teal-700/20' },
-              { id: 2, label: 'ລາຄາ 2', desc: 'ລູກຄ້າປະຈຳ', activeClass: 'bg-sky-600 text-white shadow-xs font-black ring-1 ring-sky-700/20' },
-              { id: 3, label: 'ລາຄາ 3', desc: 'ຂາຍສົ່ງ/VIP', activeClass: 'bg-amber-600 text-white shadow-xs font-black ring-1 ring-amber-700/20' },
+              { id: 1, label: 'ລາຄາ 1', desc: 'ມາດຕະຖານ' },
+              { id: 2, label: 'ລາຄາ 2', desc: 'ລູກຄ້າປະຈຳ' },
+              { id: 3, label: 'ລາຄາ 3', desc: 'ຂາຍສົ່ງ/VIP' },
             ].map((tier) => {
               const isSelected = (globalPriceTier || 1) === tier.id;
               return (
@@ -875,8 +872,8 @@ export default function PosScreen({
                   }}
                   className={`h-6 px-2.5 rounded-md text-[11px] transition-all cursor-pointer flex items-center justify-center select-none active:scale-95 ${
                     isSelected
-                      ? tier.activeClass
-                      : 'text-slate-600 font-bold hover:text-slate-900 hover:bg-slate-300/70'
+                      ? 'bg-primary text-white shadow-xs font-bold'
+                      : 'bg-transparent text-slate-600 hover:text-slate-900 font-medium'
                   }`}
                   title={`ນຳໃຊ້ ${tier.label} (${tier.desc}) ໃຫ້ທຸກລາຍການໃນກະຕ່າ`}
                 >
@@ -891,9 +888,9 @@ export default function PosScreen({
       {/* 2.5 Cart Item Count Bar */}
       <div className="px-3 py-1.5 bg-slate-100/90 border-b border-slate-200 flex items-center justify-between text-[11px] font-bold text-slate-600 shrink-0 select-none">
         <div className="flex items-center gap-1.5">
-          <ShoppingCart size={13} weight="bold" className="text-teal-600" />
+          <ShoppingCart size={13} weight="bold" className="text-primary" />
           <span>ລາຍການໃນກະຕ່າ:</span>
-          <span className="px-2 py-0.5 rounded-full bg-teal-600 text-white font-mono font-extrabold text-[11px] shadow-2xs">
+          <span className="font-bold text-primary font-mono text-xs">
             {cart.length} ລາຍການ
           </span>
         </div>
@@ -916,16 +913,14 @@ export default function PosScreen({
             return (
               <div
                 key={item.id}
-                className={`p-1.5 px-2 rounded-lg border bg-white flex flex-col gap-1 transition-all shadow-2xs ${
+                className={`p-1.5 px-2 rounded-lg border border-slate-200/80 hover:border-slate-300 bg-white flex flex-col gap-1 transition-all shadow-2xs ${
                   isPriceMenuOpen ? 'relative z-40 overflow-visible' : 'relative z-0'
-                } ${
-                  isOverridden ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200/80 hover:border-slate-300'
                 }`}
               >
                 {/* Product Thumbnail (Left) + 2 Rows (Right) */}
                 <div className="flex items-center gap-2">
                   {/* Thumbnail 36x36 Collage from Child Flavors */}
-                  <div className="w-9 h-9 rounded-md bg-teal-50 overflow-hidden shrink-0 border border-teal-200/80 flex items-center justify-center self-center text-teal-700 shadow-2xs">
+                  <div className="w-9 h-9 rounded-md bg-primary-light overflow-hidden shrink-0 border border-primary-border flex items-center justify-center self-center text-primary shadow-2xs">
                     {(() => {
                       const compImages = (item.bundleComponents || [])
                         .map((c) => {
@@ -959,7 +954,7 @@ export default function PosScreen({
                         <span className="font-semibold text-xs text-slate-900 truncate" title={item.bundleName}>
                           {item.bundleName}
                         </span>
-                        <span className="px-1 py-0.2 rounded text-[8.5px] font-bold bg-teal-100 text-teal-800 border border-teal-200 shrink-0 flex items-center gap-0.5">
+                        <span className="px-1 py-0.2 rounded text-[8.5px] font-bold bg-primary-light text-primary border border-primary-border shrink-0 flex items-center gap-0.5">
                           <Package size={9} weight="duotone" />
                           <span>Mix</span>
                         </span>
@@ -978,12 +973,12 @@ export default function PosScreen({
                                 setCustomPriceInput(effectivePrice > 0 ? formatDots(effectivePrice) : '');
                               }
                             }}
-                            className={`h-6 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-md px-2 text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs ${
+                            className={`h-6 bg-primary-light hover:bg-primary-border/60 text-primary border border-primary-border rounded-md px-2 text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs ${
                               isOverridden ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-400/40' : ''
                             }`}
                             title="ກົດເພື່ອປັບລາຄາພິເສດ"
                           >
-                            <Tag size={11} weight="bold" className={isOverridden ? 'text-amber-800' : 'text-teal-700'} />
+                            <Tag size={11} weight="bold" className={isOverridden ? 'text-amber-800' : 'text-primary'} />
                             <span className="font-mono tabular-nums">{formatDots(effectivePrice)} ₭</span>
                             <CaretDown size={10} weight="bold" className="opacity-70" />
                           </button>
@@ -999,7 +994,7 @@ export default function PosScreen({
                                 {/* Header */}
                                 <div className="px-1 py-0.5 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center justify-between">
                                   <span>ເລືອກລະດັບລາຄາ:</span>
-                                  <span className="text-teal-700 font-extrabold">
+                                  <span className="text-primary font-extrabold">
                                     {cartonCount > 0 ? `${cartonCount} ${item.unitName || 'ແກັດ'}` : ''}
                                     {cartonCount > 0 && Number(item.looseQty || 0) > 0 ? ' + ' : ''}
                                     {Number(item.looseQty || 0) > 0 ? `${item.looseQty} ${item.baseUnitName || 'ອັນ'}` : ''}
@@ -1017,17 +1012,17 @@ export default function PosScreen({
                                     }}
                                     className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg hover:bg-slate-50 cursor-pointer text-xs transition-colors ${
                                       !isOverridden
-                                        ? 'bg-teal-50 text-teal-900 font-bold'
+                                        ? 'bg-primary-light text-primary font-bold'
                                         : 'text-slate-700 font-medium'
                                     }`}
                                   >
-                                    <span className={`whitespace-nowrap ${!isOverridden ? 'text-teal-950 font-bold' : 'text-slate-700'}`}>
+                                    <span className={`whitespace-nowrap ${!isOverridden ? 'text-primary font-bold' : 'text-slate-700'}`}>
                                       ລາຄາມາດຕະຖານ
                                     </span>
                                     <div className="font-bold text-slate-900 whitespace-nowrap flex items-center gap-1.5 font-mono tabular-nums shrink-0">
                                       <span>{formatDots(standardLinePrice)} ₭</span>
                                       {!isOverridden && (
-                                        <Check size={14} weight="bold" className="text-teal-600 shrink-0" />
+                                        <Check size={14} weight="bold" className="text-primary shrink-0" />
                                       )}
                                     </div>
                                   </button>
@@ -1066,7 +1061,7 @@ export default function PosScreen({
                                         }
                                       }}
                                       placeholder="ປ້ອນລາຄາ..."
-                                      className="flex-1 h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-mono font-bold tabular-nums focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                      className="flex-1 h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-mono font-bold tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                     />
                                     <button
                                       type="button"
@@ -1079,7 +1074,7 @@ export default function PosScreen({
                                           setOpenPriceMenuKey(null);
                                         }
                                       }}
-                                      className="h-8 px-3 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
+                                      className="h-8 px-3 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
                                     >
                                       OK
                                     </button>
@@ -1113,7 +1108,7 @@ export default function PosScreen({
                           className="inline-flex items-center bg-slate-100 hover:bg-slate-200/70 p-0.5 px-2 rounded-md border border-slate-200/80 gap-1 text-[11px] font-bold text-slate-700 cursor-pointer transition-all active:scale-95"
                           title="ກົດເພື່ອແກ້ໄຂລົດຊາດ ແລະ ຈຳນວນ"
                         >
-                          <Package size={13} weight="bold" className="text-teal-700" />
+                          <Package size={13} weight="bold" className="text-primary" />
                           <span>{cartonCount > 0 ? `${cartonCount} ${item.unitName || 'ແກັດ'}` : ''}</span>
                           {cartonCount > 0 && Number(item.looseQty || 0) > 0 && <span className="text-slate-400">+</span>}
                           {Number(item.looseQty || 0) > 0 && (
@@ -1129,7 +1124,7 @@ export default function PosScreen({
                         <button
                           type="button"
                           onClick={() => handleOpenEditBundleModal(item)}
-                          className="h-6 px-2 rounded-md bg-slate-100 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200 border border-slate-200 text-slate-600 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95 shadow-2xs"
+                          className="h-6 px-2 rounded-md bg-slate-100 hover:bg-primary-light hover:text-primary hover:border-primary-border border border-slate-200 text-slate-600 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95 shadow-2xs"
                           title="ແກ້ໄຂຈຳນວນ & ລົດຊາດ (Sửa số lượng & vị)"
                         >
                           <PencilSimple size={12} weight="bold" />
@@ -1155,7 +1150,7 @@ export default function PosScreen({
                     {item.bundleComponents.map((c, cIdx) => (
                       <div key={cIdx} className="flex items-center justify-between text-[10.5px] text-slate-600">
                         <span className="truncate">• {c.productName}</span>
-                        <span className="font-mono font-extrabold text-teal-800 shrink-0">x{c.quantity}</span>
+                        <span className="font-mono font-extrabold text-primary shrink-0">x{c.quantity}</span>
                       </div>
                     ))}
                   </div>
@@ -1164,9 +1159,11 @@ export default function PosScreen({
             );
           }
 
+          const origProduct = (products || []).find((p) => p.id === item.product?.id) || item.product;
+          const origUnit = origProduct?.units?.find((u) => u.id === item.unit?.id || u.unitName === item.unit?.unitName) || item.unit;
           const itemKey = `${item.product.id}_${item.unit.id}`;
           const currentTier = item.selectedPriceTier || 1;
-          const tierPrice = getEffectiveUnitPrice(item.unit, currentTier);
+          const tierPrice = getEffectiveUnitPrice(origUnit, currentTier);
           const standardPrice = item.isHalfCarton ? Math.round(tierPrice / 2) : tierPrice;
           const effectivePrice =
             item.customPrice !== undefined && item.customPrice !== null
@@ -1204,10 +1201,8 @@ export default function PosScreen({
           return (
             <div
               key={`${item.product.id}_${item.unit.id}`}
-              className={`p-1.5 px-2 rounded-lg border bg-white flex flex-col gap-1 transition-all shadow-2xs ${
+              className={`p-1.5 px-2 rounded-lg border border-slate-200/80 hover:border-slate-300 bg-white flex flex-col gap-1 transition-all shadow-2xs ${
                 isAnyMenuOpen ? 'relative z-40 overflow-visible' : 'relative z-0'
-              } ${
-                isOverridden ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200/80 hover:border-slate-300'
               }`}
             >
               {/* Product Thumbnail (Left) + 2 Rows (Right) */}
@@ -1270,12 +1265,12 @@ export default function PosScreen({
                               setCustomPriceInput(effectivePrice > 0 ? formatDots(effectivePrice) : '');
                             }
                           }}
-                          className={`h-6 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-md px-2 text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs ${
+                          className={`h-6 bg-primary-light hover:bg-primary-border/60 text-primary border border-primary-border rounded-md px-2 text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs ${
                             isOverridden ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-400/40' : ''
                           }`}
                           title="ກົດເພື່ອເລືອກລະດັບລາຄາ ຫຼື ປັບລາຄາພິເສດ"
                         >
-                          <Tag size={11} weight="bold" className={isOverridden ? 'text-amber-800' : 'text-teal-700'} />
+                          <Tag size={11} weight="bold" className={isOverridden ? 'text-amber-800' : 'text-primary'} />
                           <span className="font-mono tabular-nums">{formatDots(effectivePrice)} ₭</span>
                           <CaretDown size={10} weight="bold" className="opacity-70" />
                         </button>
@@ -1291,26 +1286,29 @@ export default function PosScreen({
                               {/* Header */}
                               <div className="px-1 py-0.5 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center justify-between">
                                 <span>ເລືອກລະດັບລາຄາ:</span>
-                                <span className="text-teal-700 font-extrabold">{item.unit.unitName}</span>
+                                <span className="text-primary font-extrabold">{item.unit.unitName}</span>
                               </div>
 
                               {/* Khu vực 1: Chọn nhanh mức giá cấu hình sẵn */}
                               {(() => {
+                                const origProduct = (products || []).find((p) => p.id === item.product?.id) || item.product;
+                                const origUnit = origProduct?.units?.find((u) => u.id === item.unit?.id || u.unitName === item.unit?.unitName) || item.unit;
+
                                 const tiers = [
                                   {
                                     tierNum: 1,
                                     label: 'ລາຄາ 1 (ມາດຕະຖານ)',
-                                    price: Number(item.unit.retailPrice ?? item.unit.retail_price ?? item.unit.price ?? 0),
+                                    price: Number(origUnit?.retailPrice ?? origUnit?.retail_price ?? origUnit?.price ?? item.unit?.retailPrice ?? 0),
                                   },
                                   {
                                     tierNum: 2,
                                     label: 'ລາຄາ 2 (ລູກຄ້າປະຈຳ)',
-                                    price: Number(item.unit.price_2 ?? item.unit.price2 ?? 0),
+                                    price: Number(origUnit?.price_2 ?? origUnit?.price2 ?? item.unit?.price_2 ?? 0),
                                   },
                                   {
                                     tierNum: 3,
                                     label: 'ລາຄາ 3 (VIP/ຂາຍສົ່ງ)',
-                                    price: Number(item.unit.price_3 ?? item.unit.price3 ?? 0),
+                                    price: Number(origUnit?.price_3 ?? origUnit?.price3 ?? item.unit?.price_3 ?? 0),
                                   },
                                 ];
                                 const availableTiers = tiers.filter((t) => t.price > 0);
@@ -1336,17 +1334,17 @@ export default function PosScreen({
                                           }}
                                           className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg hover:bg-slate-50 cursor-pointer text-xs transition-colors ${
                                             isSelected
-                                              ? 'bg-teal-50 text-teal-900 font-bold'
+                                              ? 'bg-primary-light text-primary font-bold'
                                               : 'text-slate-700 font-medium'
                                           }`}
                                         >
-                                          <span className={`whitespace-nowrap ${isSelected ? 'text-teal-950 font-bold' : 'text-slate-700'}`}>
+                                          <span className={`whitespace-nowrap ${isSelected ? 'text-primary font-bold' : 'text-slate-700'}`}>
                                             {label}
                                           </span>
                                           <div className="font-bold text-slate-900 whitespace-nowrap flex items-center gap-1.5 font-mono tabular-nums shrink-0">
                                             <span>{formatDots(price)} ₭</span>
                                             {isSelected && (
-                                              <Check size={14} weight="bold" className="text-teal-600 shrink-0" />
+                                              <Check size={14} weight="bold" className="text-primary shrink-0" />
                                             )}
                                           </div>
                                         </button>
@@ -1389,7 +1387,7 @@ export default function PosScreen({
                                       }
                                     }}
                                     placeholder="ປ້ອນລາຄາ..."
-                                    className="flex-1 h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-mono font-bold tabular-nums focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                    className="flex-1 h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-mono font-bold tabular-nums focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                   />
                                   <button
                                     type="button"
@@ -1402,7 +1400,7 @@ export default function PosScreen({
                                         setOpenPriceMenuKey(null);
                                       }
                                     }}
-                                    className="h-8 px-3 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
+                                    className="h-8 px-3 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
                                   >
                                     OK
                                   </button>
@@ -1477,7 +1475,7 @@ export default function PosScreen({
                                     isSelected
                                       ? (isHalfCartonActive
                                           ? 'bg-amber-600 text-white shadow-2xs'
-                                          : 'bg-teal-600 text-white shadow-2xs')
+                                          : 'bg-primary text-white shadow-2xs')
                                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
                                   }`}
                                   title={
@@ -1518,12 +1516,12 @@ export default function PosScreen({
                                           }}
                                           className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors whitespace-nowrap ${
                                             !isHalfCartonActive
-                                              ? 'bg-teal-50 text-teal-900 font-bold'
+                                              ? 'bg-primary-light text-primary font-bold'
                                               : 'text-slate-700 hover:bg-slate-50 font-medium'
                                           }`}
                                         >
                                           <span>1 {u.unitName} (ເຕັມ)</span>
-                                          {!isHalfCartonActive && <Check size={13} weight="bold" className="text-teal-600 shrink-0" />}
+                                          {!isHalfCartonActive && <Check size={13} weight="bold" className="text-primary shrink-0" />}
                                         </button>
                                         <button
                                           type="button"
@@ -1585,7 +1583,7 @@ export default function PosScreen({
 
                             if (!isCartonUnit) {
                               return (
-                                <span className="text-[11px] text-teal-800 font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200/60 shrink-0">
+                                <span className="text-[11px] text-primary font-bold bg-primary-light px-2 py-0.5 rounded border border-primary-border shrink-0">
                                   {u.unitName}
                                 </span>
                               );
@@ -1599,7 +1597,7 @@ export default function PosScreen({
                                   className={`h-6 px-2 rounded text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
                                     isHalfCartonActive
                                       ? 'bg-amber-600 text-white shadow-2xs'
-                                      : 'bg-teal-600 text-white shadow-2xs'
+                                      : 'bg-primary text-white shadow-2xs'
                                   }`}
                                   title="ກົດເພື່ອເລືອກ 1 ແກັດ ຫຼື ½ ແກັດ (ເຄິ່ງແກັດ)"
                                 >
@@ -1631,12 +1629,12 @@ export default function PosScreen({
                                           }}
                                           className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between cursor-pointer transition-colors whitespace-nowrap ${
                                             !isHalfCartonActive
-                                              ? 'bg-teal-50 text-teal-900 font-bold'
+                                              ? 'bg-primary-light text-primary font-bold'
                                               : 'text-slate-700 hover:bg-slate-50 font-medium'
                                           }`}
                                         >
                                           <span>1 {u.unitName} (ເຕັມ)</span>
-                                          {!isHalfCartonActive && <Check size={13} weight="bold" className="text-teal-600 shrink-0" />}
+                                          {!isHalfCartonActive && <Check size={13} weight="bold" className="text-primary shrink-0" />}
                                         </button>
                                         <button
                                           type="button"
@@ -1718,7 +1716,7 @@ export default function PosScreen({
                         toggleCartItemCrateDeposit &&
                         toggleCartItemCrateDeposit(item.product.id, item.unit.id, e.target.checked)
                       }
-                      className="w-3.5 h-3.5 rounded text-teal-600 focus:ring-teal-500 cursor-pointer shrink-0 accent-teal-600"
+                      className="w-3.5 h-3.5 rounded text-primary focus:ring-primary cursor-pointer shrink-0 accent-primary"
                     />
                     <span className="text-[11px] font-semibold text-amber-900 ml-1.5 truncate">
                       ມັດຈຳລັງ (+{formatDots(feePerCrate)} ₭)
@@ -1834,9 +1832,9 @@ export default function PosScreen({
               handleOpenCheckout();
             }}
             disabled={cart.length === 0}
-            className={`h-9 sm:h-10 px-3 rounded-lg text-xs sm:text-sm font-bold shadow-sm flex items-center justify-center gap-1.5 transition-colors active:scale-98 cursor-pointer ${
+            className={`h-9 sm:h-10 px-3 rounded-lg text-xs sm:text-sm font-bold shadow-md flex items-center justify-center gap-1.5 transition-colors active:scale-98 cursor-pointer ${
               cart.length > 0
-                ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-teal-600/25'
+                ? 'bg-primary hover:bg-primary-hover text-white'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >
@@ -1904,7 +1902,7 @@ export default function PosScreen({
                 onChange={handleSearchChange}
                 onKeyDown={handleSearchKeyDown}
                 placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ ຫຼື ສະແກນບາໂຄດ..."
-                className="w-full h-11 pl-9 pr-10 bg-slate-100/80 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-600 focus:bg-white font-medium shadow-2xs transition-all"
+                className="w-full h-11 pl-9 pr-10 bg-slate-100/80 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:bg-white font-medium shadow-2xs transition-all"
               />
               
               {localSearch && (
@@ -1928,7 +1926,7 @@ export default function PosScreen({
                 playActionClickBeep();
                 setScannerOpen(true);
               }}
-              className="h-11 px-3 sm:px-3.5 rounded-xl bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white border border-teal-200 shadow-2xs flex items-center gap-1.5 font-bold text-xs sm:text-sm cursor-pointer transition-all active:scale-95 shrink-0"
+              className="h-11 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 font-semibold rounded-xl flex items-center gap-1.5 shadow-sm hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all duration-200 cursor-pointer active:scale-95 shrink-0 text-xs sm:text-sm"
               title="ເປີດກ້ອງສະແກນບາໂຄດ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
             >
               <Barcode size={20} weight="bold" />
@@ -1945,7 +1943,7 @@ export default function PosScreen({
               }}
               className={`md:hidden relative h-11 px-3 rounded-xl border transition-all active:scale-95 shrink-0 flex items-center justify-center cursor-pointer shadow-2xs ${
                 cart.length > 0
-                  ? 'bg-teal-600 hover:bg-teal-700 text-white border-teal-600 shadow-teal-600/25'
+                  ? 'bg-primary hover:bg-primary-hover text-white border-primary shadow-primary/25'
                   : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
               }`}
               title="ເປີດກະຕ່າສິນຄ້າ (Shopping Cart)"
@@ -1960,17 +1958,7 @@ export default function PosScreen({
               </div>
             </button>
 
-            {/* Nút Tỷ giá: Ẩn ở chế độ màn hình dọc điện thoại (< 768px/md:flex), giữ nguyên ở iPad / Tablet (>= 768px) */}
-            <div className="hidden md:flex items-center shrink-0">
-              <ExchangeRateBadge
-                exchangeRate={exchangeRate}
-                onRateUpdated={setExchangeRate}
-                queryClient={queryClient}
-                className="!h-11 !px-3 text-xs"
-              />
-            </div>
-
-            {/* Nút Refresh Làm mới danh sách sản phẩm: Luôn có mặt để cập nhật tức thì, thay thế vị trí tỷ giá trên Mobile */}
+            {/* Nút Refresh: Nút tiện ích hệ thống */}
             <button
               type="button"
               onClick={() => {
@@ -1978,19 +1966,17 @@ export default function PosScreen({
                 onRefreshProducts?.();
               }}
               disabled={isLoading}
-              className={`h-11 px-3 rounded-xl border transition-all active:scale-95 shrink-0 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
-                isLoading
-                  ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                  : 'bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-700 border-slate-200 hover:border-teal-300'
+              className={`group/ref h-11 px-3 py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl flex items-center gap-1.5 shadow-sm hover:border-blue-300 hover:bg-blue-50/60 transition-all duration-200 cursor-pointer active:scale-95 shrink-0 text-xs sm:text-sm ${
+                isLoading ? 'opacity-50 cursor-not-allowed' : ''
               }`}
-              title="ໂຫຼດຂໍ້ມູນສິນຄ້າຄືນໃໝ່ (Refresh Product Catalog)"
+              title="Làm mới"
             >
               <ArrowClockwise
                 size={18}
                 weight="bold"
-                className={isLoading ? 'animate-spin text-teal-600' : ''}
+                className={`text-blue-600 transition-transform duration-300 group-hover/ref:rotate-180 ${isLoading ? 'animate-spin' : ''}`}
               />
-              <span className="text-xs font-bold hidden sm:inline">ຣີເຟຣຊ</span>
+              <span className="text-slate-700 font-medium hidden sm:inline">ຣີເຟຣຊ</span>
             </button>
           </div>
 
@@ -2009,8 +1995,8 @@ export default function PosScreen({
                     }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 border active:scale-95 ${
                       isSelected
-                        ? 'bg-teal-700 text-white border-teal-700 shadow-xs font-extrabold'
-                        : 'bg-slate-100/90 hover:bg-slate-200/80 text-slate-700 border-transparent'
+                        ? 'bg-primary text-white border-primary shadow-xs font-extrabold'
+                        : 'bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 border-slate-200'
                     }`}
                   >
                     {cat === 'ລວມ' || cat === '📦 ລວມ' ? (
@@ -2078,10 +2064,10 @@ export default function PosScreen({
                         playActionClickBeep();
                         setSelectedBundleForModal(resolvedBundle);
                       }}
-                      className="bg-gradient-to-b from-teal-50/50 to-white rounded-xl border-2 border-teal-500/80 hover:border-teal-600 hover:shadow-md transition-all duration-150 flex flex-col justify-between overflow-hidden cursor-pointer group select-none"
+                      className="bg-gradient-to-b from-primary-light/50 to-white rounded-xl border-2 border-primary-border hover:border-primary hover:shadow-md transition-all duration-150 flex flex-col justify-between overflow-hidden cursor-pointer group select-none"
                     >
                       <div className="p-2 sm:p-2.5 flex-1 flex flex-col">
-                        <div className="relative h-28 sm:h-36 w-full rounded-[10px] overflow-hidden bg-teal-50/80 mb-2 shrink-0 flex items-center justify-center border border-teal-100">
+                        <div className="relative h-28 sm:h-36 w-full rounded-[10px] overflow-hidden bg-primary-light/80 mb-2 shrink-0 flex items-center justify-center border border-primary-border">
                           {bundleChildImages.length > 0 ? (
                             <BundleCollage images={bundleChildImages} className="w-full h-full" fallbackIconSize={44} />
                           ) : (b.image_url || b.imageUrl) ? (
@@ -2091,14 +2077,14 @@ export default function PosScreen({
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                             />
                           ) : (
-                            <div className="flex flex-col items-center justify-center text-teal-600">
+                            <div className="flex flex-col items-center justify-center text-primary">
                               <Package size={44} weight="duotone" />
-                              <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 mt-1">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-primary mt-1">
                                 {b.package_qty} {b.base_unit_name || 'ອັນ'}/{b.unit_name || 'ແກັດ'}
                               </span>
                             </div>
                           )}
-                          <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-teal-600 text-[9.5px] font-black text-white shadow-xs flex items-center gap-1 z-10">
+                          <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-primary text-[9.5px] font-black text-white shadow-xs flex items-center gap-1 z-10">
                             <Package size={11} weight="duotone" />
                             <span>ຍົກລັງ Mix</span>
                           </span>
@@ -2116,10 +2102,10 @@ export default function PosScreen({
                             )}
                           </div>
 
-                          <div className="mt-2 pt-2 border-t border-teal-100 flex items-baseline justify-between">
+                          <div className="mt-2 pt-2 border-t border-primary-border/60 flex items-baseline justify-between">
                             <div>
                               <span className="text-[10px] text-slate-400 block font-bold">ລາຄາຍົກລັງ:</span>
-                              <span className="text-xs sm:text-sm font-black font-mono text-teal-800">
+                              <span className="text-xs sm:text-sm font-black font-mono text-primary">
                                 {formatKip(cartonDisplayPrice)}
                               </span>
                             </div>
@@ -2141,7 +2127,7 @@ export default function PosScreen({
                   return (
                     <div
                       key={p.id}
-                      className="bg-white rounded-xl border border-slate-200/90 hover:border-teal-400 hover:shadow-xs transition-all duration-150 flex flex-col justify-between overflow-hidden group"
+                      className="bg-white rounded-xl border border-slate-200/90 hover:border-primary-border hover:shadow-xs transition-all duration-150 flex flex-col justify-between overflow-hidden group"
                     >
                       {/* Top card area */}
                       <div
@@ -2250,35 +2236,48 @@ export default function PosScreen({
                                 priceFontClass = 'text-[10px] sm:text-[10.5px] tracking-normal';
                               }
 
+                              const isBiggestUnit = isBulk || (totalUnits > 1 && idx === 0);
+
+                              const isInCart = cart.some(
+                                (cItem) =>
+                                  !cItem.isBundle &&
+                                  cItem.product?.id === p.id &&
+                                  ((unit.id && cItem.unit?.id === unit.id) || cItem.unit?.unitName === unit.unitName)
+                              );
+
                               return (
                                 <button
                                   key={unit.id || idx}
                                   type="button"
                                   onClick={() => addToCart(p, unit, 1)}
                                   style={{ flex: `${flexRatio} 1 0%` }}
-                                  className={`min-w-0 py-1.5 px-0.5 sm:px-1 rounded-lg text-center transition-all cursor-pointer active:scale-95 flex flex-col justify-center items-center shadow-2xs overflow-hidden ${
-                                    isBulk
-                                      ? 'bg-teal-600 hover:bg-teal-700 text-white'
-                                      : isMiddlePack
-                                      ? 'bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-slate-900'
-                                      : 'bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-400 text-slate-900'
+                                  className={`group/btn min-w-0 py-1.5 px-0.5 sm:px-1 rounded-lg text-center transition-all cursor-pointer active:scale-95 flex flex-col justify-center items-center shadow-2xs overflow-hidden ${
+                                    isInCart
+                                      ? 'bg-primary-light border border-primary text-primary-deep font-bold shadow-2xs ring-1 ring-primary/40'
+                                      : isBiggestUnit
+                                      ? 'bg-blue-50/90 hover:bg-blue-100/80 border border-blue-200 text-blue-950 shadow-2xs'
+                                      : 'bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-700 transition-colors'
                                   }`}
                                   title={`ຂາຍ 1 ${unit.unitName} (${formatKip(priceNum)})`}
                                 >
                                   <span
-                                    className={`text-[9.5px] sm:text-[10px] font-bold block truncate max-w-full leading-tight ${
-                                      isBulk
-                                        ? 'text-teal-100'
-                                        : isMiddlePack
-                                        ? 'text-sky-700'
-                                        : 'text-slate-500'
+                                    className={`text-[9.5px] sm:text-[10px] block truncate max-w-full leading-tight ${
+                                      isInCart
+                                        ? 'text-primary-deep font-extrabold'
+                                        : isBiggestUnit
+                                        ? 'text-blue-700 font-extrabold'
+                                        : 'text-primary font-bold group-hover/btn:text-primary-hover'
                                     }`}
                                   >
                                     {unit.unitName}
                                   </span>
                                   <span
-                                    className={`font-black block font-mono leading-tight mt-0.5 whitespace-nowrap truncate max-w-full ${priceFontClass} ${
-                                      isBulk ? 'text-white' : 'text-slate-900'
+                                    className={`block leading-tight mt-0.5 whitespace-nowrap truncate max-w-full ${priceFontClass} ${
+                                      isInCart
+                                        ? 'text-primary-deep font-black'
+                                        : isBiggestUnit
+                                        ? 'text-blue-950 font-black'
+                                        : 'text-slate-800 font-bold group-hover/btn:text-primary'
                                     }`}
                                   >
                                     {priceStr}
@@ -2301,9 +2300,9 @@ export default function PosScreen({
                     ref={sentinelRef}
                     className="col-span-full py-3.5 flex items-center justify-center text-xs font-bold text-slate-400 gap-2"
                   >
-                    <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-pulse" />
                     <span>ສະແດງ {visibleProducts.length} ຈາກ {filteredProducts.length} ລາຍການ</span>
-                    <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-pulse" />
                   </div>
                 )}
               </div>
@@ -2339,10 +2338,10 @@ export default function PosScreen({
             onClick={() => setMobileCartOpen(true)}
             className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer active:scale-98 transition-transform"
           >
-            <div className="relative p-2 rounded-lg bg-teal-50 text-teal-700 border border-teal-200 shrink-0">
+            <div className="relative p-2 rounded-lg bg-primary-light text-primary border border-primary-border shrink-0">
               <ShoppingCart size={19} weight="bold" />
               {cart.length > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-0.5 rounded-full bg-teal-600 text-white text-[9px] font-bold font-mono flex items-center justify-center border-[1.5px] border-white shadow-xs">
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-0.5 rounded-full bg-primary text-white text-[9px] font-bold font-mono flex items-center justify-center border-[1.5px] border-white shadow-xs">
                   {cart.reduce((s, i) => s + (i.quantity || 1), 0)}
                 </span>
               )}
@@ -2351,7 +2350,7 @@ export default function PosScreen({
               <span className="text-[11px] text-slate-500 font-bold truncate">
                 {customerName || 'ລູກຄ້າທົ່ວໄປ'} • {cart.length} ລາຍການ
               </span>
-              <span className="text-xs font-black text-teal-700 font-mono leading-tight">
+              <span className="text-xs font-black text-primary font-mono leading-tight">
                 {formatKip(cartSubtotal)}
               </span>
             </div>
@@ -2367,12 +2366,12 @@ export default function PosScreen({
             disabled={cart.length === 0}
             className={`px-3.5 py-2 rounded-xl font-bold text-xs shadow-sm flex items-center gap-1 shrink-0 active:scale-95 transition-all cursor-pointer ${
               cart.length > 0
-                ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-teal-600/30'
+                ? 'bg-primary hover:bg-primary-hover text-white shadow-primary/30'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >
             <span>ເບິ່ງກະຕ່າ & ເຊັກບິນ</span>
-            <span className="text-teal-200 font-bold">→</span>
+            <span className="text-white/80 font-bold">→</span>
           </button>
         </div>
       </section>
@@ -2395,7 +2394,7 @@ export default function PosScreen({
           {/* Header giỏ hàng cố định trên cùng (Không bao giờ bị bàn phím dịch chuyển) */}
           <div className="pt-[max(0.6rem,env(safe-area-inset-top,0.6rem))] px-3.5 pb-2.5 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50 shadow-2xs">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 border border-teal-200/80 flex items-center justify-center font-bold shadow-2xs">
+              <div className="w-8 h-8 rounded-xl bg-primary-light text-primary border border-primary-border flex items-center justify-center font-bold shadow-2xs">
                 <ShoppingCart size={18} weight="bold" />
               </div>
               <div>
@@ -2403,7 +2402,7 @@ export default function PosScreen({
                   ກະຕ່າສິນຄ້າ
                 </div>
                 <div className="text-[10.5px] text-slate-500 font-medium">
-                  {cart.length} ລາຍການ • <span className="font-mono font-bold text-teal-700">{formatKip(cartSubtotal)}</span>
+                  {cart.length} ລາຍການ • <span className="font-mono font-bold text-primary">{formatKip(cartSubtotal)}</span>
                 </div>
               </div>
             </div>

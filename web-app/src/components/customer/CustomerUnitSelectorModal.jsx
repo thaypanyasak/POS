@@ -15,8 +15,11 @@ export default function CustomerUnitSelectorModal({
 
   if (!isOpen || !product) return null;
 
-  const tierBreakdown = getProductTierBreakdown(product);
-  const activeItem = tierBreakdown[selectedUnitIdx] || tierBreakdown[0] || {
+  const allTiers = getProductTierBreakdown(product);
+  const tierBreakdown = allTiers.filter((t) => Number(t.retailPrice) > 0);
+  const activeTiers = tierBreakdown.length > 0 ? tierBreakdown : allTiers;
+
+  const activeItem = activeTiers[selectedUnitIdx] || activeTiers[0] || {
     unitName: product.baseUnit || 'ອັນ',
     label: `${product.baseUnit || 'ອັນ'}:`,
     retailPrice: Number(product.retailPrice || product.price || 0),
@@ -59,7 +62,7 @@ export default function CustomerUnitSelectorModal({
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+            <span className="w-2.5 h-2.5 rounded-full bg-primary" />
             <span className="text-xs font-black text-slate-700 tracking-tight uppercase">
               ເລືອກຫົວໜ່ວຍ & ຈຳນວນ
             </span>
@@ -93,7 +96,7 @@ export default function CustomerUnitSelectorModal({
               <h3 className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-2">
                 {product.name}
               </h3>
-              <p className="text-[11px] text-teal-700 font-bold font-mono mt-0.5">
+              <p className="text-[11px] text-blue-700 font-bold font-mono mt-0.5">
                 {formatKip(activeItem.retailPrice)} / {activeItem.unitName}
               </p>
             </div>
@@ -105,7 +108,7 @@ export default function CustomerUnitSelectorModal({
               ຫົວໜ່ວຍການຂາຍ (Đơn vị tính):
             </label>
             <div className="grid grid-cols-1 gap-1.5">
-              {tierBreakdown.map((item, idx) => {
+              {activeTiers.map((item, idx) => {
                 const isSelected = selectedUnitIdx === idx;
                 return (
                   <button
@@ -114,7 +117,7 @@ export default function CustomerUnitSelectorModal({
                     onClick={() => setSelectedUnitIdx(idx)}
                     className={`w-full p-2.5 rounded-2xl border text-left flex items-center justify-between cursor-pointer transition-all active:scale-98 ${
                       isSelected
-                        ? 'bg-teal-50/80 border-teal-500 shadow-xs ring-2 ring-teal-500/20'
+                        ? 'bg-blue-50/80 border-primary shadow-xs ring-2 ring-primary/20'
                         : 'bg-white hover:bg-slate-50 border-slate-200'
                     }`}
                   >
@@ -122,7 +125,7 @@ export default function CustomerUnitSelectorModal({
                       <div
                         className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${
                           isSelected
-                            ? 'bg-teal-600 text-white'
+                            ? 'bg-primary text-white'
                             : 'bg-slate-100 text-slate-600'
                         }`}
                       >
@@ -136,7 +139,7 @@ export default function CustomerUnitSelectorModal({
                     </div>
 
                     <div className="text-right shrink-0">
-                      <span className="text-xs sm:text-sm font-black text-teal-700 font-mono">
+                      <span className="text-xs sm:text-sm font-black text-blue-700 font-mono">
                         {formatKip(item.retailPrice)}
                       </span>
                     </div>
@@ -175,8 +178,8 @@ export default function CustomerUnitSelectorModal({
           </div>
 
           {/* Total Preview */}
-          <div className="bg-teal-900 text-white p-3 rounded-2xl flex items-center justify-between">
-            <span className="text-xs text-teal-200 font-medium">ລວມເງິນ (Tổng):</span>
+          <div className="bg-gradient-to-r from-blue-700 to-indigo-700 text-white p-3 rounded-2xl flex items-center justify-between shadow-xs">
+            <span className="text-xs text-blue-100 font-medium">ລວມເງິນ :</span>
             <span className="text-base font-black font-mono text-amber-300">
               {formatKip(activeItem.retailPrice * quantity)}
             </span>
@@ -188,7 +191,7 @@ export default function CustomerUnitSelectorModal({
           <button
             type="button"
             onClick={handleConfirm}
-            className="w-full h-11 rounded-2xl bg-teal-600 hover:bg-teal-700 active:scale-98 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+            className="w-full h-11 rounded-2xl bg-primary hover:bg-primary-hover active:scale-98 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
           >
             <ShoppingCart size={17} weight="bold" />
             <span>ເພີ່ມໃສ່ກະຕ່າ ({quantity} {activeItem.unitName})</span>

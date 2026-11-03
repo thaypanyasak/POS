@@ -54,11 +54,11 @@ export default function ExchangeRateBadge({
       <button
         type="button"
         onClick={handleOpen}
-        className={`h-11 px-3 sm:px-3.5 rounded-xl bg-teal-50 hover:bg-teal-100/80 text-teal-800 border border-teal-200/90 shadow-2xs flex items-center gap-1.5 font-mono text-xs sm:text-sm font-black cursor-pointer transition-all active:scale-95 shrink-0 ${className}`}
+        className={`h-11 px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 font-medium rounded-xl flex items-center gap-2 shadow-sm hover:bg-emerald-100 transition-colors cursor-pointer active:scale-95 shrink-0 font-mono text-xs sm:text-sm ${className}`}
         title="ກົດເພື່ອປັບອັດຕາແລກປ່ຽນ (Point-in-Time Snapshot)"
       >
-        <ArrowsClockwise size={16} weight="bold" className="text-teal-700 animate-spin-hover" />
-        <span className="tabular-nums">1 ฿ = {Number(exchangeRate).toLocaleString()} ₭</span>
+        <ArrowsClockwise size={16} weight="bold" className="text-emerald-700 animate-spin-hover" />
+        <span>1 ฿ = <span className="font-bold text-emerald-800 tabular-nums">{Number(exchangeRate).toLocaleString()}</span> ₭</span>
       </button>
 
       {/* Popover / Modal for Rate Update */}
@@ -68,7 +68,7 @@ export default function ExchangeRateBadge({
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center border border-teal-100">
+                <div className="w-8 h-8 rounded-xl bg-primary-light text-primary flex items-center justify-center border border-primary-border">
                   <CurrencyCircleDollar size={20} weight="bold" />
                 </div>
                 <div>
@@ -112,7 +112,7 @@ export default function ExchangeRateBadge({
                     onChange={(e) => setTempRate(e.target.value)}
                     autoFocus
                     placeholder="0"
-                    className="w-full h-11 px-3.5 pr-12 rounded-xl bg-slate-50 border border-slate-300 focus:border-teal-600 focus:bg-white text-base font-mono font-black text-slate-900 tracking-tight focus:outline-none transition-all"
+                    className="w-full h-11 px-3.5 pr-12 rounded-xl bg-slate-50 border border-slate-300 focus:border-primary focus:ring-1 focus:ring-primary focus:bg-white text-base font-mono font-black text-slate-900 tracking-tight focus:outline-none transition-all"
                   />
                   <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 font-mono">
                     ₭ (LAK)
@@ -138,7 +138,7 @@ export default function ExchangeRateBadge({
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="flex-1 h-10 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                  className="flex-1 h-10 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
                 >
                   {isSaving ? (
                     <CircleNotch size={16} weight="bold" className="animate-spin text-white" />

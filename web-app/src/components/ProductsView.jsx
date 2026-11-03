@@ -595,7 +595,7 @@ export default function ProductsView({
         {/* Row 1 on mobile: Title, Icon & Count */}
         <div className="flex items-center justify-between w-full sm:w-auto min-w-0">
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-700 shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-primary-light flex items-center justify-center text-primary shrink-0">
               <Warehouse size={20} className="sm:w-5 sm:h-5" weight="duotone" />
             </div>
             <div className="min-w-0">
@@ -652,7 +652,7 @@ export default function ProductsView({
               playActionClickBeep('products');
               onAddNewProduct?.();
             }}
-            className="px-3 sm:px-4 py-2 sm:py-2.5 h-9 sm:h-10 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+            className="px-3 sm:px-4 py-2 sm:py-2.5 h-9 sm:h-10 bg-primary hover:bg-primary-hover text-primary-foreground rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
           >
             <Plus size={16} weight="bold" />
             <span>+ ເພີ່ມສິນຄ້າໃໝ່</span>

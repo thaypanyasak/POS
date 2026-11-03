@@ -1115,7 +1115,8 @@ export default function SalesByUnitReportView({
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {paginatedProducts.map((p) => {
+                {paginatedProducts.map((p, idx) => {
+                  const rowNum = (pageSize === 'ALL' ? 0 : (safeCurrentPage - 1) * pageSize) + idx + 1;
                   const hasCarton = p.cartonQty > 0;
                   const hasPack = p.packQty > 0;
                   const hasRetail = p.retailQty > 0;
@@ -1124,6 +1125,9 @@ export default function SalesByUnitReportView({
                     <div key={p.id} className="p-3 hover:bg-slate-50/70 transition-colors flex flex-col gap-2">
                       <div className="flex items-start justify-between gap-2.5">
                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                            #{rowNum}
+                          </span>
                           {p.imageUrl ? (
                             <img
                               src={p.imageUrl}
@@ -1321,6 +1325,11 @@ export default function SalesByUnitReportView({
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="bg-slate-50/90 border-b border-slate-200 text-[11px] font-extrabold text-slate-600 uppercase tracking-wider select-none">
+                  {/* Col 0: STT (ລ/ດ) */}
+                  <th className="py-2.5 px-2 sm:px-3 w-12 text-center text-slate-500 font-bold">
+                    ລ/ດ
+                  </th>
+
                   {/* Col 1: Product Name & Image */}
                   <th
                     onClick={() => handleSort('name')}
@@ -1383,7 +1392,7 @@ export default function SalesByUnitReportView({
                   <SalesByUnitSkeleton count={8} />
                 ) : paginatedProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center">
+                    <td colSpan={6} className="py-12 text-center">
                       <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
                         <Package size={24} weight="duotone" />
                       </div>
@@ -1402,7 +1411,8 @@ export default function SalesByUnitReportView({
                     </td>
                   </tr>
                 ) : (
-                  paginatedProducts.map((p) => {
+                  paginatedProducts.map((p, idx) => {
+                    const rowNum = (pageSize === 'ALL' ? 0 : (safeCurrentPage - 1) * pageSize) + idx + 1;
                     const hasCarton = p.cartonQty > 0;
                     const hasPack = p.packQty > 0;
                     const hasRetail = p.retailQty > 0;
@@ -1412,6 +1422,11 @@ export default function SalesByUnitReportView({
                         key={p.id}
                         className="h-[50px] hover:bg-slate-50/80 transition-colors text-xs"
                       >
+                        {/* Col 0: STT (ລ/ດ) */}
+                        <td className="py-1.5 px-2 sm:px-3 text-center font-mono text-xs font-semibold text-slate-400">
+                          {rowNum}
+                        </td>
+
                         {/* Col 1: Product Thumbnail & Name */}
                         <td className="py-1.5 px-4">
                           <div className="flex items-center gap-3 min-w-0">
@@ -1539,7 +1554,7 @@ export default function SalesByUnitReportView({
               {displayedProducts.length > 0 && (
                 <tfoot>
                   <tr className="bg-slate-100/80 border-t-2 border-slate-200 font-extrabold text-xs text-slate-800">
-                    <td className="py-3 px-4">
+                    <td colSpan={2} className="py-3 px-4">
                       <span>ລວມທັງໝົດ ({displayedProducts.length} ລາຍການ):</span>
                     </td>
                     <td className="py-3 px-3 text-center tabular-nums text-amber-900 font-mono">

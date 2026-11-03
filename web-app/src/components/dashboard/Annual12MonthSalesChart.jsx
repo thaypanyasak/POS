@@ -224,8 +224,8 @@ export default function Annual12MonthSalesChart({
             <AreaChart data={chartData} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
               <defs>
                 <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#0D9488" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#14B8A6" stopOpacity={0.0} />
+                  <stop offset="5%" stopColor="#0B5ED7" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#0B5ED7" stopOpacity={0.0} />
                 </linearGradient>
                 <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
@@ -269,12 +269,12 @@ export default function Annual12MonthSalesChart({
                 type="monotone"
                 dataKey="revenue"
                 name="revenue"
-                stroke="#0F766E"
+                stroke="#0B5ED7"
                 strokeWidth={3}
                 fillOpacity={1}
                 fill="url(#colorRevenue)"
-                dot={{ r: 3.5, fill: '#0F766E', strokeWidth: 1.5, stroke: '#FFFFFF' }}
-                activeDot={{ r: 6, fill: '#0F766E', strokeWidth: 2, stroke: '#FFFFFF' }}
+                dot={{ r: 3.5, fill: '#0B5ED7', strokeWidth: 1.5, stroke: '#FFFFFF' }}
+                activeDot={{ r: 6, fill: '#0B5ED7', strokeWidth: 2, stroke: '#FFFFFF' }}
               />
               <Area
                 type="monotone"

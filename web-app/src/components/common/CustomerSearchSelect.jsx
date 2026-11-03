@@ -114,16 +114,16 @@ export default function CustomerSearchSelect({
         className={`w-full h-8 px-2.5 rounded-lg border flex items-center justify-between gap-1.5 cursor-pointer transition-all select-none shadow-2xs ${
           isDefault
             ? 'bg-slate-50 hover:bg-slate-100/80 border-slate-200 text-slate-700'
-            : 'bg-teal-50/80 hover:bg-teal-100/80 border-teal-300 text-teal-900 font-bold'
+            : 'bg-primary-light hover:bg-primary-light/90 border-primary-border text-primary font-bold'
         }`}
       >
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-          <User size={13} weight="bold" className={isDefault ? 'text-slate-400' : 'text-teal-700'} />
+          <User size={13} weight="bold" className={isDefault ? 'text-slate-400' : 'text-primary'} />
           <span className="text-xs truncate font-medium">
             {customerName || 'ລູກຄ້າທົ່ວໄປ'}
           </span>
           {customerPhone && (
-            <span className="text-[10px] font-mono font-bold text-teal-700/80 truncate">
+            <span className="text-[10px] font-mono font-bold text-primary/80 truncate">
               ({customerPhone})
             </span>
           )}
@@ -169,7 +169,7 @@ export default function CustomerSearchSelect({
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
-                className="w-full h-7 pl-7 pr-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder:text-[11px] placeholder:text-slate-400 focus:outline-none focus:border-teal-600 shadow-2xs"
+                className="w-full h-7 pl-7 pr-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder:text-[11px] placeholder:text-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-2xs"
               />
             </div>
 
@@ -180,7 +180,7 @@ export default function CustomerSearchSelect({
                   setIsOpen(false);
                   onOpenNewCustomerModal();
                 }}
-                className="h-7 px-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shrink-0 transition-all active:scale-95 shadow-2xs cursor-pointer"
+                className="h-7 px-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-bold flex items-center gap-1 shrink-0 transition-all active:scale-95 shadow-2xs cursor-pointer"
                 title="ເພີ່ມລູກຄ້າໃໝ່ "
               >
                 <Plus size={12} weight="bold" />
@@ -189,36 +189,19 @@ export default function CustomerSearchSelect({
             )}
           </div>
 
-          {/* Quick Add New Customer Row */}
-          {/* {onOpenNewCustomerModal && (
-            <div className="p-1.5 bg-teal-50/40 border-b border-teal-100/80">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOpen(false);
-                  onOpenNewCustomerModal();
-                }}
-                className="w-full py-1.5 px-2.5 rounded-xl border border-dashed border-teal-400 bg-white hover:bg-teal-50 text-teal-800 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-98"
-              >
-                <Plus size={14} weight="bold" className="text-teal-600" />
-                <span>+ ເພີ່ມລູກຄ້າໃໝ່</span>
-              </button>
-            </div>
-          )} */}
-
           {/* Quick Custom Name Option if user typed something not matching */}
           {searchTerm.trim() && (
-            <div className="p-1.5 bg-teal-50/60 border-b border-teal-100">
+            <div className="p-1.5 bg-primary-light/60 border-b border-primary-border">
               <button
                 type="button"
                 onClick={() => handleUseCustomName(searchTerm)}
-                className="w-full px-2 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 active:scale-98 text-white text-xs font-bold flex items-center justify-between transition-all cursor-pointer text-left shadow-2xs"
+                className="w-full px-2 py-1.5 rounded-lg bg-primary hover:bg-primary-hover active:scale-98 text-white text-xs font-bold flex items-center justify-between transition-all cursor-pointer text-left shadow-2xs"
               >
                 <div className="flex items-center gap-1.5 truncate">
                   <Check size={12} weight="bold" className="shrink-0" />
                   <span className="truncate">ໃຊ້ຊື່: "{searchTerm.trim()}"</span>
                 </div>
-                <span className="text-[10px] text-teal-100 font-normal shrink-0">ບັນທຶກໃໝ່</span>
+                <span className="text-[10px] text-white/90 font-normal shrink-0">ບັນທຶກໃໝ່</span>
               </button>
             </div>
           )}
@@ -231,7 +214,7 @@ export default function CustomerSearchSelect({
               onClick={() => handleSelect({ name: 'ລູກຄ້າທົ່ວໄປ', phone: '' })}
               className={`w-full px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
                 isDefault
-                  ? 'bg-teal-50 text-teal-900 font-bold'
+                  ? 'bg-primary-light text-primary font-bold'
                   : 'hover:bg-slate-100 text-slate-700 font-medium'
               }`}
             >
@@ -241,7 +224,7 @@ export default function CustomerSearchSelect({
                 </div>
                 <span>ລູກຄ້າທົ່ວໄປ</span>
               </div>
-              {isDefault && <Check size={13} weight="bold" className="text-teal-700" />}
+              {isDefault && <Check size={13} weight="bold" className="text-primary" />}
             </button>
 
             {/* Other Customers */}
@@ -257,7 +240,7 @@ export default function CustomerSearchSelect({
                     onClick={() => handleSelect(c)}
                     className={`w-full px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between text-left transition-colors cursor-pointer ${
                       isSelected
-                        ? 'bg-teal-50 text-teal-900 font-bold'
+                        ? 'bg-primary-light text-primary font-bold'
                         : 'hover:bg-slate-100 text-slate-700 font-medium'
                     }`}
                   >
@@ -273,7 +256,7 @@ export default function CustomerSearchSelect({
                       )}
                     </div>
 
-                    {isSelected && <Check size={13} weight="bold" className="text-teal-700 shrink-0" />}
+                    {isSelected && <Check size={13} weight="bold" className="text-primary shrink-0" />}
                   </button>
                 );
               })}

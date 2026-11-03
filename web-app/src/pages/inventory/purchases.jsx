@@ -24,6 +24,8 @@ import {
   CaretLeft,
   CaretRight,
   FileArrowDown,
+  Clock,
+  User,
 } from '@phosphor-icons/react';
 import { exportPurchasesToExcel } from '../../utils/excelExport';
 import {
@@ -37,6 +39,7 @@ import {
   getSortedUnits,
   formatStockDisplay,
   normalizeLao,
+  formatDateTime24h,
 } from '../../utils/formatters';
 import {
   processMultiProductGRN,
@@ -1225,16 +1228,10 @@ export default function PurchasesView({
           <>
             {/* Scroll anchor for pagination scroll-to-top */}
             <div ref={tableTopRef} className="scroll-mt-3 sm:scroll-mt-4" />
-            {/* MOBILE CARD LIST (< 1024px, block lg:hidden) */}
-            <div className="block lg:hidden space-y-2.5">
+            {/* MOBILE CARD LIST (< 768px, block md:hidden) */}
+            <div className="block md:hidden space-y-2.5">
               {paginatedOrders.map((po) => {
-                const dateFormatted = new Date(po.created_at).toLocaleString('lo-LA', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                });
+                const dateFormatted = formatDateTime24h(po.created_at);
                 const debt = Number(po.debt_amount) || 0;
                 const prodName = getOrderProductName(po);
                 const qtyDisplay = formatOrderQuantity(po);
@@ -1369,9 +1366,9 @@ export default function PurchasesView({
               })}
             </div>
 
-            {/* Mobile-only pagination bar for POs (< 1024px) */}
+            {/* Mobile-only pagination bar for POs (< 768px) */}
             {filteredOrders.length > 0 && (
-              <div className="lg:hidden bg-white rounded-2xl border border-slate-200/90 p-3 mb-3 flex flex-col items-center gap-3 shadow-2xs">
+              <div className="md:hidden bg-white rounded-2xl border border-slate-200/90 p-3 mb-3 flex flex-col items-center gap-3 shadow-2xs">
                 {/* Top: Page Size Selector (20 | 50 | 100 | 200 | ALL) */}
                 <div className="flex items-center gap-2 w-full justify-between">
                   <span className="text-xs text-slate-500 font-medium">
@@ -1475,136 +1472,184 @@ export default function PurchasesView({
               </div>
             )}
 
-            {/* DESKTOP DATA TABLE (>= 1024px, hidden lg:block) */}
-            <div className="hidden lg:block bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden mb-3">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-separate border-spacing-0">
+            {/* DESKTOP & TABLET DATA TABLE (>= 768px, hidden md:block) */}
+            <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden mb-3">
+              <div className="overflow-x-auto overscroll-x-contain touch-pan-y">
+                <table className="w-full text-left text-xs border-separate border-spacing-0 min-w-[760px]">
                   <thead>
-                    <tr className="sticky top-0 z-10 text-slate-600 font-bold text-xs [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50/90">
-                      <th className="py-3.5 px-4 font-bold">ລະຫັດບິນ & ວັນທີ</th>
-                      <th className="py-3.5 px-4 font-bold">ຮ້ານສົ່ງ</th>
-                      <th className="py-3.5 px-4 font-bold">ສິນຄ້າ & ຈຳນວນ</th>
-                      <th className="py-3.5 px-4 text-right font-bold">ມູນຄ່າຮັບເຂົ້າ ₭</th>
-                      <th className="py-3.5 px-4 text-right font-bold">ມູນຄ່າຮັບເຂົ້າ ฿</th>
-                      <th className="py-3.5 px-4 text-center font-bold">ສະຖານະຊຳລະ</th>
-                      <th className="py-3.5 px-4 text-right font-bold">ໜີ້ຄ້າງຊຳລະ</th>
-                      <th className="py-3.5 px-4 text-center font-bold">ຈັດການ</th>
+                    <tr className="sticky top-0 z-10 text-slate-700 font-extrabold [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
+                      <th className="py-3 px-2 sm:px-3 w-12 text-center text-slate-500 font-bold">ລ/ດ</th>
+                      <th className="py-3 px-3 sm:px-4">ລະຫັດບິນ & ວັນທີ</th>
+                      <th className="py-3 px-3">ຮ້ານສົ່ງ</th>
+                      <th className="py-3 px-3">ສິນຄ້າ & ຈຳນວນ</th>
+                      <th className="py-3 px-3 text-right">ມູນຄ່າຮັບເຂົ້າ</th>
+                      <th className="py-3 px-3 text-center">ສະຖານະ</th>
+                      <th className="py-3 px-3 text-right">ໜີ້ຄ້າງຊຳລະ</th>
+                      <th className="py-3 px-3 sm:px-4 text-center">ຈັດການ</th>
                     </tr>
                   </thead>
                   <tbody className="[&_td]:border-b [&_td]:border-slate-100 text-slate-700">
-                    {paginatedOrders.map((po) => {
-                      const dateFormatted = new Date(po.created_at).toLocaleString('lo-LA', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      });
+                    {paginatedOrders.map((po, idx) => {
+                      const itemIndex =
+                        (poCurrentPage - 1) * (poPageSize === 'ALL' ? filteredOrders.length : Number(poPageSize)) +
+                        idx +
+                        1;
+                      const dateFormatted = formatDateTime24h(po.created_at);
                       const debt = Number(po.debt_amount) || 0;
                       const prodName = getOrderProductName(po);
+                      const baseProdName = prodName.replace(/\s*\(\+\d+\s*ລາຍການ\)/, '').trim();
+                      const extraCount =
+                        po.purchase_order_items && po.purchase_order_items.length > 1
+                          ? po.purchase_order_items.length - 1
+                          : 0;
                       const qtyDisplay = formatOrderQuantity(po);
+                      const cleanQty = qtyDisplay.replace(/\s*\(\+\d+\s*ລາຍການ\)/, '').trim();
 
                       return (
-                        <tr key={po.id} className="hover:bg-slate-50/80 transition-colors">
-                          {/* ລະຫັດບິນ & ວັນທີ */}
-                          <td className="py-2.5 px-4">
-                            <div className="font-bold text-slate-900 text-[12.5px]">{po.id}</div>
-                            <div className="text-[11px] text-slate-500 mt-0.5">{dateFormatted}</div>
+                        <tr
+                          key={po.id}
+                          className={`transition-colors duration-150 ${
+                            debt > 0
+                              ? 'bg-amber-50/20 hover:bg-amber-50/45 text-slate-900'
+                              : 'hover:bg-slate-50/80 text-slate-900'
+                          }`}
+                        >
+                          {/* 0. STT (ລ/ດ) */}
+                          <td className="py-3 px-2 sm:px-3 text-center font-bold text-slate-400 font-mono text-[11px]">
+                            {itemIndex}
                           </td>
 
-                          {/* ຮ້ານສົ່ງ */}
-                          <td className="py-2.5 px-4">
-                            <div className="font-semibold text-slate-800 text-[12.5px]">
-                              {po.suppliers?.name || 'ບໍ່ລະບຸຜູ້ສະໜອງ'}
+                          {/* 1. ລະຫັດບິນ & ວັນທີ */}
+                          <td className="py-3 px-3 sm:px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-2xs">
+                                <Package size={16} weight="duotone" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className=" font-black text-slate-800 text-xs tracking-tight whitespace-nowrap">
+                                  {po.id}
+                                </div>
+                                <div className="text-[10.5px] text-slate-400 font-medium whitespace-nowrap flex items-center gap-1 mt-0.5">
+                                  <Clock size={11} className="text-slate-400 shrink-0" />
+                                  <span>{dateFormatted}</span>
+                                </div>
+                              </div>
                             </div>
-                            {po.received_by && (
-                              <div className="text-[11px] text-slate-400 mt-0.5">
-                                ຜູ້ຮັບ: {po.received_by}
+                          </td>
+
+                          {/* 2. ຮ້ານສົ່ງ & ຜູ້ຮັບ */}
+                          <td className="py-3 px-3">
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                                <Truck size={14} className="text-teal-600 shrink-0" />
+                                <span className="truncate max-w-[150px]" title={po.suppliers?.name || 'ບໍ່ລະບຸຜູ້ສະໜອງ'}>
+                                  {po.suppliers?.name || 'ບໍ່ລະບຸຜູ້ສະໜອງ'}
+                                </span>
+                              </div>
+                              {po.received_by && (
+                                <div className="text-[10.5px] text-slate-400 flex items-center gap-1 mt-0.5 font-medium">
+                                  <User size={11} className="text-slate-400 shrink-0" />
+                                  <span className="truncate">
+                                    ຜູ້ຮັບ: <span className="text-slate-600 font-semibold">{po.received_by}</span>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* 3. ສິນຄ້າ & ຈຳນວນ */}
+                          <td className="py-3 px-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className="font-bold text-slate-900 text-xs truncate max-w-[180px]"
+                                  title={prodName}
+                                >
+                                  {baseProdName}
+                                </span>
+                                {extraCount > 0 && (
+                                  <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+                                    +{extraCount} ລາຍການ
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-1">
+                                <span className="inline-block px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200/80 font-mono font-bold text-[11px] shadow-2xs">
+                                  {cleanQty}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 4. ມູນຄ່າຮັບເຂົ້າ (Kip & Baht Combined) */}
+                          <td className="py-3 px-3 text-right whitespace-nowrap">
+                            <div className="ຫ font-black text-slate-900 text-xs sm:text-[13px]">
+                              {formatKip(po.total_cost_lak)}
+                            </div>
+                            {Number(po.total_cost_thb) > 0 && (
+                              <div className=" text-[11px] text-slate-400 font-bold mt-0.5">
+                                ≈ {formatThb(po.total_cost_thb)} ฿
                               </div>
                             )}
                           </td>
 
-                          {/* ສິນຄ້າ & ຈຳນວນ */}
-                          <td className="py-2.5 px-4">
-                            <div className="font-bold text-slate-900 truncate max-w-xs text-[12.5px]" title={prodName}>
-                              {prodName}
-                            </div>
-                            <div className="text-[11px] font-mono text-teal-700 font-bold mt-0.5">
-                              {qtyDisplay}
-                            </div>
-                          </td>
-
-                          {/* ມູນຄ່າຮັບເຂົ້າ ₭ */}
-                          <td className="py-3 px-4 text-right font-bold text-slate-900 text-[13.5px]">
-                            {formatKip(po.total_cost_lak)}
-                          </td>
-
-                          {/* ມູນຄ່າຮັບເຂົ້າ ฿ */}
-                          <td className="py-3 px-4 text-right font-mono font-semibold text-slate-600 text-[13px]">
-                            {Number(po.total_cost_thb) > 0 ? `${formatThb(po.total_cost_thb)} ฿` : '-'}
-                          </td>
-
-                          {/* ສະຖານະຊຳລະ */}
-                          <td className="py-3 px-4 text-center">
+                          {/* 5. ສະຖານະຊຳລະ */}
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
                             {po.payment_status === 'PAID' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200">
-                                <CheckCircle size={13} weight="bold" />
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-teal-50 text-teal-700 border border-teal-200 shadow-2xs">
+                                <CheckCircle size={12} weight="fill" className="text-teal-600" />
                                 <span>ຈ່າຍຄົບ</span>
                               </span>
                             )}
                             {po.payment_status === 'PARTIAL' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
+                                <Clock size={12} weight="bold" className="text-amber-600" />
                                 <span>ຈ່າຍບາງສ່ວນ</span>
                               </span>
                             )}
                             {po.payment_status === 'DEBT' && (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 font-mono">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                                <WarningCircle size={12} weight="fill" className="text-rose-500" />
                                 <span>ຕິດໜີ້</span>
                               </span>
                             )}
                           </td>
 
-                          {/* ໜີ້ຄ້າງຊຳລະ */}
-                          <td className="py-3 px-4 text-right font-mono text-[13.5px]">
+                          {/* 6. ໜີ້ຄ້າງຊຳລະ */}
+                          <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
                             {debt > 0 ? (
-                              <span className="text-rose-600 font-extrabold">
+                              <span className="text-rose-600 font-black text-xs sm:text-[13px]">
                                 {formatDots(debt)} ₭
                               </span>
                             ) : (
-                              <span className="text-teal-700 font-semibold text-[13px]">0 ₭</span>
+                              <span className="text-slate-300 font-bold select-none">-</span>
                             )}
                           </td>
 
-                          {/* ຈັດການ: ປຸ່ມແກ້ໄຂ, ເບິ່ງລາຍລະອຽດ & ປຸ່ມຊຳລະໜີ້ */}
-                          <td className="py-3 px-4 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleEditPo(po)}
-                                className="p-1.5 text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-lg cursor-pointer transition-colors"
-                                title="ແກ້ໄຂ"
-                              >
-                                <PencilSimple size={17} />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => setPoToDelete(po)}
-                                className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
-                                title="ລຶບໃບຮັບສິນຄ້າ"
-                              >
-                                <Trash size={17} />
-                              </button>
-
+                          {/* 7. ຈັດການ (Icon-only buttons) */}
+                          <td className="py-2.5 px-3 sm:px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5 flex-nowrap">
+                              {/* View Details */}
                               <button
                                 type="button"
                                 onClick={() => setSelectedPoForDetails(po)}
-                                className="p-1.5 text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-lg cursor-pointer transition-colors"
-                                title="ເບິ່ງລາຍລະອຽດ"
+                                className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/90 flex items-center justify-center active:scale-95 transition-all cursor-pointer shadow-2xs"
+                                title="ເບິ່ງລາຍລະອຽດໃບຮັບສິນຄ້າ"
                               >
-                                <Eye size={18} />
+                                <Eye size={14} weight="bold" />
                               </button>
 
+                              {/* Edit GRN */}
+                              <button
+                                type="button"
+                                onClick={() => handleEditPo(po)}
+                                className="w-7 h-7 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 flex items-center justify-center active:scale-95 transition-all cursor-pointer shadow-2xs"
+                                title="ແກ້ໄຂໃບຮັບສິນຄ້າ"
+                              >
+                                <PencilSimple size={14} weight="bold" />
+                              </button>
+
+                              {/* Pay Debt (if debt > 0) */}
                               {debt > 0 && (
                                 <button
                                   type="button"
@@ -1614,13 +1659,22 @@ export default function PurchasesView({
                                     setRepayMethod('CASH');
                                     setRepayNote('');
                                   }}
-                                  className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold cursor-pointer transition-colors flex items-center gap-1 border border-rose-200 shadow-2xs"
+                                  className="w-7 h-7 bg-rose-600 hover:bg-rose-700 text-white rounded-lg flex items-center justify-center cursor-pointer active:scale-95 transition-all shadow-2xs"
                                   title="ຊຳລະໜີ້ຜູ້ສະໜອງ"
                                 >
-                                  <HandCoins size={15} weight="bold" />
-                                  <span>ຊຳລະໜີ້</span>
+                                  <HandCoins size={14} weight="bold" />
                                 </button>
                               )}
+
+                              {/* Delete GRN */}
+                              <button
+                                type="button"
+                                onClick={() => setPoToDelete(po)}
+                                className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                                title="ລຶບໃບຮັບສິນຄ້າ"
+                              >
+                                <Trash size={14} />
+                              </button>
                             </div>
                           </td>
                         </tr>

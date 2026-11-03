@@ -14,7 +14,7 @@ import {
   CaretRight,
   FileImage,
 } from '@phosphor-icons/react';
-import { formatKip, getDueDateStatus } from '../utils/formatters';
+import { formatKip, getDueDateStatus, formatDateTime24h } from '../utils/formatters';
 import {
   printReceiptSmart,
   printReceiptWithRetry,
@@ -1010,7 +1010,7 @@ export default function ReceiptModal({
                 <span>{L.voidTitle}</span>
               </div>
               <p className="text-[10px] font-medium opacity-95 mt-0.5 leading-normal">
-                {receipt.cancelledAt ? `${L.date} ${new Date(receipt.cancelledAt).toLocaleString(receiptLanguage === 'vi' ? 'vi-VN' : 'lo-LA')}` : ''} • {L.voidDesc}
+                {receipt.cancelledAt ? `${L.date} ${formatDateTime24h(receipt.cancelledAt)}` : ''} • {L.voidDesc}
               </p>
             </div>
           )}
@@ -1040,7 +1040,7 @@ export default function ReceiptModal({
               </div>
               <div className="flex items-center justify-end gap-1 font-mono text-[10px] text-slate-700 pt-0.5">
                 <span className="font-sans text-slate-500 font-normal">{L.date}</span>
-                <span>{new Date(receipt.createdAt || receipt.created_at || Date.now()).toLocaleString(receiptLanguage === 'vi' ? 'vi-VN' : 'lo-LA')}</span>
+                <span>{formatDateTime24h(receipt.createdAt || receipt.created_at || Date.now())}</span>
               </div>
             </div>
 

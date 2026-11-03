@@ -341,7 +341,7 @@ export default function MixedCartonSelectorModal({
         {/* Header */}
         <div className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black border border-teal-100 shadow-2xs overflow-hidden shrink-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center font-black border border-primary-border shadow-2xs overflow-hidden shrink-0">
               {childProducts.some((p) => p.imageUrl || p.image_url) ? (
                 <BundleCollage
                   images={childProducts.map((p) => p.imageUrl || p.image_url).filter(Boolean)}
@@ -357,7 +357,7 @@ export default function MixedCartonSelectorModal({
                 <h2 className="text-sm sm:text-lg font-black text-slate-900 leading-tight truncate">
                   {bundle.name}
                 </h2>
-                <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded-full bg-teal-100 text-teal-800 shrink-0">
+                <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded-full bg-primary-light text-primary shrink-0">
                   {packageQty} {baseUnitName}/{unitName}
                 </span>
                 {editingCartItem && (
@@ -368,7 +368,7 @@ export default function MixedCartonSelectorModal({
                 )}
               </div>
               <div className="text-[11px] sm:text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 truncate">
-                <span>ລາຄາຂາຍຍົກລັງ: <b className="text-teal-700 font-mono font-extrabold">{formatKip(cartonPrice)}</b></span>
+                <span>ລາຄາຂາຍຍົກລັງ: <b className="text-primary font-mono font-extrabold">{formatKip(cartonPrice)}</b></span>
                 {exchangeRate > 0 && (
                   <span className="text-slate-400 font-mono hidden xs:inline">
                     (≈ {formatBaht(cartonPrice / exchangeRate)})
@@ -391,7 +391,7 @@ export default function MixedCartonSelectorModal({
           <div className="flex items-center justify-between text-xs mb-1">
             <div className="flex items-center gap-1.5 font-black text-slate-800">
               <span className="text-[11px] sm:text-xs">ເລືອກແລ້ວ:</span>
-              <span className="text-xs sm:text-sm font-mono text-teal-700 font-black">
+              <span className="text-xs sm:text-sm font-mono text-primary font-black">
                 {totalPicked} / {packageQty} {baseUnitName}
               </span>
             </div>
@@ -437,7 +437,7 @@ export default function MixedCartonSelectorModal({
               <button
                 type="button"
                 onClick={handleDistributeEvenly}
-                className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-white hover:bg-teal-50 text-teal-700 rounded-lg text-[11px] sm:text-xs font-extrabold border border-teal-200 transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs"
+                className="px-2 py-0.5 sm:px-2.5 sm:py-1 bg-white hover:bg-primary-light text-primary rounded-lg text-[11px] sm:text-xs font-extrabold border border-primary-border transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs"
                 title="ປັນຈຳນວນເທົ່າກັນໃຫ້ທຸກລົດຊາດ"
               >
                 <Lightning size={12} weight="fill" />
@@ -488,7 +488,7 @@ export default function MixedCartonSelectorModal({
                   onClick={() => setActiveFlavorId(p.id)}
                   className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl border transition-all flex items-center justify-between gap-2.5 sm:gap-3 ${
                     isSelected
-                      ? 'bg-teal-50/60 border-teal-500 shadow-2xs'
+                      ? 'bg-primary-light/60 border-primary shadow-2xs'
                       : isActive
                       ? 'bg-slate-50 border-slate-300'
                       : 'bg-white border-slate-200/90 hover:border-slate-300'
@@ -541,13 +541,13 @@ export default function MixedCartonSelectorModal({
                       min="0"
                       value={qty}
                       onChange={(e) => handleSetQty(p.id, e.target.value)}
-                      className="w-10 sm:w-12 h-7 sm:h-8 text-center bg-white border border-slate-200 rounded-lg font-mono font-black text-xs sm:text-sm text-slate-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                      className="w-10 sm:w-12 h-7 sm:h-8 text-center bg-white border border-slate-200 rounded-lg font-mono font-black text-xs sm:text-sm text-slate-900 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                     />
 
                     <button
                       type="button"
                       onClick={() => handleDelta(p.id, 1)}
-                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-xs"
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary hover:bg-primary-hover text-white flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-xs"
                     >
                       <Plus size={13} weight="bold" />
                     </button>
@@ -565,7 +565,7 @@ export default function MixedCartonSelectorModal({
           <div className="min-w-0 flex-1">
             <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ຍອດລວມ:</div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-base sm:text-2xl font-mono font-black text-teal-800 truncate">
+              <span className="text-base sm:text-2xl font-mono font-black text-primary truncate">
                 {formatKip(grandTotalLak)}
               </span>
               {exchangeRate > 0 && (
@@ -609,7 +609,7 @@ export default function MixedCartonSelectorModal({
               className={`px-3.5 sm:px-6 py-2 sm:py-2.5 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 editingCartItem
                   ? 'bg-amber-600 hover:bg-amber-700 disabled:opacity-40'
-                  : 'bg-teal-600 hover:bg-teal-700 disabled:opacity-40'
+                  : 'bg-primary hover:bg-primary-hover disabled:opacity-40'
               }`}
             >
               {editingCartItem ? (

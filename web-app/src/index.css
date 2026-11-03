@@ -133,9 +133,91 @@
   src: url('/fonts/tahomabd.ttf') format('truetype');
 }
 
+@layer base {
+  :root {
+    /* MÀU CHỦ ĐẠO TỪ NÚT BẤM (#1C66D6) */
+    --primary: 28 102 214;            /* #1C66D6: Màu nút bấm chính */
+    --primary-hover: 20 82 178;       /* Trạng thái hover đậm hơn */
+    --primary-light: 238 245 255;     /* Nền mờ khi active/selected */
+    --primary-border: 186 216 254;    /* Viền xanh nhạt */
+    --primary-foreground: 255 255 255;/* Chữ trắng trên nền primary */
+
+    /* MÀU CHỮ TIÊU ĐỀ & ĐIỂM NHẤN ĐẬM (#08439B) */
+    --primary-deep: 8 67 155;         /* #08439B: Dùng cho text nhấn, header */
+
+    /* MÀU LOGO (#1E6CE2) */
+    --brand-logo: 30 108 226;         /* #1E6CE2 */
+
+    /* SOMSAK BRAND ACCENT (Vàng nghệ từ logo) */
+    --accent: 245 166 35;             /* #F5A623 */
+    --accent-hover: 224 146 18;       /* #E09212 */
+    --accent-light: 254 243 199;      /* #FEF3C7 */
+    --accent-foreground: 255 255 255; /* #FFFFFF */
+
+    /* NÚT ĐƠN VỊ TÍNH TRÊN THẺ SẢN PHẨM (Dịu mắt, không ngộp) */
+    --btn-unit-bg: 248 250 252;       /* Slate-50 */
+    --btn-unit-border: 226 232 240;   /* Slate-200 */
+    --btn-unit-text: 51 65 85;        /* Slate-700 */
+    --btn-unit-hover: 238 245 255;    /* Hover xanh nhẹ */
+  }
+
+  /* Khung dự phòng sẵn sàng cho Dark Mode sau này */
+  .dark {
+    --primary: 43 125 245;            /* Sáng hơn để nổi bật trên nền tối */
+    --primary-hover: 74 144 247;
+    --primary-light: 20 48 94;
+    --primary-border: 30 108 226;
+    --primary-foreground: 255 255 255;
+
+    --primary-deep: 147 197 253;      /* Sáng hơn trong darkmode */
+    --brand-logo: 74 144 247;
+
+    --accent: 245 166 35;
+    --accent-hover: 224 146 18;
+    --accent-light: 120 53 15;
+    --accent-foreground: 255 255 255;
+
+    --btn-unit-bg: 30 41 59;
+    --btn-unit-border: 51 65 85;
+    --btn-unit-text: 226 232 240;
+    --btn-unit-hover: 51 65 85;
+  }
+
+}
+
 @theme {
   --font-sans: 'Noto Sans Lao', 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', Consolas, Monaco, monospace, 'Noto Sans Lao';
+
+  --color-primary: rgb(var(--primary));
+  --color-primary-hover: rgb(var(--primary-hover));
+  --color-primary-light: rgb(var(--primary-light));
+  --color-primary-border: rgb(var(--primary-border));
+  --color-primary-foreground: rgb(var(--primary-foreground));
+  --color-primary-deep: rgb(var(--primary-deep));
+  --color-brand-logo: rgb(var(--brand-logo));
+
+  --color-accent: rgb(var(--accent));
+  --color-accent-hover: rgb(var(--accent-hover));
+  --color-accent-light: rgb(var(--accent-light));
+  --color-accent-foreground: rgb(var(--accent-foreground));
+
+  --color-unit-btn: rgb(var(--btn-unit-bg));
+  --color-unit-btn-border: rgb(var(--btn-unit-border));
+  --color-unit-btn-text: rgb(var(--btn-unit-text));
+  --color-unit-btn-hover: rgb(var(--btn-unit-hover));
+
+  --color-teal-50: rgb(var(--primary-light));
+  --color-teal-100: rgb(219 234 254);
+  --color-teal-200: rgb(var(--primary-border));
+  --color-teal-300: rgb(147 197 253);
+  --color-teal-400: rgb(96 165 250);
+  --color-teal-500: rgb(var(--primary));
+  --color-teal-600: rgb(var(--primary));
+  --color-teal-700: rgb(var(--primary-hover));
+  --color-teal-800: rgb(var(--primary-deep));
+  --color-teal-900: rgb(30 58 138);
+  --color-teal-950: rgb(23 37 84);
 }
 
 :root {

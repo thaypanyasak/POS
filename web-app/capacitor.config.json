@@ -1,13 +1,13 @@
 {
-  "appId": "la.meiishop.pos",
-  "appName": "MeiiShop POS",
+  "appId": "com.somsak.pos.somsak.pos",
+  "appName": "SomSak POS",
   "webDir": "dist",
   "plugins": {
     "CapacitorUpdater": {
       "autoUpdate": true,
       "statsUrl": "https://stats.capgo.app",
       "channel": "production",
-      "key": "600b29bc-c506-49b6-9356-c8798229b1fe"
+      "key": "92801f8f-e956-465c-b1f4-01623cd71f78"
     }
   },
   "ios": {

@@ -158,8 +158,9 @@ export default function CustomersView({
   const handleExportExcel = () => {
     playActionClickBeep();
     try {
-      const headers = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ຈຳນວນບິນ', 'ຍອດຊື້ລວມ (K)', 'ໜີ້ຄ້າງຊຳລະ (K)', 'ທີ່ຢູ່', 'ໝາຍເຫດ'];
-      const rows = filteredCustomers.map((c) => [
+      const headers = ['ລ/ດ', 'ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ຈຳນວນບິນ', 'ຍອດຊື້ລວມ (K)', 'ໜີ້ຄ້າງຊຳລະ (K)', 'ທີ່ຢູ່', 'ໝາຍເຫດ'];
+      const rows = filteredCustomers.map((c, idx) => [
+        idx + 1,
         `"${(c.name || '').replace(/"/g, '""')}"`,
         `"${(c.phone || '').replace(/"/g, '""')}"`,
         c.totalOrders || 0,
@@ -384,6 +385,7 @@ export default function CustomersView({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                <th className="py-3 px-2 sm:px-3 w-12 text-center text-slate-500 font-bold">ລ/ດ</th>
                 <th className="py-3 px-4">ຊື່ລູກຄ້າ</th>
                 <th className="py-3 px-4">ເບີໂທລະສັບ</th>
                 <th className="py-3 px-4 text-center">ຈຳນວນບິນ</th>
@@ -398,6 +400,9 @@ export default function CustomersView({
                 // 1. SKELETON TABLE ROWS (Khi đang tải dữ liệu từ Supabase)
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={`cust-skel-${i}`} className="animate-pulse">
+                    <td className="py-3.5 px-2 sm:px-3 text-center">
+                      <div className="h-3 bg-slate-200 rounded w-5 mx-auto" />
+                    </td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-xl bg-slate-200 shrink-0" />
@@ -434,7 +439,7 @@ export default function CustomersView({
               ) : filteredCustomers.length === 0 ? (
                 // 2. EMPTY STATE (Chỉ hiển thị khi đã load xong và thực sự không có dòng nào)
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-slate-400">
+                  <td colSpan={8} className="py-16 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center">
                         <Users size={28} weight="duotone" />
@@ -465,10 +470,15 @@ export default function CustomersView({
                   </td>
                 </tr>
               ) : (
-                filteredCustomers.map((c) => {
+                filteredCustomers.map((c, idx) => {
                   const hasDebt = Number(c.currentDebt || 0) > 0;
                   return (
                     <tr key={c.id || c.name} className="hover:bg-slate-50/80 transition-colors">
+                      {/* STT */}
+                      <td className="py-3 px-2 sm:px-3 text-center font-mono text-xs font-semibold text-slate-400">
+                        {idx + 1}
+                      </td>
+
                       {/* Name */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
@@ -496,19 +506,19 @@ export default function CustomersView({
                       </td>
 
                       {/* Phone */}
-                      <td className="py-3 px-4 font-mono font-bold text-slate-700">
+                      <td className="py-3 px-4  font-bold text-slate-700">
                         {c.phone || <span className="text-slate-300 font-normal">-</span>}
                       </td>
 
                       {/* Total Orders */}
                       <td className="py-3 px-4 text-center">
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold font-mono">
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold ">
                           {c.totalOrders}
                         </span>
                       </td>
 
                       {/* Total Spent */}
-                      <td className="py-3 px-4 text-right font-mono font-bold text-emerald-800">
+                      <td className="py-3 px-4 text-right  font-bold text-emerald-800">
                         {formatKip(c.totalSpent)} ₭
                       </td>
 
@@ -643,12 +653,15 @@ export default function CustomersView({
               )}
             </div>
           ) : (
-            filteredCustomers.map((c) => {
+            filteredCustomers.map((c, idx) => {
               const hasDebt = Number(c.currentDebt || 0) > 0;
               return (
                 <div key={c.id || c.name} className="p-3.5 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                        #{idx + 1}
+                      </span>
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
                         c.isDefault ? 'bg-slate-100 text-slate-600' : hasDebt ? 'bg-rose-50 text-rose-700' : 'bg-teal-50 text-teal-700'
                       }`}>

@@ -351,8 +351,8 @@ export default function CustomerCatalogView({
     <div
       ref={scrollContainerRef}
       onScroll={handleContainerScroll}
-      className={`fixed inset-0 w-full h-full h-dvh overflow-y-auto overscroll-contain bg-slate-50 text-slate-900 font-sans flex flex-col selection:bg-teal-500/20 selection:text-teal-900 z-10 ${
-        cart.length > 0 ? 'pb-28 sm:pb-24' : 'pb-12'
+      className={`fixed inset-0 w-full h-full h-dvh overflow-y-auto overscroll-contain bg-slate-50 text-slate-900 font-sans flex flex-col selection:bg-blue-500/20 selection:text-blue-900 z-10 ${
+        cart.length > 0 ? 'pb-24 md:pb-12' : 'pb-12'
       }`}
       style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }}
     >
@@ -387,11 +387,11 @@ export default function CustomerCatalogView({
               <button
                 type="button"
                 onClick={() => setIsCheckoutOpen(true)}
-                className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0"
+                className="bg-primary hover:bg-primary-hover text-white font-bold px-3 sm:px-4 py-2 rounded-xl shadow-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95 shrink-0 text-xs sm:text-sm"
                 title="ເບິ່ງກະຕ່າສິນຄ້າ"
               >
                 <div className="relative">
-                  <ShoppingCart size={16} weight="fill" />
+                  <ShoppingCart size={17} weight="fill" />
                   <span className="absolute -top-1.5 -right-2 px-1 min-w-[15px] h-3.5 rounded-full bg-rose-500 text-[9px] font-black flex items-center justify-center">
                     {totalCartQuantity}
                   </span>
@@ -407,10 +407,10 @@ export default function CustomerCatalogView({
               <button
                 type="button"
                 onClick={() => setTrackingOrder(activeOrder || recentOrders[0])}
-                className="h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1 border border-slate-200 shadow-2xs transition-all active:scale-95 cursor-pointer relative"
+                className="h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl border border-slate-200/80 text-slate-600 hover:text-primary hover:bg-slate-50 text-xs font-medium flex items-center gap-1 transition-all active:scale-95 cursor-pointer relative"
                 title="ຕິດຕາມອໍເດີຂອງຂ້ອຍ"
               >
-                <Package size={15} weight="bold" className="text-teal-700" />
+                <Package size={15} weight="bold" className="text-primary" />
                 <span className="hidden sm:inline">ອໍເດີຂອງຂ້ອຍ</span>
                 {activeOrder && (
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping absolute -top-0.5 -right-0.5" />
@@ -423,20 +423,20 @@ export default function CustomerCatalogView({
               href={defaultWhatsappUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1 border border-emerald-200 shadow-2xs transition-all active:scale-95"
+              className="h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl border border-slate-200/80 text-slate-600 hover:text-emerald-600 hover:bg-slate-50 text-xs font-medium flex items-center gap-1 transition-all active:scale-95"
               title="ສັ່ງຜ່ານ WhatsApp"
             >
-              <WhatsappLogo size={15} weight="fill" className="text-emerald-600" />
+              <WhatsappLogo size={15} weight="fill" className="text-emerald-500" />
               <span className="hidden sm:inline">WhatsApp</span>
             </a>
 
             {/* Quick Hotline Call Button */}
             <a
               href={`tel:${hotlineNumbers[0].replace(/\s+/g, '')}`}
-              className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold flex items-center gap-1.5 border border-teal-200/80 shadow-2xs transition-all active:scale-95"
+              className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl border border-slate-200/80 text-slate-600 hover:text-primary hover:bg-slate-50 text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95"
               title="ໂທຫາຮ້ານ"
             >
-              <Phone size={14} weight="bold" className="text-teal-600" />
+              <Phone size={14} weight="bold" className="text-primary" />
               <span className="hidden md:inline font-mono">{hotlineNumbers[0]}</span>
               <span className="md:hidden">ໂທຮ້ານ</span>
             </a>
@@ -447,13 +447,13 @@ export default function CustomerCatalogView({
                 type="button"
                 onClick={onRefresh}
                 disabled={isLoading}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer transition-colors active:scale-95 shadow-2xs"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-slate-200/80 text-slate-500 hover:text-primary hover:bg-slate-50 flex items-center justify-center cursor-pointer transition-colors active:scale-95 shadow-2xs"
                 title="ໂຫຼດຂໍ້ມູນໃໝ່"
               >
                 <ArrowClockwise
                   size={16}
                   weight="bold"
-                  className={isLoading ? 'animate-spin text-teal-600' : ''}
+                  className={isLoading ? 'animate-spin text-primary' : ''}
                 />
               </button>
             )}
@@ -461,55 +461,53 @@ export default function CustomerCatalogView({
         </div>
       </header>
 
-      {/* 2. HERO / STORE ANNOUNCEMENT BANNER (Solid Color, No Gradient, No Emojis, Pure Lao) */}
+      {/* 2. HERO / STORE ANNOUNCEMENT BANNER */}
       <section className="max-w-6xl mx-auto w-full px-3 sm:px-6 pt-3 sm:pt-4 shrink-0">
-        <div className="rounded-2xl sm:rounded-3xl bg-teal-900 text-white p-4 sm:p-6 shadow-sm border border-teal-800">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
-            <div className="space-y-1.5 max-w-xl">
-              <div className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-teal-800 text-[11px] font-bold text-teal-100 border border-teal-700">
+        <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 text-white rounded-2xl p-6 shadow-md relative overflow-hidden">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-[11px] font-bold text-blue-100 mb-2">
                 <span>ເມນູສິນຄ້າ & ລາຄາຂາຍລ່າສຸດ</span>
               </div>
-              <h2 className="text-base sm:text-2xl font-black tracking-tight leading-tight text-white">
+              <h2 className="text-2xl font-black tracking-tight text-white">
                 ຍິນດີຕ້ອນຮັບສູ່ ຮ້ານ ສົມສັກ
               </h2>
-              <div className="flex items-center gap-2 text-xs sm:text-sm text-teal-200/90 flex-wrap">
-                <span className="flex items-center gap-1">
-                  <MapPin size={14} weight="bold" className="text-teal-300 shrink-0" />
+              <div className="text-blue-100 text-sm flex items-center gap-4 mt-2">
+                <span className="flex items-center gap-1.5">
+                  <MapPin size={15} weight="bold" className="text-blue-200 shrink-0" />
                   <span>{storeAddress}</span>
                 </span>
-                <span className="hidden sm:inline text-teal-500">•</span>
-                <span className="flex items-center gap-1">
-                  <Clock size={14} weight="bold" className="text-teal-300 shrink-0" />
+                <span className="hidden sm:inline text-blue-300">•</span>
+                <span className="flex items-center gap-1.5">
+                  <Clock size={15} weight="bold" className="text-blue-200 shrink-0" />
                   <span>ເປີດທຸກມື້ 07:00 - 21:00</span>
                 </span>
               </div>
             </div>
 
-            {/* Hotline & WhatsApp Actions: Both numbers clearly accessible */}
-            <div className="flex items-center gap-2 pt-1 md:pt-0 flex-wrap">
+            {/* Frosted Glass Pill Cluster */}
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
               <a
                 href={defaultWhatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="h-10 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-transform active:scale-95"
+                className="bg-white/15 backdrop-blur-sm border border-white/20 text-white hover:bg-white hover:text-blue-700 px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 shadow-xs"
+                title="WhatsApp"
               >
-                <WhatsappLogo size={16} weight="fill" />
-                <span>WhatsApp: {whatsappNumber}</span>
+                <WhatsappLogo size={15} weight="fill" />
+                <span>WhatsApp</span>
               </a>
-              <a
-                href={`tel:${hotlineNumbers[0].replace(/\s+/g, '')}`}
-                className="h-10 px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-xs transition-transform active:scale-95"
-              >
-                <Phone size={15} weight="bold" />
-                <span>{hotlineNumbers[0]}</span>
-              </a>
-              <a
-                href={`tel:${hotlineNumbers[1].replace(/\s+/g, '')}`}
-                className="h-10 px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-xs transition-transform active:scale-95"
-              >
-                <Phone size={15} weight="bold" />
-                <span>{hotlineNumbers[1]}</span>
-              </a>
+              {hotlineNumbers.map((phone) => (
+                <a
+                  key={phone}
+                  href={`tel:${phone.replace(/\s+/g, '')}`}
+                  className="bg-white/15 backdrop-blur-sm border border-white/20 text-white hover:bg-white hover:text-blue-700 px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 shadow-xs font-mono"
+                  title={`ໂທ ${phone}`}
+                >
+                  <Phone size={14} weight="bold" />
+                  <span>{phone}</span>
+                </a>
+              ))}
             </div>
           </div>
         </div>
@@ -530,7 +528,7 @@ export default function CustomerCatalogView({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="ຄົ້ນຫາສິນຄ້າ ຫຼື ບາໂຄດ..."
-              className="w-full h-10 sm:h-11 pl-10 pr-9 bg-white border border-slate-200/90 rounded-2xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-500/10 shadow-2xs font-medium"
+              className="w-full h-10 sm:h-11 pl-10 pr-9 bg-white border border-slate-200/90 rounded-2xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 shadow-2xs font-medium"
             />
             {searchQuery && (
               <button
@@ -551,7 +549,7 @@ export default function CustomerCatalogView({
               onClick={() => setViewMode('grid')}
               className={`w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${
                 viewMode === 'grid'
-                  ? 'bg-teal-600 text-white shadow-2xs'
+                  ? 'bg-primary text-white shadow-2xs'
                   : 'text-slate-400 hover:text-slate-700'
               }`}
               title="ເບິ່ງແບບຕາໜ່າງ (Grid)"
@@ -563,7 +561,7 @@ export default function CustomerCatalogView({
               onClick={() => setViewMode('list')}
               className={`w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${
                 viewMode === 'list'
-                  ? 'bg-teal-600 text-white shadow-2xs'
+                  ? 'bg-primary text-white shadow-2xs'
                   : 'text-slate-400 hover:text-slate-700'
               }`}
               title="ເບິ່ງແບບລາຍການ (List)"
@@ -584,7 +582,7 @@ export default function CustomerCatalogView({
                 onClick={() => setActiveCategory(catName)}
                 className={`h-8 px-3.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer transition-all active:scale-95 shrink-0 ${
                   isSelected
-                    ? 'bg-teal-600 text-white shadow-xs font-black'
+                    ? 'bg-primary text-white shadow-xs font-black'
                     : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200/90 shadow-2xs'
                 }`}
               >
@@ -600,7 +598,7 @@ export default function CustomerCatalogView({
         {/* Results Counter */}
         <div className="flex items-center justify-between mb-3 text-xs text-slate-500 font-bold">
           <span>
-            ພົບ <span className="text-teal-700 font-black font-mono">{processedProducts.length}</span> ສິນຄ້າ
+            ພົບ <span className="text-primary font-black font-mono">{processedProducts.length}</span> ສິນຄ້າ
             {activeCategory !== 'ທັງໝົດ' && <span> ໃນໝວດ "{activeCategory}"</span>}
           </span>
           {(searchQuery || activeCategory !== 'ທັງໝົດ') && (
@@ -610,7 +608,7 @@ export default function CustomerCatalogView({
                 setSearchQuery('');
                 setActiveCategory('ທັງໝົດ');
               }}
-              className="text-teal-600 hover:underline cursor-pointer"
+              className="text-primary hover:underline cursor-pointer"
             >
               ລ້າງຕົວກັ່ນຕອງ
             </button>
@@ -635,7 +633,7 @@ export default function CustomerCatalogView({
                 setSearchQuery('');
                 setActiveCategory('ທັງໝົດ');
               }}
-              className="mt-2 h-9 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all active:scale-95 shadow-2xs cursor-pointer"
+              className="mt-2 h-9 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold transition-all active:scale-95 shadow-2xs cursor-pointer"
             >
               ເບິ່ງສິນຄ້າທັງໝົດ
             </button>
@@ -827,9 +825,9 @@ export default function CustomerCatalogView({
             ref={sentinelRef}
             className="py-6 flex items-center justify-center text-xs font-bold text-slate-400 gap-2"
           >
-            <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
             <span>ສະແດງ {visibleProducts.length} ຈາກ {processedProducts.length} ລາຍການ</span>
-            <div className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
           </div>
         )}
       </main>
@@ -857,7 +855,7 @@ export default function CustomerCatalogView({
               <a
                 key={phone}
                 href={`tel:${phone.replace(/\s+/g, '')}`}
-                className="hover:text-teal-700 hover:underline flex items-center gap-1"
+                className="hover:text-primary hover:underline flex items-center gap-1"
               >
                 <Phone size={13} weight="bold" />
                 <span>{phone}</span>
@@ -871,31 +869,31 @@ export default function CustomerCatalogView({
         </div>
       </footer>
 
-      {/* 6. FLOATING CART BOTTOM BAR */}
+      {/* 6. FLOATING CART BOTTOM BAR (Mobile only, hidden on tablet/desktop) */}
       {cart.length > 0 && (
-        <div className="fixed bottom-3 left-3 right-3 sm:bottom-4 sm:left-auto sm:right-6 sm:w-[400px] z-40 animate-in slide-in-from-bottom-4 duration-200 select-none">
+        <div className="md:hidden fixed bottom-3 left-3 right-3 z-40 animate-in slide-in-from-bottom-4 duration-200 select-none">
           <div
             onClick={() => setIsCheckoutOpen(true)}
-            className="bg-slate-900/95 backdrop-blur-md text-white p-3 sm:p-3.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-900 transition-all active:scale-98"
+            className="bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl border border-slate-800 flex items-center justify-between gap-3 cursor-pointer active:scale-98"
           >
             <div className="flex items-center gap-3 min-w-0">
-              <div className="relative w-10 h-10 rounded-xl bg-teal-500 flex items-center justify-center text-white shadow-xs shrink-0">
+              <div className="relative w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white shadow-xs shrink-0">
                 <ShoppingCart size={20} weight="fill" />
                 <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-rose-500 text-white text-[11px] font-black flex items-center justify-center border-2 border-slate-900">
                   {totalCartQuantity}
                 </span>
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] text-teal-300 font-bold truncate">
+                <div className="text-[11px] text-blue-200 font-bold truncate">
                   {cart.length} ລາຍການໃນກະຕ່າ
                 </div>
-                <div className="text-base sm:text-lg font-black font-mono text-white tracking-tight">
+                <div className="text-base font-black font-mono text-white tracking-tight">
                   {formatKip(cartGrandTotal)}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs shrink-0 shadow-xs transition-colors">
+            <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs shrink-0 shadow-xs transition-colors">
               <span>ສັ່ງຊື້ສິນຄ້າ</span>
               <ArrowRight size={15} weight="bold" />
             </div>
@@ -913,9 +911,9 @@ export default function CustomerCatalogView({
             (bannerOrder.online_status || bannerOrder.onlineStatus) === 'COMPLETED'
               ? 'bg-emerald-950/95 border-emerald-500/50 hover:bg-emerald-900/95 shadow-emerald-950/40'
               : (bannerOrder.online_status || bannerOrder.onlineStatus) === 'READY'
-              ? 'bg-teal-950/95 border-teal-500/50 hover:bg-teal-900/95 shadow-teal-950/40'
-              : (bannerOrder.online_status || bannerOrder.onlineStatus) === 'PREPARING'
               ? 'bg-blue-950/95 border-blue-500/50 hover:bg-blue-900/95 shadow-blue-950/40'
+              : (bannerOrder.online_status || bannerOrder.onlineStatus) === 'PREPARING'
+              ? 'bg-indigo-950/95 border-indigo-500/50 hover:bg-indigo-900/95 shadow-indigo-950/40'
               : 'bg-slate-900/95 border-slate-700 hover:bg-slate-800 shadow-slate-950/40'
           }`}
         >
@@ -923,9 +921,9 @@ export default function CustomerCatalogView({
             {(bannerOrder.online_status || bannerOrder.onlineStatus) === 'COMPLETED' ? (
               <CheckCircle size={22} weight="fill" className="text-emerald-400 shrink-0" />
             ) : (bannerOrder.online_status || bannerOrder.onlineStatus) === 'READY' ? (
-              <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-ping shrink-0" />
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping shrink-0" />
             ) : (bannerOrder.online_status || bannerOrder.onlineStatus) === 'PREPARING' ? (
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
             ) : (
               <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
             )}
@@ -954,7 +952,7 @@ export default function CustomerCatalogView({
             <span className={`text-[11px] font-black px-2.5 py-1 rounded-xl shadow-2xs ${
               (bannerOrder.online_status || bannerOrder.onlineStatus) === 'COMPLETED'
                 ? 'bg-emerald-500 text-slate-950'
-                : 'bg-teal-500 text-slate-950'
+                : 'bg-primary text-white'
             }`}>
               {(bannerOrder.online_status || bannerOrder.onlineStatus) === 'COMPLETED' ? 'ເບິ່ງບິນ' : 'ຕິດຕາມ'}
             </span>

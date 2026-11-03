@@ -190,7 +190,7 @@ export default function OnlineOrdersView({
       <header className="bg-white border-b border-slate-200 px-3.5 sm:px-6 py-2.5 sm:py-3 shrink-0 shadow-2xs">
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center font-bold shadow-2xs shrink-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-primary-light text-primary border border-primary-border flex items-center justify-center font-bold shadow-2xs shrink-0">
               <ShoppingBag size={18} className="sm:w-5 sm:h-5" weight="fill" />
             </div>
             <div className="min-w-0">
@@ -221,7 +221,7 @@ export default function OnlineOrdersView({
                 <ArrowClockwise
                   size={15}
                   weight="bold"
-                  className={isLoading ? 'animate-spin text-teal-600' : ''}
+                  className={isLoading ? 'animate-spin text-primary' : ''}
                 />
                 <span className="hidden sm:inline">ໂຫຼດໃໝ່</span>
               </button>
@@ -499,7 +499,7 @@ export default function OnlineOrdersView({
                           {/* 1. Receipt Code & Time (Max 2 lines) */}
                           <td className="py-2.5 px-3 align-middle whitespace-nowrap">
                             <div className="flex items-center gap-1">
-                              <span className="font-mono font-black text-slate-900 tracking-tight text-xs">
+                              <span className=" font-black text-slate-900 tracking-tight text-xs">
                                 #{cleanDisplayCode}
                               </span>
                               <button

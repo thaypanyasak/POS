@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ClockCounterClockwise,
   Printer,
   Receipt,
+  Invoice,
   Trash,
   PencilSimple,
   MagnifyingGlass,
@@ -27,9 +29,10 @@ import {
   Bell,
   FileArrowDown,
   DotsThreeVertical,
+  Tag
 } from '@phosphor-icons/react';
 import { exportTransactionsToExcel } from '../utils/excelExport';
-import { formatKip, normalizeLao, getDueDateStatus } from '../utils/formatters';
+import { formatKip, normalizeLao, getDueDateStatus, formatDateToDDMMYYYY, formatDateTime24h, formatTime24h } from '../utils/formatters';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner, sanitizeBarcode } from '../hooks/useHardwareBarcodeScanner';
@@ -95,20 +98,50 @@ export default function HistoryView({
   // Customer Debt Recovery Modal state
   const [debtModalTx, setDebtModalTx] = useState(null);
 
-  // Row Action Menu State (for 3-dots action popover)
-  const [openActionTxId, setOpenActionTxId] = useState(null);
+  // Row Action Menu State (for 3-dots action popover rendered via Portal to avoid overflow/z-index clipping)
+  const [actionMenuState, setActionMenuState] = useState(null);
 
-  // Close 3-dots action popover when clicking anywhere outside
+  const handleToggleActionMenu = (e, tx) => {
+    e.stopPropagation();
+    if (actionMenuState && actionMenuState.tx.id === tx.id) {
+      setActionMenuState(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 155;
+    const menuHeight = canDeleteOrders ? 88 : 46;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpward = spaceBelow < 120 && rect.top > 120;
+
+    let left = rect.right - menuWidth;
+    if (left < 10) left = 10;
+    if (left + menuWidth > window.innerWidth - 10) {
+      left = window.innerWidth - menuWidth - 10;
+    }
+
+    const top = openUpward ? rect.top - menuHeight - 4 : rect.bottom + 4;
+
+    setActionMenuState({
+      tx,
+      top,
+      left,
+      openUpward,
+    });
+  };
+
+  // Close 3-dots action popover when clicking anywhere outside or scrolling
   useEffect(() => {
-    if (!openActionTxId) return;
-    const handleOutsideClick = (e) => {
-      if (!e.target.closest('.row-action-popover-container')) {
-        setOpenActionTxId(null);
-      }
+    if (!actionMenuState) return;
+    const handleClose = () => setActionMenuState(null);
+    window.addEventListener('click', handleClose);
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('resize', handleClose);
+    return () => {
+      window.removeEventListener('click', handleClose);
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
     };
-    window.addEventListener('click', handleOutsideClick);
-    return () => window.removeEventListener('click', handleOutsideClick);
-  }, [openActionTxId]);
+  }, [actionMenuState]);
 
   // Filter out all online orders: HistoryView is strictly for direct POS in-store sales (#INV-...)
   // Online orders (#ONL-...) are managed and viewed exclusively in OnlineOrdersView!
@@ -1270,6 +1303,9 @@ export default function HistoryView({
               {/* Top Row: Receipt #, Status Chip & Date */}
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
+                  <div className="w-6 h-6 rounded-md bg-blue-50 text-primary flex items-center justify-center shrink-0 border border-blue-100">
+                    <Tag size={14} weight="duotone" />
+                  </div>
                   <span
                     className={`font-black font-mono text-sm ${
                       isCancelled ? 'line-through text-slate-400' : 'text-slate-900'
@@ -1289,13 +1325,13 @@ export default function HistoryView({
                     </span>
                   )}
                   {isOrderNew && (
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_2px_6px_rgba(5,150,105,0.3)] inline-flex items-center gap-1">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-600 text-white shadow-xs inline-flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-white" />
                       <span>ບິນໃໝ່</span>
                     </span>
                   )}
                   {isOrderUpdated && (
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_2px_6px_rgba(245,158,11,0.3)] inline-flex items-center gap-1">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-600 text-white shadow-xs inline-flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-white" />
                       <span>ແກ້ໄຂໃໝ່</span>
                     </span>
@@ -1318,12 +1354,8 @@ export default function HistoryView({
                   )}
                 </div>
                 <div className="text-right">
-                  <div className="text-[11px] text-slate-500 font-medium">
-                    {new Date(tx.createdAt).toLocaleDateString('lo-LA')}{' '}
-                    {new Date(tx.createdAt).toLocaleTimeString('lo-LA', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                  <div className="text-[11px] text-slate-500 font-medium font-mono">
+                    {formatDateTime24h(tx.createdAt || tx.created_at)}
                   </div>
                 </div>
               </div>
@@ -1627,6 +1659,7 @@ export default function HistoryView({
           <table className={`w-full text-left text-xs border-separate border-spacing-0 ${activeTab === 'debt' ? 'min-w-[760px]' : 'min-w-[700px]'}`}>
           <thead>
             <tr className="sticky top-0 z-10 text-slate-700 font-extrabold [&_th]:border-b [&_th]:border-slate-200 [&_th]:bg-slate-50">
+              <th className="py-3 px-2 sm:px-3 w-12 text-center text-slate-500 font-bold">ລ/ດ</th>
               <th className="py-3 px-3 sm:px-4">ເລກທີບິນ</th>
               <th className="py-3 px-3">ວັນທີ & ເວລາ</th>
               <th className="py-3 px-3">ຜູ້ຂາຍ</th>
@@ -1640,11 +1673,12 @@ export default function HistoryView({
                   <th className="py-3 px-3 text-center whitespace-nowrap">ກຳນົດຊຳລະ</th>
                 </>
               )}
-              <th className="py-3 px-3 sm:px-4 text-center">ຈັດການ (Actions)</th>
+              <th className="py-3 px-2 sm:px-3 text-center">ຈັດການ</th>
             </tr>
           </thead>
           <tbody className="[&_td]:border-b [&_td]:border-slate-100">
-            {displayedTransactions.map((tx) => {
+            {displayedTransactions.map((tx, idx) => {
+              const itemIndex = (currentPage - 1) * pageSize + idx + 1;
               const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
               const total = Number(tx.grandTotal) || 0;
               const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
@@ -1709,21 +1743,30 @@ export default function HistoryView({
                       : 'hover:bg-slate-50/80 text-slate-900'
                   }`}
                 >
-                  {/* Receipt # */}
+                  {/* 0. STT (ລ/ດ - Số thứ tự) */}
+                  <td className="py-3 px-2 sm:px-3 text-center font-bold text-slate-400 font-mono text-[11px]">
+                    {itemIndex}
+                  </td>
+
+                  {/* 1. Receipt # */}
                   <td className="py-3 px-4 font-black font-mono">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span
-                        className={isCancelled ? 'line-through text-slate-400' : 'text-slate-900'}
-                      >
-                        #{tx.receiptNumber}
-                      </span>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-blue-50 text-primary flex items-center justify-center shrink-0 border border-blue-100 shadow-2xs">
+                        <Tag size={16} weight="duotone" />
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        <span
+                          className={isCancelled ? 'line-through text-slate-400' : 'text-slate-900'}
+                        >
+                          #{tx.receiptNumber}
+                        </span>
                       {(tx.order_source === 'online' || tx.orderSource === 'online') && (
                         <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-teal-50 text-teal-800 border border-teal-200 inline-flex items-center gap-1">
                           <span>ອອນລາຍ</span>
                         </span>
                       )}
                       {isOrderNew && (
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_2px_6px_rgba(5,150,105,0.3)] inline-flex items-center gap-1">
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-emerald-600 text-white shadow-xs inline-flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-white" />
                           <span>ບິນໃໝ່</span>
                         </span>
@@ -1735,7 +1778,7 @@ export default function HistoryView({
                         </span>
                       )}
                       {isOrderUpdated && (
-                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_2px_6px_rgba(245,158,11,0.3)] inline-flex items-center gap-1">
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-600 text-white shadow-xs inline-flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-white" />
                           <span>ແກ້ໄຂໃໝ່</span>
                         </span>
@@ -1752,16 +1795,14 @@ export default function HistoryView({
                         </span>
                       )}
                     </div>
+                    </div>
                   </td>
 
-                  {/* Date & Time (Clean 2-row max) */}
-                  <td className="py-3 px-3 text-slate-600 font-medium whitespace-nowrap">
-                    <div>{new Date(tx.createdAt).toLocaleDateString('lo-LA')}</div>
-                    <div className="text-[10px] text-slate-400">
-                      {new Date(tx.createdAt).toLocaleTimeString('lo-LA', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                  {/* Date & Time (DD/MM/YYYY & 24h HH:mm) */}
+                  <td className="py-3 px-3 text-slate-600 font-medium whitespace-nowrap font-mono">
+                    <div className="font-bold text-slate-800 text-xs">{formatDateToDDMMYYYY(tx.createdAt || tx.created_at)}</div>
+                    <div className="text-[10.5px] text-slate-400 font-medium">
+                      {formatTime24h(tx.createdAt || tx.created_at)}
                     </div>
                   </td>
 
@@ -1908,196 +1949,63 @@ export default function HistoryView({
                   )}
 
                   {/* Actions Column */}
-                  <td className="py-3 px-3 sm:px-4 text-center">
-                    {activeTab === 'debt' ? (
-                      /* Optimized Compact Action for Debt Tab on iPad: Primary Button + 3-Dots Dropdown */
-                      <div className="inline-flex items-center justify-center gap-1.5 relative row-action-popover-container">
-                        {/* Primary Button */}
-                        {!isCancelled && hasDebt ? (
-                          <button
-                            type="button"
-                            onClick={() => setDebtModalTx(tx)}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black inline-flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer"
-                            title="ຊຳລະໜີ້ລູກຄ້າ"
-                          >
-                            <HandCoins size={13} weight="bold" />
-                            <span>ຊຳລະ</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handlePrintReceipt(tx)}
-                            className={`px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer ${
-                              Boolean(tx.is_printed || tx.isPrinted)
-                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                                : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
-                            }`}
-                            title={Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນໃໝ່' : 'ເບິ່ງ / ພິມບິນ'}
-                          >
-                            <Printer size={13} />
-                            <span>{Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນ' : 'ພິມ'}</span>
-                          </button>
-                        )}
+                  <td className="py-2.5 px-2 text-center">
+                    <div className="flex items-center justify-center gap-1 flex-nowrap relative row-action-popover-container">
+                      {/* 1. View/Print Receipt */}
+                      <button
+                        type="button"
+                        onClick={() => handlePrintReceipt(tx)}
+                        className={`h-7 px-2 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer shadow-2xs ${
+                          Boolean(tx.is_printed || tx.isPrinted)
+                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80'
+                            : 'bg-blue-50 hover:bg-primary hover:text-white text-blue-700 border border-blue-200'
+                        }`}
+                        title={Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນໃໝ່' : 'ເບິ່ງ / ພິມບິນ'}
+                      >
+                        <Printer size={13} weight="bold" />
+                        <span>{Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນ' : 'ພິມ'}</span>
+                      </button>
 
-                        {/* 3-Dots Action Button */}
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenActionTxId(openActionTxId === tx.id ? null : tx.id);
-                            }}
-                            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                              openActionTxId === tx.id
-                                ? 'bg-slate-200 border-slate-300 text-slate-900'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200/80'
-                            }`}
-                            title="ຕົວເລືອກເພີ່ມເຕີມ"
-                          >
-                            <DotsThreeVertical size={16} weight="bold" />
-                          </button>
-
-                          {/* 3-Dots Floating Dropdown Popover */}
-                          {openActionTxId === tx.id && (
-                            <div
-                              className="absolute right-0 top-full mt-1 z-40 bg-white rounded-xl shadow-xl border border-slate-200 py-1 min-w-[150px] text-left animate-in fade-in zoom-in-95 duration-150"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {/* Print */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenActionTxId(null);
-                                  handlePrintReceipt(tx);
-                                }}
-                                className="w-full px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-2 transition-colors cursor-pointer"
-                              >
-                                <Printer size={14} className="text-teal-600" />
-                                <span>ເບິ່ງ / ພິມບິນ</span>
-                              </button>
-
-                              {/* Edit Order via POS */}
-                              {!isCancelled && onEditOrderInPos && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenActionTxId(null);
-                                    onEditOrderInPos(tx);
-                                  }}
-                                  className="w-full px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-50 flex items-center gap-2 transition-colors cursor-pointer"
-                                >
-                                  <PencilSimple size={14} weight="bold" className="text-amber-600" />
-                                  <span>ແກ້ໄຂບິນ</span>
-                                </button>
-                              )}
-
-                              {/* Void / Cancel */}
-                              {!isCancelled && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenActionTxId(null);
-                                    onCancelTransaction && onCancelTransaction(tx);
-                                  }}
-                                  className="w-full px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer"
-                                >
-                                  <Prohibit size={14} weight="bold" className="text-rose-600" />
-                                  <span>ຍົກເລີກບິນ</span>
-                                </button>
-                              )}
-
-                              {/* Delete (Admin Only) */}
-                              {canDeleteOrders && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenActionTxId(null);
-                                    onDeleteTransaction && onDeleteTransaction(tx);
-                                  }}
-                                  className="w-full px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-100"
-                                >
-                                  <Trash size={14} className="text-red-600" />
-                                  <span>ລຶບຖາວອນ</span>
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      /* Standard Multi-Button Actions for Other Tabs */
-                      <div className="flex items-center justify-center gap-1 flex-wrap">
-                        {/* View/Print Receipt */}
+                      {/* 2. Edit Order via POS */}
+                      {!isCancelled && onEditOrderInPos && (
                         <button
                           type="button"
-                          onClick={() => handlePrintReceipt(tx)}
-                          className={`px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer ${
-                            Boolean(tx.is_printed || tx.isPrinted)
-                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                              : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
-                          }`}
-                          title={Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນໃໝ່' : 'ເບິ່ງ / ພິມບິນ'}
+                          onClick={() => onEditOrderInPos(tx)}
+                          className="h-7 px-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer shadow-2xs"
+                          title="ແກ້ໄຂບິນໂດຍນຳເຂົ້າໜ້າ POS"
                         >
-                          <Printer size={13} />
-                          <span>{Boolean(tx.is_printed || tx.isPrinted) ? 'ພິມຄືນ' : 'ພິມ'}</span>
+                          <PencilSimple size={13} weight="bold" />
+                          <span>ແກ້ໄຂ</span>
                         </button>
+                      )}
 
-                        {/* Edit Order via POS (Replace & Re-checkout pattern) */}
-                        {!isCancelled && onEditOrderInPos && (
-                          <button
-                            type="button"
-                            onClick={() => onEditOrderInPos(tx)}
-                            className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-                            title="ແກ້ໄຂບິນໂດຍນຳເຂົ້າໜ້າ POS"
-                          >
-                            <PencilSimple size={13} weight="bold" />
-                            <span>ແກ້ໄຂ</span>
-                          </button>
-                        )}
+                      {/* 3. Collect Debt Modal (Nếu có nợ) */}
+                      {!isCancelled && hasDebt && (
+                        <button
+                          type="button"
+                          onClick={() => setDebtModalTx(tx)}
+                          className="h-7 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black inline-flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer"
+                          title="ຊຳລະໜີ້ລູກຄ້າ"
+                        >
+                          <HandCoins size={13} weight="bold" />
+                          <span>ຊຳລະ</span>
+                        </button>
+                      )}
 
-                        {/* Collect Debt Modal */}
-                        {!isCancelled && hasDebt && (
-                          <button
-                            type="button"
-                            onClick={() => setDebtModalTx(tx)}
-                            className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black inline-flex items-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer"
-                            title="ຊຳລະໜີ້ລູກຄ້າ"
-                          >
-                            <HandCoins size={13} weight="bold" />
-                            <span>ຊຳລະ</span>
-                          </button>
-                        )}
-
-                        {/* Void / Cancel */}
-                        {!isCancelled ? (
-                          <button
-                            type="button"
-                            onClick={() => onCancelTransaction && onCancelTransaction(tx)}
-                            className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 text-[11px] font-bold inline-flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-                            title="ຍົກເລີກບິນ & ຄືນສະຕັອກ"
-                          >
-                            <Prohibit size={13} weight="bold" />
-                            <span>ຍົກເລີກ</span>
-                          </button>
-                        ) : (
-                          <span className="px-2 py-1 rounded-lg bg-rose-50 text-rose-400 text-[10px] font-bold inline-flex items-center gap-1">
-                            ຍົກເລີກແລ້ວ
-                          </span>
-                        )}
-
-                        {/* Delete (Admin Only) */}
-                        {canDeleteOrders && (
-                          <button
-                            type="button"
-                            onClick={() => onDeleteTransaction && onDeleteTransaction(tx)}
-                            className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer"
-                            title="ລຶບຖາວອນ (Admin Only)"
-                          >
-                            <Trash size={14} />
-                          </button>
-                        )}
-                      </div>
-                    )}
+                      {/* 4. Menu 3 chấm (Chứa Hủy đơn & Xóa) */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleActionMenu(e, tx)}
+                        className={`w-7 h-7 rounded-lg border transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                          actionMenuState?.tx.id === tx.id
+                            ? 'bg-slate-200 border-slate-300 text-slate-900 shadow-2xs'
+                            : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200 shadow-2xs'
+                        }`}
+                        title="ຕົວເລືອກເພີ່ມເຕີມ"
+                      >
+                        <DotsThreeVertical size={15} weight="bold" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -2363,6 +2271,64 @@ export default function HistoryView({
           )}
           <span>{scanToast.message}</span>
         </div>
+      )}
+
+      {/* 6. Action Menu Popover Portal (Renders into document.body with fixed position & z-[9999] to prevent table clipping & pagination overlap) */}
+      {actionMenuState && typeof document !== 'undefined' && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[9998]"
+            onClick={() => setActionMenuState(null)}
+          />
+          <div
+            className="fixed z-[9999] animate-in fade-in zoom-in-95 duration-100"
+            style={{
+              top: `${actionMenuState.top}px`,
+              left: `${actionMenuState.left}px`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-white rounded-xl shadow-2xl border border-slate-200 py-1 min-w-[155px] text-left">
+              {/* Hủy đơn (Void / Cancel) */}
+              {!actionMenuState.tx.isCancelled && actionMenuState.tx.status !== 'cancelled' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentTx = actionMenuState.tx;
+                    setActionMenuState(null);
+                    onCancelTransaction && onCancelTransaction(currentTx);
+                  }}
+                  className="w-full px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Prohibit size={15} weight="bold" className="text-rose-600" />
+                  <span>ຍົກເລີກບິນ</span>
+                </button>
+              ) : (
+                <div className="px-3 py-1.5 text-[11px] text-rose-400 font-bold italic flex items-center gap-1.5">
+                  <Prohibit size={13} weight="bold" />
+                  <span>ບິນນີ້ຍົກເລີກແລ້ວ</span>
+                </div>
+              )}
+
+              {/* Xóa vĩnh viễn (Delete - Admin Only) */}
+              {canDeleteOrders && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentTx = actionMenuState.tx;
+                    setActionMenuState(null);
+                    onDeleteTransaction && onDeleteTransaction(currentTx);
+                  }}
+                  className="w-full px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-100"
+                >
+                  <Trash size={15} className="text-red-600" />
+                  <span>ລຶບຖາວອນ</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </>,
+        document.body
       )}
     </main>
   );

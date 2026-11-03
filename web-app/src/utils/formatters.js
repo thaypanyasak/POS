@@ -755,6 +755,44 @@ export function formatDateToDDMMYYYY(dateVal) {
     const [yyyy, mm, dd] = parts;
     return `${dd}/${mm}/${yyyy}`;
   }
+  const d = new Date(dateVal);
+  if (!isNaN(d.getTime())) {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
   return String(dateVal);
+}
+
+/**
+ * Formats timestamp or Date to 'DD/MM/YYYY, HH:mm' (24-hour time format)
+ * @param {string|number|Date} dateVal
+ * @returns {string} e.g. "02/11/2026, 20:05"
+ */
+export function formatDateTime24h(dateVal) {
+  if (!dateVal) return '';
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year}, ${hours}:${minutes}`;
+}
+
+/**
+ * Formats timestamp or Date to 'HH:mm' (24-hour time format)
+ * @param {string|number|Date} dateVal
+ * @returns {string} e.g. "20:05"
+ */
+export function formatTime24h(dateVal) {
+  if (!dateVal) return '';
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return '';
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
 }
 

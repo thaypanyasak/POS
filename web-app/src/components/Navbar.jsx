@@ -163,14 +163,14 @@ export default function Navbar({
                       : 'w-full px-3 py-2 justify-between'
                   } ${
                     isActive
-                      ? 'bg-teal-50 text-teal-700 font-bold'
+                      ? 'bg-primary-light text-primary font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-medium'
                   }`}
                   title={collapsed ? item.label : undefined}
                 >
                   {/* Active Indicator: Dải thanh chỉ thị màu Teal ở cạnh trái */}
                   {isActive && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-7 bg-teal-600 rounded-r-full" />
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-7 bg-primary rounded-r-full" />
                   )}
 
                   {/* Left Icon + Text */}
@@ -180,7 +180,7 @@ export default function Navbar({
                         weight="bold"
                         className={`shrink-0 transition-colors ${
                           isActive
-                            ? 'text-teal-700'
+                            ? 'text-primary'
                             : 'text-slate-500 group-hover:text-slate-800'
                         }`}
                       />
@@ -198,7 +198,7 @@ export default function Navbar({
                             className={`relative flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full text-[10px] font-black font-sans tabular-nums leading-none text-white ring-2 ring-white ${
                               item.id === 'history'
                                 ? 'bg-gradient-to-tr from-red-700 via-red-600 to-red-500 shadow-[0_2px_8px_rgba(220,38,38,0.45)]'
-                                : 'bg-gradient-to-tr from-teal-600 to-emerald-500 shadow-[0_2px_8px_rgba(13,148,136,0.35)]'
+                                : 'bg-primary shadow-[0_2px_8px_rgba(11,94,215,0.35)]'
                             }`}
                           >
                             {item.badge > 99 ? '99+' : item.badge}
@@ -210,7 +210,7 @@ export default function Navbar({
                     {!collapsed && (
                       <span
                         className={`text-[13px] truncate ${
-                          isActive ? 'text-teal-800 font-bold' : 'text-slate-700 font-medium group-hover:text-slate-900'
+                          isActive ? 'text-primary font-bold' : 'text-slate-700 font-medium group-hover:text-slate-900'
                         }`}
                       >
                         {item.label}
@@ -224,7 +224,7 @@ export default function Navbar({
                       className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-black font-sans tabular-nums tracking-tight text-white shrink-0 shadow-xs ${
                         item.id === 'history'
                           ? 'bg-gradient-to-r from-red-600 to-red-500 shadow-[0_2px_8px_rgba(220,38,38,0.35)]'
-                          : 'bg-gradient-to-r from-teal-600 to-emerald-500 shadow-[0_2px_8px_rgba(13,148,136,0.3)]'
+                          : 'bg-primary shadow-[0_2px_8px_rgba(11,94,215,0.3)]'
                       }`}
                     >
                       {item.id === 'history' && (
@@ -254,7 +254,7 @@ export default function Navbar({
                       className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center shrink-0 shadow-xs text-white ${
                         isCashierAdmin
                           ? 'bg-gradient-to-tr from-amber-600 to-amber-500'
-                          : 'bg-gradient-to-tr from-teal-600 to-emerald-500'
+                          : 'bg-primary'
                       }`}
                     >
                       {cashierInitial}
@@ -263,7 +263,7 @@ export default function Navbar({
                       <div className="text-xs font-black text-slate-900 truncate">
                         {cashierDisplayName}
                       </div>
-                      <div className="text-[10px] text-teal-700 font-bold font-mono">
+                      <div className="text-[10px] text-primary font-bold font-mono">
                         {isCashierAdmin ? 'ຜູ້ຈັດການ (Admin)' : 'ພະນັກງານຂາຍ'}
                       </div>
                     </div>
@@ -274,7 +274,7 @@ export default function Navbar({
                   <button
                     type="button"
                     onClick={() => setIsSwitchModalOpen(true)}
-                    className="py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-800 text-[10.5px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors active:scale-95"
+                    className="py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-primary-light text-slate-700 hover:text-primary text-[10.5px] font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors active:scale-95"
                     title="ປ່ຽນກະຂາຍເຄື່ອງ (Switch Shift)"
                   >
                     <UserSwitch size={12} weight="bold" />
@@ -322,7 +322,7 @@ export default function Navbar({
               <button
                 type="button"
                 onClick={toggleCollapsed}
-                className="w-full h-10 px-3 bg-white hover:bg-teal-50/60 border border-slate-200 hover:border-teal-300 text-slate-700 hover:text-teal-800 rounded-xl text-xs font-bold flex items-center justify-between shadow-2xs transition-all cursor-pointer"
+                className="w-full h-10 px-3 bg-white hover:bg-primary-light border border-slate-200 hover:border-primary-border text-slate-700 hover:text-primary rounded-xl text-xs font-bold flex items-center justify-between shadow-2xs transition-all cursor-pointer"
                 title="ຫຍໍ້ແຖບເມນູ (Collapse Sidebar)"
               >
                 <div className="flex items-center gap-2">
@@ -338,11 +338,11 @@ export default function Navbar({
               <button
                 type="button"
                 onClick={() => setIsSwitchModalOpen(true)}
-                className="w-10 h-10 rounded-xl bg-teal-600 text-white font-black text-xs flex items-center justify-center relative shadow-xs cursor-pointer active:scale-95 transition-transform"
+                className="w-10 h-10 rounded-xl bg-primary text-white font-black text-xs flex items-center justify-center relative shadow-xs cursor-pointer active:scale-95 transition-transform"
                 title={`ຜູ້ຂາຍ: ${cashierDisplayName} • ກົດເພື່ອປ່ຽນກະ`}
               >
                 <span>{cashierInitial}</span>
-                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-[8px] text-teal-400">
+                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-[8px] text-primary-light">
                   <UserSwitch size={9} weight="bold" />
                 </span>
               </button>
@@ -371,7 +371,7 @@ export default function Navbar({
               <button
                 type="button"
                 onClick={toggleCollapsed}
-                className="w-12 h-10 mx-auto bg-white hover:bg-teal-50/60 border border-slate-200 hover:border-teal-300 text-slate-700 hover:text-teal-800 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                className="w-12 h-10 mx-auto bg-white hover:bg-primary-light border border-slate-200 hover:border-primary-border text-slate-700 hover:text-primary rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                 title="ຂະຫຍາຍແຖບເມນູ (Expand Sidebar)"
               >
                 <SidebarSimple size={18} weight="bold" className="text-slate-600" />
@@ -419,14 +419,14 @@ export default function Navbar({
                       setActiveMainTab(item.id);
                     }}
                     className={`flex-1 min-w-0 flex flex-col items-center justify-center py-1 gap-0.5 transition-all relative cursor-pointer active:scale-95 select-none ${
-                      isActive ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'
+                      isActive ? 'text-primary' : 'text-slate-400 hover:text-slate-600'
                     }`}
                   >
                     {/* Top Neon Line Indicator */}
                     <div
                       className={`h-[3px] w-8 sm:w-10 rounded-full transition-all duration-200 ${
                         isActive
-                          ? 'bg-emerald-600 shadow-[0_1px_8px_rgba(5,150,105,0.6)]'
+                          ? 'bg-primary shadow-[0_1px_8px_rgba(11,94,215,0.6)]'
                           : 'bg-transparent'
                       }`}
                     />
@@ -446,7 +446,7 @@ export default function Navbar({
                             className={`relative flex items-center justify-center h-[16px] min-w-[16px] px-1 rounded-full text-[9px] font-black font-sans tabular-nums leading-none text-white ring-2 ring-white ${
                               item.id === 'history'
                                 ? 'bg-gradient-to-tr from-red-700 via-red-600 to-red-500 shadow-xs'
-                                : 'bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-xs'
+                                : 'bg-primary shadow-xs'
                             }`}
                           >
                             {item.badge > 99 ? '99+' : item.badge}
@@ -458,7 +458,7 @@ export default function Navbar({
                     {/* Short Label */}
                     <span
                       className={`text-[10px] sm:text-[10.5px] truncate max-w-full leading-tight font-sans tracking-tight ${
-                        isActive ? 'text-emerald-700 font-extrabold' : 'text-slate-500 font-medium'
+                        isActive ? 'text-primary font-extrabold' : 'text-slate-500 font-medium'
                       }`}
                     >
                       {item.shortLabel}
@@ -476,7 +476,7 @@ export default function Navbar({
                 }}
                 className={`flex-1 min-w-0 flex flex-col items-center justify-center py-1 gap-0.5 transition-all relative cursor-pointer active:scale-95 select-none ${
                   isMoreActive || isMoreMenuOpen
-                    ? 'text-emerald-600'
+                    ? 'text-primary'
                     : 'text-slate-400 hover:text-slate-600'
                 }`}
               >
@@ -484,7 +484,7 @@ export default function Navbar({
                 <div
                   className={`h-[3px] w-8 sm:w-10 rounded-full transition-all duration-200 ${
                     isMoreActive || isMoreMenuOpen
-                      ? 'bg-emerald-600 shadow-[0_1px_8px_rgba(5,150,105,0.6)]'
+                      ? 'bg-primary shadow-[0_1px_8px_rgba(11,94,215,0.6)]'
                       : 'bg-transparent'
                   }`}
                 />
@@ -493,14 +493,14 @@ export default function Navbar({
                 <div className="relative inline-flex items-center justify-center mt-0.5">
                   <SquaresFour size={22} weight={isMoreActive || isMoreMenuOpen ? 'bold' : 'regular'} />
                   {moreHasBadge && (
-                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white animate-pulse" />
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-white animate-pulse" />
                   )}
                 </div>
 
                 {/* Short Label */}
                 <span
                   className={`text-[10px] sm:text-[10.5px] truncate max-w-full leading-tight font-sans tracking-tight ${
-                    isMoreActive || isMoreMenuOpen ? 'text-emerald-700 font-extrabold' : 'text-slate-500 font-medium'
+                    isMoreActive || isMoreMenuOpen ? 'text-primary font-extrabold' : 'text-slate-500 font-medium'
                   }`}
                 >
                   ເພີ່ມເຕີມ
@@ -527,7 +527,7 @@ export default function Navbar({
                   {/* Sheet Header */}
                   <div className="px-4 py-2 flex items-center justify-between border-b border-slate-100 shrink-0">
                     <div className="flex items-center gap-2">
-                      <SquaresFour size={18} weight="bold" className="text-teal-600" />
+                      <SquaresFour size={18} weight="bold" className="text-primary" />
                       <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">
                         ເມນູເພີ່ມເຕີມ (More Menu)
                       </span>
@@ -558,13 +558,13 @@ export default function Navbar({
                           }}
                           className={`p-2 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all text-center border cursor-pointer active:scale-95 ${
                             isActive
-                              ? 'bg-teal-50 border-teal-300 text-teal-800 shadow-2xs font-bold'
+                              ? 'bg-primary-light border-primary-border text-primary shadow-2xs font-bold'
                               : 'bg-slate-50/80 hover:bg-slate-100 border-slate-200/80 text-slate-700 font-medium'
                           }`}
                         >
                           <div
                             className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                              isActive ? 'bg-teal-600 text-white shadow-2xs' : 'bg-white text-slate-600 shadow-2xs'
+                              isActive ? 'bg-primary text-white shadow-2xs' : 'bg-white text-slate-600 shadow-2xs'
                             }`}
                           >
                             <Icon size={18} weight="bold" />
@@ -580,7 +580,7 @@ export default function Navbar({
                   {/* Quick Shift, Lock & Logout Footer */}
                   <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-6 h-6 rounded-full bg-teal-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">
+                      <div className="w-6 h-6 rounded-full bg-primary text-white font-black text-[10px] flex items-center justify-center shrink-0">
                         {cashierInitial}
                       </div>
                       <span className="text-[11px] font-bold text-slate-800 truncate">
@@ -595,7 +595,7 @@ export default function Navbar({
                           setIsMoreMenuOpen(false);
                           setIsSwitchModalOpen(true);
                         }}
-                        className="px-2.5 py-1 bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-800 text-[10.5px] font-bold rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                        className="px-2.5 py-1 bg-white hover:bg-primary-light text-slate-700 hover:text-primary text-[10.5px] font-bold rounded-lg border border-slate-200 transition-colors cursor-pointer"
                       >
                         ປ່ຽນກະ
                       </button>

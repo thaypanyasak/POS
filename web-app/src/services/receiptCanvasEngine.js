@@ -43,6 +43,7 @@ export const K80 = {
 import { ensureSaysetthaLoaded } from '../utils/saysetthaFont';
 import { ensureTahomaLoaded } from '../utils/tahomaFont';
 import { ensureSegoeUiLoaded } from '../utils/segoeUiFont';
+import { formatDateTime24h } from '../utils/formatters';
 
 // ─── Typography (High-Res POS Scale — Large & Bold for Maximum Thermal Clarity) ──
 export function getFonts(lang = 'lo') {
@@ -639,9 +640,7 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
   const cashierDisp = (!rawCashier || rawCashier.includes('\u0ec4\u0ea1\u0ec9\u0e84\u0eb3') || rawCashier.toLowerCase() === 'meii') ? 'Meii' : rawCashier;
   drawLeft(`${L.cashier} ${cashierDisp}`, K80.LEFT_MARGIN, y, FONTS.META_VAL);
 
-  const dateStr = receipt.createdAt || receipt.created_at
-    ? new Date(receipt.createdAt || receipt.created_at).toLocaleString(lang === 'vi' ? 'vi-VN' : 'lo-LA')
-    : new Date().toLocaleString();
+  const dateStr = formatDateTime24h(receipt.createdAt || receipt.created_at || Date.now());
   drawRight(`${L.date} ${dateStr}`, K80.RIGHT_EDGE, y, FONTS.META_LABEL);
   y += 34;
 
