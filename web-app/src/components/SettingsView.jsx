@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Gear,
   CurrencyCircleDollar,
@@ -6,11 +7,11 @@ import {
   UsersThree,
   Plus,
   ArrowClockwise,
+  ArrowsClockwise,
   PencilSimple,
   FloppyDisk,
   X,
   Printer,
-  HandCoins,
   CheckCircle,
   Tag,
   CaretRight,
@@ -24,12 +25,13 @@ import {
   ArrowCounterClockwise,
   SpeakerHigh,
   SpeakerSlash,
+  WarningCircle,
 } from '@phosphor-icons/react';
 import { Capacitor } from '@capacitor/core';
-import { updateExchangeRateInSupabase } from '../services/supabase';
+import { updateExchangeRateInSupabase, updateExchangeRateAndRepriceInSupabase, supabase } from '../services/supabase';
 import queryClient from '../services/queryClient';
 import { formatDots } from '../utils/formatters';
-import { getPrinterConfig, savePrinterConfig, fetchPrinterConfigFromDb, openCashDrawerDirect, testPrinterConnection } from '../services/printerService';
+import { getPrinterConfig, savePrinterConfig, fetchPrinterConfigFromDb, testPrinterConnection } from '../services/printerService';
 import { liveUpdater } from '../services/liveUpdateService';
 import {
   playSuccessBeep,
@@ -44,6 +46,7 @@ import {
 export default function SettingsView({
   exchangeRate = 0,
   setExchangeRate,
+  onRepriceInPlace,
   onAlert,
   isCloudSynced = false,
   productsCount = 0,
@@ -89,7 +92,13 @@ export default function SettingsView({
     }
   };
 
-  const handleSaveRate = async () => {
+  const [isRepriceModalOpen, setIsRepriceModalOpen] = useState(false);
+  const [isApplyingReprice, setIsApplyingReprice] = useState(false);
+
+  // HÀNH ĐỘNG 1: LƯU TỶ GIÁ THAM CHIẾU (SAVE EXCHANGE RATE ONLY)
+  // Chỉ cập nhật bảng store_settings (key = 'thb_lak_exchange_rate').
+  // TUYỆT ĐỐI KHÔNG can thiệp, không tính lại giá bất kỳ sản phẩm nào.
+  const handleSaveRateOnly = async () => {
     const val = parseInt(rateInput, 10);
     if (!val || val <= 0) {
       onAlert?.('ກະລຸນາປ້ອນອັດຕາແລກປ່ຽນທີ່ຖືກຕ້ອງ (> 0)!', 'ແຈ້ງເຕືອນ', 'warning');
@@ -97,25 +106,115 @@ export default function SettingsView({
     }
     setIsSavingRate(true);
     try {
-      await updateExchangeRateInSupabase(val);
+      const res = await updateExchangeRateInSupabase(val);
+      if (!res.success) {
+        throw new Error(res.error || 'ບໍ່ສາມາດບັນທຶກອັດຕາແລກປ່ຽນໄດ້');
+      }
       setExchangeRate?.(val);
+
+      // Đồng bộ tỷ giá tham chiếu sang các thiết bị POS khác (shouldReprice: false)
+      try {
+        supabase.channel('pos_store_events').send({
+          type: 'broadcast',
+          event: 'exchange_rate_updated',
+          payload: { rate: val, roundStep: 500, shouldReprice: false },
+        });
+        supabase.channel('pos_price_sync').send({
+          type: 'broadcast',
+          event: 'exchange_rate_updated',
+          payload: { rate: val, roundStep: 500, shouldReprice: false },
+        });
+      } catch (broadcastErr) {
+        console.warn('Realtime broadcast warning:', broadcastErr);
+      }
+
       await queryClient.invalidateQueries({ queryKey: ['exchange_rate'] });
       await queryClient.invalidateQueries({ queryKey: ['store_settings'] });
       setIsEditingRate(false);
-      onAlert?.(`ອັບເດດອັດຕາແລກປ່ຽນ: 1 ฿ = ${formatDots(val)} ₭ ສຳເລັດ!`, 'ສຳເລັດ', 'success');
+
+      playSuccessBeep();
+      onAlert?.('ບັນທຶກອັດຕາແລກປ່ຽນສຳເລັດແລ້ວ', 'ສຳເລັດ', 'success');
     } catch (err) {
+      playErrorBeep();
       onAlert?.(err.message || 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກອັດຕາແລກປ່ຽນ', 'ຂໍ້ຜິດພາດ', 'error');
     } finally {
       setIsSavingRate(false);
     }
   };
 
-  // Printer Settings State (LAN / Wi-Fi IP, Port, Paper Width, Print Method)
+  // HÀNH ĐỘNG 2: NÚT ÁP DỤNG ĐỔI GIÁ HÀNG LOẠT (MANUAL BULK REPRICE TRIGGER)
+  // Xác định tỷ giá sẽ áp dụng: ưu tiên rateInput nếu đang sửa, ngược lại lấy exchangeRate
+  const activeTargetRate = isEditingRate && parseInt(rateInput, 10) > 0
+    ? parseInt(rateInput, 10)
+    : (Number(exchangeRate) || 0);
+
+  const handleOpenRepriceModal = () => {
+    if (!activeTargetRate || activeTargetRate <= 0) {
+      onAlert?.('ກະລຸນາປ້ອນອັດຕາແລກປ່ຽນທີ່ຖືກຕ້ອງ (> 0) ກ່ອນດຳເນີນການ!', 'ແຈ້ງເຕືອນ', 'warning');
+      return;
+    }
+    setIsRepriceModalOpen(true);
+  };
+
+  const handleConfirmBulkReprice = async () => {
+    if (!activeTargetRate || activeTargetRate <= 0) {
+      onAlert?.('ກະລຸນາປ້ອນອັດຕາແລກປ່ຽນທີ່ຖືກຕ້ອງ (> 0)!', 'ແຈ້ງເຕືອນ', 'warning');
+      return;
+    }
+    setIsApplyingReprice(true);
+    try {
+      // 1. Gọi PostgreSQL RPC sync_exchange_rate_and_reprice (Zero-Egress Strategy < 1KB)
+      const res = await updateExchangeRateAndRepriceInSupabase(activeTargetRate, 500);
+      if (!res.success && res.error) {
+        throw new Error(res.error);
+      }
+
+      setExchangeRate?.(activeTargetRate);
+      if (isEditingRate) {
+        setIsEditingRate(false);
+      }
+
+      // 2. Local In-Place mutation trong RAM không re-fetch
+      onRepriceInPlace?.(activeTargetRate, 500);
+
+      // 3. Realtime Broadcast cho tất cả POS đồng bộ giá mới
+      try {
+        supabase.channel('pos_store_events').send({
+          type: 'broadcast',
+          event: 'exchange_rate_updated',
+          payload: { rate: activeTargetRate, roundStep: 500, shouldReprice: true },
+        });
+        supabase.channel('pos_price_sync').send({
+          type: 'broadcast',
+          event: 'exchange_rate_updated',
+          payload: { rate: activeTargetRate, roundStep: 500, shouldReprice: true },
+        });
+      } catch (broadcastErr) {
+        console.warn('Realtime broadcast warning:', broadcastErr);
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['exchange_rate'] });
+      await queryClient.invalidateQueries({ queryKey: ['store_settings'] });
+      setIsRepriceModalOpen(false);
+
+      const updatedCount = res?.data?.updated_count || res?.data?.updated_products || 0;
+      playSuccessBeep();
+      onAlert?.(
+        `ອັບເດດລາຄາສຳເລັດແລ້ວ ${updatedCount} ລາຍການ`,
+        'ສຳເລັດ',
+        'success'
+      );
+    } catch (err) {
+      playErrorBeep();
+      onAlert?.(err.message || 'ເກີດຂໍ້ຜິດພາດໃນການປັບລາຄາສິນຄ້າ', 'ຂໍ້ຜິດພາດ', 'error');
+    } finally {
+      setIsApplyingReprice(false);
+    }
+  };
+
+  // Printer Settings State (LAN / Wi-Fi IP, Port - Mặc định Direct Socket 80mm ESC/POS)
   const [printerIp, setPrinterIp] = useState(() => getPrinterConfig().printer_ip || getPrinterConfig().ip || '');
   const [printerPort, setPrinterPort] = useState(() => getPrinterConfig().printer_port || getPrinterConfig().port || 9100);
-  const [printerAutoCut, setPrinterAutoCut] = useState(() => getPrinterConfig().autoCut);
-  const [printerDrawerKick, setPrinterDrawerKick] = useState(() => getPrinterConfig().drawerKick);
-  const [printerMethod, setPrinterMethod] = useState(() => getPrinterConfig().printMethod || 'socket');
 
   // Load shared printer config from Supabase on mount
   useEffect(() => {
@@ -123,22 +222,9 @@ export default function SettingsView({
       if (cfg) {
         if (cfg.printer_ip) setPrinterIp(cfg.printer_ip);
         if (cfg.printer_port) setPrinterPort(cfg.printer_port);
-        if (cfg.auto_cut !== undefined) setPrinterAutoCut(cfg.auto_cut);
-        if (cfg.drawer_kick !== undefined) setPrinterDrawerKick(cfg.drawer_kick);
       }
     }).catch(() => {});
   }, []);
-
-  const [localPaperWidth, setLocalPaperWidth] = useState(() => getPrinterConfig().paperWidth || receiptPaperWidth);
-  const paperWidth = setReceiptPaperWidth ? receiptPaperWidth : localPaperWidth;
-
-  const handlePaperWidthChange = (val) => {
-    if (setReceiptPaperWidth) {
-      setReceiptPaperWidth(val);
-    }
-    setLocalPaperWidth(val);
-    savePrinterConfig({ paper_width: val });
-  };
 
   const handleSavePrinterSettings = async () => {
     const cleanIp = printerIp.trim();
@@ -408,7 +494,7 @@ export default function SettingsView({
             {/* Card 1: Currency & Exchange Rate (ອັດຕາຕົ້ນທຶນເງິນບາດ THB / LAK - Đưa lên trên cùng) */}
             <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 sm:p-5">
               <div className="flex items-center gap-2.5 mb-3.5">
-                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
                   <CurrencyCircleDollar size={20} weight="fill" />
                 </div>
                 <div className="min-w-0">
@@ -421,66 +507,105 @@ export default function SettingsView({
                 </div>
               </div>
 
-              <div className="p-3 sm:p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <span className="text-[10.5px] text-slate-500 font-semibold uppercase tracking-wider block mb-1">
-                    ອັດຕາແລກປ່ຽນປະຈຸບັນ
+              {/* HÀNH ĐỘNG 1 & 2: KHỐI TỶ GIÁ THAM CHIẾU & ĐỒNG BỘ GIÁ BÁN (REDESIGN PHẲNG, CÂN ĐỐI 100%) */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+                {/* Header label & Action Edit on the same horizontal line */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    ອັດຕາແລກປ່ຽນ (1 ฿ = ... ₭)
                   </span>
-                  {!isEditingRate ? (
-                    <span className="inline-flex items-center px-3 py-1 rounded-lg bg-amber-50 border border-amber-200/90 text-amber-900 font-mono text-base sm:text-lg font-black tracking-tight tabular-nums shadow-2xs">
-                      1 ฿ = {formatDots(exchangeRate)} ₭
-                    </span>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-mono font-bold text-slate-500">1 ฿ =</span>
-                      <input
-                        type="number"
-                        value={rateInput}
-                        onChange={(e) => setRateInput(e.target.value)}
-                        className="w-28 h-8 px-2.5 bg-white border border-teal-500 rounded-lg text-sm font-mono font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                        placeholder="0"
-                        autoFocus
-                      />
-                      <span className="text-xs font-mono font-bold text-slate-500">₭</span>
-                    </div>
-                  )}
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!isEditingRate ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingRate(true)}
+                        className="h-7 px-2.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                      >
+                        <PencilSimple size={13} weight="bold" />
+                        <span>ແກ້ໄຂອັດຕາ</span>
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRateInput(String(exchangeRate));
+                            setIsEditingRate(false);
+                          }}
+                          disabled={isSavingRate}
+                          className="h-7 px-2.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95 transition-all"
+                          title="ຍົກເລີກ"
+                        >
+                          <X size={12} weight="bold" />
+                          <span>ຍົກເລີກ</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveRateOnly}
+                          disabled={isSavingRate}
+                          className="h-7 px-3 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95 transition-all"
+                        >
+                          <FloppyDisk size={13} weight="bold" />
+                          <span>{isSavingRate ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກ'}</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                <div className="shrink-0">
-                  {!isEditingRate ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingRate(true)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-teal-700 border border-teal-200 shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
-                    >
-                      <PencilSimple size={13} weight="bold" />
-                      <span>ແກ້ໄຂ</span>
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
+                {/* Display Mode: Sleek Big Rate Value & In-Use Badge */}
+                {!isEditingRate ? (
+                  <div className="flex items-center justify-between bg-white px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs font-bold text-slate-400 font-mono">1 ฿ =</span>
+                      <span className="text-xl font-black font-mono text-slate-900 tracking-tight">
+                        {formatDots(exchangeRate)}
+                      </span>
+                      <span className="text-xs font-bold text-slate-500">₭</span>
+                    </div>
+                    <span className="text-[10.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      ກຳລັງໃຊ້ງານ
+                    </span>
+                  </div>
+                ) : (
+                  /* Edit Mode: Integrated Input Group only, NO separate buttons underneath */
+                  <div className="flex items-center bg-white rounded-xl border-2 border-blue-500 shadow-xs overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20">
+                    <span className="px-3 py-2 text-xs font-bold text-slate-500 font-mono select-none bg-slate-100/70 border-r border-slate-200">
+                      1 ฿ =
+                    </span>
+                    <input
+                      type="number"
+                      value={rateInput}
+                      onChange={(e) => setRateInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveRateOnly();
+                        if (e.key === 'Escape') {
                           setRateInput(String(exchangeRate));
                           setIsEditingRate(false);
-                        }}
-                        disabled={isSavingRate}
-                        className="h-8 px-2.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 cursor-pointer"
-                        title="ຍົກເລີກ"
-                      >
-                        <X size={14} weight="bold" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveRate}
-                        disabled={isSavingRate}
-                        className="h-8 px-3 rounded-lg text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95 transition-all"
-                      >
-                        <FloppyDisk size={14} weight="bold" />
-                        <span>{isSavingRate ? '...' : 'ບັນທຶກ'}</span>
-                      </button>
-                    </div>
-                  )}
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 text-base font-black font-mono text-slate-900 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      placeholder="0"
+                      autoFocus
+                    />
+                    <span className="px-3 py-2 text-xs font-bold text-slate-500 select-none bg-slate-100/70 border-l border-slate-200">
+                      ₭
+                    </span>
+                  </div>
+                )}
+
+                {/* HÀNH ĐỘNG 2: NÚT ÁP DỤNG ĐỔI GIÁ HÀNG LOẠT (MÀU XANH DƯƠNG, FULL-WIDTH CÂN ĐỐI) */}
+                <div className="pt-2 border-t border-slate-200/60">
+                  <button
+                    type="button"
+                    onClick={handleOpenRepriceModal}
+                    disabled={isSavingRate || isApplyingReprice}
+                    className="w-full h-9 px-4 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-xs flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    <ArrowsClockwise size={15} weight="bold" className={isApplyingReprice ? 'animate-spin' : ''} />
+                    <span>ປັບລາຄາຂາຍສິນຄ້າທັງໝົດຕາມອັດຕານີ້</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -624,93 +749,7 @@ export default function SettingsView({
             </div>
 
             {/* Card 2: Master Data (Single Divided List Group) */}
-            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 sm:p-5">
-              <div className="flex items-center gap-2.5 mb-3.5">
-                <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 border border-slate-200">
-                  <Folders size={20} weight="bold" />
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                    ຈັດການຂໍ້ມູນຫຼັກ (Master Data)
-                  </h2>
-                  <p className="text-[11.5px] text-slate-500 truncate">
-                    ໝວດໝູ່ສິນຄ້າ, ຜູ້ສະໜອງ ແລະ ການເພີ່ມສິນຄ້າໃໝ່
-                  </p>
-                </div>
-              </div>
-
-              {/* Divided List Group */}
-              <div className="border border-slate-200/90 rounded-xl divide-y divide-slate-100 bg-white overflow-hidden shadow-2xs">
-                {onOpenCategoryManager && (
-                  <button
-                    type="button"
-                    onClick={onOpenCategoryManager}
-                    className="w-full flex items-center justify-between p-3 sm:py-3.5 sm:px-4 hover:bg-slate-50/90 transition-colors text-left cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100">
-                        <Tag size={16} weight="bold" />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-xs sm:text-[13px] font-bold text-slate-800 group-hover:text-teal-700 transition-colors block truncate">
-                          ຈັດການໝວດໝູ່ສິນຄ້າ (Categories)
-                        </span>
-                        <p className="text-[11px] text-slate-500 truncate">
-                          ເພີ່ມ, ແກ້ໄຂ ແລະ ຈັດລະບຽບກຸ່ມສິນຄ້າ
-                        </p>
-                      </div>
-                    </div>
-                    <CaretRight size={15} weight="bold" className="text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
-                  </button>
-                )}
-
-                {onOpenSupplierManager && (
-                  <button
-                    type="button"
-                    onClick={onOpenSupplierManager}
-                    className="w-full flex items-center justify-between p-3 sm:py-3.5 sm:px-4 hover:bg-slate-50/90 transition-colors text-left cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100">
-                        <UsersThree size={16} weight="bold" />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-xs sm:text-[13px] font-bold text-slate-800 group-hover:text-teal-700 transition-colors block truncate">
-                          ຈັດການຜູ້ສະໜອງ (Suppliers)
-                        </span>
-                        <p className="text-[11px] text-slate-500 truncate">
-                          ລາຍຊື່ຜູ້ສະໜອງ, ເບີໂທ ແລະ ຍອດໜີ້ຄ້າງຈ່າຍ
-                        </p>
-                      </div>
-                    </div>
-                    <CaretRight size={15} weight="bold" className="text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
-                  </button>
-                )}
-
-                {onAddNewProduct && (
-                  <button
-                    type="button"
-                    onClick={onAddNewProduct}
-                    className="w-full flex items-center justify-between p-3 sm:py-3.5 sm:px-4 hover:bg-slate-50/90 transition-colors text-left cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100">
-                        <Plus size={16} weight="bold" />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-xs sm:text-[13px] font-bold text-slate-800 group-hover:text-teal-700 transition-colors block truncate">
-                          ເພີ່ມສິນຄ້າໃໝ່ (Add Product)
-                        </span>
-                        <p className="text-[11px] text-slate-500 truncate">
-                          ລົງທະບຽນບາໂຄດ, ລາຄາ ແລະ 3 ລະດັບຫົວໜ່ວຍ
-                        </p>
-                      </div>
-                    </div>
-                    <CaretRight size={15} weight="bold" className="text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
-                  </button>
-                )}
-              </div>
-            </div>
+            
           </div>
 
           {/* ================================================================ */}
@@ -784,122 +823,22 @@ export default function SettingsView({
                 </div>
               </div>
 
-              {/* Paper Width — Hardcoded 80mm K80 */}
-              <div className="mb-3.5">
-                <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
-                  ຂະໜາດເຈ້ຍພິມ (Paper Width) — K80 ມາດຕະຖານ
-                </label>
-                <div className="h-14 px-3 rounded-xl border bg-teal-50 border-teal-500 text-teal-900 ring-1 ring-teal-500 flex items-center justify-between">
-                  <div className="min-w-0 pr-1">
-                    <span className="font-bold text-xs block truncate">80 mm K80 (ES-8803WA)</span>
-                    <span className="text-[10px] text-slate-500 block truncate">
-                      ມາດຕະຖານຕັ້ງໂຕະ (576 dots) — ລັອກໄວ້
-                    </span>
-                  </div>
-                  <CheckCircle size={17} weight="fill" className="text-teal-600 shrink-0" />
-                </div>
-              </div>
-
-              {/* Print Engine Mode: Native Spooler (Vector) vs Direct Socket */}
-              <div className="mb-3.5">
-                <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
-                  ຮູບແບບການພິມເລີ່ມຕົ້ນ (Default Print Mode)
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPrinterMethod('spooler')}
-                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                      printerMethod === 'spooler'
-                        ? 'bg-indigo-50 border-indigo-500 text-indigo-950 ring-1 ring-indigo-500 shadow-2xs'
-                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold block">🖨️ AirPrint / Spooler</span>
-                      {printerMethod === 'spooler' && <CheckCircle size={15} weight="fill" className="text-indigo-600" />}
-                    </div>
-                    <span className="text-[10px] text-slate-500 block mt-0.5">
-                      ຕົວໜັງສື Vector ຄົມຊັດ ຄື Word
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPrinterMethod('socket')}
-                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                      printerMethod === 'socket'
-                        ? 'bg-teal-50 border-teal-500 text-teal-950 ring-1 ring-teal-500 shadow-2xs'
-                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold block">⚡ Direct Socket</span>
-                      {printerMethod === 'socket' && <CheckCircle size={15} weight="fill" className="text-teal-600" />}
-                    </div>
-                    <span className="text-[10px] text-slate-500 block mt-0.5">
-                      ພິມງຽບໆ Port 9100
-                    </span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Hardware Toggles: Drawer Kick & Auto-Cut (Horizontal) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                <label className="flex items-center gap-2 p-2 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/80 cursor-pointer text-[11px] font-bold text-slate-800 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={printerDrawerKick}
-                    onChange={(e) => setPrinterDrawerKick(e.target.checked)}
-                    className="w-3.5 h-3.5 text-teal-600 rounded focus:ring-teal-500 accent-teal-600 shrink-0"
-                  />
-                  <span className="truncate">ເປີດລິ້ນຊັກເງິນ (Drawer Kick)</span>
-                </label>
-
-                <label className="flex items-center gap-2 p-2 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/80 cursor-pointer text-[11px] font-bold text-slate-800 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={printerAutoCut}
-                    onChange={(e) => setPrinterAutoCut(e.target.checked)}
-                    className="w-3.5 h-3.5 text-teal-600 rounded focus:ring-teal-500 accent-teal-600 shrink-0"
-                  />
-                  <span className="truncate">ຕັດເຈ້ຍອັດຕະໂນມັດ (Auto Cut)</span>
-                </label>
-              </div>
-
-              {/* Action Bar: Save & Kick Drawer Test */}
-              <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleTestPrinter}
-                    disabled={isTestingPrinter}
-                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 disabled:opacity-60 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
-                    title="ທົດສອບການເຊື່ອມຕໍ່ IP ເຄື່ອງພິມ"
-                  >
-                    {isTestingPrinter ? (
-                      <CircleNotch size={14} className="animate-spin text-teal-600" />
-                    ) : (
-                      <Printer size={14} weight="bold" />
-                    )}
-                    <span>{isTestingPrinter ? 'ກຳລັງທົດສອບ...' : 'ທົດສອບເຄື່ອງພິມ'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleTestKickDrawer}
-                    disabled={isTestingDrawer}
-                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 disabled:opacity-60 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
-                    title="ທົດສອບຄຳສັ່ງເປີດລິ້ນຊັກເງິນ ESC/POS"
-                  >
-                    {isTestingDrawer ? (
-                      <CircleNotch size={14} className="animate-spin text-teal-600" />
-                    ) : (
-                      <HandCoins size={14} weight="bold" />
-                    )}
-                    <span>{isTestingDrawer ? 'ກຳລັງເປີດ...' : 'ທົດສອບລິ້ນຊັກ'}</span>
-                  </button>
-                </div>
+              {/* Action Bar: Save & Test Printer */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={handleTestPrinter}
+                  disabled={isTestingPrinter}
+                  className="h-8 px-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 disabled:opacity-60 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                  title="ທົດສອບການເຊື່ອມຕໍ່ IP ເຄື່ອງພິມ"
+                >
+                  {isTestingPrinter ? (
+                    <CircleNotch size={14} className="animate-spin text-teal-600" />
+                  ) : (
+                    <Printer size={14} weight="bold" />
+                  )}
+                  <span>{isTestingPrinter ? 'ກຳລັງທົດສອບ...' : 'ທົດສອບເຄື່ອງພິມ'}</span>
+                </button>
 
                 <button
                   type="button"
@@ -1080,6 +1019,98 @@ export default function SettingsView({
           </div>
         </div>
       </div>
+
+      {/* Modal Xác nhận Cập nhật giá bán toàn bộ sản phẩm (Confirmation Dialog) */}
+      {isRepriceModalOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => !isApplyingReprice && setIsRepriceModalOpen(false)}
+        >
+          <div
+            className="relative max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                  <ArrowsClockwise size={20} weight="bold" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  ຢືນຢັນການປັບລາຄາສິນຄ້າທັງໝົດ
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isApplyingReprice && setIsRepriceModalOpen(false)}
+                disabled={isApplyingReprice}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-white/80 cursor-pointer disabled:opacity-40"
+              >
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4 text-sm text-slate-600">
+              <p className="leading-relaxed">
+                ລະບົບຈະຄິດໄລ່ ແລະ ປັບລາຄາຂາຍໃໝ່ສຳລັບທຸກສິນຄ້າທີ່ຜູກກັບເງິນບາດ ຕາມອັດຕາແລກປ່ຽນ <span className="font-mono font-black text-slate-900 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">1 ฿ = {formatDots(activeTargetRate)} ₭</span>. ທ່ານຕ້ອງການດຳເນີນການຕໍ່ບໍ່?
+              </p>
+
+              <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>ອັດຕາແລກປ່ຽນໃໝ່:</span>
+                  <span className="font-mono font-bold text-slate-900">1 ฿ = {formatDots(activeTargetRate)} ₭</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>ຫຼັກການປັດເສດ:</span>
+                  <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                    ຂັ້ນລະ 500 ₭ (Retail Step)
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>ການປະມວນຜົນ:</span>
+                  <span className="font-mono font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                    Zero-Egress RPC (&lt; 1KB)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsRepriceModalOpen(false)}
+                disabled={isApplyingReprice}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 cursor-pointer disabled:opacity-50"
+              >
+                ຍົກເລີກ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBulkReprice}
+                disabled={isApplyingReprice}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 active:bg-slate-950 shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isApplyingReprice ? (
+                  <>
+                    <CircleNotch size={14} weight="bold" className="animate-spin" />
+                    <span>ກຳລັງປັບລາຄາ...</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowsClockwise size={14} weight="bold" />
+                    <span>ຢືນຢັນປັບລາຄາ</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

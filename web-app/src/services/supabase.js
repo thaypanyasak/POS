@@ -223,6 +223,42 @@ export async function updateExchangeRateInSupabase(newRate) {
   });
 }
 
+/**
+ * Cập nhật tỷ giá và tự động tính lại giá bán cho toàn bộ sản phẩm (Zero-Egress Strategy via RPC)
+ * Thực thi 100% trong PostgreSQL - không tải lại danh sách sản phẩm về client
+ */
+export async function syncExchangeRateAndRepriceInSupabase(newRate, roundStep = 500) {
+  const rateNum = Number(newRate);
+  if (!rateNum || rateNum <= 0) {
+    return { success: false, error: 'Tỷ giá phải là số dương lớn hơn 0' };
+  }
+  try {
+    let { data, error } = await supabase.rpc('sync_exchange_rate_and_reprice', {
+      p_new_rate: rateNum,
+      p_round_step: roundStep,
+    });
+    if (error) {
+      const retryRes = await supabase.rpc('update_exchange_rate_and_reprice', {
+        p_new_rate: rateNum,
+        p_round_step: roundStep,
+      });
+      data = retryRes.data;
+      error = retryRes.error;
+    }
+    if (error) {
+      console.warn('RPC sync_exchange_rate_and_reprice warning, falling back to standard setting update:', error);
+      const fallbackRes = await updateExchangeRateInSupabase(rateNum);
+      return fallbackRes;
+    }
+    return { success: true, data };
+  } catch (err) {
+    console.error('syncExchangeRateAndRepriceInSupabase exception:', err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+export const updateExchangeRateAndRepriceInSupabase = syncExchangeRateAndRepriceInSupabase;
+
 // Global cached crate deposit settings from store_settings (synchronized across all devices)
 let cachedCrateDeposits = null;
 
@@ -294,6 +330,13 @@ export function invalidateProductsCache() {
   } catch (_) {}
 }
 
+export function setCachedProductsInMemory(products) {
+  if (Array.isArray(products)) {
+    cachedProductsInMemory = products;
+    cachedProductsTimestamp = Date.now();
+  }
+}
+
 /**
  * 1. Fetch all products with their associated multi-tier units from Supabase (Full Scale 3,000+ support)
  * Features Stale-While-Revalidate caching, in-flight deduplication, selective column projection,
@@ -349,12 +392,23 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
       }
 
       // 1. Fetch ALL products using chunked range queries with explicit column projection (0 HTTP 400 errors)
-      const res = await fetchAllRowsWithRange(() =>
+      let res = await fetchAllRowsWithRange(() =>
         supabase
           .from('products')
-          .select('id, name, name_vi, barcode, image_url, category, category_id, base_unit, cost_lak, cost_thb, cost_per_base_unit, track_stock, current_stock_base_units, allow_negative_stock, is_deleted, created_at, updated_at')
+          .select('id, name, name_vi, barcode, image_url, category, category_id, base_unit, cost_lak, cost_thb, cost_currency, is_auto_currency_reprice, cost_per_base_unit, track_stock, current_stock_base_units, allow_negative_stock, is_deleted, created_at, updated_at')
           .order('created_at', { ascending: false })
       );
+
+      // Safe fallback if cost_currency / is_auto_currency_reprice not yet in schema cache
+      if (res.error && (res.error.message?.includes('cost_currency') || res.error.message?.includes('is_auto_currency_reprice'))) {
+        res = await fetchAllRowsWithRange(() =>
+          supabase
+            .from('products')
+            .select('id, name, name_vi, barcode, image_url, category, category_id, base_unit, cost_lak, cost_thb, cost_per_base_unit, track_stock, current_stock_base_units, allow_negative_stock, is_deleted, created_at, updated_at')
+            .order('created_at', { ascending: false })
+        );
+      }
+
       const prodData = res.data;
       const prodErr = res.error;
 
@@ -367,11 +421,22 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
       const activeProducts = prodData.filter((p) => p.is_deleted !== true);
 
       // 2. Fetch product_units using explicit column projection
-      const { data: unitsData, error: unitsErr } = await fetchAllRowsWithRange(() =>
+      let { data: unitsData, error: unitsErr } = await fetchAllRowsWithRange(() =>
         supabase
           .from('product_units')
-          .select('id, product_id, unit_name, multiplier, retail_price, wholesale_price, price_2, price_3, barcode, is_base_unit')
+          .select('id, product_id, unit_name, multiplier, retail_price, wholesale_price, price_2, price_3, price_ratio_1, price_ratio_2, price_ratio_3, barcode, is_base_unit')
       );
+
+      // Safe fallback if price_ratio columns not yet in schema cache
+      if (unitsErr && (unitsErr.message?.includes('price_ratio_1') || unitsErr.message?.includes('price_ratio'))) {
+        const fallbackUnitsRes = await fetchAllRowsWithRange(() =>
+          supabase
+            .from('product_units')
+            .select('id, product_id, unit_name, multiplier, retail_price, wholesale_price, price_2, price_3, barcode, is_base_unit')
+        );
+        unitsData = fallbackUnitsRes.data;
+        unitsErr = fallbackUnitsRes.error;
+      }
 
       if (unitsErr || !unitsData) {
         console.warn('Could not fetch product_units from Supabase:', unitsErr);
@@ -427,6 +492,9 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
           price_3: Number(u.price_3) || 0,
           price2: Number(u.price_2) || 0,
           price3: Number(u.price_3) || 0,
+          price_ratio_1: Number(u.price_ratio_1) || 0,
+          price_ratio_2: Number(u.price_ratio_2) || 0,
+          price_ratio_3: Number(u.price_ratio_3) || 0,
           barcode: u.barcode || null,
           isBaseUnit: Boolean(u.is_base_unit),
           tier: resolvedTier,
@@ -557,6 +625,12 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
         costPerBaseUnit: baseCostKip,
         costBaht: Number(costBaht) || 0,
         costKip: Number(costKip) || 0,
+        cost_thb: Number(costBaht) || 0,
+        cost_lak: Number(costKip) || 0,
+        cost_currency: p.cost_currency || (Number(costBaht) > 0 ? 'THB' : (Number(costKip) > 0 ? 'LAK' : 'THB')),
+        costCurrency: p.cost_currency || (Number(costBaht) > 0 ? 'THB' : (Number(costKip) > 0 ? 'LAK' : 'THB')),
+        is_auto_currency_reprice: p.is_auto_currency_reprice !== undefined ? Boolean(p.is_auto_currency_reprice) : false,
+        isAutoCurrencyReprice: p.is_auto_currency_reprice !== undefined ? Boolean(p.is_auto_currency_reprice) : false,
         tier1_active: isCartonActive,
         tier2_active: isPackActive,
         tier3_active: isPieceActive,
@@ -676,11 +750,22 @@ export async function saveProductToSupabase(product) {
     if (finalCostLak !== undefined && finalCostLak !== null && finalCostLak !== '') {
       prodPayload.cost_lak = Math.round(Number(finalCostLak) || 0);
     }
+    prodPayload.cost_currency = product.cost_currency || product.costCurrency || 'THB';
+    prodPayload.is_auto_currency_reprice = product.is_auto_currency_reprice !== undefined
+      ? Boolean(product.is_auto_currency_reprice)
+      : (product.isAutoCurrencyReprice !== undefined ? Boolean(product.isAutoCurrencyReprice) : false);
 
     let { error: pErr } = await supabase.from('products').upsert(prodPayload);
 
-    // If optional columns (name_vi, cost_thb, cost_lak, category_id) do not exist yet in schema cache, safely retry without them
-    if (pErr && pErr.message && (pErr.message.includes('name_vi') || pErr.message.includes('cost_thb') || pErr.message.includes('cost_lak') || pErr.message.includes('category_id'))) {
+    // If optional columns (name_vi, cost_thb, cost_lak, category_id, cost_currency, is_auto_currency_reprice) do not exist yet in schema cache, safely retry without them
+    if (pErr && pErr.message && (
+      pErr.message.includes('name_vi') ||
+      pErr.message.includes('cost_thb') ||
+      pErr.message.includes('cost_lak') ||
+      pErr.message.includes('category_id') ||
+      pErr.message.includes('cost_currency') ||
+      pErr.message.includes('is_auto_currency_reprice')
+    )) {
       if (pErr.message.includes('name_vi')) {
         delete prodPayload.name_vi;
       }
@@ -692,6 +777,12 @@ export async function saveProductToSupabase(product) {
       }
       if (pErr.message.includes('category_id')) {
         delete prodPayload.category_id;
+      }
+      if (pErr.message.includes('cost_currency')) {
+        delete prodPayload.cost_currency;
+      }
+      if (pErr.message.includes('is_auto_currency_reprice')) {
+        delete prodPayload.is_auto_currency_reprice;
       }
       const retryRes = await supabase.from('products').upsert(prodPayload);
       pErr = retryRes.error;
@@ -714,15 +805,26 @@ export async function saveProductToSupabase(product) {
         wholesale_price: Number(u.wholesalePrice) || 0,
         price_2: Number(u.price_2 ?? u.price2 ?? 0),
         price_3: Number(u.price_3 ?? u.price3 ?? 0),
+        price_ratio_1: Number(u.price_ratio_1 ?? u.priceRatio1 ?? 0),
+        price_ratio_2: Number(u.price_ratio_2 ?? u.priceRatio2 ?? 0),
+        price_ratio_3: Number(u.price_ratio_3 ?? u.priceRatio3 ?? 0),
         barcode: u.barcode || null,
         is_base_unit: Boolean(u.isBaseUnit),
       }));
 
       // Upsert active units in-place without deleting to prevent Foreign Key Violation
       let { error: uErr } = await supabase.from('product_units').upsert(unitsPayload, { onConflict: 'id' });
-      if (uErr && uErr.message && (uErr.message.includes('price_2') || uErr.message.includes('price_3') || uErr.message.includes('column') || uErr.message.includes('schema cache'))) {
-        // Safe retry without price_2/price_3 if columns not yet migrated in Supabase
-        const fallbackUnits = unitsPayload.map(({ price_2, price_3, ...rest }) => rest);
+      if (uErr && uErr.message && (
+        uErr.message.includes('price_2') ||
+        uErr.message.includes('price_3') ||
+        uErr.message.includes('price_ratio_1') ||
+        uErr.message.includes('price_ratio_2') ||
+        uErr.message.includes('price_ratio_3') ||
+        uErr.message.includes('column') ||
+        uErr.message.includes('schema cache')
+      )) {
+        // Safe retry without newer columns if not yet migrated in Supabase
+        const fallbackUnits = unitsPayload.map(({ price_2, price_3, price_ratio_1, price_ratio_2, price_ratio_3, ...rest }) => rest);
         const retryRes = await supabase.from('product_units').upsert(fallbackUnits, { onConflict: 'id' });
         uErr = retryRes.error;
       }
@@ -3828,6 +3930,166 @@ export async function updateOnlineOrderStatusInSupabase(orderId, newStatus, extr
     return { success: true };
   } catch (err) {
     console.error('[OnlineOrder] Error updating online order status:', err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Zero-Egress Realtime Broadcast for POS Terminal Price Sync
+ * Sends minimal delta payload over WebSocket without any REST API request.
+ */
+export async function broadcastPriceUpdate(payload) {
+  try {
+    const channel = supabase.channel('pos_price_sync');
+    await channel.send({
+      type: 'broadcast',
+      event: 'price_updated',
+      payload,
+    });
+  } catch (err) {
+    console.warn('[Realtime] Failed to broadcast price update:', err);
+  }
+}
+
+/**
+ * Zero-Egress Product Unit Price Batch Mutation
+ * - Target: product_units table (id, retail_price, price_2, wholesale_price, price_3)
+ * - Strict Zero-Egress: Never appends .select(). Returns HTTP 200/204 empty body (0 KB egress).
+ * - Never calls fetchProducts() or triggers re-fetch.
+ * - Mutates cachedProductsInMemory in-place.
+ * - Broadcasts price_updated event to all other POS terminals via pos_price_sync channel.
+ */
+export async function updateProductUnitPricesZeroEgress(dirtyUnits) {
+  if (!dirtyUnits || !Array.isArray(dirtyUnits) || dirtyUnits.length === 0) {
+    return { success: true, count: 0, payload: [] };
+  }
+
+  // Pre-build O(1) lookup map from in-memory cache to resolve product_id and unit_name for PostgreSQL NOT NULL constraint
+  const cacheLookupMap = new Map();
+  if (cachedProductsInMemory && Array.isArray(cachedProductsInMemory)) {
+    cachedProductsInMemory.forEach((prod) => {
+      if (prod.units && Array.isArray(prod.units)) {
+        const maxMult = Math.max(...prod.units.map((un) => Number(un.multiplier) || 1), 1);
+        const prodCostLak = Number(prod.cost_lak || prod.costKip) || 0;
+        prod.units.forEach((un) => {
+          const mult = Number(un.multiplier) || 1;
+          const uCost = (prodCostLak / maxMult) * mult;
+          cacheLookupMap.set(un.id, {
+            productId: un.productId || un.product_id || prod.id,
+            unitName: un.unitName || un.unit_name,
+            multiplier: un.multiplier,
+            unitCostLak: uCost,
+          });
+        });
+      }
+    });
+  }
+
+  const payload = dirtyUnits.map((u) => {
+    const cachedInfo = cacheLookupMap.get(u.id);
+    const productId = u.product_id || u.productId || cachedInfo?.productId;
+    const unitName = u.unit_name || u.unitName || cachedInfo?.unitName;
+    const multiplier = u.multiplier !== undefined ? u.multiplier : cachedInfo?.multiplier;
+
+    const item = {
+      id: u.id,
+    };
+
+    // Provide required NOT NULL fields to satisfy PostgreSQL INSERT clause in UPSERT
+    if (productId) item.product_id = productId;
+    if (unitName) item.unit_name = unitName;
+    if (multiplier !== undefined) item.multiplier = Number(multiplier) || 1;
+
+    if (u.retail_price !== undefined) item.retail_price = Number(u.retail_price) || 0;
+    if (u.price_2 !== undefined) {
+      item.price_2 = Number(u.price_2) || 0;
+      item.wholesale_price = item.price_2;
+    } else if (u.wholesale_price !== undefined) {
+      item.wholesale_price = Number(u.wholesale_price) || 0;
+      item.price_2 = item.wholesale_price;
+    }
+    if (u.price_3 !== undefined) item.price_3 = Number(u.price_3) || 0;
+
+    // Automatically recalculate price ratio if unit cost is known
+    if (cachedInfo?.unitCostLak > 0) {
+      if (item.retail_price > 0) item.price_ratio_1 = Number((item.retail_price / cachedInfo.unitCostLak).toFixed(4));
+      if (item.price_2 > 0) item.price_ratio_2 = Number((item.price_2 / cachedInfo.unitCostLak).toFixed(4));
+      if (item.price_3 > 0) item.price_ratio_3 = Number((item.price_3 / cachedInfo.unitCostLak).toFixed(4));
+    }
+
+    return item;
+  });
+
+  try {
+    // 1. Zero-Egress upsert to Supabase product_units (WITHOUT .select())
+    let { error: uErr } = await supabase
+      .from('product_units')
+      .upsert(payload, { onConflict: 'id' });
+
+    // Fallback A: If upsert complains about missing NOT NULL columns (e.g. product_id), use individual parallel PATCH/UPDATE
+    if (uErr && (uErr.message?.includes('not-null') || uErr.message?.includes('product_id') || uErr.message?.includes('null value in column'))) {
+      console.warn('[ZeroEgress] Upsert failed with NOT NULL constraint, executing parallel zero-egress updates:', uErr.message);
+      const updatePromises = payload.map((pItem) => {
+        const updateFields = {};
+        if (pItem.retail_price !== undefined) updateFields.retail_price = pItem.retail_price;
+        if (pItem.price_2 !== undefined) {
+          updateFields.price_2 = pItem.price_2;
+          updateFields.wholesale_price = pItem.price_2;
+        } else if (pItem.wholesale_price !== undefined) {
+          updateFields.wholesale_price = pItem.wholesale_price;
+          updateFields.price_2 = pItem.wholesale_price;
+        }
+        if (pItem.price_3 !== undefined) updateFields.price_3 = pItem.price_3;
+
+        return supabase.from('product_units').update(updateFields).eq('id', pItem.id);
+      });
+      const results = await Promise.all(updatePromises);
+      const failed = results.find((r) => r.error);
+      uErr = failed ? failed.error : null;
+    }
+
+    // Fallback B: If price_2 / price_3 columns do not exist in older schema
+    if (uErr && uErr.message && (uErr.message.includes('price_2') || uErr.message.includes('price_3') || uErr.message.includes('column') || uErr.message.includes('schema cache'))) {
+      const fallbackPayload = payload.map(({ price_2, price_3, ...rest }) => rest);
+      const retry = await supabase.from('product_units').upsert(fallbackPayload, { onConflict: 'id' });
+      uErr = retry.error;
+    }
+
+    if (uErr) {
+      console.error('[ZeroEgress] Product units upsert error:', uErr);
+      return { success: false, error: uErr.message || JSON.stringify(uErr) };
+    }
+
+    // 2. In-place memory cache mutation (0 network request)
+    if (cachedProductsInMemory && Array.isArray(cachedProductsInMemory)) {
+      const unitPriceMap = new Map(payload.map((u) => [u.id, u]));
+      cachedProductsInMemory.forEach((prod) => {
+        if (prod.units && Array.isArray(prod.units)) {
+          prod.units.forEach((unit) => {
+            if (unitPriceMap.has(unit.id)) {
+              const delta = unitPriceMap.get(unit.id);
+              if (delta.retail_price !== undefined) unit.retailPrice = delta.retail_price;
+              if (delta.price_2 !== undefined) {
+                unit.price_2 = delta.price_2;
+                unit.price2 = delta.price_2;
+                unit.wholesalePrice = delta.price_2;
+              }
+              if (delta.price_3 !== undefined) {
+                unit.price_3 = delta.price_3;
+                unit.price3 = delta.price_3;
+              }
+            }
+          });
+        }
+      });
+    }
+
+    // 3. P2P Realtime Broadcast to sync other iPads over WebSocket (0 REST API egress)
+    broadcastPriceUpdate(payload);
+
+    return { success: true, count: payload.length, payload };
+  } catch (err) {
+    console.error('[ZeroEgress] updateProductUnitPricesZeroEgress exception:', err);
     return { success: false, error: err.message || String(err) };
   }
 }

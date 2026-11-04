@@ -478,6 +478,16 @@ export default function PosScreen({
   const handleApplyPriceOverride = (productId, unitId, newPrice, reason) => {
     setCart(
       cart.map((item) => {
+        if (item.isBundle && (item.id === productId || item.bundleId === productId)) {
+          const parsedPrice = Number(newPrice) || 0;
+          return {
+            ...item,
+            customPrice: parsedPrice,
+            custom_price: parsedPrice,
+            overrideReason: reason || 'ປັບລາຄາພິເສດ',
+            lineTotal: parsedPrice,
+          };
+        }
         if (!item.isBundle && item.product?.id === productId && (item.unit?.id === unitId || !unitId)) {
           const parsedPrice = Number(newPrice) || 0;
           const qty = Number(item.quantity) || 1;
@@ -492,6 +502,7 @@ export default function PosScreen({
           return {
             ...item,
             customPrice: parsedPrice,
+            custom_price: parsedPrice,
             unitPrice: parsedPrice,
             lineTotal: newLineTotal,
             unit: origUnit,
@@ -506,8 +517,21 @@ export default function PosScreen({
   const handleResetPriceOverride = (productId, unitId) => {
     setCart(
       cart.map((item) => {
+        if (item.isBundle && (item.id === productId || item.bundleId === productId)) {
+          const { customPrice, custom_price, overrideReason, ...rest } = item;
+          const cartonCount = Number(item.cartonQty ?? 0);
+          const cartonPrice = Number(item.cartonPrice || 0);
+          const looseTotal = Number(item.loosePriceTotal || 0);
+          const standardLinePrice = (cartonCount * cartonPrice) + looseTotal;
+          return {
+            ...rest,
+            customPrice: null,
+            custom_price: null,
+            lineTotal: standardLinePrice,
+          };
+        }
         if (!item.isBundle && item.product?.id === productId && (item.unit?.id === unitId || !unitId)) {
-          const { customPrice, overrideReason, ...rest } = item;
+          const { customPrice, custom_price, overrideReason, ...rest } = item;
           const origProduct = (products || []).find((p) => p.id === item.product?.id) || item.product;
           const origUnit = origProduct?.units?.find((u) => u.id === item.unit?.id || u.unitName === item.unit?.unitName) || item.unit;
           const tierPrice = getEffectiveUnitPrice(origUnit, item.selectedPriceTier || 1);
@@ -520,6 +544,7 @@ export default function PosScreen({
           return {
             ...rest,
             customPrice: null,
+            custom_price: null,
             unitPrice: standardPrice,
             lineTotal: (standardPrice * qty) + crateFee,
             unit: origUnit,
@@ -962,7 +987,7 @@ export default function PosScreen({
 
                       {/* Right: DUY NHẤT 1 GIÁ NÚT BẤM [ <Tag /> {effectivePrice} ₭ <CaretDown /> ] */}
                       <div className="flex items-center gap-1 shrink-0">
-                        <div className="relative">
+                        <div className="relative flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => {
@@ -981,6 +1006,18 @@ export default function PosScreen({
                             <Tag size={11} weight="bold" className={isOverridden ? 'text-amber-800' : 'text-primary'} />
                             <span className="font-mono tabular-nums">{formatDots(effectivePrice)} ₭</span>
                             <CaretDown size={10} weight="bold" className="opacity-70" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenPriceMenuKey(null);
+                              setOverrideModalItem(item);
+                            }}
+                            className="h-6 w-6 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center justify-center active:scale-95 transition-all shadow-2xs cursor-pointer shrink-0"
+                            title="ເປີດແປ້ນພິມ Numpad ປັບລາຄາດ່ວນ (One-off Cart Override)"
+                          >
+                            <PencilSimple size={11} weight="bold" />
                           </button>
 
                           {/* Price popover: Only real price and custom price */}
@@ -1092,6 +1129,17 @@ export default function PosScreen({
                                       ຣີເຊັດກັບລາຄາເດີມ
                                     </button>
                                   )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenPriceMenuKey(null);
+                                      setOverrideModalItem(item);
+                                    }}
+                                    className="w-full h-9 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-98 transition-all mt-1"
+                                  >
+                                    <PencilSimple size={14} weight="bold" />
+                                    <span>ແປ້ນພິມ Numpad (ປັບລາຄາໄວ)</span>
+                                  </button>
                                 </div>
                               </div>
                             </>
@@ -1256,7 +1304,7 @@ export default function PosScreen({
                     {/* Bên phải: NƠI ĐẶT NÚT CHỌN GIÁ DUY NHẤT dạng [ {đơn_giá} ₭ ▾ ] + Icon Thùng rác */}
                     <div className="flex items-center gap-1 shrink-0">
                       {/* NÚT CHỌN GIÁ DUY NHẤT */}
-                      <div className="relative">
+                      <div className="relative flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => {
@@ -1275,6 +1323,18 @@ export default function PosScreen({
                           <Tag size={11} weight="bold" className={isOverridden ? 'text-amber-800' : 'text-primary'} />
                           <span className="font-mono tabular-nums">{formatDots(effectivePrice)} ₭</span>
                           <CaretDown size={10} weight="bold" className="opacity-70" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenPriceMenuKey(null);
+                            setOverrideModalItem(item);
+                          }}
+                          className="h-6 w-6 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 flex items-center justify-center active:scale-95 transition-all shadow-2xs cursor-pointer shrink-0"
+                          title="ເປີດແປ້ນພິມ Numpad ປັບລາຄາດ່ວນ (One-off Cart Override)"
+                        >
+                          <PencilSimple size={11} weight="bold" />
                         </button>
 
                         {/* MENU DROPDOWN POPOVER ALL-IN-ONE (bắt buộc neo theo mép phải right-0) */}
@@ -1420,6 +1480,17 @@ export default function PosScreen({
                                     ຣີເຊັດກັບລາຄາເດີມ
                                   </button>
                                 )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenPriceMenuKey(null);
+                                    setOverrideModalItem(item);
+                                  }}
+                                  className="w-full h-9 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-98 transition-all mt-1"
+                                >
+                                  <PencilSimple size={14} weight="bold" />
+                                  <span>ແປ້ນພິມ Numpad (ປັບລາຄາໄວ)</span>
+                                </button>
                               </div>
                             </div>
                           </>

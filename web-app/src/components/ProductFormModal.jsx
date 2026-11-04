@@ -23,7 +23,7 @@ import {
   Link,
   X,
 } from '@phosphor-icons/react';
-import { formatDots, sanitizeImageUrl } from '../utils/formatters';
+import { formatDots, parseDots, sanitizeImageUrl } from '../utils/formatters';
 import { compressProductImage, formatFileSize } from '../utils/imageCompressor';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner, sanitizeBarcode } from '../hooks/useHardwareBarcodeScanner';
@@ -60,6 +60,10 @@ export default function ProductFormModal({
   newProdCostBaht,
   setNewProdCostKip,
   setNewProdCostBaht,
+  costCurrency = 'THB',
+  setCostCurrency,
+  isAutoCurrencyReprice = false,
+  setIsAutoCurrencyReprice,
   handleBahtCostChange,
   handleKipCostChange,
   lastModifiedCostField,
@@ -200,6 +204,7 @@ export default function ProductFormModal({
       return;
     }
     const rate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 0;
+    // Giá vốn giữ nguyên giá trị toán học chính xác (Math.round) để hạch toán kế toán & tính lãi chuẩn
     const costLak = rate > 0 ? Math.round(costThb * rate) : 0;
     setNewProdCostBaht?.(formatDots(costThb));
     if (rate > 0) {
@@ -237,6 +242,58 @@ export default function ProductFormModal({
       const costThb = Math.round(costLak / rate);
       setNewProdCostBaht?.(formatDots(costThb));
     }
+  };
+
+  // Dynamic Unit Cost & Profit Margin Calculations for live UI feedback
+  const totalCostLak = parseDots(newProdCostKip) || 0;
+  const packsPerCartonNum = Math.max(1, parseDots(cartonMultiplier) || 1);
+  const piecesPerPackNum = Math.max(1, parseDots(packMultiplier) || 1);
+
+  let cartonMultCalc = 1;
+  let packMultCalc = 1;
+  let pieceMultCalc = 1;
+
+  if (enablePiece) {
+    pieceMultCalc = 1;
+    packMultCalc = enablePack ? piecesPerPackNum : 1;
+    cartonMultCalc = enableCarton
+      ? (enablePack ? (packsPerCartonNum * packMultCalc) : packsPerCartonNum)
+      : 1;
+  } else if (enablePack) {
+    packMultCalc = 1;
+    cartonMultCalc = enableCarton ? packsPerCartonNum : 1;
+  }
+
+  // Giá vốn chính xác toán học đến từng Kíp (Math.round, không làm tròn 500 ₭) để phản ánh đúng vốn & tính biên lãi thực tế
+  const baseUnitCostLak = cartonMultCalc > 0 ? Math.round(totalCostLak / cartonMultCalc) : totalCostLak;
+  const cartonCostLak = totalCostLak;
+  const packCostLak = packMultCalc * baseUnitCostLak;
+  const pieceCostLak = pieceMultCalc * baseUnitCostLak;
+
+  const renderProfitBadge = (priceStr, unitCost) => {
+    const priceNum = parseDots(priceStr);
+    if (!priceNum || !unitCost || unitCost <= 0) return null;
+    const diff = priceNum - unitCost;
+    const pct = ((diff / unitCost) * 100).toFixed(1);
+    const isProfit = diff > 0;
+    const isLoss = diff < 0;
+
+    return (
+      <div className="mt-1 flex items-center">
+        <span
+          className={`inline-flex items-center text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded border shadow-2xs whitespace-nowrap ${
+            isProfit
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : isLoss
+              ? 'bg-rose-50 text-rose-700 border-rose-200'
+              : 'bg-slate-100 text-slate-600 border-slate-200'
+          }`}
+          title={`ຕົ້ນທຶນ: ${formatDots(unitCost)} ₭ | ກຳໄລ: ${diff >= 0 ? '+' : ''}${formatDots(diff)} ₭`}
+        >
+          {isProfit ? `ກຳໄລ: +${formatDots(diff)} ₭ (+${pct}%)` : isLoss ? `ຂາດທຶນ: ${formatDots(diff)} ₭ (${pct}%)` : '0 ₭ (0%)'}
+        </span>
+      </div>
+    );
   };
 
   // Helper to check if a barcode already exists on another product in DB
@@ -295,8 +352,6 @@ export default function ProductFormModal({
         setPackBarcode(clean);
       } else if (setPieceBarcode) {
         setPieceBarcode(clean);
-      } else if (setNewProdBarcode) {
-        setNewProdBarcode(clean);
       }
     }
     setScannerOpen(false);
@@ -722,74 +777,133 @@ export default function ProductFormModal({
               </div>
             </div>
 
-            {/* CARD 2: ຕົ້ນທຶນຮັບເຂົ້າ (Purchase Cost) - 2-Way Reactive Currency Sync */}
+            {/* CARD 2: ຕົ້ນທຶນຮັບເຂົ້າ (Purchase Cost) - Multi-Currency THB / LAK */}
             <div className="bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-teal-200/80 shadow-2xs bg-gradient-to-br from-teal-50/20 to-white flex flex-col gap-2 sm:gap-2.5">
-              <div className="flex items-center justify-between pb-1.5 border-b border-teal-100">
-                <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-between pb-1.5 border-b border-teal-100 flex-wrap gap-2">
+                {/* Tiêu đề gọn gàng + Badge tỷ giá thay thế cho (Purchase Cost) */}
+                <div className="flex items-center gap-1.5 min-w-0">
                   <CurrencyCircleDollar size={17} className="text-teal-600 shrink-0" weight="fill" />
-                  <h3 className="text-xs font-black text-slate-900">
-                    2. ຕົ້ນທຶນຮັບເຂົ້າ (Purchase Cost)
+                  <h3 className="text-xs font-black text-slate-900 shrink-0">
+                    2. ຕົ້ນທຶນຮັບເຂົ້າ
                   </h3>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-teal-800 bg-teal-100/70 border border-teal-300/60 px-2 py-0.5 rounded-full font-mono font-bold tabular-nums">
-                    1 ฿ = {exchangeRate > 0 ? formatDots(exchangeRate) : '-'} ₭
-                  </span>
-                  {/* Dual Mode Switch Toggle: [ Link ອັດຕະໂນມັດ / LinkBreak ປ້ອນເອງ ] */}
-                  <button
-                    type="button"
-                    onClick={() => setCostSyncMode((prev) => (prev === 'auto' ? 'manual' : 'auto'))}
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 transition-all border cursor-pointer ${
-                      costSyncMode === 'auto'
-                        ? 'bg-teal-50 border-teal-300 text-teal-800 hover:bg-teal-100'
-                        : 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100'
-                    }`}
-                    title={costSyncMode === 'auto' ? 'ໂໝດໄລ່ອັດຕະໂນມັດ: ຄລິກເພື່ອປ່ຽນເປັນໂໝດແຍກປ້ອນເອງ' : 'ໂໝດແຍກປ້ອນເອງ: ຄລິກເພື່ອປ່ຽນເປັນໂໝດໄລ່ອັດຕະໂນມັດ'}
+                  <span
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200/90 rounded-md text-[10px] font-bold font-mono shadow-2xs tabular-nums shrink-0"
+                    title={`ອັດຕາແລກປ່ຽນລະບົບມື້ນີ້: 1 ฿ = ${exchangeRate > 0 ? formatDots(exchangeRate) : '-'} ₭`}
                   >
-                    {costSyncMode === 'auto' ? (
-                      <>
-                        <Link size={12} weight="bold" />
-                        <span>ອັດຕະໂນມັດ</span>
-                      </>
-                    ) : (
-                      <>
-                        <LinkBreak size={12} weight="bold" />
-                        <span>ປ້ອນເອງ</span>
-                      </>
-                    )}
-                  </button>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span>1 ฿ = {exchangeRate > 0 ? formatDots(exchangeRate) : '-'} ₭</span>
+                  </span>
+                </div>
+
+                {/* Switch chuyển đổi tiền Baht / Kíp ở góc trên bên phải */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1 p-0.5 bg-slate-100/90 rounded-lg border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCostCurrency?.('THB');
+                      }}
+                      className={`px-2 py-0.5 rounded-md text-[10.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all ${
+                        costCurrency === 'THB'
+                          ? 'bg-white text-teal-800 shadow-2xs border border-teal-200'
+                          : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${costCurrency === 'THB' ? 'bg-teal-600' : 'bg-slate-300'}`} />
+                      <span>ເງິນບາດ (THB)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCostCurrency?.('LAK');
+                        setIsAutoCurrencyReprice?.(false);
+                        setNewProdCostBaht?.('');
+                      }}
+                      className={`px-2 py-0.5 rounded-md text-[10.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all ${
+                        costCurrency === 'LAK'
+                          ? 'bg-white text-teal-800 shadow-2xs border border-teal-200'
+                          : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${costCurrency === 'LAK' ? 'bg-teal-600' : 'bg-slate-300'}`} />
+                      <span>ເງິນກີບ (LAK)</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
-                {/* 1. THB Purchase Cost */}
-                <div className="p-2 sm:p-2.5 bg-white rounded-lg sm:rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/20 transition-all">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10.5px] sm:text-[11px] font-extrabold text-slate-800 truncate">
-                      ຕົ້ນທຶນບາດ (฿ THB)
-                    </label>
-                    <span className="text-[9px] text-slate-400 font-medium hidden xs:inline">ອ້າງອີງ</span>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={newProdCostBaht}
-                      onChange={(e) => onBahtChange(e.target.value)}
-                      placeholder="0"
-                      className="w-full h-8 sm:h-9 pl-2.5 pr-7 py-1 bg-slate-50 border border-slate-200 rounded-md sm:rounded-lg text-xs sm:text-sm font-black text-slate-900 font-mono tabular-nums focus:outline-none focus:border-teal-600 focus:bg-white transition-colors"
-                    />
-                    <span className="absolute right-2 top-1.5 sm:top-2 text-xs font-black text-slate-400 font-mono">฿</span>
-                  </div>
-                </div>
+              {costCurrency === 'THB' ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                    {/* 1. THB Purchase Cost */}
+                    <div className="p-2 sm:p-2.5 bg-white rounded-lg sm:rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/20 transition-all">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[10.5px] sm:text-[11px] font-extrabold text-slate-800 truncate">
+                          ຕົ້ນທຶນບາດ (฿ THB) *
+                        </label>
+                        <span className="text-[9px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-bold hidden xs:inline">ເງິນຕົ້ນທາງ</span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={newProdCostBaht}
+                          onChange={(e) => onBahtChange(e.target.value)}
+                          placeholder="0"
+                          className="w-full h-8 sm:h-9 pl-2.5 pr-7 py-1 bg-slate-50 border border-slate-200 rounded-md sm:rounded-lg text-xs sm:text-sm font-black text-slate-900 font-mono tabular-nums focus:outline-none focus:border-teal-600 focus:bg-white transition-colors"
+                        />
+                        <span className="absolute right-2 top-1.5 sm:top-2 text-xs font-black text-slate-400 font-mono">฿</span>
+                      </div>
+                    </div>
 
-                {/* 2. LAK Purchase Cost */}
+                    {/* 2. LAK Purchase Cost */}
+                    <div className="p-2 sm:p-2.5 bg-white rounded-lg sm:rounded-xl border border-teal-200 shadow-2xs flex flex-col justify-between focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/20 transition-all">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[10.5px] sm:text-[11px] font-extrabold text-teal-900 truncate">
+                          ຕົ້ນທຶນກີບ (₭ LAK)
+                        </label>
+                        <span className="text-[9.5px] text-teal-800 font-bold bg-teal-100/90 border border-teal-200/80 px-1.5 py-0.2 rounded font-mono tabular-nums">
+                          1 ฿ = {exchangeRate > 0 ? formatDots(exchangeRate) : '-'} ₭
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={newProdCostKip}
+                          onChange={(e) => onKipChange(e.target.value)}
+                          placeholder="0"
+                          className="w-full h-8 sm:h-9 pl-2.5 pr-7 py-1 bg-teal-50/40 border border-teal-300 rounded-md sm:rounded-lg text-xs sm:text-sm font-black text-teal-900 font-mono tabular-nums focus:outline-none focus:border-teal-600 focus:bg-white transition-colors"
+                        />
+                        <span className="absolute right-2 top-1.5 sm:top-2 text-xs font-black text-teal-600 font-mono">₭</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Auto-Reprice Toggle Checkbox */}
+                  <label className="flex items-center gap-2 p-2 bg-teal-50/60 hover:bg-teal-50 rounded-lg border border-teal-200/80 cursor-pointer transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(isAutoCurrencyReprice)}
+                      onChange={(e) => setIsAutoCurrencyReprice?.(e.target.checked)}
+                      className="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500 cursor-pointer"
+                    />
+                    <div className="min-w-0">
+                      <span className="text-[11.5px] font-bold text-slate-800 block leading-tight">
+                        ປັບລາຄາຂາຍຕາມອັດຕາແລກປ່ຽນອັດຕະໂນມັດ (Auto-Repricing)
+                      </span>
+                      
+                    </div>
+                  </label>
+                </>
+              ) : (
+                /* When LAK: only pure LAK cost, no Baht input */
                 <div className="p-2 sm:p-2.5 bg-white rounded-lg sm:rounded-xl border border-teal-200 shadow-2xs flex flex-col justify-between focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/20 transition-all">
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-[10.5px] sm:text-[11px] font-extrabold text-teal-900 truncate">
                       ຕົ້ນທຶນກີບ (₭ LAK) *
                     </label>
-                    <span className="text-[9px] text-teal-700 font-bold bg-teal-100/80 px-1.5 py-0.2 rounded hidden xs:inline">ຫຼັກບັນຊີ</span>
+                    <span className="text-[9px] text-teal-700 font-bold bg-teal-100/80 px-1.5 py-0.2 rounded">ຕົ້ນທຶນຄົງທີ່ເປັນເງິນກີບ</span>
                   </div>
                   <div className="relative">
                     <input
@@ -803,7 +917,7 @@ export default function ProductFormModal({
                     <span className="absolute right-2 top-1.5 sm:top-2 text-xs font-black text-teal-600 font-mono">₭</span>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* CARD 3: INVENTORY TRACKING & STARTING STOCK (Compact Section 3) */}
@@ -1036,6 +1150,7 @@ export default function ProductFormModal({
                           placeholder="0"
                           className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-amber-400 focus:bg-white rounded-lg text-xs font-bold text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-amber-400/40"
                         />
+                        {renderProfitBadge(cartonPrice, cartonCostLak)}
                       </div>
 
                       {/* Price 2: Regular Customer */}
@@ -1051,6 +1166,7 @@ export default function ProductFormModal({
                           placeholder="(ບໍ່ກຳນົດ)"
                           className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
                         />
+                        {renderProfitBadge(cartonPrice2, cartonCostLak)}
                       </div>
 
                       {/* Price 3: Wholesale / VIP */}
@@ -1066,6 +1182,7 @@ export default function ProductFormModal({
                           placeholder="(ບໍ່ກຳນົດ)"
                           className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
                         />
+                        {renderProfitBadge(cartonPrice3, cartonCostLak)}
                       </div>
                     </div>
 
@@ -1268,6 +1385,7 @@ export default function ProductFormModal({
                           placeholder="0"
                           className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-sky-500 focus:bg-white rounded-lg text-xs font-bold text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-sky-500"
                         />
+                        {renderProfitBadge(packPrice, packCostLak)}
                       </div>
 
                       {/* Price 2: Regular Customer */}
@@ -1283,6 +1401,7 @@ export default function ProductFormModal({
                           placeholder="(ບໍ່ກຳນົດ)"
                           className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
                         />
+                        {renderProfitBadge(packPrice2, packCostLak)}
                       </div>
 
                       {/* Price 3: Wholesale / VIP */}
@@ -1298,6 +1417,7 @@ export default function ProductFormModal({
                           placeholder="(ບໍ່ກຳນົດ)"
                           className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
                         />
+                        {renderProfitBadge(packPrice3, packCostLak)}
                       </div>
                     </div>
 
@@ -1437,6 +1557,7 @@ export default function ProductFormModal({
                           placeholder="0"
                           className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-teal-500 focus:bg-white rounded-lg text-xs font-bold text-slate-900 font-mono focus:outline-none focus:ring-1 focus:ring-teal-500"
                         />
+                        {renderProfitBadge(piecePrice, pieceCostLak)}
                       </div>
 
                       {/* Price 2: Regular Customer */}
@@ -1452,6 +1573,7 @@ export default function ProductFormModal({
                           placeholder="(ບໍ່ກຳນົດ)"
                           className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
                         />
+                        {renderProfitBadge(piecePrice2, pieceCostLak)}
                       </div>
 
                       {/* Price 3: Wholesale / VIP */}
@@ -1467,6 +1589,7 @@ export default function ProductFormModal({
                           placeholder="(ບໍ່ກຳນົດ)"
                           className="w-full h-8.5 sm:h-9 px-2.5 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:bg-white rounded-lg text-xs font-medium text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-slate-300"
                         />
+                        {renderProfitBadge(piecePrice3, pieceCostLak)}
                       </div>
                     </div>
 

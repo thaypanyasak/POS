@@ -4,6 +4,24 @@ export const formatKip = (val) => {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' ₭';
 };
 
+/**
+ * Chuẩn hóa đuôi số lẻ tiền Kíp Lào theo bước nhảy (mặc định 500 ₭)
+ * Quy tắc làm tròn chuẩn bán lẻ 500 LAK:
+ * - Đuôi 0..249   -> về 000 (Ví dụ: 23.210 -> 23.000)
+ * - Đuôi 250..749 -> về 500 (Ví dụ: 23.323 -> 23.500; 25.542 -> 25.500)
+ * - Đuôi 750..999 -> lên 1.000 tiếp theo (Ví dụ: 23.780 -> 24.000)
+ *
+ * @param {number|string} price
+ * @param {number} step (mặc định 500)
+ * @returns {number}
+ */
+export const roundLakToStep = (price, step = 500) => {
+  const p = Number(price);
+  if (!p || isNaN(p) || p <= 0) return 0;
+  const s = Number(step) > 0 ? Number(step) : 500;
+  return Math.round(p / s) * s;
+};
+
 export const formatBaht = (val) => {
   const n = Math.round(Number(val) || 0);
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' ฿';

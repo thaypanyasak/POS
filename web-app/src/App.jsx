@@ -24,6 +24,7 @@ import {
   saveProductBundleToSupabase,
   deleteProductBundleInSupabase,
   updateOnlineOrderStatusInSupabase,
+  setCachedProductsInMemory,
   supabase
 } from './services/supabase';
 import queryClient from './services/queryClient';
@@ -72,7 +73,7 @@ import {
   isDeviceOnline,
 } from './services/offlineSyncService';
 
-import { formatDots, parseDots, parseCurrencyInput, formatCompoundStock, getEffectiveUnitPrice, PRICE_TIERS, normalizeLao } from './utils/formatters';
+import { formatDots, parseDots, parseCurrencyInput, formatCompoundStock, getEffectiveUnitPrice, PRICE_TIERS, normalizeLao, roundLakToStep } from './utils/formatters';
 import { useHardwareBarcodeScanner, sanitizeBarcode } from './hooks/useHardwareBarcodeScanner';
 import {
   playSuccessBeep,
@@ -516,6 +517,170 @@ export default function App() {
 
   // Customer Directory State (Loaded from Supabase 'customers' table + calculated from sales transactions)
   const [savedCustomersList, setSavedCustomersList] = useState([]);
+
+  // In-Place Product Unit Price Mutation without re-fetching entire table (Zero-Egress Strategy)
+  const handleApplyUnitPricesInPlace = useCallback((updatedUnits) => {
+    if (!updatedUnits || !Array.isArray(updatedUnits) || updatedUnits.length === 0) return;
+    const unitMap = new Map();
+    updatedUnits.forEach((u) => {
+      unitMap.set(u.id, u);
+    });
+
+    setProducts((prevProducts) => {
+      if (!prevProducts || prevProducts.length === 0) return prevProducts;
+      let hasChanged = false;
+      const nextProducts = prevProducts.map((prod) => {
+        if (!prod.units || !Array.isArray(prod.units)) return prod;
+        let prodUnitsChanged = false;
+        const nextUnits = prod.units.map((unit) => {
+          if (!unitMap.has(unit.id)) return unit;
+          const delta = unitMap.get(unit.id);
+          prodUnitsChanged = true;
+          hasChanged = true;
+          const newRetail = delta.retail_price !== undefined ? Number(delta.retail_price) : unit.retailPrice;
+          const newPrice2 = delta.price_2 !== undefined ? Number(delta.price_2) : (delta.wholesale_price !== undefined ? Number(delta.wholesale_price) : unit.price_2);
+          const newPrice3 = delta.price_3 !== undefined ? Number(delta.price_3) : unit.price_3;
+
+          return {
+            ...unit,
+            retailPrice: newRetail,
+            wholesalePrice: newPrice2,
+            price_2: newPrice2,
+            price2: newPrice2,
+            price_3: newPrice3,
+            price3: newPrice3,
+          };
+        });
+
+        if (!prodUnitsChanged) return prod;
+        return {
+          ...prod,
+          units: nextUnits,
+        };
+      });
+
+      if (hasChanged) {
+        try {
+          safeSetItem('meiishop_products_v5', nextProducts);
+          idbSet('meiishop_products_v5', nextProducts);
+        } catch (_) {}
+        return nextProducts;
+      }
+      return prevProducts;
+    });
+  }, []);
+
+  /**
+   * Zero-Egress In-Memory Repricing for Rate Changes:
+   * Recalculates cost_lak and all unit prices in local memory using stored price ratios
+   * without calling fetchProducts over PostgREST API (0 KB Egress)
+   */
+  const handleApplyRepriceForRateChange = useCallback((newRate, roundStep = 500) => {
+    const rateNum = Number(newRate);
+    if (!rateNum || rateNum <= 0) return;
+
+    setProducts((prev) => {
+      if (!prev || !Array.isArray(prev) || prev.length === 0) return prev;
+      let hasChange = false;
+
+      const updated = prev.map((prod) => {
+        const isThb = (prod.cost_currency || prod.costCurrency || 'THB') === 'THB';
+        const isAuto = prod.is_auto_currency_reprice !== undefined
+          ? Boolean(prod.is_auto_currency_reprice)
+          : Boolean(prod.isAutoCurrencyReprice);
+        const thbCost = Number(prod.costBaht ?? prod.cost_thb) || 0;
+
+        if (isThb && isAuto && thbCost > 0) {
+          hasChange = true;
+          // Giá vốn giữ nguyên số tiền Kíp chính xác (Math.round), không làm tròn mốc 500
+          const newCostLak = Math.round(thbCost * rateNum);
+          const maxMult = Math.max(...(prod.units || []).map((u) => Number(u.multiplier) || 1), 1);
+          const newCostPerBaseUnit = Math.round(newCostLak / maxMult);
+
+          const updatedUnits = (prod.units || []).map((u) => {
+            const mult = Number(u.multiplier) || 1;
+            const unitCostLak = ((thbCost * rateNum) / maxMult) * mult;
+            const currentCostLak = prod.costKip > 0 ? prod.costKip : (thbCost * rateNum);
+            const currentUnitCost = (currentCostLak / maxMult) * mult;
+
+            const r1 = Number(u.price_ratio_1) || (u.retailPrice > 0 && currentUnitCost > 0 ? (u.retailPrice / currentUnitCost) : 0);
+            const r2 = Number(u.price_ratio_2) || (u.price_2 > 0 && currentUnitCost > 0 ? (u.price_2 / currentUnitCost) : 0);
+            const r3 = Number(u.price_ratio_3) || (u.price_3 > 0 && currentUnitCost > 0 ? (u.price_3 / currentUnitCost) : 0);
+
+            const newRetail = r1 > 0 ? roundLakToStep(unitCostLak * r1, roundStep) : u.retailPrice;
+            const newPrice2 = r2 > 0 ? roundLakToStep(unitCostLak * r2, roundStep) : (u.price_2 || 0);
+            const newPrice3 = r3 > 0 ? roundLakToStep(unitCostLak * r3, roundStep) : (u.price_3 || 0);
+
+            return {
+              ...u,
+              retailPrice: newRetail,
+              price_2: newPrice2,
+              price_3: newPrice3,
+              price2: newPrice2,
+              price3: newPrice3,
+              wholesalePrice: newPrice3 > 0 ? newPrice3 : u.wholesalePrice,
+              price_ratio_1: r1 > 0 ? Number(r1.toFixed(4)) : u.price_ratio_1,
+              price_ratio_2: r2 > 0 ? Number(r2.toFixed(4)) : u.price_ratio_2,
+              price_ratio_3: r3 > 0 ? Number(r3.toFixed(4)) : u.price_ratio_3,
+            };
+          });
+
+          return {
+            ...prod,
+            costKip: newCostLak,
+            cost_lak: newCostLak,
+            costPerBaseUnit: newCostPerBaseUnit,
+            units: updatedUnits,
+          };
+        }
+        return prod;
+      });
+
+      if (hasChange) {
+        try {
+          safeSetItem('meiishop_products_v5', updated);
+          idbSet('meiishop_products_v5', updated);
+          setCachedProductsInMemory(updated);
+        } catch (_) {}
+        return updated;
+      }
+      return prev;
+    });
+  }, []);
+
+  // Realtime Broadcast for POS Terminal Price Sync & Exchange Rate Reprice (Zero-Egress Strategy)
+  useEffect(() => {
+    const handleExchangeRateEvent = ({ payload }) => {
+      if (payload?.rate && Number(payload.rate) > 0) {
+        setExchangeRate(Number(payload.rate));
+        // ONLY reprice products in-memory if explicitly requested by user (Manual Bulk Reprice Trigger)
+        if (payload?.shouldReprice) {
+          handleApplyRepriceForRateChange(Number(payload.rate), payload.roundStep || 500);
+        }
+      }
+    };
+
+    const priceSyncChannel = supabase
+      .channel('pos_price_sync')
+      .on('broadcast', { event: 'price_updated' }, ({ payload }) => {
+        if (Array.isArray(payload) && payload.length > 0) {
+          handleApplyUnitPricesInPlace(payload);
+        }
+      })
+      .on('broadcast', { event: 'exchange_rate_updated' }, handleExchangeRateEvent)
+      .subscribe();
+
+    const storeEventsChannel = supabase
+      .channel('pos_store_events')
+      .on('broadcast', { event: 'exchange_rate_updated' }, handleExchangeRateEvent)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(priceSyncChannel);
+      supabase.removeChannel(storeEventsChannel);
+    };
+  }, [handleApplyUnitPricesInPlace, handleApplyRepriceForRateChange]);
+
   useEffect(() => {
     fetchSavedCustomers().then((data) => setSavedCustomersList(data || []));
 
@@ -996,6 +1161,8 @@ export default function App() {
   const [newProdBarcode, setNewProdBarcode] = useState('');
   const [newProdCostKip, setNewProdCostKip] = useState('');
   const [newProdCostBaht, setNewProdCostBaht] = useState('');
+  const [costCurrency, setCostCurrency] = useState('THB'); // 'THB' | 'LAK'
+  const [isAutoCurrencyReprice, setIsAutoCurrencyReprice] = useState(false);
   const [newProdImageUrl, setNewProdImageUrl] = useState('');
   const [imageFileToUpload, setImageFileToUpload] = useState(null);
   const [imageCompressionStats, setImageCompressionStats] = useState(null);
@@ -1385,7 +1552,7 @@ export default function App() {
 
     const activeRate = Number(exchangeRate) || 0;
     if (activeRate > 0) {
-      // Lao Kip is atomic integer, zero decimal places
+      // Giá vốn giữ nguyên số tiền Kíp thực tế (Math.round), không ép làm tròn 500
       const costLak = Math.round(costThb * activeRate);
       setNewProdCostKip(formatDots(costLak));
     }
@@ -1556,6 +1723,8 @@ export default function App() {
     setImageCompressionStats(null);
     setNewProdCostBaht('');
     setNewProdCostKip('');
+    setCostCurrency('THB');
+    setIsAutoCurrencyReprice(false);
     setLastModifiedCostField(null);
 
     // Default to 3-tier beverage setup with reasonable defaults
@@ -1626,6 +1795,15 @@ export default function App() {
       setNewProdCostKip(formatDots(p.costKip ?? p.cost_lak ?? ''));
     }
     setLastModifiedCostField(null);
+
+    // Multi-Currency & Auto-Repricing settings
+    const resolvedCostCurrency = p.cost_currency || p.costCurrency || (Number(p.costBaht ?? p.cost_thb) > 0 ? 'THB' : (Number(p.costKip ?? p.cost_lak) > 0 ? 'LAK' : 'THB'));
+    setCostCurrency(resolvedCostCurrency);
+    setIsAutoCurrencyReprice(
+      p.is_auto_currency_reprice !== undefined
+        ? Boolean(p.is_auto_currency_reprice)
+        : Boolean(p.isAutoCurrencyReprice)
+    );
 
     // Crate Deposit setting strictly configured from product metadata
     setHasCrateDeposit(Boolean(p.hasCrateDeposit));
@@ -1705,10 +1883,9 @@ export default function App() {
     setPiecePrice2(pieceU && Number(pieceU.price_2 || pieceU.price2) > 0 ? formatDots(pieceU.price_2 || pieceU.price2) : (p.tierSettings?.piecePrice2 || ''));
     setPiecePrice3(pieceU && Number(pieceU.price_3 || pieceU.price3) > 0 ? formatDots(pieceU.price_3 || pieceU.price3) : (p.tierSettings?.piecePrice3 || ''));
 
-    // Resolve Tier Barcodes from units or fallback
     setCartonBarcode(cartonU?.barcode || '');
     setPackBarcode(packU?.barcode || '');
-    setPieceBarcode(pieceU?.barcode || (!cartonU && !packU ? p.barcode || '' : ''));
+    setPieceBarcode(pieceU?.barcode || '');
 
     // 5. Multipliers Hydration
     // Carton multiplier (Packs per carton or Pieces per carton)
@@ -1834,7 +2011,8 @@ export default function App() {
 
     try {
       const prodId = productToEdit?.id || 'p_' + Date.now().toString(36);
-      const costKip = parseDots(newProdCostKip);
+      // Giá vốn giữ nguyên giá trị thực tế nhập vào (không làm tròn 500 ₭)
+      const costKip = parseDots(newProdCostKip) || 0;
       const costBaht = parseDots(newProdCostBaht);
       const isCartonActive = Boolean(enableCarton);
       const isPackActive = Boolean(enablePack);
@@ -2010,7 +2188,7 @@ export default function App() {
         }
       }
 
-      // Cost per base unit for store accounting & profit
+      // Cost per base unit for store accounting & profit (giữ nguyên chính xác, không ép làm tròn 500)
       let costPerBaseUnit = costKip;
       if (tier1Multiplier > 0) {
         costPerBaseUnit = Math.round(costKip / tier1Multiplier);
@@ -2037,14 +2215,25 @@ export default function App() {
         }
       }
 
-      // Primary barcode precedence: Piece barcode -> Pack barcode -> Carton barcode -> general barcode -> generated
-      const primaryBarcode =
-        pieceBarcode.trim() ||
-        packBarcode.trim() ||
-        cartonBarcode.trim() ||
-        newProdBarcode.trim() ||
-        productToEdit?.barcode ||
-        '885' + Math.floor(100000000 + Math.random() * 900000000);
+      // Parent product barcode is intentionally NULL. Barcodes are strictly assigned to specific units (product_units).
+      const primaryBarcode = null;
+
+      // Calculate unit cost in LAK (exact integer) and price ratios for each unit
+      const finalUnits = units.map((u) => {
+        const uMult = Number(u.multiplier) || 1;
+        const uCostLak = (uMult === tier1Multiplier && costKip > 0)
+          ? costKip
+          : Math.round(costPerBaseUnit * uMult);
+        const r1 = uCostLak > 0 && Number(u.retailPrice) > 0 ? Number((Number(u.retailPrice) / uCostLak).toFixed(4)) : 0;
+        const r2 = uCostLak > 0 && Number(u.price_2) > 0 ? Number((Number(u.price_2) / uCostLak).toFixed(4)) : 0;
+        const r3 = uCostLak > 0 && Number(u.price_3) > 0 ? Number((Number(u.price_3) / uCostLak).toFixed(4)) : 0;
+        return {
+          ...u,
+          price_ratio_1: r1,
+          price_ratio_2: r2,
+          price_ratio_3: r3,
+        };
+      });
 
       // Resolve categoryId strictly matching current newProdCategory name first
       const matchedCat = rawCategories.find((c) => c.name === newProdCategory);
@@ -2069,6 +2258,10 @@ export default function App() {
         costKip: Math.round(Number(costKip) || 0),
         cost_thb: Math.round(Number(costBaht) || 0),
         cost_lak: Math.round(Number(costKip) || 0),
+        cost_currency: costCurrency,
+        costCurrency: costCurrency,
+        is_auto_currency_reprice: Boolean(isAutoCurrencyReprice),
+        isAutoCurrencyReprice: Boolean(isAutoCurrencyReprice),
         tier1_active: isCartonActive,
         tier2_active: isPackActive,
         tier3_active: isPieceActive,
@@ -2095,7 +2288,7 @@ export default function App() {
         trackStock: Boolean(trackStock),
         hasCrateDeposit: Boolean(hasCrateDeposit),
         crateDepositFee: parseDots(crateDepositFee) || 30000,
-        units,
+        units: finalUnits,
       };
 
       // REAL SUPABASE DATABASE API CALL:
@@ -3794,6 +3987,7 @@ export default function App() {
               onOpenCategoryManager={() => setActiveMainTab('categories')}
               onOpenBundleManager={() => setActiveMainTab('bundles')}
               isLoading={isLoadingProducts || isRefreshing}
+              onUpdateProductUnitPrices={handleApplyUnitPricesInPlace}
             />
           </RouteGuard>
         )}
@@ -3902,6 +4096,7 @@ export default function App() {
             <SettingsView
               exchangeRate={exchangeRate}
               setExchangeRate={setExchangeRate}
+              onRepriceInPlace={handleApplyRepriceForRateChange}
               isCloudSynced={isCloudSynced}
               onAlert={openAlert}
               productsCount={products.length}
@@ -3998,6 +4193,10 @@ export default function App() {
         newProdCostBaht={newProdCostBaht}
         setNewProdCostKip={setNewProdCostKip}
         setNewProdCostBaht={setNewProdCostBaht}
+        costCurrency={costCurrency}
+        setCostCurrency={setCostCurrency}
+        isAutoCurrencyReprice={isAutoCurrencyReprice}
+        setIsAutoCurrencyReprice={setIsAutoCurrencyReprice}
         handleBahtCostChange={handleBahtCostChange}
         handleKipCostChange={handleKipCostChange}
         lastModifiedCostField={lastModifiedCostField}

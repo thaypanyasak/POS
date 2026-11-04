@@ -61,7 +61,7 @@ export default class ErrorBoundary extends React.Component {
                 className="flex-1 h-10 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-98 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all"
               >
                 <ArrowClockwise size={16} weight="bold" />
-                <span>ໂຫຼດຄືນໃໝ່ (Tải lại)</span>
+                <span>ໂຫຼດຄືນໃໝ່</span>
               </button>
 
               <button
