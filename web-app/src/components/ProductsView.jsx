@@ -25,6 +25,7 @@ import {
   PencilLine,
   Tag,
   CheckSquare,
+  ArrowsDownUp,
 } from '@phosphor-icons/react';
 import BulkPriceModal from './BulkPriceModal';
 import { updateProductUnitPricesZeroEgress } from '../services/supabase';
@@ -267,6 +268,9 @@ export default function ProductsView({
   const searchInputRef = useRef(null);
   const categoryDropdownRef = useRef(null);
 
+  // Thứ tự sắp xếp mặc định: Mới nhất ở trên đầu bảng ('newest_first')
+  const [productSortOrder, setProductSortOrder] = useState('newest_first');
+
   // Price Editing & Multi-select State (Zero-Egress Strategy)
   const [isPriceEditMode, setIsPriceEditMode] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -346,7 +350,7 @@ export default function ProductsView({
     return categoryOptions.list.filter((cat) => normalizeLao(cat.name).includes(q));
   }, [categoryOptions.list, categorySearchTerm]);
 
-  // Combined product filtering by category and search query
+  // Combined product filtering by category, search query, and chronological sorting
   const filteredProducts = useMemo(() => {
     let list = products || [];
 
@@ -364,21 +368,51 @@ export default function ProductsView({
 
     // 2. Search Query Filter
     const q = normalizeLao(searchTerm);
-    if (!q) return list;
-    return list.filter((p) => {
-      return (
-        (p.name && normalizeLao(p.name).includes(q)) ||
-        (p.barcode && normalizeLao(p.barcode).includes(q)) ||
-        (p.category && normalizeLao(p.category).includes(q)) ||
-        (p.units &&
-          p.units.some(
-            (u) =>
-              normalizeLao(u.unitName).includes(q) ||
-              (u.barcode && normalizeLao(u.barcode).includes(q))
-          ))
-      );
+    if (q) {
+      list = list.filter((p) => {
+        return (
+          (p.name && normalizeLao(p.name).includes(q)) ||
+          (p.barcode && normalizeLao(p.barcode).includes(q)) ||
+          (p.category && normalizeLao(p.category).includes(q)) ||
+          (p.units &&
+            p.units.some(
+              (u) =>
+                normalizeLao(u.unitName).includes(q) ||
+                (u.barcode && normalizeLao(u.barcode).includes(q))
+            ))
+        );
+      });
+    }
+
+    // 3. Sắp xếp danh sách sản phẩm ProductsView:
+    // Mặc định: productSortOrder === 'newest_first' -> Sản phẩm MỚI NHẤT ở trên đầu bảng!
+    const originalIndexMap = new Map();
+    (products || []).forEach((p, idx) => {
+      originalIndexMap.set(p.id, idx);
     });
-  }, [products, searchTerm, selectedCategory]);
+
+    const getChronologicalScore = (p) => {
+      const rawDate = p.created_at || p.createdAt;
+      if (rawDate) {
+        const t = new Date(rawDate).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+      // Fallback: Mảng products gốc từ Supabase query theo created_at ascending (index 0 là cũ nhất, index N-1 là mới nhất)
+      const idx = originalIndexMap.get(p.id) ?? 0;
+      return idx;
+    };
+
+    const sorted = list.slice();
+    if (productSortOrder === 'oldest_first') {
+      // Cũ nhất ở trên đầu
+      sorted.sort((a, b) => getChronologicalScore(a) - getChronologicalScore(b));
+    } else {
+      // Mặc định: Mới nhất ở trên đầu bảng (Newest first)
+      sorted.sort((a, b) => getChronologicalScore(b) - getChronologicalScore(a));
+    }
+
+    return sorted;
+  }, [products, searchTerm, selectedCategory, productSortOrder]);
 
   // Configurable Pagination States (Default 50, with 20 | 50 | 100 | 200 | ALL options)
   const [pageSize, setPageSize] = useState(50);
@@ -402,10 +436,10 @@ export default function ProductsView({
     setCurrentPage(1);
   };
 
-  // Auto-reset currentPage to 1 when search query or category filter changes
+  // Auto-reset currentPage to 1 when search query, category filter or sort order changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedCategory]);
+  }, [searchTerm, selectedCategory, productSortOrder]);
 
   const totalPages = useMemo(() => {
     if (pageSize === 'ALL' || !pageSize) return 1;
@@ -1146,6 +1180,35 @@ export default function ProductsView({
               )}
             </div>
 
+            {/* Nút Sắp xếp thứ tự sản phẩm: Mặc định Mới nhất ở trên đầu bảng (newest_first), bấm để chuyển sang Cũ nhất ở trên */}
+            {!isPriceEditMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  playUnitChangeBeep('products');
+                  setProductSortOrder((prev) => (prev === 'newest_first' ? 'oldest_first' : 'newest_first'));
+                }}
+                className={`h-9 px-2.5 sm:px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                  productSortOrder === 'newest_first'
+                    ? 'bg-teal-50 hover:bg-teal-100 text-teal-800 border-teal-300'
+                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                }`}
+                title={
+                  productSortOrder === 'newest_first'
+                    ? 'ກຳລັງສະແດງ: ສິນຄ້າໃໝ່ສຸດຂຶ້ນເທິງ (ຄລິກເພື່ອປ່ຽນເປັນ ເກົ່າສຸດຂຶ້ນເທິງ)'
+                    : 'ກຳລັງສະແດງ: ສິນຄ້າເກົ່າສຸດຂຶ້ນເທິງ (ຄລິກເພື່ອປ່ຽນເປັນ ໃໝ່ສຸດຂຶ້ນເທິງ)'
+                }
+              >
+                <ArrowsDownUp size={15} weight="bold" />
+                <span className="hidden sm:inline">
+                  {productSortOrder === 'newest_first' ? 'ໃໝ່ສຸດເທິງ' : 'ເກົ່າສຸດເທິງ'}
+                </span>
+                <span className="sm:hidden text-[11px]">
+                  {productSortOrder === 'newest_first' ? 'ໃໝ່' : 'ເກົ່າ'}
+                </span>
+              </button>
+            )}
+
             {/* Nút 1: Multi-Select Toggle (Icon vuông không chữ: Xám khi tắt, Xanh thành công khi bật) */}
             {!isPriceEditMode && (
               <button
@@ -1755,7 +1818,14 @@ export default function ProductsView({
                 </>
               ) : (
                 <>
-                  <th className="py-3.5 px-4 w-[24%] min-w-[200px]">ຮູບ & ຊື່ສິນຄ້າ</th>
+                  <th className="py-3.5 px-4 w-[24%] min-w-[200px]">
+                    <div className="flex items-center gap-1.5">
+                      <span>ຮູບ & ຊື່ສິນຄ້າ</span>
+                      <span className="text-[10px] font-bold text-teal-700 bg-teal-100/80 px-1.5 py-0.5 rounded">
+                        {productSortOrder === 'newest_first' ? 'ໃໝ່ສຸດ' : 'ເກົ່າສຸດ'}
+                      </span>
+                    </div>
+                  </th>
                   <th className="py-3.5 px-3 w-[13%] min-w-[110px]">ໝວດໝູ່</th>
                   <th className="py-3.5 px-3 w-[15%] min-w-[110px]">ຕົ້ນທຶນບາດ (฿) & ກີບ (₭)</th>
                   <th className="py-3.5 px-3 w-[24%] min-w-[220px]">ລະດັບຫົວໜ່ວຍຂາຍ</th>

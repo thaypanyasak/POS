@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Minus, ShoppingCart, Package } from '@phosphor-icons/react';
 import { formatKip, getProductTierBreakdown, sanitizeImageUrl } from '../../utils/formatters';
@@ -12,6 +12,24 @@ export default function CustomerUnitSelectorModal({
 }) {
   const [selectedUnitIdx, setSelectedUnitIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
+
+  // Reset selected unit index and quantity whenever modal is opened or product changes
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedUnitIdx(0);
+      setQuantity(1);
+    }
+  }, [isOpen, product?.id]);
+
+  // Lock background body scroll while modal is active
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
 
   if (!isOpen || !product) return null;
 

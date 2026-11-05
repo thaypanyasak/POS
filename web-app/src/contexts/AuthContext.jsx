@@ -14,6 +14,7 @@ import {
 } from '../services/authStorage';
 import { playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
 import { isRouteAllowed, USER_ROLES, DEFAULT_ROLE_PERMISSIONS } from '../config/navigationSchema';
+import { isCustomerStorefrontRoute } from '../utils/routeUtils';
 import {
   getRolePermissions,
   saveRolePermissions,
@@ -80,6 +81,12 @@ export function AuthProvider({ children }) {
   // 3. Initialize Auth & Session persistence
   useEffect(() => {
     let isMounted = true;
+
+    // Security Isolation: Customer Storefront visitors do NOT need staff profiles, roles, or permissions
+    if (isCustomerStorefrontRoute()) {
+      setIsLoading(false);
+      return;
+    }
 
     async function initAuth() {
       try {

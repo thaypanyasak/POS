@@ -89,6 +89,7 @@ import {
   playActionClickBeep,
   playOrderDingSound,
 } from './utils/audioFeedback';
+import { isCustomerStorefrontRoute } from './utils/routeUtils';
 
 export default function App() {
   const { activeCashier, user, isLoading } = useAuth();
@@ -108,27 +109,7 @@ export default function App() {
   });
 
   // Application View Mode: 'pos' (Default for App & Web) | 'customer' (Only when explicitly accessing #menu or #catalog)
-  const isCustomerLink = () => {
-    if (typeof window === 'undefined') return false;
-    try {
-      const hash = (window.location.hash || '').toLowerCase();
-      const path = (window.location.pathname || '').toLowerCase();
-      return (
-        hash === '#menu' ||
-        hash.startsWith('#menu') ||
-        hash === '#catalog' ||
-        hash.startsWith('#catalog') ||
-        hash === '#customer-catalog' ||
-        hash === '#customer-menu' ||
-        path === '/menu' ||
-        path.startsWith('/menu/') ||
-        path === '/catalog' ||
-        path.startsWith('/catalog/')
-      );
-    } catch (_) {
-      return false;
-    }
-  };
+  const isCustomerLink = isCustomerStorefrontRoute;
 
   const [appMode, setAppMode] = useState(() => {
     return isCustomerLink() ? 'customer' : 'pos';
@@ -210,6 +191,8 @@ export default function App() {
     }
     return [];
   });
+  const productsRef = useRef(products);
+  productsRef.current = products;
 
   // Hydrate full catalog & transactions from high-capacity IndexedDB if localStorage was pruned or empty
   useEffect(() => {
@@ -219,13 +202,16 @@ export default function App() {
         setProducts((prev) => (prev.length === 0 || cached.length > prev.length ? cached : prev));
       }
     });
-    idbGet('meiishop_transactions_v7').then((cached) => {
-      if (isMounted && Array.isArray(cached) && cached.length > 0) {
-        setTransactions((prev) => (prev.length === 0 || cached.length > prev.length ? cached : prev));
-      }
-    });
+    // Bỏ qua nạp lịch sử hóa đơn IndexedDB nếu đang ở trang khách xem menu
+    if (!isCustomerLink() && appMode !== 'customer') {
+      idbGet('meiishop_transactions_v7').then((cached) => {
+        if (isMounted && Array.isArray(cached) && cached.length > 0) {
+          setTransactions((prev) => (prev.length === 0 || cached.length > prev.length ? cached : prev));
+        }
+      });
+    }
     return () => { isMounted = false; };
-  }, []);
+  }, [appMode]);
 
   const [isCloudSynced, setIsCloudSynced] = useState(false);
   const [isOnline, setIsOnline] = useState(() => isDeviceOnline());
@@ -248,8 +234,10 @@ export default function App() {
     return 690;
   }); // Default 1 ฿ = 690 ₭ (Dynamic Point-in-Time Snapshot)
 
-  // Listen & synchronize exchange rate from store_settings
+  // Listen & synchronize exchange rate from store_settings (Bỏ qua đối với khách xem Storefront)
   useEffect(() => {
+    if (isCustomerLink() || appMode === 'customer') return;
+
     let mounted = true;
     fetchExchangeRate().then((rate) => {
       if (mounted && rate && rate > 0) {
@@ -268,7 +256,7 @@ export default function App() {
       mounted = false;
       unsubscribe();
     };
-  }, []);
+  }, [appMode]);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Default collapsed: chỉ thấy icon
   const [searchQuery, setSearchQuery] = useState('');
@@ -726,6 +714,9 @@ export default function App() {
   }, [handleApplyUnitPricesInPlace, handleApplyRepriceForRateChange]);
 
   useEffect(() => {
+    // Chặn triệt để rò rỉ dữ liệu khách hàng nếu đang ở trang khách xem menu Storefront
+    if (isCustomerLink() || appMode === 'customer') return;
+
     fetchSavedCustomers().then((data) => setSavedCustomersList(data || []));
 
     // Realtime sync for customers across multiple POS terminals (In-memory updates without re-fetching entire table)
@@ -756,7 +747,7 @@ export default function App() {
     return () => {
       supabase.removeChannel(custChannel);
     };
-  }, []);
+  }, [appMode]);
   const customerDirectory = useMemo(() => {
     return buildCustomerDirectory(savedCustomersList, transactions);
   }, [savedCustomersList, transactions]);
@@ -1018,7 +1009,7 @@ export default function App() {
   }, [applyStockDeductionsFromTx]);
 
   const { realtimeHighlights, triggerHighlight } = useOrderRealtime({
-    enabled: true,
+    enabled: !isCustomerLink() && appMode !== 'customer',
     onNewOrder: handleRealtimeNewOrder,
     onUpdateOrder: handleRealtimeUpdateOrder,
     onDeleteOrder: handleRealtimeDeleteOrder,
@@ -1320,9 +1311,10 @@ export default function App() {
     try {
       const cloudBundles = await fetchProductBundlesFromSupabase();
       if (cloudBundles) {
+        const currentProducts = productsRef.current || [];
         const resolved = cloudBundles.map((b) => {
           const bItemIds = b.itemIds || (b.product_bundle_items || []).map((it) => it.product_id) || [];
-          const childs = (products || []).filter((p) => bItemIds.includes(p.id));
+          const childs = currentProducts.filter((p) => bItemIds.includes(p.id));
           if (childs.length > 0) {
             for (const p of childs) {
               const units = Array.isArray(p.units) ? p.units : [];
@@ -1348,7 +1340,7 @@ export default function App() {
       console.warn('Bundles fetch error:', bErr);
     }
     return null;
-  }, [products]);
+  }, []);
 
   // 4. Modular Categories Refresh
   const refreshCategories = useCallback(async (force = false, realProds = null) => {
@@ -1468,10 +1460,32 @@ export default function App() {
     }
   };
 
-  // Initial Data Fetch from Supabase
+  // Customer Catalog Refresh - ZERO DATA LEAK ISOLATION:
+  // Khách xem Storefront chỉ tải danh sách sản phẩm và danh mục để xem món/chọn món.
+  // Tuyệt đối KHÔNG tải hóa đơn bán hàng (sale_transactions), thông tin khách hàng, cấu hình máy in hay nhập hàng!
+  const handleCustomerCatalogRefresh = useCallback(async (force = false) => {
+    setIsRefreshing(true);
+    try {
+      const realProds = await refreshProducts(force);
+      await refreshCategories(force, realProds);
+    } catch (err) {
+      console.warn('handleCustomerCatalogRefresh error:', err);
+    } finally {
+      setIsRefreshing(false);
+      setIsLoadingProducts(false);
+    }
+  }, [refreshProducts, refreshCategories]);
+
+  // Initial Data Fetch from Supabase với phân tách luồng nghiêm ngặt
   useEffect(() => {
-    handleRefreshAllFromSupabase();
-  }, []);
+    if (isCustomerLink() || appMode === 'customer') {
+      // Khách xem menu Storefront: Chỉ tải danh mục và sản phẩm
+      handleCustomerCatalogRefresh();
+    } else {
+      // Nhân viên / Admin POS: Tải toàn bộ dữ liệu cửa hàng
+      handleRefreshAllFromSupabase();
+    }
+  }, [appMode]);
 
   // Lazy load purchase orders & suppliers when Purchases tab opens (Bandwidth Defense)
   useEffect(() => {
@@ -1482,6 +1496,15 @@ export default function App() {
 
   // Subscribe to React Query Cache Invalidation with granular dispatchers
   useEffect(() => {
+    if (isCustomerLink() || appMode === 'customer') {
+      const unsubProducts = queryClient.subscribe('products', () => {
+        refreshProducts(true);
+      });
+      return () => {
+        unsubProducts();
+      };
+    }
+
     const unsubProducts = queryClient.subscribe('products', () => {
       refreshProducts(true);
     });
@@ -1506,7 +1529,7 @@ export default function App() {
       unsubTx();
       unsubSuppliers();
     };
-  }, [refreshProducts, refreshBundles, refreshPurchases, refreshTransactions]);
+  }, [appMode]);
 
   // Automatic startup cleanup for obsolete localStorage keys
   useEffect(() => {
@@ -2453,6 +2476,7 @@ export default function App() {
 
   // Global Hardware Barcode Scanner Fallback (Triggered on any screen, e.g. Dashboard or History)
   useHardwareBarcodeScanner({
+    enabled: !isCustomerLink() && appMode !== 'customer',
     onScan: (barcode) => {
       const cleanCode = sanitizeBarcode(barcode).toLowerCase();
       const matched = products.find(
@@ -4129,10 +4153,10 @@ export default function App() {
         if (!isNaN(t) && t > 0) return t;
       }
       // Dữ liệu cache cũ chưa có created_at:
-      // Trong mảng products gốc, index 0 là mới nhất, index N-1 là cũ nhất
-      // => products.length - idx: Cũ nhất có điểm thấp nhất (1), mới nhất có điểm cao nhất (N)
+      // Trong mảng products gốc từ Supabase (query theo created_at ascending), index 0 là cũ nhất, index N-1 là mới nhất
+      // => index 0 có điểm thấp nhất (cũ nhất), index N-1 có điểm cao nhất (mới nhất)
       const idx = originalIndexMap.has(p.id) ? originalIndexMap.get(p.id) : 0;
-      return products.length - idx;
+      return idx;
     };
 
     if (posSortOrder === 'newest_first') {
@@ -4273,14 +4297,14 @@ export default function App() {
 
   // 1. Dedicated Customer Catalog View (Only when accessing #menu or /menu)
   // Completely standalone: no auth check, no redirect to login, no redirect to POS
-  if (appMode === 'customer') {
+  if (appMode === 'customer' || isCustomerLink()) {
     return (
       <CustomerCatalogView
         products={products}
         categories={categoriesList}
         bundles={bundles}
         isLoading={isLoadingProducts || isRefreshing}
-        onRefresh={handleRefreshAllFromSupabase}
+        onRefresh={handleCustomerCatalogRefresh}
       />
     );
   }

@@ -1,5 +1,6 @@
 import { fetchStoreSetting, updateStoreSetting } from './supabase';
 import { DEFAULT_ROLE_PERMISSIONS, USER_ROLES } from '../config/navigationSchema';
+import { isCustomerStorefrontRoute } from '../utils/routeUtils';
 
 const PERMISSIONS_STORAGE_KEY = 'role_permissions';
 const ROLES_STORAGE_KEY = 'app_roles_v1';
@@ -32,6 +33,7 @@ export const DEFAULT_ROLES = [
  * @returns {Promise<Array>} List of role objects
  */
 export async function getAppRoles() {
+  if (isCustomerStorefrontRoute()) return DEFAULT_ROLES;
   try {
     const roles = await fetchStoreSetting(ROLES_STORAGE_KEY, DEFAULT_ROLES);
 
@@ -83,6 +85,7 @@ export async function saveAppRoles(rolesList) {
  * @returns {Promise<Object>} Map of roleId -> string[]
  */
 export async function getRolePermissions() {
+  if (isCustomerStorefrontRoute()) return DEFAULT_ROLE_PERMISSIONS;
   try {
     const permissions = await fetchStoreSetting(
       PERMISSIONS_STORAGE_KEY,

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { supabase, sanitizeCashierName, fetchStoreSetting, updateStoreSetting } from './supabase';
+import { isCustomerStorefrontRoute } from '../utils/routeUtils';
 
 const SUPABASE_URL = 'https://qanphpmphnipyuwcadwz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_zQw2L3JfnT-5o_-tJgZaIA_WETQFTPq';
@@ -12,6 +13,11 @@ export const EVENT_STAFF_CHANGED = 'meiishop:staff-updated';
  * Reads cloud store_settings with local cache
  */
 export async function fetchStaffProfiles({ force = false } = {}) {
+  // Security Guard: Never fetch or leak staff list/PINs to public customer storefront visitors
+  if (isCustomerStorefrontRoute()) {
+    return { data: [], error: null };
+  }
+
   try {
     // 1. Check store_settings in Supabase cloud
     const cloudStaff = await fetchStoreSetting(STAFF_STORAGE_KEY, null, { force });

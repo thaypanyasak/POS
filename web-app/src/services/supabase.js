@@ -3,6 +3,7 @@ import { universalStorage } from './authStorage';
 import { sanitizeImageUrl, normalizeLao } from '../utils/formatters';
 import { idbGet, idbSet } from '../utils/indexedDbStorage';
 import { safeSetItem } from '../utils/safeStorage';
+import { isCustomerStorefrontRoute } from '../utils/routeUtils';
 
 const SUPABASE_URL = 'https://qanphpmphnipyuwcadwz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_zQw2L3JfnT-5o_-tJgZaIA_WETQFTPq';
@@ -98,10 +99,16 @@ export async function fetchAllStoreSettings({ force = false } = {}) {
 
   inFlightStoreSettingsPromise = (async () => {
     try {
+      // Security Isolation: Public customer storefront only needs the exchange rate
+      // Never fetch staff list, permissions, or printer settings for storefront visitors
+      const keysToFetch = isCustomerStorefrontRoute()
+        ? ['thb_lak_exchange_rate']
+        : BATCH_STORE_SETTINGS_KEYS;
+
       const { data, error } = await supabase
         .from('store_settings')
         .select('key, value')
-        .in('key', BATCH_STORE_SETTINGS_KEYS);
+        .in('key', keysToFetch);
 
       if (!error && Array.isArray(data)) {
         data.forEach((row) => {
@@ -443,8 +450,8 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
         return cachedProductsInMemory || null;
       }
 
-    // Fetch product_crate_deposits synchronized settings from store_settings
-    const crateDepositsMap = await fetchProductCrateDeposits().catch(() => ({}));
+    // Fetch product_crate_deposits synchronized settings from store_settings (bypassed for customer storefront)
+    const crateDepositsMap = isCustomerStorefrontRoute() ? {} : await fetchProductCrateDeposits().catch(() => ({}));
 
     // 3. O(N) Hash Map Indexing for units by product_id (eliminates O(N*M) 27-million iteration loop)
     const unitsByProductId = new Map();

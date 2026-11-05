@@ -311,12 +311,19 @@ export default function CustomerCatalogView({
     return processedProducts.slice(0, visibleLimit);
   }, [processedProducts, visibleLimit]);
 
-  // Load more items smoothly when approaching bottom
+  const processedProductsRef = useRef(processedProducts);
+  processedProductsRef.current = processedProducts;
+
+  // Load more items smoothly when approaching bottom without recreating observer
   const loadMoreProducts = useCallback(() => {
-    if (processedProducts && visibleLimit < processedProducts.length) {
-      setVisibleLimit((prev) => Math.min(prev + LOAD_MORE_STEP, processedProducts.length));
-    }
-  }, [processedProducts, visibleLimit]);
+    setVisibleLimit((prev) => {
+      const maxLen = processedProductsRef.current?.length || 0;
+      if (prev < maxLen) {
+        return Math.min(prev + LOAD_MORE_STEP, maxLen);
+      }
+      return prev;
+    });
+  }, []);
 
   // Dual-trigger: IntersectionObserver on sentinel element (400px before bottom) + scroll listener
   useEffect(() => {
@@ -724,7 +731,9 @@ export default function CustomerCatalogView({
                     <button
                       type="button"
                       onClick={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
+                        setSelectedProduct(null);
                         setSelectorProduct(p);
                       }}
                       className="w-full mt-1.5 h-8 rounded-xl bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-teal-200/90 hover:border-teal-600 transition-all active:scale-95 cursor-pointer shadow-2xs"
@@ -803,7 +812,9 @@ export default function CustomerCatalogView({
                     <button
                       type="button"
                       onClick={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
+                        setSelectedProduct(null);
                         setSelectorProduct(p);
                       }}
                       className="h-9 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer shrink-0"
