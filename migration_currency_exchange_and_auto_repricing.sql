@@ -93,7 +93,7 @@ END $$;
 -- Tiêu tốn < 1KB Egress (Zero-Egress Strategy)
 CREATE OR REPLACE FUNCTION public.sync_exchange_rate_and_reprice(
   p_new_rate NUMERIC,
-  p_round_step INT DEFAULT 500
+  p_round_step INT DEFAULT 1000
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -109,7 +109,7 @@ BEGIN
   END IF;
 
   IF p_round_step IS NULL OR p_round_step <= 0 THEN
-    p_round_step := 500;
+    p_round_step := 1000;
   END IF;
 
   -- 2. Cập nhật tỷ giá mới vào bảng store_settings
@@ -200,22 +200,22 @@ BEGIN
     SET 
       retail_price = CASE 
         WHEN eu.eff_ratio_1 > 0 
-        THEN ROUND((eu.new_unit_cost_lak * eu.eff_ratio_1) / p_round_step) * p_round_step
+        THEN ROUND((eu.new_unit_cost_lak * eu.eff_ratio_1) / (p_round_step::numeric)) * p_round_step
         ELSE u.retail_price 
       END,
       price_2 = CASE 
         WHEN eu.eff_ratio_2 > 0 
-        THEN ROUND((eu.new_unit_cost_lak * eu.eff_ratio_2) / p_round_step) * p_round_step
+        THEN ROUND((eu.new_unit_cost_lak * eu.eff_ratio_2) / (p_round_step::numeric)) * p_round_step
         ELSE u.price_2 
       END,
       price_3 = CASE 
         WHEN eu.eff_ratio_3 > 0 
-        THEN ROUND((eu.new_unit_cost_lak * eu.eff_ratio_3) / p_round_step) * p_round_step
+        THEN ROUND((eu.new_unit_cost_lak * eu.eff_ratio_3) / (p_round_step::numeric)) * p_round_step
         ELSE u.price_3 
       END,
       wholesale_price = CASE 
         WHEN eu.eff_ratio_3 > 0 
-        THEN ROUND((eu.new_unit_cost_lak * eu.eff_ratio_3) / p_round_step) * p_round_step
+        THEN ROUND((eu.new_unit_cost_lak * eu.eff_ratio_3) / (p_round_step::numeric)) * p_round_step
         ELSE u.wholesale_price 
       END,
       price_ratio_1 = CASE WHEN eu.eff_ratio_1 > 0 THEN eu.eff_ratio_1 ELSE u.price_ratio_1 END,
@@ -241,7 +241,7 @@ $$;
 -- Alias tương thích
 CREATE OR REPLACE FUNCTION public.update_exchange_rate_and_reprice(
   p_new_rate NUMERIC,
-  p_round_step INT DEFAULT 500
+  p_round_step INT DEFAULT 1000
 )
 RETURNS JSONB
 LANGUAGE plpgsql

@@ -15,6 +15,9 @@ import {
   createCategoryInSupabase,
   updateCategoryInSupabase,
   deleteCategoryInSupabase,
+  reorderCategoriesInSupabase,
+  assignProductToCategoryInSupabase,
+  batchAssignProductsToCategoryInSupabase,
   fetchSuppliersFromSupabase,
   fetchPurchaseOrdersFromSupabase,
   updateExistingSaleTransactionInSupabase,
@@ -270,6 +273,7 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Default collapsed: chỉ thấy icon
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('ທັງໝົດ');
+  const [posSortOrder, setPosSortOrder] = useState('oldest_first'); // 'oldest_first' (cũ nhất ở trên) | 'newest_first' (mới nhất ở trên)
 
   // Cart & Multi-Order Management (Space cho chọn Order, đổi khách hàng 1, 2...)
   const [posOrders, setPosOrders] = useState(() => {
@@ -361,10 +365,17 @@ export default function App() {
   useEffect(() => {
     setPosOrders((prevOrders) => {
       const existing = prevOrders.find((o) => o.id === activeOrderId);
-      const isDefaultCust = !customerName || customerName.trim() === '' || customerName.trim() === 'ລູກຄ້າທົ່ວໄປ';
-      const orderIndex = prevOrders.findIndex((o) => o.id === activeOrderId);
-      const defaultLabel = existing?.defaultLabel || (existing?.label?.startsWith('Order ') ? existing.label : `Order ${orderIndex >= 0 ? orderIndex + 1 : 1}`);
-      const newLabel = isDefaultCust ? defaultLabel : customerName.trim();
+      if (!existing) return prevOrders;
+
+      let newLabel = existing.label;
+      let defaultLabel = existing.defaultLabel;
+      // Do not overwrite custom label of a dedicated edit order tab with customer name
+      if (!existing.isEditingOldOrder) {
+        const isDefaultCust = !customerName || customerName.trim() === '' || customerName.trim() === 'ລູກຄ້າທົ່ວໄປ';
+        const orderIndex = prevOrders.findIndex((o) => o.id === activeOrderId);
+        defaultLabel = existing?.defaultLabel || (existing?.label?.startsWith('Order ') ? existing.label : `Order ${orderIndex >= 0 ? orderIndex + 1 : 1}`);
+        newLabel = isDefaultCust ? defaultLabel : customerName.trim();
+      }
 
       if (
         existing &&
@@ -409,7 +420,7 @@ export default function App() {
       if (o.id === activeOrderId) {
         return {
           ...o,
-          cart,
+          cart: [...cart],
           customerName,
           customerPhone,
           customerId,
@@ -421,11 +432,19 @@ export default function App() {
 
     setPosOrders(updatedOrders);
     setActiveOrderId(targetOrderId);
-    setCart(targetOrder.cart || []);
+    setCart(targetOrder.cart ? [...targetOrder.cart] : []);
     setCustomerName(targetOrder.customerName || 'ລູກຄ້າທົ່ວໄປ');
     setCustomerPhone(targetOrder.customerPhone || '');
     setCustomerId(targetOrder.customerId || null);
     setGlobalPriceTier(targetOrder.priceTier || 1);
+
+    // Dynamically toggle editingOldTransaction based on whether target tab is an edit order!
+    if (targetOrder.isEditingOldOrder && targetOrder.originalTx) {
+      setEditingOldTransaction(targetOrder.originalTx);
+    } else {
+      setEditingOldTransaction(null);
+    }
+
     safeSetItem('meiishop_pos_active_orders_v1', updatedOrders);
     safeSetItem('meiishop_pos_active_order_id_v1', targetOrderId);
     playActionClickBeep();
@@ -433,15 +452,16 @@ export default function App() {
 
   // Add a new order tab
   const handleAddNewOrderTab = () => {
-    // Generate next Order label
+    // Generate next Order label (ignoring edit tabs)
     const orderNumbers = posOrders
+      .filter((o) => !o.isEditingOldOrder)
       .map((o) => {
         const text = o.defaultLabel || o.label || '';
         const m = text.match(/\d+/);
         return m ? parseInt(m[0], 10) : 0;
       })
       .filter((n) => n > 0);
-    const nextNum = (orderNumbers.length > 0 ? Math.max(...orderNumbers) : posOrders.length) + 1;
+    const nextNum = (orderNumbers.length > 0 ? Math.max(...orderNumbers) : posOrders.filter((o) => !o.isEditingOldOrder).length) + 1;
     const newId = 'order_' + Date.now();
     const defaultLabel = `Order ${nextNum}`;
     const newOrder = {
@@ -458,7 +478,7 @@ export default function App() {
 
     // Save current active order before switching
     const updatedOrders = [
-      ...posOrders.map((o) => (o.id === activeOrderId ? { ...o, cart, customerName, customerPhone, customerId, priceTier: globalPriceTier } : o)),
+      ...posOrders.map((o) => (o.id === activeOrderId ? { ...o, cart: [...cart], customerName, customerPhone, customerId, priceTier: globalPriceTier } : o)),
       newOrder,
     ];
 
@@ -469,6 +489,7 @@ export default function App() {
     setCustomerPhone('');
     setCustomerId(null);
     setGlobalPriceTier(1);
+    setEditingOldTransaction(null);
 
     safeSetItem('meiishop_pos_active_orders_v1', updatedOrders);
     safeSetItem('meiishop_pos_active_order_id_v1', newId);
@@ -478,6 +499,9 @@ export default function App() {
   // Close / Delete an order tab
   const handleCloseOrderTab = (targetOrderId, e) => {
     if (e) e.stopPropagation();
+    const closingOrder = posOrders.find((o) => o.id === targetOrderId);
+    const isClosingEditOrder = Boolean(closingOrder?.isEditingOldOrder || targetOrderId.startsWith('edit_order_'));
+
     if (posOrders.length <= 1) {
       // Just clear current order instead of deleting only tab
       setCart([]);
@@ -485,25 +509,45 @@ export default function App() {
       setCustomerPhone('');
       setCustomerId(null);
       setGlobalPriceTier(1);
+      if (isClosingEditOrder) {
+        setEditingOldTransaction(null);
+        const resetOrder = [
+          { id: 'order_1', label: 'Order 1', defaultLabel: 'Order 1', cart: [], customerName: 'ລູກຄ້າທົ່ວໄປ', customerPhone: '', customerId: null, priceTier: 1, createdAt: Date.now() }
+        ];
+        setPosOrders(resetOrder);
+        setActiveOrderId('order_1');
+        safeSetItem('meiishop_pos_active_orders_v1', resetOrder);
+        safeSetItem('meiishop_pos_active_order_id_v1', 'order_1');
+      }
       return;
     }
 
     const remainingOrders = posOrders.filter((o) => o.id !== targetOrderId);
     let nextActive = remainingOrders[0];
     if (targetOrderId === activeOrderId) {
-      const closingIdx = posOrders.findIndex((o) => o.id === targetOrderId);
-      nextActive = remainingOrders[Math.max(0, closingIdx - 1)] || remainingOrders[0];
+      if (isClosingEditOrder && closingOrder?.returnOrderId) {
+        nextActive = remainingOrders.find((o) => o.id === closingOrder.returnOrderId) || remainingOrders[0];
+      } else {
+        const closingIdx = posOrders.findIndex((o) => o.id === targetOrderId);
+        nextActive = remainingOrders[Math.max(0, closingIdx - 1)] || remainingOrders[0];
+      }
     } else {
       nextActive = remainingOrders.find((o) => o.id === activeOrderId) || remainingOrders[0];
     }
 
     setPosOrders(remainingOrders);
     setActiveOrderId(nextActive.id);
-    setCart(nextActive.cart || []);
+    setCart(nextActive.cart ? [...nextActive.cart] : []);
     setCustomerName(nextActive.customerName || 'ລູກຄ້າທົ່ວໄປ');
     setCustomerPhone(nextActive.customerPhone || '');
     setCustomerId(nextActive.customerId || null);
     setGlobalPriceTier(nextActive.priceTier || 1);
+
+    if (nextActive.isEditingOldOrder && nextActive.originalTx) {
+      setEditingOldTransaction(nextActive.originalTx);
+    } else {
+      setEditingOldTransaction(null);
+    }
 
     safeSetItem('meiishop_pos_active_orders_v1', remainingOrders);
     safeSetItem('meiishop_pos_active_order_id_v1', nextActive.id);
@@ -575,7 +619,7 @@ export default function App() {
    * Recalculates cost_lak and all unit prices in local memory using stored price ratios
    * without calling fetchProducts over PostgREST API (0 KB Egress)
    */
-  const handleApplyRepriceForRateChange = useCallback((newRate, roundStep = 500) => {
+  const handleApplyRepriceForRateChange = useCallback((newRate, roundStep = 1000) => {
     const rateNum = Number(newRate);
     if (!rateNum || rateNum <= 0) return;
 
@@ -655,7 +699,7 @@ export default function App() {
         setExchangeRate(Number(payload.rate));
         // ONLY reprice products in-memory if explicitly requested by user (Manual Bulk Reprice Trigger)
         if (payload?.shouldReprice) {
-          handleApplyRepriceForRateChange(Number(payload.rate), payload.roundStep || 500);
+          handleApplyRepriceForRateChange(Number(payload.rate), payload.roundStep || 1000);
         }
       }
     };
@@ -773,7 +817,20 @@ export default function App() {
       return null;
     }
   };
-  const [editingOldTransaction, setEditingOldTransaction] = useState(null); // Re-checkout old order mode
+  const [editingOldTransaction, setEditingOldTransaction] = useState(() => {
+    try {
+      const savedOrders = localStorage.getItem('meiishop_pos_active_orders_v1');
+      const savedId = localStorage.getItem('meiishop_pos_active_order_id_v1') || 'order_1';
+      if (savedOrders) {
+        const parsed = JSON.parse(savedOrders);
+        const active = parsed.find((o) => o.id === savedId);
+        if (active?.isEditingOldOrder && active?.originalTx) {
+          return active.originalTx;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }); // Re-checkout old order mode
 
   // Dashboard Timeframe: 'daily' | 'weekly' | 'monthly' | 'all'
   const [dashboardTimeframe, setDashboardTimeframe] = useState('daily');
@@ -1314,6 +1371,13 @@ export default function App() {
       console.warn('Categories fetch error:', catErr);
     }
   }, []);
+
+  // Auto-refresh categories whenever cashier enters POS screen or Categories to ensure child categories are up to date
+  useEffect(() => {
+    if (activeMainTab === 'pos' || activeMainTab === 'categories') {
+      refreshCategories(true);
+    }
+  }, [activeMainTab, refreshCategories]);
 
   // 5. Modular Purchases & Suppliers Refresh (Lazy-loaded only when on Purchases screen)
   const refreshPurchases = useCallback(async (force = false) => {
@@ -2254,9 +2318,9 @@ export default function App() {
         imageUrl: finalImageUrl,
         baseUnit: actualBaseUnitName,
         costPerBaseUnit: Math.round(Number(costPerBaseUnit) || 0),
-        costBaht: Math.round(Number(costBaht) || 0),
+        costBaht: Number(costBaht) || 0,
         costKip: Math.round(Number(costKip) || 0),
-        cost_thb: Math.round(Number(costBaht) || 0),
+        cost_thb: Number(costBaht) || 0,
         cost_lak: Math.round(Number(costKip) || 0),
         cost_currency: costCurrency,
         costCurrency: costCurrency,
@@ -2289,6 +2353,10 @@ export default function App() {
         hasCrateDeposit: Boolean(hasCrateDeposit),
         crateDepositFee: parseDots(crateDepositFee) || 30000,
         units: finalUnits,
+        created_at: productToEdit?.created_at || productToEdit?.createdAt || new Date().toISOString(),
+        createdAt: productToEdit?.createdAt || productToEdit?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
       // REAL SUPABASE DATABASE API CALL:
@@ -2301,7 +2369,7 @@ export default function App() {
       if (productToEdit) {
         setProducts(products.map((p) => (p.id === prodId ? updatedProduct : p)));
       } else {
-        setProducts([updatedProduct, ...products]);
+        setProducts([...products, updatedProduct]);
       }
 
       setProductFormModalOpen(false);
@@ -3080,8 +3148,11 @@ export default function App() {
         debtDueDate: isDebt ? (debtDueDate || null) : null,
       });
 
-      if (editingOldTransaction) {
-        const savedOldTxId = editingOldTransaction.id;
+      const isEditingOldOrder = Boolean(editingOldTransaction);
+      const savedOldTransaction = editingOldTransaction;
+
+      if (isEditingOldOrder && savedOldTransaction) {
+        const savedOldTxId = savedOldTransaction.id;
         // Track local echo to avoid redundant notification
         localEchoIdsRef.current.add(savedOldTxId);
 
@@ -3089,7 +3160,7 @@ export default function App() {
         // 1. Restore old stock 2. Delete old items 3. Deduct new stock 4. Insert new items 5. Update header
         const res = await updateExistingSaleTransactionInSupabase(
           savedOldTxId,
-          editingOldTransaction.items || editingOldTransaction.sale_transaction_items || [],
+          savedOldTransaction.items || savedOldTransaction.sale_transaction_items || [],
           receipt,
           receiptItems
         );
@@ -3118,7 +3189,7 @@ export default function App() {
           );
 
           openAlert(`ບັນທຶກການແກ້ໄຂບິນ #${receiptNo} ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
-          // Đánh dấu đơn này là đơn đã chỉnh sửa (vừa hiện badge ở sidebar, vừa giữ nhãn & highlight amber bền vững)
+          // Đánh dấu đơn này là đơn đã chỉnh sửa
           setUnreadOrderIds((prev) => new Set([...prev, savedOldTxId]));
           setUpdatedOrderIds((prev) => new Set([...prev, savedOldTxId]));
           triggerHighlight?.(savedOldTxId, 'updated');
@@ -3136,7 +3207,38 @@ export default function App() {
         setEditingOldTransaction(null);
         // Refresh transactions silently in background without blocking UI
         void refreshTransactions(true);
+
+        // CLEANUP DEDICATED EDIT TAB & RETURN TO ORIGINAL HELD ORDER (e.g. Order 2):
+        const currentOrder = posOrders.find((o) => o.id === activeOrderId);
+        const returnTargetId = currentOrder?.returnOrderId;
+        const remainingOrders = posOrders.filter((o) => o.id !== activeOrderId || !currentOrder?.isEditingOldOrder);
+        const finalOrders = remainingOrders.length > 0 ? remainingOrders : [
+          { id: 'order_1', label: 'Order 1', defaultLabel: 'Order 1', cart: [], customerName: 'ລູກຄ້າທົ່ວໄປ', customerPhone: '', customerId: null, priceTier: 1, createdAt: Date.now() }
+        ];
+
+        const nextOrder = finalOrders.find((o) => o.id === returnTargetId) ||
+          finalOrders.find((o) => !o.isEditingOldOrder) ||
+          finalOrders[0];
+
+        setPosOrders(finalOrders);
+        setActiveOrderId(nextOrder.id);
+        setCart(nextOrder.cart ? [...nextOrder.cart] : []);
+        setCustomerName(nextOrder.customerName || 'ລູກຄ້າທົ່ວໄປ');
+        setCustomerPhone(nextOrder.customerPhone || '');
+        setCustomerId(nextOrder.customerId || null);
+        setGlobalPriceTier(nextOrder.priceTier || 1);
+
+        safeSetItem('meiishop_pos_active_orders_v1', finalOrders);
+        safeSetItem('meiishop_pos_active_order_id_v1', nextOrder.id);
+
+        // Reset payment form states
+        setPaymentMethod('cash');
+        setTenderedKip(0);
+        setDebtPaidKip(0);
+        setDebtNote('');
+        setDebtDueDate('');
       } else {
+        // Normal sale branch:
         // Prepare stock deductions for tracked products
         const stockDeductions = [];
         const updatedProducts = products.map((prod) => {
@@ -3241,35 +3343,35 @@ export default function App() {
           setCheckoutModalOpen(false);
           setReceiptModalOpen(true);
         }
-      }
 
-      // Auto-cleanup finished order in Multi-Order Tab system
-      if (posOrders.length > 1) {
-        // If multiple orders open, remove this finished order and switch to the next active one
-        const remainingOrders = posOrders.filter((o) => o.id !== activeOrderId);
-        const nextOrder = remainingOrders[0];
-        setPosOrders(remainingOrders);
-        setActiveOrderId(nextOrder.id);
-        setCart(nextOrder.cart || []);
-        setCustomerName(nextOrder.customerName || 'ລູກຄ້າທົ່ວໄປ');
-        setCustomerPhone(nextOrder.customerPhone || '');
-        setCustomerId(nextOrder.customerId || null);
-        setGlobalPriceTier(nextOrder.priceTier || 1);
-        safeSetItem('meiishop_pos_active_orders_v1', remainingOrders);
-        safeSetItem('meiishop_pos_active_order_id_v1', nextOrder.id);
-      } else {
-        // Only 1 order open, reset it cleanly
-        setCart([]);
-        setCustomerName('ລູກຄ້າທົ່ວໄປ');
-        setCustomerPhone('');
-        setCustomerId(null);
-        setGlobalPriceTier(1);
-        const resetOrders = [
-          { id: activeOrderId, label: posOrders[0]?.label || 'Order 1', cart: [], customerName: 'ລູກຄ້າທົ່ວໄປ', customerPhone: '', customerId: null, priceTier: 1, createdAt: Date.now() }
-        ];
-        setPosOrders(resetOrders);
-        safeSetItem('meiishop_pos_active_orders_v1', resetOrders);
-        safeSetItem('meiishop_pos_active_order_id_v1', activeOrderId);
+        // Auto-cleanup finished order in Multi-Order Tab system (ONLY FOR NORMAL SALES)
+        if (posOrders.length > 1) {
+          // If multiple orders open, remove this finished order and switch to the next active one
+          const remainingOrders = posOrders.filter((o) => o.id !== activeOrderId);
+          const nextOrder = remainingOrders[0];
+          setPosOrders(remainingOrders);
+          setActiveOrderId(nextOrder.id);
+          setCart(nextOrder.cart || []);
+          setCustomerName(nextOrder.customerName || 'ລູກຄ້າທົ່ວໄປ');
+          setCustomerPhone(nextOrder.customerPhone || '');
+          setCustomerId(nextOrder.customerId || null);
+          setGlobalPriceTier(nextOrder.priceTier || 1);
+          safeSetItem('meiishop_pos_active_orders_v1', remainingOrders);
+          safeSetItem('meiishop_pos_active_order_id_v1', nextOrder.id);
+        } else {
+          // Only 1 order open, reset it cleanly
+          setCart([]);
+          setCustomerName('ລູກຄ້າທົ່ວໄປ');
+          setCustomerPhone('');
+          setCustomerId(null);
+          setGlobalPriceTier(1);
+          const resetOrders = [
+            { id: activeOrderId, label: posOrders[0]?.label || 'Order 1', cart: [], customerName: 'ລູກຄ້າທົ່ວໄປ', customerPhone: '', customerId: null, priceTier: 1, createdAt: Date.now() }
+          ];
+          setPosOrders(resetOrders);
+          safeSetItem('meiishop_pos_active_orders_v1', resetOrders);
+          safeSetItem('meiishop_pos_active_order_id_v1', activeOrderId);
+        }
       }
     } catch (err) {
       console.error('Checkout payment error:', err);
@@ -3357,6 +3459,8 @@ export default function App() {
 
     const enrichedTx = {
       ...tx,
+      isEditing: true,
+      originalInvoiceId: tx.id,
       id: tx.id,
       receiptNumber: receiptNum,
       originalTransactionId: tx.id,
@@ -3369,11 +3473,74 @@ export default function App() {
       debtNote: note,
     };
 
+    // 1. Snapshot and save current active order so its items/customer are NEVER overwritten or lost
+    const savedOrdersWithCurrent = posOrders.map((o) =>
+      o.id === activeOrderId
+        ? {
+            ...o,
+            cart: [...cart],
+            customerName,
+            customerPhone,
+            customerId,
+            priceTier: globalPriceTier,
+          }
+        : o
+    );
+
+    // 2. Dedicated Edit Order Tab identifier
+    const editTabId = 'edit_order_' + tx.id;
+    const editTabLabel = `ແກ້ໄຂ #${receiptNum}`;
+
+    // Check if an edit tab for this transaction already exists
+    const existingEditIdx = savedOrdersWithCurrent.findIndex((o) => o.id === editTabId);
+    let updatedOrders;
+    if (existingEditIdx >= 0) {
+      updatedOrders = savedOrdersWithCurrent.map((o, idx) =>
+        idx === existingEditIdx
+          ? {
+              ...o,
+              label: editTabLabel,
+              defaultLabel: editTabLabel,
+              isEditingOldOrder: true,
+              originalTx: enrichedTx,
+              returnOrderId: o.returnOrderId || activeOrderId,
+              cart: loadedCart,
+              customerName: custName,
+              customerPhone: tx.customerPhone || tx.customer_phone || '',
+              customerId: tx.customerId || tx.customer_id || null,
+              priceTier: 1,
+            }
+          : o
+      );
+    } else {
+      const newEditOrder = {
+        id: editTabId,
+        label: editTabLabel,
+        defaultLabel: editTabLabel,
+        isEditingOldOrder: true,
+        originalTx: enrichedTx,
+        returnOrderId: activeOrderId, // Retains whichever order tab the cashier was working on (e.g. Order 2)!
+        cart: loadedCart,
+        customerName: custName,
+        customerPhone: tx.customerPhone || tx.customer_phone || '',
+        customerId: tx.customerId || tx.customer_id || null,
+        priceTier: 1,
+        createdAt: Date.now(),
+      };
+      updatedOrders = [...savedOrdersWithCurrent, newEditOrder];
+    }
+
+    setPosOrders(updatedOrders);
+    setActiveOrderId(editTabId);
     setCart(loadedCart);
     setCustomerName(custName);
     setCustomerPhone(tx.customerPhone || tx.customer_phone || '');
     setCustomerId(tx.customerId || tx.customer_id || null);
+    setGlobalPriceTier(1);
     setEditingOldTransaction(enrichedTx);
+
+    safeSetItem('meiishop_pos_active_orders_v1', updatedOrders);
+    safeSetItem('meiishop_pos_active_order_id_v1', editTabId);
 
     if (pMethod === 'DEBT') {
       setPaymentMethod('debt');
@@ -3389,19 +3556,56 @@ export default function App() {
 
     setActiveMainTab('pos');
     openAlert(
-      `ໂຫຼດບິນ #${receiptNum} ເຂົ້າສູ່ໜ້າ POS ແລ້ວ. ປັບປຸງລາຍການແລ້ວກົດບັນທຶກ!`,
+      `ໂຫຼດບິນ #${receiptNum} ເຂົ້າສູ່ Order ໃໝ່ແລ້ວ! Order ທີ່ທ່ານເລືອກໄວ້ກ່ອນໜ້ານີ້ຍັງຄົງຢູ່ຄົບຖ້ວນ.`,
       'ແກ້ໄຂບິນ',
       'info'
     );
   };
 
   const handleCancelEditingOrder = () => {
+    // 1. Identify which tab we are on and where to return
+    const currentOrder = posOrders.find((o) => o.id === activeOrderId);
+    const isEditOrder = Boolean(currentOrder?.isEditingOldOrder || activeOrderId.startsWith('edit_order_'));
+    const returnTargetId = currentOrder?.returnOrderId;
+
+    // Filter out the edit order tab from posOrders
+    const remainingOrders = posOrders.filter((o) => o.id !== activeOrderId || !isEditOrder);
+    const finalOrders = remainingOrders.length > 0 ? remainingOrders : [
+      { id: 'order_1', label: 'Order 1', defaultLabel: 'Order 1', cart: [], customerName: 'ລູກຄ້າທົ່ວໄປ', customerPhone: '', customerId: null, priceTier: 1, createdAt: Date.now() }
+    ];
+
+    // Find return order (e.g. Order 2 that was active before editing)
+    const targetOrder = finalOrders.find((o) => o.id === returnTargetId) ||
+      finalOrders.find((o) => !o.isEditingOldOrder) ||
+      finalOrders[0];
+
+    // 2. Clear editing state
     setEditingOldTransaction(null);
-    setCart([]);
-    setCustomerName('ລູກຄ້າທົ່ວໄປ');
-    setCustomerPhone('');
-    setCustomerId(null);
-    openAlert('ຍົກເລີກການແກ້ໄຂບິນເກົ່າແລ້ວ', 'ແຈ້ງເຕືອນ', 'info');
+
+    // 3. Switch back to target order with its items fully preserved
+    setPosOrders(finalOrders);
+    setActiveOrderId(targetOrder.id);
+    setCart(targetOrder.cart ? [...targetOrder.cart] : []);
+    setCustomerName(targetOrder.customerName || 'ລູກຄ້າທົ່ວໄປ');
+    setCustomerPhone(targetOrder.customerPhone || '');
+    setCustomerId(targetOrder.customerId || null);
+    setGlobalPriceTier(targetOrder.priceTier || 1);
+
+    safeSetItem('meiishop_pos_active_orders_v1', finalOrders);
+    safeSetItem('meiishop_pos_active_order_id_v1', targetOrder.id);
+
+    // Reset payment states back to default
+    setPaymentMethod('cash');
+    setTenderedKip(0);
+    setDebtPaidKip(0);
+    setDebtNote('');
+    setDebtDueDate('');
+
+    openAlert(
+      `ຍົກເລີກການແກ້ໄຂບິນເກົ່າແລ້ວ. ໄດ້ກັບຄືນສູ່ ${targetOrder.label || 'Order ປະຈຸບັນ'} ພ້ອມສິນຄ້າຄົບຖ້ວນ!`,
+      'ແຈ້ງເຕືອນ',
+      'info'
+    );
   };
 
   // Void / Cancel a Sale Transaction from Supabase and restore product stock (Without deleting record)
@@ -3621,12 +3825,15 @@ export default function App() {
     setModalQuantity(1);
   };
 
-  const handleCreateCategory = async (name) => {
+  const handleCreateCategory = async (name, parentId = null) => {
     if (!name || !name.trim()) return null;
     const clean = name.trim();
-    const res = await createCategoryInSupabase(clean, rawCategories.length + 1);
+    const res = await createCategoryInSupabase(clean, rawCategories.length + 1, parentId);
     if (res.success && res.data) {
-      const newCatObj = res.data;
+      const newCatObj = {
+        ...res.data,
+        parent_id: res.data.parent_id !== undefined ? res.data.parent_id : (parentId || null),
+      };
       const updatedRaw = [...rawCategories, newCatObj];
       setRawCategories(updatedRaw);
       const updatedNames = updatedRaw.map((c) => c.name).filter(Boolean);
@@ -3639,11 +3846,19 @@ export default function App() {
     }
   };
 
-  const handleUpdateCategory = async (id, newName, oldName) => {
-    const res = await updateCategoryInSupabase(id, newName, oldName);
+  const handleUpdateCategory = async (id, newName, oldName, parentId = undefined) => {
+    const res = await updateCategoryInSupabase(id, newName, oldName, parentId);
     if (res.success) {
       // 1. Update rawCategories state
-      const updatedRaw = rawCategories.map((c) => (c.id === id ? { ...c, name: newName } : c));
+      const updatedRaw = rawCategories.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              name: newName,
+              ...(parentId !== undefined ? { parent_id: parentId || null } : {}),
+            }
+          : c
+      );
       setRawCategories(updatedRaw);
 
       // 2. Update categoriesList state
@@ -3690,6 +3905,147 @@ export default function App() {
     }
   };
 
+  // Batch reorder categories with Zero-Egress
+  const handleReorderCategories = async (newOrderedCategories, rootsToUpdate = null) => {
+    try {
+      if (!newOrderedCategories || newOrderedCategories.length === 0) return { success: true };
+
+      // 1. Optimistic UI update: update rawCategories immediately
+      setRawCategories(newOrderedCategories);
+      const updatedNames = newOrderedCategories.map((c) => c.name).filter(Boolean);
+      setCategoriesList(updatedNames);
+      safeSetItem('meiishop_categories_cache', updatedNames);
+
+      // 2. Prepare payload for Supabase (MUST include name & parent_id to satisfy NOT NULL constraints)
+      const itemsToPersist = rootsToUpdate && rootsToUpdate.length > 0 ? rootsToUpdate : newOrderedCategories;
+      const payload = itemsToPersist.map((cat, idx) => ({
+        id: cat.id,
+        name: cat.name,
+        sort_order: Number(cat.sort_order ?? idx + 1),
+        parent_id: cat.parent_id || null,
+      }));
+
+      // 3. Persist to Supabase with Zero-Egress
+      const res = await reorderCategoriesInSupabase(payload);
+      return res;
+    } catch (err) {
+      console.error('handleReorderCategories error:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Direct product assignment to category from Category Detail View
+  const handleAssignProductToCategory = async (productId, categoryName, categoryId) => {
+    try {
+      const res = await assignProductToCategoryInSupabase(productId, categoryName, categoryId);
+      if (res.success) {
+        setProducts((prev) => {
+          const updated = prev.map((p) => {
+            if (p.id === productId) {
+              return {
+                ...p,
+                category: categoryName,
+                categoryId: categoryId,
+                categories: categoryId ? { id: categoryId, name: categoryName } : null,
+              };
+            }
+            return p;
+          });
+          safeSetItem('meiishop_products_v5', updated);
+          idbSet('meiishop_products_v5', updated);
+          return updated;
+        });
+        // Zero-Egress Architecture: State, localStorage, and IndexedDB are already updated in-place.
+        // Omit queryClient.invalidateQueries to avoid re-fetching all 668+ products over the network.
+        return { success: true };
+      }
+      return res;
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Unassign/remove product from category
+  const handleRemoveProductFromCategory = async (productId, remainingCategories = 'ທົ່ວໄປ') => {
+    try {
+      const cleanCat = remainingCategories || 'ທົ່ວໄປ';
+      const res = await assignProductToCategoryInSupabase(productId, cleanCat, null);
+      if (res.success) {
+        setProducts((prev) => {
+          const updated = prev.map((p) => {
+            if (p.id === productId) {
+              return {
+                ...p,
+                category: cleanCat,
+                categoryId: null,
+                categories: null,
+              };
+            }
+            return p;
+          });
+          safeSetItem('meiishop_products_v5', updated);
+          idbSet('meiishop_products_v5', updated);
+          return updated;
+        });
+        // Zero-Egress Architecture: State, localStorage, and IndexedDB are already updated in-place.
+        return { success: true };
+      }
+      return res;
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Batch assign/remove products to/from category
+  const handleBatchAssignProductsToCategory = async (assignments = []) => {
+    try {
+      if (!assignments || assignments.length === 0) return { success: true };
+      const res = await batchAssignProductsToCategoryInSupabase(assignments);
+      if (res.success) {
+        const assignmentMap = new Map(assignments.map((a) => [a.productId, a]));
+        setProducts((prev) => {
+          const updated = prev.map((p) => {
+            const match = assignmentMap.get(p.id);
+            if (match) {
+              return {
+                ...p,
+                category: match.categoryName,
+                categoryId: match.categoryId || null,
+                categories: match.categoryId ? { id: match.categoryId, name: match.categoryName } : null,
+              };
+            }
+            return p;
+          });
+          safeSetItem('meiishop_products_v5', updated);
+          idbSet('meiishop_products_v5', updated);
+          return updated;
+        });
+        // Zero-Egress Architecture: State, localStorage, and IndexedDB are already updated in-place.
+        return { success: true };
+        return { success: true };
+      }
+      return res;
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Open Product Creation modal pre-filled with specific category
+  const handleOpenCreateProductForCategory = (initialCategoryName, initialCategoryId) => {
+    setProductToEdit(null);
+    setNewProdName('');
+    setNewProdNameVi('');
+    setNewProdCategory(initialCategoryName || 'ທົ່ວໄປ');
+    setNewProdCategoryId(initialCategoryId || '');
+    setNewProdBarcode('');
+    setCartonBarcode('');
+    setPackBarcode('');
+    setPieceBarcode('');
+    setNewProdImageUrl('');
+    setImageFileToUpload(null);
+    setProductFormModalOpen(true);
+  };
+
   // Strictly list categories from database: 'ທັງໝົດ' + optional 'ລວມ' + categories loaded from Supabase!
   const categories = useMemo(() => {
     const list = ['ທັງໝົດ'];
@@ -3706,28 +4062,89 @@ export default function App() {
     const cleanRaw = searchQuery ? searchQuery.trim() : '';
     const q = cleanRaw ? normalizeLao(cleanRaw).toLowerCase() : '';
 
+    let result = [];
     if (!q && activeCategory === 'ທັງໝົດ') {
-      return products;
-    }
+      result = products.slice();
+    } else {
+      // Two-Tier Category Hierarchy Resolution:
+      // If activeCategory is a Parent Category, match products in the parent AND all its child categories!
+      const activeCatObj = rawCategories.find((c) => c.name === activeCategory || c.id === activeCategory);
+      const matchedCategoryNames = new Set();
+      const matchedCategoryIds = new Set();
 
-    return products.filter((p) => {
-      const matchesCat = activeCategory === 'ທັງໝົດ' || p.category === activeCategory;
-      if (!matchesCat) return false;
-      if (!q) return true;
+      if (activeCatObj) {
+        matchedCategoryNames.add(activeCatObj.name);
+        matchedCategoryIds.add(activeCatObj.id);
 
-      // Ultra-fast path: Pre-computed flat search index (< 1ms)
-      if (p._searchKey) {
-        return p._searchKey.includes(q);
+        // Collect all child categories under this category
+        const childCategories = rawCategories.filter((c) => c.parent_id === activeCatObj.id);
+        childCategories.forEach((ch) => {
+          if (ch.name) matchedCategoryNames.add(ch.name);
+          if (ch.id) matchedCategoryIds.add(ch.id);
+        });
+      } else if (activeCategory !== 'ທັງໝົດ') {
+        matchedCategoryNames.add(activeCategory);
       }
 
-      // Safe fallback for dynamic items missing precomputed index
-      return (
-        normalizeLao(p.name).toLowerCase().includes(q) ||
-        (p.barcode && normalizeLao(p.barcode).toLowerCase().includes(q)) ||
-        p.units.some((u) => normalizeLao(u.unitName).toLowerCase().includes(q) || (u.barcode && normalizeLao(u.barcode).toLowerCase().includes(q)))
-      );
+      result = products.filter((p) => {
+        let matchesCat = activeCategory === 'ທັງໝົດ';
+        if (!matchesCat) {
+          const pCatString = p.category || p.categories?.name || '';
+          const pCatList = pCatString.split(',').map((s) => s.trim()).filter(Boolean);
+          const pCatId = p.categoryId || p.category_id || p.categories?.id;
+          matchesCat = Boolean(
+            (pCatList.length > 0 && pCatList.some((c) => matchedCategoryNames.has(c))) ||
+            (pCatId && matchedCategoryIds.has(pCatId))
+          );
+        }
+        if (!matchesCat) return false;
+        if (!q) return true;
+
+        // Ultra-fast path: Pre-computed flat search index (< 1ms)
+        if (p._searchKey) {
+          return p._searchKey.includes(q);
+        }
+
+        // Safe fallback for dynamic items missing precomputed index
+        return (
+          normalizeLao(p.name).toLowerCase().includes(q) ||
+          (p.barcode && normalizeLao(p.barcode).toLowerCase().includes(q)) ||
+          p.units.some((u) => normalizeLao(u.unitName).toLowerCase().includes(q) || (u.barcode && normalizeLao(u.barcode).toLowerCase().includes(q)))
+        );
+      });
+    }
+
+    // Sắp xếp danh sách sản phẩm màn POS:
+    // posSortOrder === 'oldest_first' (mặc định khi vào lần đầu): Cũ nhất ở trên -> Mới nhất ở dưới
+    // posSortOrder === 'newest_first' (khi bấm tiếp vào tab "ທັງໝົດ"): Mới nhất ở trên -> Cũ nhất ở dưới
+    const originalIndexMap = new Map();
+    products.forEach((p, idx) => {
+      originalIndexMap.set(p.id, idx);
     });
-  }, [products, activeCategory, searchQuery]);
+
+    const getChronologicalScore = (p) => {
+      const rawDate = p.created_at || p.createdAt;
+      if (rawDate) {
+        const t = new Date(rawDate).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+      // Dữ liệu cache cũ chưa có created_at:
+      // Trong mảng products gốc, index 0 là mới nhất, index N-1 là cũ nhất
+      // => products.length - idx: Cũ nhất có điểm thấp nhất (1), mới nhất có điểm cao nhất (N)
+      const idx = originalIndexMap.has(p.id) ? originalIndexMap.get(p.id) : 0;
+      return products.length - idx;
+    };
+
+    if (posSortOrder === 'newest_first') {
+      // Mới nhất ở trên (đầu danh sách), cũ nhất ở đằng sau (cuối danh sách)
+      result.sort((a, b) => getChronologicalScore(b) - getChronologicalScore(a));
+    } else {
+      // Mặc định: Cũ nhất ở trên (đầu danh sách), mới nhất ở đằng sau (cuối danh sách)
+      result.sort((a, b) => getChronologicalScore(a) - getChronologicalScore(b));
+    }
+
+    return result;
+  }, [products, activeCategory, searchQuery, rawCategories, posSortOrder]);
 
   // Dashboard Aggregations
   const dashboardData = useMemo(() => {
@@ -3914,15 +4331,24 @@ export default function App() {
         {activeMainTab === 'pos' && (
           <PosScreen
             categories={categories}
+            rawCategories={rawCategories}
             activeCategory={activeCategory}
             setActiveCategory={setActiveCategory}
+            posSortOrder={posSortOrder}
+            setPosSortOrder={setPosSortOrder}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             filteredProducts={filteredProducts}
             products={products}
             bundles={bundles}
             isLoading={isLoadingProducts || isRefreshing}
-            onRefreshProducts={() => refreshProducts(true)}
+            onRefreshProducts={async () => {
+              await Promise.all([
+                refreshProducts(true),
+                refreshCategories(true),
+                refreshBundles(true),
+              ]);
+            }}
             addToCart={addToCart}
             openUnitSelector={openUnitSelector}
             cart={cart}
@@ -3983,7 +4409,13 @@ export default function App() {
               onAddNewProduct={handleOpenNewProduct}
               onEditProduct={handleOpenEditProduct}
               onDeleteProduct={handleDeleteProduct}
-              onRefreshProducts={() => refreshProducts(true)}
+              onRefreshProducts={async () => {
+              await Promise.all([
+                refreshProducts(true),
+                refreshCategories(true),
+                refreshBundles(true),
+              ]);
+            }}
               onOpenCategoryManager={() => setActiveMainTab('categories')}
               onOpenBundleManager={() => setActiveMainTab('bundles')}
               isLoading={isLoadingProducts || isRefreshing}
@@ -4000,7 +4432,15 @@ export default function App() {
               onCreateCategory={handleCreateCategory}
               onUpdateCategory={handleUpdateCategory}
               onDeleteCategory={handleDeleteCategory}
-              onRefresh={() => refreshCategories(true)}
+              onReorderCategories={handleReorderCategories}
+              onAssignProduct={handleAssignProductToCategory}
+              onRemoveProduct={handleRemoveProductFromCategory}
+              onBatchAssignProducts={handleBatchAssignProductsToCategory}
+              onBatchRemoveProducts={handleBatchAssignProductsToCategory}
+              onOpenCreateProduct={handleOpenCreateProductForCategory}
+              onRefresh={async () => {
+                await Promise.all([refreshProducts(true), refreshCategories(true)]);
+              }}
               isLoading={isLoadingProducts || isRefreshing}
               onAlert={openAlert}
             />

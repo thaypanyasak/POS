@@ -149,8 +149,8 @@ export default function BulkPriceModal({
         nextPrice = orig;
     }
 
-    // Áp dụng quy tắc làm tròn bán lẻ chuẩn mốc 500 ₭ (Standard Retail 500 LAK Rounding)
-    return roundLakToStep(nextPrice, 500);
+    // Áp dụng quy tắc làm tròn bán lẻ chuẩn bước nhảy 1.000 ₭ (Lấy mốc 500 làm tròn chẵn nghìn)
+    return roundLakToStep(nextPrice, 1000);
   };
 
   // Handle value change for Formula input with dot formatting

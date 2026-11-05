@@ -22,6 +22,7 @@ import {
   Check,
   Tag,
   CaretDown,
+  CaretUp,
   XCircle,
   X,
   ArrowClockwise,
@@ -142,8 +143,11 @@ function renderBundleCollage(images, sizeClass = "w-full h-full", fallbackIconSi
 
 export default function PosScreen({
   categories,
+  rawCategories = [],
   activeCategory,
   setActiveCategory,
+  posSortOrder = 'oldest_first',
+  setPosSortOrder = null,
   searchQuery,
   setSearchQuery,
   filteredProducts,
@@ -237,6 +241,63 @@ export default function PosScreen({
     }
   }, [mobileCartOpen]);
 
+  // Two-Tier Category Dropdown State & Click-away handling
+  const [openCategoryDropdown, setOpenCategoryDropdown] = useState(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+
+  // Close Category Dropdown on outside resize or scroll
+  useEffect(() => {
+    if (!openCategoryDropdown) return;
+    const handleClose = () => setOpenCategoryDropdown(null);
+    window.addEventListener('resize', handleClose);
+    window.addEventListener('scroll', handleClose, true);
+    return () => {
+      window.removeEventListener('resize', handleClose);
+      window.removeEventListener('scroll', handleClose, true);
+    };
+  }, [openCategoryDropdown]);
+
+  // Organize 2-tier Category Tree (Parent -> Children)
+  const categoryTree = useMemo(() => {
+    if (!rawCategories || rawCategories.length === 0) {
+      return (categories || []).map((c, i) => ({
+        id: `cat_simple_${i}`,
+        name: c,
+        children: [],
+      }));
+    }
+
+    const catMap = new Map();
+    rawCategories.forEach((c) => {
+      catMap.set(c.id, { ...c, children: [] });
+    });
+
+    const roots = [];
+    rawCategories.forEach((c) => {
+      const node = catMap.get(c.id);
+      if (c.parent_id && catMap.has(c.parent_id)) {
+        catMap.get(c.parent_id).children.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+
+    // Safeguard: Ensure any category names present in products but not yet in categories table are still visible
+    (categories || []).forEach((cName) => {
+      if (!cName || cName === 'ທັງໝົດ' || cName === 'ລວມ') return;
+      const exists = rawCategories.some((r) => r.name === cName);
+      if (!exists) {
+        roots.push({
+          id: `cat_extra_${cName}`,
+          name: cName,
+          children: [],
+        });
+      }
+    });
+
+    return roots;
+  }, [rawCategories, categories]);
+
   const INITIAL_BATCH_SIZE = 48;
   const LOAD_MORE_STEP = 36;
   const [visibleLimit, setVisibleLimit] = useState(INITIAL_BATCH_SIZE);
@@ -296,7 +357,7 @@ export default function PosScreen({
   // Mixed Carton Bundles filter for POS catalog: Only display in the 'ລວມ' category tab
   const matchingBundles = useMemo(() => {
     if (!bundles || bundles.length === 0) return [];
-    if (activeCategory === 'ລວມ' || activeCategory === '📦 ລວມ' || activeCategory?.includes('ລວມ')) {
+    if (activeCategory === 'ລວມ' || activeCategory?.includes('ລວມ')) {
       if (!searchQuery?.trim()) return bundles;
       const q = normalizeLao(searchQuery.trim());
       return bundles.filter(
@@ -622,82 +683,29 @@ export default function PosScreen({
   };
 
   // Reusable Edit Order Banner per DESIGN.md:
-  // ກຳລັງແກ້ໄຂບິນ: #[receipt_number] | ຮູບແບບຊຳລະເດີມ: [Badge Tiền mặt / Chuyển khoản / Nợ]
+  // Banner cảnh báo gọn gàng khi đang ở tab sửa hóa đơn
   const renderEditingBanner = () => {
     if (!editingOldTransaction) return null;
 
-    const rawMethod = (
-      editingOldTransaction.originalPaymentMethod ||
-      editingOldTransaction.paymentMethod ||
-      editingOldTransaction.payment_method ||
-      ''
-    ).toUpperCase();
-    const isDebt =
-      rawMethod === 'DEBT' ||
-      Boolean(editingOldTransaction.isDebt || editingOldTransaction.is_debt);
-    const isTransfer =
-      rawMethod === 'TRANSFER' ||
-      rawMethod === 'ONEPAY' ||
-      rawMethod === 'QR';
-    const isCash = !isDebt && !isTransfer;
-
-    const custName =
-      editingOldTransaction.originalCustomerName ||
-      editingOldTransaction.customerName ||
-      editingOldTransaction.customer_name ||
-      'ລູກຄ້າທົ່ວໄປ';
-
-    const remainingDebt = Number(
-      editingOldTransaction.originalRemainingDebt ??
-      editingOldTransaction.debtAmount ??
-      editingOldTransaction.debt_amount ??
-      editingOldTransaction.remainingDebt ??
-      editingOldTransaction.remaining_debt ??
-      0
-    );
+    const receiptNo = editingOldTransaction.receiptNumber || editingOldTransaction.originalReceiptNumber || editingOldTransaction.id;
 
     return (
-      <div className="bg-amber-500 text-white p-2 px-3 flex items-center justify-between gap-2 shadow-xs shrink-0 sticky top-0 z-20 border-b border-amber-600">
-        <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto whitespace-nowrap scrollbar-none text-[11px] font-bold">
-          <WarningCircle size={15} weight="fill" className="text-white shrink-0" />
-          <span>ກຳລັງແກ້ໄຂບິນ: #{editingOldTransaction.receiptNumber || editingOldTransaction.originalReceiptNumber}</span>
-          <span className="text-amber-200">|</span>
-          <span className="text-amber-100">ຮູບແບບຊຳລະເດີມ:</span>
-          {isCash && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold shadow-2xs">
-              <Money size={12} weight="bold" />
-              <span>ເງິນສົດ (Cash)</span>
-            </span>
-          )}
-          {isTransfer && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-2xs">
-              <QrCode size={12} weight="bold" />
-              <span>ໂອນເງິນ (Transfer)</span>
-            </span>
-          )}
-          {isDebt && (
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-[10px] font-bold shadow-2xs font-mono"
-              style={{ backgroundColor: '#EF4444' }}
-            >
-              <HandCoins size={12} weight="bold" />
-              <span>ຄ້າງຊຳລະ ({formatDots(remainingDebt)} ₭)</span>
-            </span>
-          )}
-          {custName && custName !== 'ລູກຄ້າທົ່ວໄປ' && (
-            <>
-              <span className="text-amber-200">|</span>
-              <span className="text-amber-100 font-medium">ລູກຄ້າ: {custName}</span>
-            </>
-          )}
+      <div className="bg-amber-500 text-white py-2 px-3 flex items-center justify-between gap-2 shadow-xs shrink-0 sticky top-0 z-30 border-b border-amber-600 animate-in fade-in slide-in-from-top-1">
+        <div className="flex items-center gap-2 min-w-0 text-xs font-bold text-white">
+          <WarningCircle size={16} weight="fill" className="text-amber-100 shrink-0" />
+          <span className="truncate tracking-wide font-extrabold">
+            ພວມແກ້ໄຂໃບບິນ: #{receiptNo}
+          </span>
         </div>
         {onCancelEditOrder && (
           <button
             type="button"
             onClick={onCancelEditOrder}
-            className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold shrink-0 cursor-pointer transition-all shadow-2xs"
+            className="px-2.5 py-0.5 rounded-lg bg-white hover:bg-rose-50 text-rose-700 hover:text-rose-800 text-xs font-black shrink-0 cursor-pointer transition-all shadow-xs active:scale-95 flex items-center gap-1 border border-rose-200"
+            title="ຍົກເລີກການແກ້ໄຂ ແລະ ກັບຄືນສູ່ອໍເດີປະຈຸບັນ"
           >
-            ຍົກເລີກ
+            <X size={12} weight="bold" />
+            <span>ຍົກເລີກ</span>
           </button>
         )}
       </div>
@@ -744,22 +752,33 @@ export default function PosScreen({
 
           {/* Nút Chọn Order ở cuối bên phải */}
           <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setOrderMenuOpen(!orderMenuOpen)}
-              className="h-8 px-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-bold text-xs flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 select-none"
-              title="ກົດເພື່ອເລືອກ Order ຫຼື ເພີ່ມ Order ໃໝ່"
-            >
-              <Package size={14} weight="bold" />
-              <span className="font-mono">
-                {(() => {
-                  const currentOrd = posOrders.find((o) => o.id === activeOrderId);
-                  const idx = posOrders.findIndex((o) => o.id === activeOrderId);
-                  return currentOrd?.defaultLabel || `Order ${idx >= 0 ? idx + 1 : 1}`;
-                })()}
-              </span>
-              <CaretDown size={11} weight="bold" className={`transition-transform duration-200 ${orderMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
+            {(() => {
+              const currentOrd = posOrders.find((o) => o.id === activeOrderId);
+              const isEditMode = Boolean(currentOrd?.isEditingOldOrder || editingOldTransaction);
+
+              return (
+                <button
+                  type="button"
+                  onClick={() => setOrderMenuOpen(!orderMenuOpen)}
+                  className={`h-8 px-2.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 select-none ${
+                    isEditMode
+                      ? 'bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 shadow-amber-200'
+                      : 'bg-primary hover:bg-primary-hover text-white'
+                  }`}
+                  title="ກົດເພື່ອເລືອກ Order ຫຼື ເພີ່ມ Order ໃໝ່"
+                >
+                  {isEditMode ? (
+                    <WarningCircle size={15} weight="fill" className="text-white shrink-0" />
+                  ) : (
+                    <Package size={14} weight="bold" />
+                  )}
+                  <span className="font-mono truncate max-w-[130px]">
+                    {currentOrd?.defaultLabel || currentOrd?.label || 'Order 1'}
+                  </span>
+                  <CaretDown size={11} weight="bold" className={`transition-transform duration-200 ${orderMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+              );
+            })()}
 
             {/* Popover Dropdown danh sách các Order (neo sang phải right-0) */}
             {orderMenuOpen && (
@@ -768,7 +787,7 @@ export default function PosScreen({
                   className="fixed inset-0 z-40"
                   onClick={() => setOrderMenuOpen(false)}
                 />
-                <div className="absolute right-0 top-full mt-1.5 z-50 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 min-w-[250px] max-w-[290px] w-68 flex flex-col gap-1.5 animate-in fade-in-50 zoom-in-95">
+                <div className="absolute right-0 top-full mt-1.5 z-50 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 min-w-[260px] max-w-[300px] w-72 flex flex-col gap-1.5 animate-in fade-in-50 zoom-in-95">
                   {/* Header popup: Tiêu đề danh sách đơn */}
                   <div className="px-1.5 py-1 border-b border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                     <span>ລາຍການ Order ({posOrders.length})</span>
@@ -782,6 +801,7 @@ export default function PosScreen({
                     {posOrders.map((ord, idx) => {
                       const isActive = ord.id === activeOrderId;
                       const summary = getOrderSummary(ord);
+                      const isOrderEditing = Boolean(ord.isEditingOldOrder);
 
                       return (
                         <div
@@ -792,24 +812,39 @@ export default function PosScreen({
                           }}
                           className={`flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-colors border ${
                             isActive
-                              ? 'bg-primary-light border-primary-border text-primary font-extrabold shadow-2xs'
+                              ? isOrderEditing
+                                ? 'bg-amber-50 border-amber-300 text-amber-900 font-extrabold shadow-2xs'
+                                : 'bg-primary-light border-primary-border text-primary font-extrabold shadow-2xs'
+                              : isOrderEditing
+                              ? 'bg-amber-50/50 hover:bg-amber-50 border-amber-100 text-amber-800'
                               : 'bg-white hover:bg-slate-50 border-slate-100 text-slate-700'
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <span
                               className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0 ${
-                                isActive ? 'bg-primary text-white' : 'bg-slate-200 text-slate-600'
+                                isActive
+                                  ? isOrderEditing
+                                    ? 'bg-amber-500 text-white'
+                                    : 'bg-primary text-white'
+                                  : isOrderEditing
+                                  ? 'bg-amber-200 text-amber-800'
+                                  : 'bg-slate-200 text-slate-600'
                               }`}
                             >
-                              {idx + 1}
+                              {isOrderEditing ? '!' : idx + 1}
                             </span>
                             <div className="flex flex-col min-w-0">
-                              <span className="truncate font-bold text-xs leading-tight">
-                                {ord.label || `Order ${idx + 1}`}
+                              <span className="truncate font-bold text-xs leading-tight flex items-center gap-1">
+                                <span>{ord.label || `Order ${idx + 1}`}</span>
+                                {isOrderEditing && (
+                                  <span className="text-[9px] px-1 py-0.2 rounded bg-amber-200/80 text-amber-800 font-extrabold shrink-0">
+                                    ແກ້ໄຂ
+                                  </span>
+                                )}
                               </span>
                               <span className="text-[10px] text-slate-400 font-normal truncate">
-                                {summary.cName}
+                                {isOrderEditing ? 'ແກ້ໄຂບິນເກົ່າ' : summary.cName}
                               </span>
                             </div>
                           </div>
@@ -819,7 +854,9 @@ export default function PosScreen({
                               <span
                                 className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ${
                                   isActive
-                                    ? 'bg-primary-light text-primary'
+                                    ? isOrderEditing
+                                      ? 'bg-amber-200 text-amber-900'
+                                      : 'bg-primary-light text-primary'
                                     : 'bg-slate-100 text-slate-600'
                                 }`}
                               >
@@ -829,7 +866,7 @@ export default function PosScreen({
                               <span className="text-[10px] text-slate-300 italic">(ຫວ່າງ)</span>
                             )}
 
-                            {posOrders.length > 1 && (
+                            {(posOrders.length > 1 || isOrderEditing) && (
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -837,7 +874,7 @@ export default function PosScreen({
                                   onCloseOrderTab?.(ord.id, e);
                                 }}
                                 className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-100/80 active:scale-95 transition-all ml-1 cursor-pointer shrink-0"
-                                title="ລຶບ / ປິດ Order ນີ້"
+                                title={isOrderEditing ? 'ຍົກເລີກການແກ້ໄຂບິນນີ້' : 'ລຶບ / ປິດ Order ນີ້'}
                               >
                                 <X size={14} weight="bold" />
                               </button>
@@ -2053,37 +2090,221 @@ export default function PosScreen({
             </button>
           </div>
 
-          {/* Category Chips Bar: Danh mục cuộn ngang mượt mà */}
-          {categories && categories.length > 0 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 touch-pan-x">
-              {categories.map((cat) => {
-                const isSelected = activeCategory === cat;
+          {/* Two-Tier Category Chips Bar (Danh mục 2 cấp: Cha - Con & Dropdown) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 touch-pan-x">
+            {/* 1. Nút [ ທັງໝົດ ] (Tất cả) - Lần đầu: cũ nhất ở trên; Bấm tiếp: đảo ngược mới nhất ở trên */}
+            <button
+              type="button"
+              onClick={() => {
+                playUnitChangeBeep('pos');
+                if (activeCategory === 'ທັງໝົດ') {
+                  // Đang ở tab "ທັງໝົດ" mà bấm tiếp -> đảo ngược thứ tự: cũ nhất <-> mới nhất
+                  setPosSortOrder?.((prev) => (prev === 'oldest_first' ? 'newest_first' : 'oldest_first'));
+                } else {
+                  // Đang ở danh mục khác mà bấm vào "ທັງໝົດ" -> chuyển về "ທັງໝົດ", mặc định cũ nhất ở trên
+                  setActiveCategory?.('ທັງໝົດ');
+                  setPosSortOrder?.('oldest_first');
+                }
+                setOpenCategoryDropdown(null);
+              }}
+              className={`h-[32px] px-3 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 border active:scale-95 flex items-center justify-center gap-1 ${
+                activeCategory === 'ທັງໝົດ'
+                  ? 'bg-primary text-white border-primary shadow-xs font-extrabold'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border-slate-200'
+              }`}
+              title={
+                activeCategory === 'ທັງໝົດ'
+                  ? (posSortOrder === 'oldest_first'
+                      ? 'ກຳລັງສະແດງ: ສິນຄ້າເກົ່າສຸດຂຶ້ນເທິງ (ກົດເພື່ອສະຫຼັບເປັນ ໃໝ່ສຸດຂຶ້ນເທິງ)'
+                      : 'ກຳລັງສະແດງ: ສິນຄ້າໃໝ່ສຸດຂຶ້ນເທິງ (ກົດເພື່ອສະຫຼັບເປັນ ເກົ່າສຸດຂຶ້ນເທິງ)')
+                  : 'ເບິ່ງສິນຄ້າທັງໝົດ'
+              }
+            >
+              <span>ທັງໝົດ</span>
+              {activeCategory === 'ທັງໝົດ' && (
+                <span className="flex items-center text-[10px] opacity-90">
+                  {posSortOrder === 'oldest_first' ? (
+                    <CaretUp size={11} weight="bold" />
+                  ) : (
+                    <CaretDown size={11} weight="bold" />
+                  )}
+                </span>
+              )}
+            </button>
+
+            {/* 2. Nút [ ລວມ ] (Bán theo lốc/thùng Mix nếu có) */}
+            {bundles && bundles.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  playUnitChangeBeep('pos');
+                  setActiveCategory?.('ລວມ');
+                  setOpenCategoryDropdown(null);
+                }}
+                className={`h-[32px] px-3.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 border active:scale-95 flex items-center gap-1.5 ${
+                  activeCategory === 'ລວມ'
+                    ? 'bg-primary text-white border-primary shadow-xs font-extrabold'
+                    : 'bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border-slate-200'
+                }`}
+              >
+                <Package size={14} weight="duotone" />
+                <span>ລວມ</span>
+              </button>
+            )}
+
+            {/* 3. Danh mục 2 cấp: Danh mục độc lập & Danh mục Cha có Popover Con */}
+            {categoryTree.map((root) => {
+              if (root.name === 'ທັງໝົດ' || root.name === 'ລວມ') {
+                return null;
+              }
+
+              const hasChildren = root.children && root.children.length > 0;
+
+              // CASE A: Danh mục Cha có danh mục con (ví dụ: ເຄື່ອງດື່ມ)
+              if (hasChildren) {
+                const isParentActive = activeCategory === root.name;
+                const activeChild = root.children.find((ch) => ch.name === activeCategory);
+                const isGroupActive = isParentActive || Boolean(activeChild);
+                const isCurrentOpen = openCategoryDropdown?.id === root.id;
+
                 return (
                   <button
-                    key={cat}
+                    key={root.id}
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
                       playUnitChangeBeep('pos');
-                      setActiveCategory?.(cat);
+
+                      // Chỉ kích hoạt danh mục cha nếu nhóm này chưa được chọn (chưa có danh mục con hoặc cha nào active)
+                      // Nếu đang active danh mục con (activeChild), giữ nguyên danh mục con đó, chỉ mở/đóng dropdown
+                      if (!activeChild && !isParentActive) {
+                        setActiveCategory?.(root.name);
+                      }
+
+                      // Mở / Đóng Dropdown danh mục con
+                      if (isCurrentOpen) {
+                        setOpenCategoryDropdown(null);
+                      } else {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setDropdownPosition({
+                          top: rect.bottom + 6,
+                          left: Math.max(8, Math.min(rect.left, window.innerWidth - 240)),
+                        });
+                        setOpenCategoryDropdown(root);
+                      }
                     }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 border active:scale-95 ${
-                      isSelected
+                    className={`h-[32px] px-3 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 flex items-center gap-1.5 border active:scale-95 select-none ${
+                      isGroupActive
                         ? 'bg-primary text-white border-primary shadow-xs font-extrabold'
-                        : 'bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 border-slate-200'
+                        : 'bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border-slate-200'
                     }`}
+                    title={`ໝວດໝູ່ຫຼັກ: ${root.name} (ກົດເພື່ອເລືອກໝວດຍ່ອຍ)`}
                   >
-                    {cat === 'ລວມ' || cat === '📦 ລວມ' ? (
-                      <span className="flex items-center gap-1">
-                        <Package size={13} weight="duotone" />
-                        <span>ລວມ</span>
-                      </span>
-                    ) : (
-                      cat
-                    )}
+                    <span>
+                      {activeChild ? `${root.name} (${activeChild.name})` : root.name}
+                    </span>
+                    <CaretDown
+                      size={12}
+                      weight="bold"
+                      className={`transition-transform duration-200 ${
+                        isCurrentOpen ? 'rotate-180' : ''
+                      } ${isGroupActive ? 'text-white' : 'text-slate-400'}`}
+                    />
                   </button>
                 );
-              })}
-            </div>
+              }
+
+              // CASE B: Danh mục độc lập (không có con)
+              const isSelected = activeCategory === root.name;
+              return (
+                <button
+                  key={root.id}
+                  type="button"
+                  onClick={() => {
+                    playUnitChangeBeep('pos');
+                    setActiveCategory?.(root.name);
+                    setOpenCategoryDropdown(null);
+                  }}
+                  className={`h-[32px] px-3.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 border active:scale-95 flex items-center justify-center ${
+                    isSelected
+                      ? 'bg-primary text-white border-primary shadow-xs font-extrabold'
+                      : 'bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border-slate-200'
+                  }`}
+                >
+                  {root.name}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 2-Tier Category Dropdown Portal (Render outside container to prevent clipping) */}
+          {openCategoryDropdown && typeof document !== 'undefined' && createPortal(
+            <>
+              <div
+                className="fixed inset-0 z-[100]"
+                onClick={() => setOpenCategoryDropdown(null)}
+              />
+              <div
+                style={{
+                  top: `${dropdownPosition.top}px`,
+                  left: `${dropdownPosition.left}px`,
+                }}
+                className="fixed z-[101] bg-white rounded-2xl shadow-2xl border border-slate-200 p-1.5 min-w-[210px] max-w-[290px] flex flex-col gap-1 animate-in fade-in-50 zoom-in-95 select-none"
+              >
+                {/* 1. Chọn toàn bộ danh mục cha (Hiển thị sản phẩm cha + tất cả con) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    playUnitChangeBeep('pos');
+                    setActiveCategory?.(openCategoryDropdown.name);
+                    setOpenCategoryDropdown(null);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-colors cursor-pointer text-left ${
+                    activeCategory === openCategoryDropdown.name
+                      ? 'bg-primary-light text-primary font-black border border-primary-border shadow-2xs'
+                      : 'hover:bg-slate-50 text-slate-800 font-extrabold'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
+                    <span>ທັງໝົດ {openCategoryDropdown.name}</span>
+                  </span>
+                  {activeCategory === openCategoryDropdown.name && (
+                    <Check size={14} weight="bold" className="text-primary shrink-0 ml-1.5" />
+                  )}
+                </button>
+
+                <div className="border-t border-slate-100 my-0.5" />
+
+                {/* 2. Danh sách các danh mục con trực thuộc */}
+                <div className="flex flex-col gap-0.5 max-h-56 overflow-y-auto no-scrollbar py-0.5">
+                  {openCategoryDropdown.children.map((child) => {
+                    const isChildActive = activeCategory === child.name;
+                    return (
+                      <button
+                        key={child.id}
+                        type="button"
+                        onClick={() => {
+                          playUnitChangeBeep('pos');
+                          setActiveCategory?.(child.name);
+                          setOpenCategoryDropdown(null);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer text-left ${
+                          isChildActive
+                            ? 'bg-primary-light text-primary font-black border border-primary-border shadow-2xs'
+                            : 'hover:bg-slate-50 text-slate-700 font-medium'
+                        }`}
+                      >
+                        <span className="truncate">{child.name}</span>
+                        {isChildActive && (
+                          <Check size={14} weight="bold" className="text-primary shrink-0 ml-1.5" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>,
+            document.body
           )}
         </div>
 
@@ -2192,7 +2413,7 @@ export default function PosScreen({
                 })}
 
                 {/* 2. Normal Products */}
-                {activeCategory !== 'ລວມ' && activeCategory !== '📦 ລວມ' && visibleProducts.map((p) => {
+                {activeCategory !== 'ລວມ' && visibleProducts.map((p) => {
                   const rawStock = p.currentStockBaseUnits ?? p.current_stock_base_units;
                   const hasTrackStock = p.trackStock !== false;
                   const stockVal = hasTrackStock && rawStock !== null && rawStock !== undefined && !isNaN(rawStock) ? Number(rawStock) : null;
@@ -2370,7 +2591,7 @@ export default function PosScreen({
                 })}
 
                 {/* Sentinel & smooth loader indicator at bottom */}
-                {activeCategory !== 'ລວມ' && activeCategory !== '📦 ລວມ' && visibleLimit < filteredProducts.length && (
+                {activeCategory !== 'ລວມ' && visibleLimit < filteredProducts.length && (
                   <div
                     ref={sentinelRef}
                     className="col-span-full py-3.5 flex items-center justify-center text-xs font-bold text-slate-400 gap-2"

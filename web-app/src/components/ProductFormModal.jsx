@@ -22,6 +22,13 @@ import {
   Coins,
   Link,
   X,
+  Folders,
+  Folder,
+  CaretDown,
+  CaretUp,
+  Check,
+  MagnifyingGlass,
+  Tag,
 } from '@phosphor-icons/react';
 import { formatDots, parseDots, sanitizeImageUrl } from '../utils/formatters';
 import { compressProductImage, formatFileSize } from '../utils/imageCompressor';
@@ -139,6 +146,23 @@ export default function ProductFormModal({
   const [customCatInput, setCustomCatInput] = useState('');
   const [imageError, setImageError] = useState('');
 
+  // Category Tree Multi-Select State
+  const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
+  const [catSearchQuery, setCatSearchQuery] = useState('');
+  const catDropdownRef = useRef(null);
+
+  // Close Category Dropdown when clicking outside
+  useEffect(() => {
+    if (!isCatDropdownOpen) return;
+    const handleClickOutside = (e) => {
+      if (catDropdownRef.current && !catDropdownRef.current.contains(e.target)) {
+        setIsCatDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isCatDropdownOpen]);
+
   // Cleanly reset transient local modal states when opened or switching product
   useEffect(() => {
     setShowUrlInput(false);
@@ -146,7 +170,98 @@ export default function ProductFormModal({
     setScannerTarget('general');
     setIsAddingNewCat(false);
     setCustomCatInput('');
+    setIsCatDropdownOpen(false);
+    setCatSearchQuery('');
   }, [productToEdit?.id, isOpen]);
+
+  // Parse comma-separated categories into an array of trimmed names
+  const selectedCats = useMemo(() => {
+    if (!newProdCategory) return [];
+    return String(newProdCategory)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }, [newProdCategory]);
+
+  // Hierarchical Category Tree (Parent -> Children indented) for Multi-Select
+  const categoryTreeForSelect = useMemo(() => {
+    const q = catSearchQuery.trim().toLowerCase();
+
+    // 1. Group rawCategories into Parent -> Children
+    const roots = (rawCategories || []).filter((c) => !c.parent_id);
+    const tree = [];
+
+    roots.forEach((root) => {
+      const children = (rawCategories || []).filter((c) => c.parent_id === root.id);
+
+      const rootMatch = !q || (root.name || '').toLowerCase().includes(q);
+      const matchingChildren = children.filter((ch) => !q || (ch.name || '').toLowerCase().includes(q));
+
+      if (q && !rootMatch && matchingChildren.length === 0) return;
+
+      tree.push({
+        id: root.id,
+        name: root.name,
+        isParent: true,
+        children: q ? (rootMatch ? children : matchingChildren) : children,
+      });
+    });
+
+    // 2. Also include any categories from categoriesList not present in rawCategories
+    const knownNames = new Set(rawCategories.map((c) => c.name));
+    (categoriesList || []).forEach((cName) => {
+      if (!knownNames.has(cName)) {
+        if (!q || cName.toLowerCase().includes(q)) {
+          tree.push({
+            id: cName,
+            name: cName,
+            isParent: false,
+            children: [],
+          });
+        }
+      }
+    });
+
+    return tree;
+  }, [rawCategories, categoriesList, catSearchQuery]);
+
+  // Toggle selection of a category in multi-select mode
+  const toggleSelectCategory = (catName, catId) => {
+    const isSelected = selectedCats.includes(catName);
+    let nextList;
+    if (isSelected) {
+      nextList = selectedCats.filter((c) => c !== catName);
+    } else {
+      nextList = [...selectedCats, catName];
+    }
+    const nextStr = nextList.join(', ');
+    setNewProdCategory(nextStr);
+
+    if (setNewProdCategoryId) {
+      if (nextList.length === 0) {
+        setNewProdCategoryId('');
+      } else {
+        const firstCat = (rawCategories || []).find((c) => c.name === nextList[0]);
+        setNewProdCategoryId(firstCat?.id || catId || '');
+      }
+    }
+  };
+
+  // Remove a single category chip
+  const handleRemoveCategoryChip = (catNameToRemove, e) => {
+    e.stopPropagation();
+    const nextList = selectedCats.filter((c) => c !== catNameToRemove);
+    const nextStr = nextList.join(', ');
+    setNewProdCategory(nextStr);
+    if (setNewProdCategoryId) {
+      if (nextList.length === 0) {
+        setNewProdCategoryId('');
+      } else {
+        const firstCat = (rawCategories || []).find((c) => c.name === nextList[0]);
+        setNewProdCategoryId(firstCat?.id || '');
+      }
+    }
+  };
 
   // Default to first category from database when creating new product
   useEffect(() => {
@@ -167,7 +282,9 @@ export default function ProductFormModal({
     if (onCreateCategory) {
       newCatObj = await onCreateCategory(clean);
     }
-    setNewProdCategory(clean);
+    const nextList = selectedCats.includes(clean) ? selectedCats : [...selectedCats, clean];
+    const nextStr = nextList.join(', ');
+    setNewProdCategory(nextStr);
     if (setNewProdCategoryId && newCatObj?.id) {
       setNewProdCategoryId(newCatObj.id);
     }
@@ -457,7 +574,7 @@ export default function ProductFormModal({
               className="px-2 py-1 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 text-slate-700 hover:text-amber-900 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
               title="ເບຍ: ຂາຍສະເພາະຍົກລັງ (Tier 1 & 2 ປິດ, Tier 3 ເປີດ)"
             >
-              🍺 ເບຍ (ຍົກລັງ)
+              ເບຍ (ຍົກລັງ)
             </button>
             <button
               type="button"
@@ -465,7 +582,7 @@ export default function ProductFormModal({
               className="px-2 py-1 bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 text-slate-700 hover:text-teal-900 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
               title="ເຄື່ອງດື່ມ: 3 ລະດັບ (ກະປ໋ອງ, ແພັກ, ແກັດ)"
             >
-              🥫 ເຄື່ອງດື່ມ (3 ລະດັບ)
+              ເຄື່ອງດື່ມ (3 ລະດັບ)
             </button>
             <button
               type="button"
@@ -473,7 +590,7 @@ export default function ProductFormModal({
               className="px-2 py-1 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-700 hover:text-blue-900 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
               title="ເຂົ້າໜົມ: ຂາຍແພັກ & ແກັດ (Tier 1 ປິດ, Tier 2 & 3 ເປີດ 6 ແພັກ/ແກັດ)"
             >
-              🍬 ເຂົ້າໜົມ (ແພັກ+ແກັດ)
+              ເຂົ້າໜົມ (ແພັກ+ແກັດ)
             </button>
             <button
               type="button"
@@ -481,7 +598,7 @@ export default function ProductFormModal({
               className="px-2 py-1 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
               title="ນ້ຳຕານ/ແປ້ງນົວ: ຂາຍຖົງ & ເປົາ (Tier 2 ປິດ, Tier 1 & 3 ເປີດ 25 ຖົງ/ເປົາ)"
             >
-              🧂 ນ້ຳຕານ (ຖົງ+ເປົາ)
+              ນ້ຳຕານ (ຖົງ+ເປົາ)
             </button>
             <button
               type="button"
@@ -489,7 +606,7 @@ export default function ProductFormModal({
               className="px-2 py-1 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 text-slate-700 hover:text-purple-900 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
               title="ຂາຍຍ່ອຍ: ຂາຍສະເພາະອັນຍ່ອຍ"
             >
-              🏷️ ຂາຍຍ່ອຍ (ອັນ)
+              ຂາຍຍ່ອຍ (ອັນ)
             </button>
           </div> */}
 
@@ -617,7 +734,7 @@ export default function ProductFormModal({
                       </div>
                     ) : (
                       <p className="text-[9.5px] text-slate-400 leading-tight hidden xs:block">
-                        💡 ບີບອັດອັດຕະໂນມັດ ~15-30 KB ປະຢັດພື້ນທີ່
+                        ບີບອັດອັດຕະໂນມັດ ~15-30 KB ປະຢັດພື້ນທີ່
                       </p>
                     )}
                   </div>
@@ -748,31 +865,158 @@ export default function ProductFormModal({
                     </button>
                   </div>
                 ) : (
-                  <select
-                    value={newProdCategory}
-                    onChange={(e) => {
-                      const selectedName = e.target.value;
-                      setNewProdCategory(selectedName);
-                      const matched = rawCategories.find((c) => c.name === selectedName);
-                      if (setNewProdCategoryId) {
-                        setNewProdCategoryId(matched?.id || '');
-                      }
-                    }}
-                    className="w-full h-9 sm:h-10 px-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 focus:bg-white font-bold transition-all cursor-pointer"
-                  >
-                    {categoriesList.length === 0 ? (
-                      <option value="">(ບໍ່ມີໝວດໝູ່ໃນຖານຂໍ້ມູນ)</option>
-                    ) : (
-                      categoriesList.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat}
-                        </option>
-                      ))
+                  /* Custom Multi-Select Tree Dropdown */
+                  <div ref={catDropdownRef} className="relative">
+                    <div
+                      onClick={() => setIsCatDropdownOpen((prev) => !prev)}
+                      className="min-h-9 sm:min-h-10 w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-100/70 transition-colors focus-within:border-teal-600 focus-within:bg-white"
+                    >
+                      {/* Selected Tags Display */}
+                      <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
+                        {selectedCats.length === 0 ? (
+                          <span className="text-slate-400 text-xs font-medium px-1">
+                            -- ເລືອກໝວດໝູ່ (ສາມາດເລືອກໄດ້ຫຼາຍໝວດ) --
+                          </span>
+                        ) : (
+                          selectedCats.map((catName) => (
+                            <span
+                              key={catName}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 text-xs font-bold shadow-2xs"
+                            >
+                              <span>{catName}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleRemoveCategoryChip(catName, e)}
+                                className="w-3.5 h-3.5 rounded-full hover:bg-teal-200/60 text-teal-700 hover:text-rose-600 flex items-center justify-center cursor-pointer transition-colors"
+                              >
+                                <X size={10} weight="bold" />
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+
+                      <div className="shrink-0 text-slate-400 pr-1">
+                        {isCatDropdownOpen ? <CaretUp size={14} weight="bold" /> : <CaretDown size={14} weight="bold" />}
+                      </div>
+                    </div>
+
+                    {/* Popover Tree Checklist */}
+                    {isCatDropdownOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-white rounded-2xl shadow-xl border border-slate-200 p-2.5 flex flex-col gap-2 max-h-72 animate-in fade-in zoom-in-95 duration-150">
+                        {/* Search inside categories */}
+                        <div className="relative shrink-0">
+                          <MagnifyingGlass size={14} weight="bold" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={catSearchQuery}
+                            onChange={(e) => setCatSearchQuery(e.target.value)}
+                            placeholder="ຄົ້ນຫາຊື່ໝວດໝູ່..."
+                            className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-teal-600 focus:bg-white"
+                            autoFocus
+                          />
+                          {catSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setCatSearchQuery('')}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                            >
+                              <X size={12} weight="bold" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Hierarchical Tree List */}
+                        <div className="flex-1 overflow-y-auto no-scrollbar divide-y divide-slate-100 flex flex-col gap-1 pr-0.5">
+                          {categoryTreeForSelect.length === 0 ? (
+                            <div className="py-4 text-center text-xs text-slate-400 font-medium">
+                              ບໍ່ພົບໝວດໝູ່ທີ່ກົງກັບຄຳຄົ້ນຫາ
+                            </div>
+                          ) : (
+                            categoryTreeForSelect.map((root) => {
+                              const isRootChecked = selectedCats.includes(root.name);
+
+                              return (
+                                <div key={root.id || root.name} className="pt-1 first:pt-0">
+                                  {/* Parent Category Item */}
+                                  <div
+                                    onClick={() => toggleSelectCategory(root.name, root.id)}
+                                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer select-none ${
+                                      isRootChecked ? 'bg-teal-50 text-teal-900 font-extrabold' : 'text-slate-800'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isRootChecked}
+                                      onChange={() => {}}
+                                      className="w-4 h-4 rounded text-teal-600 accent-teal-600 cursor-pointer shrink-0"
+                                    />
+                                    <Folders size={16} weight="duotone" className="text-teal-600 shrink-0" />
+                                    <span className="text-xs font-black truncate flex-1">{root.name}</span>
+                                    {root.children.length > 0 && (
+                                      <span className="px-1.5 py-0.2 rounded-md bg-blue-50 text-blue-700 text-[9px] font-bold border border-blue-200 shrink-0">
+                                        ໝວດຫຼັກ ({root.children.length})
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Child Categories (indented directly under parent) */}
+                                  {root.children.length > 0 && (
+                                    <div className="flex flex-col gap-0.5 mt-0.5">
+                                      {root.children.map((child) => {
+                                        const isChildChecked = selectedCats.includes(child.name);
+
+                                        return (
+                                          <div
+                                            key={child.id || child.name}
+                                            onClick={() => toggleSelectCategory(child.name, child.id)}
+                                            className={`flex items-center gap-2 pl-7 pr-2.5 py-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer select-none ${
+                                              isChildChecked ? 'bg-amber-50/70 text-amber-900 font-bold' : 'text-slate-700'
+                                            }`}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={isChildChecked}
+                                              onChange={() => {}}
+                                              className="w-3.5 h-3.5 rounded text-teal-600 accent-teal-600 cursor-pointer shrink-0"
+                                            />
+                                            <span className="text-amber-600 font-black text-xs shrink-0">↳</span>
+                                            <Folder size={14} weight="duotone" className="text-amber-600 shrink-0" />
+                                            <span className="text-xs font-medium truncate flex-1">{child.name}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        {/* Bottom Toolbar */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-bold shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewProdCategory('');
+                              if (setNewProdCategoryId) setNewProdCategoryId('');
+                            }}
+                            className="text-slate-400 hover:text-rose-600 cursor-pointer transition-colors px-1"
+                          >
+                            ລຶບການເລືອກທັງໝົດ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsCatDropdownOpen(false)}
+                            className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all active:scale-95 shadow-2xs"
+                          >
+                            ສຳເລັດ ({selectedCats.length})
+                          </button>
+                        </div>
+                      </div>
                     )}
-                    {newProdCategory && !categoriesList.includes(newProdCategory) && (
-                      <option value={newProdCategory}>{newProdCategory}</option>
-                    )}
-                  </select>
+                  </div>
                 )}
               </div>
             </div>

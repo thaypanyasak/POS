@@ -227,7 +227,7 @@ export async function updateExchangeRateInSupabase(newRate) {
  * Cập nhật tỷ giá và tự động tính lại giá bán cho toàn bộ sản phẩm (Zero-Egress Strategy via RPC)
  * Thực thi 100% trong PostgreSQL - không tải lại danh sách sản phẩm về client
  */
-export async function syncExchangeRateAndRepriceInSupabase(newRate, roundStep = 500) {
+export async function syncExchangeRateAndRepriceInSupabase(newRate, roundStep = 1000) {
   const rateNum = Number(newRate);
   if (!rateNum || rateNum <= 0) {
     return { success: false, error: 'Tỷ giá phải là số dương lớn hơn 0' };
@@ -396,7 +396,7 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
         supabase
           .from('products')
           .select('id, name, name_vi, barcode, image_url, category, category_id, base_unit, cost_lak, cost_thb, cost_currency, is_auto_currency_reprice, cost_per_base_unit, track_stock, current_stock_base_units, allow_negative_stock, is_deleted, created_at, updated_at')
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: true })
       );
 
       // Safe fallback if cost_currency / is_auto_currency_reprice not yet in schema cache
@@ -405,7 +405,7 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
           supabase
             .from('products')
             .select('id, name, name_vi, barcode, image_url, category, category_id, base_unit, cost_lak, cost_thb, cost_per_base_unit, track_stock, current_stock_base_units, allow_negative_stock, is_deleted, created_at, updated_at')
-            .order('created_at', { ascending: false })
+            .order('created_at', { ascending: true })
         );
       }
 
@@ -613,6 +613,10 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
 
       return {
         id: p.id,
+        created_at: p.created_at || null,
+        createdAt: p.created_at || null,
+        updated_at: p.updated_at || null,
+        updatedAt: p.updated_at || null,
         name: p.name,
         name_vi: resolvedNameVi,
         nameVi: resolvedNameVi,
@@ -2203,20 +2207,38 @@ export function invalidateCategoriesCache() {
 
 export async function fetchCategoriesFromSupabase({ force = false } = {}) {
   const now = Date.now();
-  if (!force && cachedCategoriesInMemory && (now - cachedCategoriesTimestamp < CATEGORIES_CACHE_TTL)) {
-    return cachedCategoriesInMemory;
-  }
-
-  if (inFlightCategoriesPromise) {
-    return inFlightCategoriesPromise;
+  if (!force) {
+    if (cachedCategoriesInMemory && (now - cachedCategoriesTimestamp < CATEGORIES_CACHE_TTL)) {
+      return cachedCategoriesInMemory;
+    }
+    if (inFlightCategoriesPromise) {
+      return inFlightCategoriesPromise;
+    }
+  } else {
+    // Force refresh: clear stale in-memory cache and promise
+    cachedCategoriesInMemory = null;
+    cachedCategoriesTimestamp = 0;
+    inFlightCategoriesPromise = null;
   }
 
   inFlightCategoriesPromise = (async () => {
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('categories')
-        .select('id, name, sort_order')
+        .select('id, name, sort_order, parent_id')
         .order('sort_order', { ascending: true });
+
+      if (error && (error.code === '42703' || String(error.message || '').includes('parent_id'))) {
+        console.warn('[supabase] parent_id column not found in categories table, falling back to basic fields:', error.message);
+        const retry = await supabase
+          .from('categories')
+          .select('id, name, sort_order')
+          .order('sort_order', { ascending: true });
+        if (!retry.error && retry.data) {
+          data = retry.data.map((c) => ({ ...c, parent_id: null }));
+          error = null;
+        }
+      }
 
       if (error || !data) {
         return cachedCategoriesInMemory || null;
@@ -2239,18 +2261,34 @@ export async function fetchCategoriesFromSupabase({ force = false } = {}) {
 }
 
 /**
- * 10. Create a new Category in Supabase
+ * 10. Create a new Category in Supabase (with optional parent_id for 2-tier hierarchy)
  */
-export async function createCategoryInSupabase(name, sortOrder = 0) {
+export async function createCategoryInSupabase(name, sortOrder = 0, parentId = null) {
   try {
     if (!name || !name.trim()) return { success: false, error: 'ຊື່ໝວດໝູ່ບໍ່ຖືກຕ້ອງ' };
     const cleanName = name.trim();
 
-    const { data, error } = await supabase
+    const insertPayload = { name: cleanName, sort_order: sortOrder };
+    if (parentId) {
+      insertPayload.parent_id = parentId;
+    }
+
+    let { data, error } = await supabase
       .from('categories')
-      .insert([{ name: cleanName, sort_order: sortOrder }])
+      .insert([insertPayload])
       .select()
       .single();
+
+    if (error && (error.code === '42703' || String(error.message || '').includes('parent_id'))) {
+      const { parent_id, ...safePayload } = insertPayload;
+      const retry = await supabase
+        .from('categories')
+        .insert([safePayload])
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.warn('createCategoryInSupabase error:', error);
@@ -2259,6 +2297,10 @@ export async function createCategoryInSupabase(name, sortOrder = 0) {
 
     if (data?.id) {
       categoryNameToIdCache.set(cleanName, data.id);
+    }
+
+    if (data && parentId && data.parent_id === undefined) {
+      data.parent_id = parentId;
     }
 
     invalidateCategoriesCache();
@@ -2270,22 +2312,39 @@ export async function createCategoryInSupabase(name, sortOrder = 0) {
 }
 
 /**
- * 11. Update Category name & sort_order in Supabase
+ * 11. Update Category name, sort_order & parent_id in Supabase
  * Also cascades update on products.category for products using the old name
  */
-export async function updateCategoryInSupabase(id, newName, oldName = null) {
+export async function updateCategoryInSupabase(id, newName, oldName = null, parentId = undefined) {
   try {
     if (!id) return { success: false, error: 'Category ID ບໍ່ຖືກຕ້ອງ' };
     const cleanName = String(newName || '').trim();
     if (!cleanName) return { success: false, error: 'ກະລຸນາປ້ອນຊື່ໝວດໝູ່' };
 
+    const updatePayload = { name: cleanName };
+    if (parentId !== undefined) {
+      updatePayload.parent_id = parentId || null;
+    }
+
     // 1. Update categories table
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('categories')
-      .update({ name: cleanName })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
+
+    if (error && (error.code === '42703' || String(error.message || '').includes('parent_id'))) {
+      const { parent_id, ...safePayload } = updatePayload;
+      const retry = await supabase
+        .from('categories')
+        .update(safePayload)
+        .eq('id', id)
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.warn('updateCategoryInSupabase error:', error);
@@ -2353,6 +2412,209 @@ export async function deleteCategoryInSupabase(id, categoryName) {
     return { success: true };
   } catch (e) {
     console.error('deleteCategoryInSupabase exception:', e);
+    return { success: false, error: e.message || String(e) };
+  }
+}
+
+/**
+ * 12.1 Batch Reorder Categories (Zero-Egress Architecture)
+ * Performs single batch upsert of sort_order for categories without .select() -> 0 Egress bytes
+ * and mutates in-memory category cache directly in-place.
+ */
+export async function reorderCategoriesInSupabase(orderedItems = []) {
+  if (!orderedItems || orderedItems.length === 0) return { success: true };
+  try {
+    // Build cache lookup map for names and parent_ids if missing in payload
+    const cachedMap = new Map();
+    if (cachedCategoriesInMemory && Array.isArray(cachedCategoriesInMemory)) {
+      cachedCategoriesInMemory.forEach((c) => {
+        if (c.id) cachedMap.set(c.id, c);
+      });
+    }
+
+    const payload = orderedItems
+      .filter((item) => Boolean(item && item.id))
+      .map((item, idx) => {
+        const cached = cachedMap.get(item.id);
+        const name = (item.name || cached?.name || '').trim();
+        const sortOrder = Number(item.sort_order ?? idx + 1);
+        const parentId = item.parent_id !== undefined ? item.parent_id : cached?.parent_id;
+
+        const row = {
+          id: item.id,
+          name: name,
+          sort_order: sortOrder,
+        };
+        if (parentId !== undefined) {
+          row.parent_id = parentId || null;
+        }
+        return row;
+      })
+      .filter((row) => Boolean(row.name)); // Filter out any item missing name to satisfy NOT NULL constraint
+
+    if (payload.length === 0) return { success: true };
+
+    // Perform upsert on categories by id without .select() -> 0 Egress bytes
+    let { error } = await supabase
+      .from('categories')
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error && (error.code === '42703' || String(error.message || '').includes('parent_id'))) {
+      const safePayload = payload.map(({ parent_id, ...rest }) => rest);
+      const retry = await supabase
+        .from('categories')
+        .upsert(safePayload, { onConflict: 'id' });
+      error = retry.error;
+    }
+
+    if (error) {
+      console.warn('[ZeroEgress] reorderCategoriesInSupabase error:', error);
+      return { success: false, error: error.message };
+    }
+
+    // In-place memory cache update (ZERO EGRESS)
+    if (cachedCategoriesInMemory && Array.isArray(cachedCategoriesInMemory)) {
+      const orderMap = new Map(payload.map((p) => [p.id, p.sort_order]));
+      cachedCategoriesInMemory.forEach((c) => {
+        if (orderMap.has(c.id)) {
+          c.sort_order = orderMap.get(c.id);
+        }
+      });
+      cachedCategoriesInMemory.sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
+      cachedCategoriesTimestamp = Date.now();
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('[ZeroEgress] reorderCategoriesInSupabase error:', err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * 13. Assign a product to a specific Category in Supabase
+ */
+export async function assignProductToCategoryInSupabase(productId, categoryName, categoryId = null) {
+  try {
+    if (!productId) return { success: false, error: 'Product ID ບໍ່ຖືກຕ້ອງ' };
+    const cleanCat = String(categoryName || 'ທົ່ວໄປ').trim();
+
+    const updatePayload = {
+      category: cleanCat,
+      updated_at: new Date().toISOString(),
+    };
+    if (categoryId) {
+      updatePayload.category_id = categoryId;
+    } else {
+      updatePayload.category_id = null;
+    }
+
+    // Zero-Egress: Update without .select() returns 204 No Content (0 bytes egress)
+    let { error } = await supabase
+      .from('products')
+      .update(updatePayload)
+      .eq('id', productId);
+
+    if (error && (error.code === '42703' || String(error.message || '').includes('category_id'))) {
+      const { category_id, ...safePayload } = updatePayload;
+      const retry = await supabase
+        .from('products')
+        .update(safePayload)
+        .eq('id', productId);
+      error = retry.error;
+    }
+
+    if (!error) {
+      if (cachedProductsInMemory && Array.isArray(cachedProductsInMemory)) {
+        const target = cachedProductsInMemory.find((p) => p.id === productId);
+        if (target) {
+          target.category = cleanCat;
+          target.categoryId = categoryId;
+          target.category_id = categoryId;
+          target.updated_at = new Date().toISOString();
+        }
+        cachedProductsTimestamp = Date.now();
+      }
+    }
+
+    return { success: !error, error: error?.message };
+  } catch (e) {
+    console.error('assignProductToCategoryInSupabase exception:', e);
+    return { success: false, error: e.message || String(e) };
+  }
+}
+
+/**
+ * 13.1 Batch Assign/Update Products Category in Supabase (Zero-Egress & Ultra-Low Quota)
+ * Groups assignments by identical payload and batches into single queries with .in('id', ids)
+ * reducing 50 separate requests down to 1 single request, with 0 egress bytes.
+ */
+export async function batchAssignProductsToCategoryInSupabase(assignments = []) {
+  if (!assignments || assignments.length === 0) return { success: true };
+  try {
+    // 1. Group assignments by identical payload { categoryName, categoryId }
+    const groups = new Map();
+    assignments.forEach((item) => {
+      const cleanCat = String(item.categoryName || 'ທົ່ວໄປ').trim();
+      const catId = item.categoryId || null;
+      const key = `${cleanCat}:::${catId || ''}`;
+      if (!groups.has(key)) {
+        groups.set(key, { category: cleanCat, categoryId: catId, productIds: [] });
+      }
+      groups.get(key).productIds.push(item.productId);
+    });
+
+    const now = new Date().toISOString();
+
+    // 2. Execute grouped updates using .in('id', ids) without .select() -> 0 Egress & 1 request per group
+    for (const group of groups.values()) {
+      const updatePayload = {
+        category: group.category,
+        updated_at: now,
+      };
+      if (group.categoryId) {
+        updatePayload.category_id = group.categoryId;
+      } else {
+        updatePayload.category_id = null;
+      }
+
+      const ID_CHUNK = 50;
+      for (let i = 0; i < group.productIds.length; i += ID_CHUNK) {
+        const idChunk = group.productIds.slice(i, i + ID_CHUNK);
+
+        let { error } = await supabase
+          .from('products')
+          .update(updatePayload)
+          .in('id', idChunk);
+
+        if (error && (error.code === '42703' || String(error.message || '').includes('category_id'))) {
+          const { category_id, ...safePayload } = updatePayload;
+          await supabase
+            .from('products')
+            .update(safePayload)
+            .in('id', idChunk);
+        }
+      }
+    }
+
+    // 3. In-place memory cache mutation (ZERO EGRESS - avoids re-downloading catalog)
+    if (cachedProductsInMemory && Array.isArray(cachedProductsInMemory)) {
+      const assignmentMap = new Map(assignments.map((a) => [a.productId, a]));
+      cachedProductsInMemory.forEach((p) => {
+        const match = assignmentMap.get(p.id);
+        if (match) {
+          p.category = match.categoryName;
+          p.categoryId = match.categoryId || null;
+          p.category_id = match.categoryId || null;
+          p.updated_at = now;
+        }
+      });
+      cachedProductsTimestamp = Date.now();
+    }
+
+    return { success: true };
+  } catch (e) {
+    console.error('batchAssignProductsToCategoryInSupabase error:', e);
     return { success: false, error: e.message || String(e) };
   }
 }

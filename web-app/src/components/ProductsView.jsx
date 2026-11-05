@@ -321,8 +321,13 @@ export default function ProductsView({
   const categoryOptions = useMemo(() => {
     const counts = {};
     (products || []).forEach((p) => {
-      const cat = (p.category || 'ທົ່ວໄປ').trim();
-      counts[cat] = (counts[cat] || 0) + 1;
+      const pCats = (p.category || 'ທົ່ວໄປ')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      pCats.forEach((cat) => {
+        counts[cat] = (counts[cat] || 0) + 1;
+      });
     });
     const sortedCategories = Object.keys(counts).sort((a, b) => a.localeCompare(b));
     return {
@@ -345,9 +350,16 @@ export default function ProductsView({
   const filteredProducts = useMemo(() => {
     let list = products || [];
 
-    // 1. Category Filter
+    // 1. Category Filter (supports comma-separated multi-categories)
     if (selectedCategory && selectedCategory !== 'ALL') {
-      list = list.filter((p) => (p.category || 'ທົ່ວໄປ').trim() === selectedCategory);
+      const targetCatLower = selectedCategory.trim().toLowerCase();
+      list = list.filter((p) => {
+        const pCats = (p.category || 'ທົ່ວໄປ')
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean);
+        return pCats.includes(targetCatLower);
+      });
     }
 
     // 2. Search Query Filter
@@ -495,7 +507,13 @@ export default function ProductsView({
     if (selectedCategory === 'ALL') {
       setSelectedProductIds(new Set(filteredProducts.map((p) => p.id)));
     } else {
-      const catProds = (products || []).filter((p) => (p.category || 'ທົ່ວໄປ').trim() === selectedCategory);
+      const catProds = (products || []).filter((p) => {
+        const pCats = (p.category || 'ທົ່ວໄປ')
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean);
+        return pCats.includes(selectedCategory.trim().toLowerCase());
+      });
       setSelectedProductIds(new Set(catProds.map((p) => p.id)));
     }
   };

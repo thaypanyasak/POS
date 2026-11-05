@@ -21,26 +21,25 @@ export const convertLakToThb = (lakAmount, exchangeRate) => {
 };
 
 /**
- * Chuẩn hóa đuôi số lẻ tiền Kíp Lào theo bước nhảy (mặc định 500 ₭)
- * Quy tắc làm tròn chuẩn bán lẻ 500 LAK:
- * - Đuôi 0..249   -> về 000 (Ví dụ: 23.210 -> 23.000)
- * - Đuôi 250..749 -> về 500 (Ví dụ: 23.323 -> 23.500; 25.542 -> 25.500)
- * - Đuôi 750..999 -> lên 1.000 tiếp theo (Ví dụ: 23.780 -> 24.000)
+ * Chuẩn hóa đuôi số lẻ tiền Kíp Lào theo bước nhảy (mặc định 1.000 ₭)
+ * Quy tắc làm tròn chuẩn bán lẻ 1.000 LAK (Lấy mốc 500 để làm tròn chẵn nghìn):
+ * - Đuôi 000..499 -> kéo lùi về 000 (Ví dụ: 25.405 -> 25.000; 23.210 -> 23.000)
+ * - Đuôi 500..999 -> tiến lên 1.000 tiếp theo (Ví dụ: 24.778 -> 25.000; 24.500 -> 25.000; 382.794 -> 383.000)
  *
  * @param {number|string} price
- * @param {number} step (mặc định 500)
+ * @param {number} step (mặc định 1000)
  * @returns {number}
  */
-export const roundLakToStep = (price, step = 500) => {
+export const roundLakToStep = (price, step = 1000) => {
   const p = Number(price);
   if (!p || isNaN(p) || p <= 0) return 0;
-  const s = Number(step) > 0 ? Number(step) : 500;
+  const s = Number(step) > 0 ? Number(step) : 1000;
   return Math.round(p / s) * s;
 };
 
 /**
  * Converts Thai Baht (THB) to Lao Kip (LAK) for COST valuation
- * Keeps exact Lao Kip integer without rounding to step (500 LAK),
+ * Keeps exact Lao Kip integer without rounding to step,
  * preserving honest cost basis for inventory reporting and profit margins.
  * Strictly returns 0 if rate <= 0 or thbAmount <= 0.
  *
@@ -57,14 +56,14 @@ export const convertThbToLak = (thbAmount, exchangeRate) => {
 
 /**
  * Converts Thai Baht (THB) to Lao Kip (LAK) for RETAIL SELLING PRICE
- * Applies standard retail rounding to step (default 500 LAK) for fair pricing and cash change.
+ * Applies standard retail rounding to step (default 1000 LAK) for fair pricing and cash change.
  *
  * @param {number|string} thbAmount
  * @param {number|string} exchangeRate
  * @param {number} step
  * @returns {number}
  */
-export const convertThbToLakSellingPrice = (thbAmount, exchangeRate, step = 500) => {
+export const convertThbToLakSellingPrice = (thbAmount, exchangeRate, step = 1000) => {
   const thb = Number(thbAmount);
   const rate = Number(exchangeRate);
   if (isNaN(thb) || thb <= 0 || isNaN(rate) || rate <= 0) return 0;

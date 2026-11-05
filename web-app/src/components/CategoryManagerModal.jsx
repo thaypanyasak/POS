@@ -21,8 +21,10 @@ export default function CategoryManagerModal({
   products = [],
 }) {
   const [newCatName, setNewCatName] = useState('');
+  const [newCatParentId, setNewCatParentId] = useState('');
   const [editingCatId, setEditingCatId] = useState(null);
   const [editingCatName, setEditingCatName] = useState('');
+  const [editingCatParentId, setEditingCatParentId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null); // { type: 'success' | 'error', message }
   const [categoryToDelete, setCategoryToDelete] = useState(null);
@@ -33,6 +35,8 @@ export default function CategoryManagerModal({
     setFeedback({ type, message });
     setTimeout(() => setFeedback(null), 3500);
   };
+
+  const rootCategories = categories.filter((c) => !c.parent_id);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -47,9 +51,10 @@ export default function CategoryManagerModal({
 
     setIsSubmitting(true);
     try {
-      const res = await onCreateCategory(clean);
+      const res = await onCreateCategory(clean, newCatParentId || null);
       if (res) {
         setNewCatName('');
+        setNewCatParentId('');
         showToast('success', `ເພີ່ມໝວດໝູ່ "${clean}" ສຳເລັດແລ້ວ!`);
       }
     } catch (err) {
@@ -62,26 +67,30 @@ export default function CategoryManagerModal({
   const handleStartEdit = (cat) => {
     setEditingCatId(cat.id);
     setEditingCatName(cat.name);
+    setEditingCatParentId(cat.parent_id || '');
   };
 
   const handleCancelEdit = () => {
     setEditingCatId(null);
     setEditingCatName('');
+    setEditingCatParentId('');
   };
 
   const handleSaveEdit = async (cat) => {
     const clean = editingCatName.trim();
     if (!clean) return;
-    if (clean === cat.name) {
+
+    const parentChanged = (cat.parent_id || '') !== (editingCatParentId || '');
+    if (clean === cat.name && !parentChanged) {
       handleCancelEdit();
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const res = await onUpdateCategory(cat.id, clean, cat.name);
+      const res = await onUpdateCategory(cat.id, clean, cat.name, editingCatParentId || null);
       if (res?.success !== false) {
-        showToast('success', `ແກ້ໄຂໝວດໝູ່ເປັນ "${clean}" ສຳເລັດແລ້ວ!`);
+        showToast('success', `ແກ້ໄຂໝວດໝູ່ "${clean}" ສຳເລັດແລ້ວ!`);
         handleCancelEdit();
       } else {
         showToast('error', res?.error || 'ບໍ່ສາມາດແກ້ໄຂໝວດໝູ່ໄດ້');
@@ -95,9 +104,10 @@ export default function CategoryManagerModal({
 
   const requestDelete = (cat) => {
     // Check product count for safety
-    const count = products.filter(
-      (p) => p.category === cat.name || p.categoryId === cat.id
-    ).length;
+    const count = products.filter((p) => {
+      const catNames = (p.category || '').split(',').map((s) => s.trim().toLowerCase());
+      return catNames.includes((cat.name || '').toLowerCase()) || (cat.id && p.categoryId === cat.id);
+    }).length;
 
     if (count > 0) {
       showToast('error', `ໝວດໝູ່ນີ້ກຳລັງມີສິນຄ້າຢູ່ ${count} ລາຍການ, ບໍ່ສາມາດລຶບໄດ້! ກະລຸນາຍ້າຍສິນຄ້າໄປໝວດອື່ນກ່ອນ.`);
@@ -132,17 +142,17 @@ export default function CategoryManagerModal({
         className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <header className="px-6 py-4 bg-gradient-to-r from-teal-700 to-emerald-800 text-white flex items-center justify-between shrink-0">
+        {/* Header - Royal Blue to Blue Gradient (Xanh dương - Xanh dương theo theme hệ thống) */}
+        <header className="px-6 py-4 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-800 text-white flex items-center justify-between shrink-0 shadow-xs">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center border border-white/20">
-              <Folders size={20} weight="fill" className="text-teal-200" />
+              <Folders size={20} weight="fill" className="text-blue-200" />
             </div>
             <div>
               <h2 className="font-extrabold text-sm sm:text-base leading-tight">
                 ຈັດການໝວດໝູ່ສິນຄ້າ (Category Manager)
               </h2>
-              <p className="text-[10.5px] text-teal-100/90 mt-0.5">
+              <p className="text-[10.5px] text-blue-100/90 mt-0.5">
                 ເພີ່ມ, ແກ້ໄຂຊື່ ແລະ ລຶບໝວດໝູ່ໃນລະບົບ Supabase
               </p>
             </div>
@@ -174,32 +184,52 @@ export default function CategoryManagerModal({
           </div>
         )}
 
-        {/* Create Input Bar */}
+        {/* Create Input Bar with Parent Category Selection */}
         <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200/80 shrink-0">
-          <form onSubmit={handleCreate} className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Tag
-                size={16}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-                weight="bold"
-              />
-              <input
-                type="text"
-                value={newCatName}
-                onChange={(e) => setNewCatName(e.target.value)}
-                placeholder="ປ້ອນຊື່ໝວດໝູ່ໃໝ່ (e.g. ເຄື່ອງໃຊ້ໄຟຟ້າ, ເຂົ້າສານ...)"
-                className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-500 shadow-2xs"
-                disabled={isSubmitting}
-              />
+          <form onSubmit={handleCreate} className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Tag
+                  size={16}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                  weight="bold"
+                />
+                <input
+                  type="text"
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder="ປ້ອນຊື່ໝວດໝູ່ໃໝ່ (e.g. ເຄື່ອງດື່ມ, ເຂົ້າໜົມ...)"
+                  className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSubmitting || !newCatName.trim()}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs shrink-0 cursor-pointer"
+              >
+                <Plus size={14} weight="bold" />
+                <span>ເພີ່ມ</span>
+              </button>
             </div>
-            <button
-              type="submit"
-              disabled={isSubmitting || !newCatName.trim()}
-              className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs shrink-0 cursor-pointer"
-            >
-              <Plus size={14} weight="bold" />
-              <span>ເພີ່ມ</span>
-            </button>
+
+            {/* Optional Parent Category Selection */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-slate-500 shrink-0">ໝວດຫຼັກ (Parent):</span>
+              <select
+                value={newCatParentId}
+                onChange={(e) => setNewCatParentId(e.target.value)}
+                className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-600"
+                disabled={isSubmitting}
+              >
+                <option value="">-- ເປັນໝວດໝູ່ຫຼັກ (Root Category) --</option>
+                {rootCategories.map((rc) => (
+                  <option key={rc.id} value={rc.id}>
+                    ໝວດຫຼັກ: {rc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </form>
         </div>
 
@@ -210,7 +240,7 @@ export default function CategoryManagerModal({
               ລາຍການໝວດໝູ່ທັງໝົດ ({categories.length})
             </span>
             <span className="text-[10px] text-slate-400">
-              * ແກ້ໄຂຊື່ແລ້ວສິນຄ້າທັງໝົດຈະອັບເດດຕາມອັດຕະໂນມັດ
+              * ຮອງຮັບໝວດໝູ່ 2 ຂັ້ນ (ໝວດຫຼັກ - ໝວດຍ່ອຍ)
             </span>
           </div>
 
@@ -225,9 +255,11 @@ export default function CategoryManagerModal({
           ) : (
             categories.map((cat, idx) => {
               const isEditing = editingCatId === cat.id;
-              const prodCount = products.filter(
-                (p) => p.category === cat.name || p.categoryId === cat.id
-              ).length;
+              const prodCount = products.filter((p) => {
+                const catNames = (p.category || '').split(',').map((s) => s.trim().toLowerCase());
+                return catNames.includes((cat.name || '').toLowerCase()) || (cat.id && p.categoryId === cat.id);
+              }).length;
+              const parentCat = cat.parent_id ? categories.find((c) => c.id === cat.parent_id) : null;
 
               return (
                 <div
@@ -235,54 +267,85 @@ export default function CategoryManagerModal({
                   className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
                     isEditing
                       ? 'bg-teal-50/70 border-teal-300 ring-1 ring-teal-500/20'
+                      : cat.parent_id
+                      ? 'bg-slate-50/60 hover:bg-slate-50 border-slate-200 ml-4 shadow-2xs'
                       : 'bg-white hover:bg-slate-50 border-slate-200 shadow-2xs'
                   }`}
                 >
                   {isEditing ? (
-                    <div className="flex-1 flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={editingCatName}
-                        onChange={(e) => setEditingCatName(e.target.value)}
-                        className="flex-1 px-3 py-1.5 bg-white border border-teal-400 rounded-lg text-xs font-bold text-slate-900 focus:outline-none"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleSaveEdit(cat);
-                          } else if (e.key === 'Escape') {
-                            handleCancelEdit();
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleSaveEdit(cat)}
-                        disabled={isSubmitting || !editingCatName.trim()}
-                        className="p-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-all cursor-pointer"
-                        title="ບັນທຶກ"
-                      >
-                        <Check size={14} weight="bold" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCancelEdit}
-                        className="p-2 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 transition-all cursor-pointer"
-                        title="ຍົກເລີກ"
-                      >
-                        <X size={14} weight="bold" />
-                      </button>
+                    <div className="flex-1 flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editingCatName}
+                          onChange={(e) => setEditingCatName(e.target.value)}
+                          className="flex-1 px-3 py-1.5 bg-white border border-teal-400 rounded-lg text-xs font-bold text-slate-900 focus:outline-none"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSaveEdit(cat);
+                            } else if (e.key === 'Escape') {
+                              handleCancelEdit();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEdit(cat)}
+                          disabled={isSubmitting || !editingCatName.trim()}
+                          className="p-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-all cursor-pointer"
+                          title="ບັນທຶກ"
+                        >
+                          <Check size={14} weight="bold" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelEdit}
+                          className="p-2 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 transition-all cursor-pointer"
+                          title="ຍົກເລີກ"
+                        >
+                          <X size={14} weight="bold" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-500 shrink-0">ໝວດຫຼັກ:</span>
+                        <select
+                          value={editingCatParentId}
+                          onChange={(e) => setEditingCatParentId(e.target.value)}
+                          className="flex-1 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-teal-600"
+                        >
+                          <option value="">-- ເປັນໝວດໝູ່ຫຼັກ (Root Category) --</option>
+                          {categories
+                            .filter((c) => c.id !== cat.id && !c.parent_id)
+                            .map((rc) => (
+                              <option key={rc.id} value={rc.id}>
+                                ໝວດຫຼັກ: {rc.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
                     </div>
                   ) : (
                     <>
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center text-[10px] font-black shrink-0">
-                          {idx + 1}
+                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${
+                          cat.parent_id ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {cat.parent_id ? '↳' : idx + 1}
                         </span>
                         <div className="min-w-0">
-                          <span className="text-xs font-bold text-slate-900 block truncate">
-                            {cat.name}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-900 truncate">
+                              {cat.name}
+                            </span>
+                            {parentCat && (
+                              <span className="px-1.5 py-0.2 rounded bg-slate-200/80 text-slate-600 text-[9.5px] font-medium shrink-0">
+                                ໝວດຍ່ອຍຂອງ: {parentCat.name}
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[10px] text-slate-400 block">
                             {prodCount > 0 ? `${prodCount} ສິນຄ້າ` : 'ຍັງບໍ່ມີສິນຄ້າ'}
                           </span>

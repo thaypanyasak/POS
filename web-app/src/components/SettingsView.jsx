@@ -117,12 +117,12 @@ export default function SettingsView({
         supabase.channel('pos_store_events').send({
           type: 'broadcast',
           event: 'exchange_rate_updated',
-          payload: { rate: val, roundStep: 500, shouldReprice: false },
+          payload: { rate: val, roundStep: 1000, shouldReprice: false },
         });
         supabase.channel('pos_price_sync').send({
           type: 'broadcast',
           event: 'exchange_rate_updated',
-          payload: { rate: val, roundStep: 500, shouldReprice: false },
+          payload: { rate: val, roundStep: 1000, shouldReprice: false },
         });
       } catch (broadcastErr) {
         console.warn('Realtime broadcast warning:', broadcastErr);
@@ -164,7 +164,7 @@ export default function SettingsView({
     setIsApplyingReprice(true);
     try {
       // 1. Gọi PostgreSQL RPC sync_exchange_rate_and_reprice (Zero-Egress Strategy < 1KB)
-      const res = await updateExchangeRateAndRepriceInSupabase(activeTargetRate, 500);
+      const res = await updateExchangeRateAndRepriceInSupabase(activeTargetRate, 1000);
       if (!res.success && res.error) {
         throw new Error(res.error);
       }
@@ -175,19 +175,19 @@ export default function SettingsView({
       }
 
       // 2. Local In-Place mutation trong RAM không re-fetch
-      onRepriceInPlace?.(activeTargetRate, 500);
+      onRepriceInPlace?.(activeTargetRate, 1000);
 
       // 3. Realtime Broadcast cho tất cả POS đồng bộ giá mới
       try {
         supabase.channel('pos_store_events').send({
           type: 'broadcast',
           event: 'exchange_rate_updated',
-          payload: { rate: activeTargetRate, roundStep: 500, shouldReprice: true },
+          payload: { rate: activeTargetRate, roundStep: 1000, shouldReprice: true },
         });
         supabase.channel('pos_price_sync').send({
           type: 'broadcast',
           event: 'exchange_rate_updated',
-          payload: { rate: activeTargetRate, roundStep: 500, shouldReprice: true },
+          payload: { rate: activeTargetRate, roundStep: 1000, shouldReprice: true },
         });
       } catch (broadcastErr) {
         console.warn('Realtime broadcast warning:', broadcastErr);
@@ -1066,7 +1066,7 @@ export default function SettingsView({
                 <div className="flex items-center justify-between text-slate-600">
                   <span>ຫຼັກການປັດເສດ:</span>
                   <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                    ຂັ້ນລະ 500 ₭ (Retail Step)
+                    ຂັ້ນລະ 1.000 ₭ (Retail Step 1.000 ₭)
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
