@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Plus,
@@ -136,8 +137,22 @@ export default function CategoryManagerModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 sm:backdrop-blur-xs flex flex-col sm:items-center sm:justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (isOpen && typeof document !== 'undefined') {
+      const prevOverflow = document.body.style.overflow;
+      const prevOverscroll = document.body.style.overscrollBehavior;
+      document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehavior = 'none';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+        document.body.style.overscrollBehavior = prevOverscroll;
+      };
+    }
+  }, [isOpen]);
+
+  const modalContent = (
+    <div className="fixed inset-0 z-[90] bg-slate-900/60 sm:backdrop-blur-xs flex flex-col sm:items-center sm:justify-center p-0 sm:p-4 animate-in fade-in duration-200">
       <div
         className="bg-white rounded-none sm:rounded-3xl shadow-2xl border-none sm:border border-slate-200 w-full sm:max-w-lg h-full sm:h-auto sm:max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
@@ -430,4 +445,6 @@ export default function CategoryManagerModal({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 }

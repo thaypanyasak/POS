@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MagnifyingGlassPlus,
   Folders,
@@ -77,6 +78,20 @@ function CategoryProductsDetailModal({
   useEffect(() => {
     setCandidateLimit(CANDIDATE_INITIAL_LIMIT);
   }, [assignSearchTerm]);
+
+  // Lock body scroll when detail modal is open
+  useEffect(() => {
+    if (isOpen && typeof document !== 'undefined') {
+      const prevOverflow = document.body.style.overflow;
+      const prevOverscroll = document.body.style.overscrollBehavior;
+      document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehavior = 'none';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+        document.body.style.overscrollBehavior = prevOverscroll;
+      };
+    }
+  }, [isOpen]);
 
   // Close image preview on ESC key
   useEffect(() => {
@@ -382,11 +397,13 @@ function CategoryProductsDetailModal({
     }
   };
 
-  return (
-    <div
-      className="fixed inset-0 z-[70] bg-slate-950/70 sm:backdrop-blur-xs flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-6 animate-in fade-in duration-200"
-      onClick={onClose}
-    >
+  const modalContent = (
+    <>
+      {/* 1. Modal Chi Tiết Danh Mục (z-[90] đè hoàn toàn lên bottomTab z-40 của Mobile) */}
+      <div
+        className="fixed inset-0 z-[90] bg-slate-950/70 sm:backdrop-blur-xs flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-6 animate-in fade-in duration-200"
+        onClick={onClose}
+      >
       <div
         className="bg-white rounded-none sm:rounded-3xl shadow-2xl border-none sm:border border-slate-200/90 w-full sm:w-[94vw] md:w-[92vw] lg:max-w-5xl h-full sm:h-auto sm:max-h-[86vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
@@ -677,11 +694,13 @@ function CategoryProductsDetailModal({
             ປິດ
           </button>
         </div>
+      </div>
+    </div>
 
-      {/* Modal chọn sản phẩm để gán vào danh mục (Multi-Select & Infinite Scroll xem hết 668+ sản phẩm giống POS) */}
+      {/* 2. Modal Chọn Sản Phẩm Vào Danh Mục (z-[100] đè lên cả Modal Chi Tiết và bottomTab) */}
       {isAssignPickerOpen && (
         <div
-          className="fixed inset-0 z-[80] bg-slate-950/80 sm:backdrop-blur-xs flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-6 animate-in fade-in duration-200"
+          className="fixed inset-0 z-[100] bg-slate-950/80 sm:backdrop-blur-xs flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-6 animate-in fade-in duration-200"
           onClick={() => setIsAssignPickerOpen(false)}
         >
           <div
@@ -895,12 +914,12 @@ function CategoryProductsDetailModal({
           </div>
         </div>
       )}
-      {/* Product Image Zoom / Lightbox Modal Popup with high z-index overlaying modal */}
+      {/* 3. Product Image Zoom / Lightbox Modal Popup with highest z-index (z-[110]) */}
       {previewProduct && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[95] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200"
+          className="fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200"
           style={{
             paddingTop: 'max(2.75rem, calc(2.25rem + env(safe-area-inset-top, 0px)))',
             paddingBottom: 'max(4rem, calc(3.5rem + env(safe-area-inset-bottom, 0px)))',
@@ -964,9 +983,10 @@ function CategoryProductsDetailModal({
           </div>
         </div>
       )}
-    </div>
-  </div>
-);
+    </>
+  );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 }
 
 /**
