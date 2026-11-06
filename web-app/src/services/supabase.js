@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { universalStorage } from './authStorage';
 import { sanitizeImageUrl, normalizeLao } from '../utils/formatters';
 import { idbGet, idbSet } from '../utils/indexedDbStorage';
-import { safeSetItem } from '../utils/safeStorage';
+import { safeSetItem, clearAllLocalProductMeta } from '../utils/safeStorage';
 import { isCustomerStorefrontRoute } from '../utils/routeUtils';
 import { calculateItemCostAndMultiplier, recalculateTransactionTotals } from '../utils/costCalculation';
 
@@ -29,35 +29,21 @@ export function sanitizeCashierName(name) {
  */
 export function saveProductMetaLocal(product) {
   try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const meta = {
-        name_vi: product.name_vi || product.nameVi || '',
-        costBaht: product.costBaht,
-        costKip: product.costKip,
-        tierSettings: product.tierSettings,
-        hasCrateDeposit: Boolean(product.hasCrateDeposit),
-        crateDepositFee: Number(product.crateDepositFee) || 30000,
-      };
-      window.localStorage.setItem(`meiishop_prod_meta_${product.id}`, JSON.stringify(meta));
+    if (typeof window !== 'undefined' && window.localStorage && product?.id) {
+      // Xóa bỏ key metadata cũ nếu có để không tạo bóng ma dữ liệu (ghost data lệch giá vốn)
+      window.localStorage.removeItem(`meiishop_prod_meta_${product.id}`);
     }
   } catch (e) {
-    console.warn('saveProductMetaLocal error:', e);
+    console.warn('saveProductMetaLocal cleanup warning:', e);
   }
 }
 
 // Cache memory danh mục để tránh gọi SELECT categories thừa khi thêm/sửa sản phẩm
 const categoryNameToIdCache = new Map();
 
-export function getProductMetaLocal(productId) {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const saved = window.localStorage.getItem(`meiishop_prod_meta_${productId}`);
-      return saved ? JSON.parse(saved) : null;
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
+export function getProductMetaLocal(_productId) {
+  // Trả về null để 100% các máy luôn đọc dữ liệu gốc mới nhất từ Supabase Cloud
+  return null;
 }
 
 /**
@@ -393,6 +379,19 @@ export async function fetchProductsFromSupabase({ force = false, forCustomer = f
 
   const fetchTask = (async () => {
     try {
+      // Khi bấm nút Refresh (force: true): dọn sạch toàn bộ metadata và fingerprint cục bộ
+      if (force) {
+        clearAllLocalProductMeta();
+        cachedPosProductsInMemory = null;
+        cachedCustomerProductsInMemory = null;
+        if (typeof window !== 'undefined' && window.localStorage) {
+          try {
+            window.localStorage.removeItem('meiishop_catalog_fingerprint');
+            window.localStorage.removeItem('meiishop_customer_catalog_fingerprint');
+          } catch (_) {}
+        }
+      }
+
       // 2.1 Bandwidth Defense: Delta-Sync check before downloading 600+ products (~65KB)
       let localProducts = cachedInMemory;
       const storageKey = isCustomer ? 'meiishop_customer_products_v1' : 'meiishop_products_v5';
@@ -703,8 +702,21 @@ export async function fetchProductsFromSupabase({ force = false, forCustomer = f
         const baseCostKip = Number(p.cost_per_base_unit) || 0;
         const computedCartonCostKip = baseCostKip * cartonMultiplier;
 
-        const costKip = localMeta?.costKip !== undefined ? localMeta.costKip : (Number(p.cost_lak) || computedCartonCostKip);
-        const costBaht = localMeta?.costBaht !== undefined ? localMeta.costBaht : (Number(p.cost_thb) || Number(p.cost_baht) || 0);
+        // GROUND TRUTH: Dữ liệu thật từ Cloud Supabase (cost_lak, cost_thb) luôn là CHÂN LÝ TỐI THƯỢNG
+        // Tuyệt đối KHÔNG đọc từ LocalStorage để tránh lệch giá giữa các thiết bị!
+        let costKip = 0;
+        if (p.cost_lak !== null && p.cost_lak !== undefined && p.cost_lak !== '') {
+          costKip = Number(p.cost_lak) || 0;
+        } else if (computedCartonCostKip > 0) {
+          costKip = computedCartonCostKip;
+        }
+
+        let costBaht = 0;
+        if (p.cost_thb !== null && p.cost_thb !== undefined && p.cost_thb !== '') {
+          costBaht = Number(p.cost_thb) || 0;
+        } else if (p.cost_baht !== null && p.cost_baht !== undefined && p.cost_baht !== '') {
+          costBaht = Number(p.cost_baht) || 0;
+        }
 
         const isTrackStock = p.track_stock !== false;
         const stockValue = isTrackStock
@@ -867,7 +879,9 @@ export async function saveProductToSupabase(product) {
       }
     }
     prodPayload.category_id = targetCategoryId;
-    const finalCostThb = product.cost_thb ?? product.costBaht;
+    const resolvedCostCurrency = product.cost_currency || product.costCurrency || 'THB';
+    const isLakCurrencyMode = resolvedCostCurrency === 'LAK';
+    const finalCostThb = isLakCurrencyMode ? 0 : (product.cost_thb ?? product.costBaht);
     if (finalCostThb !== undefined && finalCostThb !== null && finalCostThb !== '') {
       prodPayload.cost_thb = Math.round(Number(finalCostThb) || 0);
     }
@@ -875,7 +889,7 @@ export async function saveProductToSupabase(product) {
     if (finalCostLak !== undefined && finalCostLak !== null && finalCostLak !== '') {
       prodPayload.cost_lak = Math.round(Number(finalCostLak) || 0);
     }
-    prodPayload.cost_currency = product.cost_currency || product.costCurrency || 'THB';
+    prodPayload.cost_currency = resolvedCostCurrency;
     prodPayload.is_auto_currency_reprice = product.is_auto_currency_reprice !== undefined
       ? Boolean(product.is_auto_currency_reprice)
       : (product.isAutoCurrencyReprice !== undefined ? Boolean(product.isAutoCurrencyReprice) : false);
@@ -4612,6 +4626,28 @@ export async function updateProductCostsZeroEgress(dirtyCosts) {
     return { success: true, count: dirtyCosts.length, payload: dirtyCosts };
   } catch (err) {
     console.error('[ZeroEgress] updateProductCostsZeroEgress exception:', err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Tự động bù giá vốn (Backfill Cost) cho các hóa đơn cũ theo chuẩn Zero-Egress
+ * 100% Database-side calculation via PostgreSQL RPC
+ * 
+ * @param {string|null} transactionId - Nếu có ID, chỉ bù cho hóa đơn đó; nếu null, bù cho toàn bộ hóa đơn
+ * @returns {Promise<{ success: boolean, updated_items: number, updated_invoices: number, error?: string }>}
+ */
+export async function backfillMissingInvoiceCosts(transactionId = null) {
+  try {
+    const params = transactionId ? { p_transaction_id: String(transactionId) } : {};
+    const { data, error } = await supabase.rpc('backfill_missing_invoice_costs', params);
+    if (error) {
+      console.error('[backfillMissingInvoiceCosts] RPC error:', error);
+      return { success: false, error: error.message };
+    }
+    return data || { success: true, updated_items: 0, updated_invoices: 0 };
+  } catch (err) {
+    console.error('[backfillMissingInvoiceCosts] exception:', err);
     return { success: false, error: err.message || String(err) };
   }
 }

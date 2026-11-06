@@ -24,6 +24,9 @@ export function cleanupLegacyStorage() {
         k.startsWith('meiishop_products_v') && k !== 'meiishop_products_v5'
       ) {
         keysToRemove.push(k);
+      } else if (k.startsWith('meiishop_prod_meta_')) {
+        // Dọn sạch toàn bộ metadata cục bộ cũ để không làm sai lệch giá vốn so với Cloud Supabase
+        keysToRemove.push(k);
       } else if (k.startsWith('meiishop_tx_meta_')) {
         txMetaKeys.push(k);
       }
@@ -120,4 +123,24 @@ export function safeGetJSON(key, defaultValue = null) {
   } catch (_) {
     return defaultValue;
   }
+}
+
+/**
+ * Xóa sạch toàn bộ metadata và fingerprint cục bộ của sản phẩm khi Refresh.
+ * Đảm bảo 100% mọi thiết bị đọc giá trị chính xác tuyệt đối từ Supabase Cloud.
+ */
+export function clearAllLocalProductMeta() {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('meiishop_prod_meta_') || k.startsWith('meiishop_catalog_fingerprint') || k.startsWith('meiishop_customer_catalog_fingerprint'))) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => {
+      try { localStorage.removeItem(k); } catch (_) {}
+    });
+  } catch (_) {}
 }

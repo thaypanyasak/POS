@@ -90,18 +90,28 @@ export const getCartonUnitInfo = (product, exchangeRate = 0) => {
   let cartonCostKip = 0;
   let cartonCostBaht = 0;
 
-  if (product.costKip !== undefined && product.costKip !== null && product.costKip !== '') {
-    cartonCostKip = Number(product.costKip);
+  const rawKip = product.costKip ?? product.cost_lak ?? product.costLak;
+  if (rawKip !== undefined && rawKip !== null && rawKip !== '') {
+    cartonCostKip = Number(rawKip) || 0;
   } else {
-    cartonCostKip = (Number(product.costPerBaseUnit) || 0) * cartonMultiplier;
+    cartonCostKip = (Number(product.costPerBaseUnit ?? product.cost_per_base_unit) || 0) * cartonMultiplier;
   }
 
-  if (product.costBaht !== undefined && product.costBaht !== null && product.costBaht !== '') {
-    cartonCostBaht = Number(product.costBaht);
-  } else if (product.cost_thb !== undefined && product.cost_thb !== null && product.cost_thb !== '') {
-    cartonCostBaht = Number(product.cost_thb);
+  const rawBaht = product.costBaht ?? product.cost_thb ?? product.costThb;
+  if (rawBaht !== undefined && rawBaht !== null && rawBaht !== '') {
+    cartonCostBaht = Number(rawBaht) || 0;
   } else {
     cartonCostBaht = 0;
+  }
+
+  const isLakCurrency = (product.cost_currency || product.costCurrency) === 'LAK';
+  if (isLakCurrency) {
+    cartonCostBaht = 0;
+  }
+
+  // Fallback: If only Baht is given and Kip is 0, auto-convert if exchangeRate is provided
+  if (!isLakCurrency && cartonCostKip === 0 && cartonCostBaht > 0 && Number(exchangeRate) > 0) {
+    cartonCostKip = Math.round(cartonCostBaht * Number(exchangeRate));
   }
 
   return {

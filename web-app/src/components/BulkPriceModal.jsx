@@ -214,14 +214,16 @@ export default function BulkPriceModal({
     const prodId = product.id;
     const rate = Number(exchangeRate) || 690;
     const maxMult = Math.max(1, ...(product.units || []).map((u) => Number(u.multiplier) || 1));
-
-    const isLakOnly =
-      (product.cost_currency || product.costCurrency) === 'LAK' ||
-      (Number(product.costBaht ?? product.cost_thb ?? 0) === 0 && Number(product.costKip ?? product.cost_lak ?? product.costPerBaseUnit ?? 0) > 0);
-
     const { cartonCostKip, cartonCostBaht } = getCartonUnitInfo(product, rate);
     const origCostLak = cartonCostKip;
     const origCostThb = cartonCostBaht;
+
+    const isBoughtInKip =
+      (product.cost_currency || product.costCurrency) === 'LAK' &&
+      Number(origCostLak || 0) > 0 &&
+      Number(origCostThb || 0) === 0;
+
+    const isLakCurrency = isBoughtInKip || (product.cost_currency || product.costCurrency) === 'LAK';
 
     setManualCostEdits((prev) => {
       const existing = prev[prodId];
@@ -235,13 +237,13 @@ export default function BulkPriceModal({
       } else if (field === 'cost_lak') {
         // Gõ trực tiếp vào ô Kíp: Giữ nguyên số tiền người dùng nhập
         curCostLak = val;
-        if (isLakOnly) {
+        if (isBoughtInKip || isLakCurrency) {
           curCostThb = 0;
         }
       }
 
       const costPerBaseUnit = Math.round(curCostLak / maxMult);
-      const isChanged = curCostLak !== origCostLak || (!isLakOnly && curCostThb !== origCostThb);
+      const isChanged = curCostLak !== origCostLak || (!isLakCurrency && curCostThb !== origCostThb);
 
       if (!isChanged) {
         const copy = { ...prev };
@@ -253,9 +255,9 @@ export default function BulkPriceModal({
         ...prev,
         [prodId]: {
           productId: prodId,
-          currency: isLakOnly ? 'LAK' : 'THB',
+          currency: isLakCurrency ? 'LAK' : 'THB',
           cost_lak: curCostLak,
-          cost_thb: curCostThb,
+          cost_thb: isLakCurrency ? 0 : curCostThb,
           cost_per_base_unit: costPerBaseUnit,
         },
       };
@@ -421,14 +423,15 @@ export default function BulkPriceModal({
             {productsWithSortedUnits.map(({ product, sortedUnits }) => {
               const productImg = product.imageUrl || product.image_url || product.image;
               const rate = Number(exchangeRate) || 690;
-              const isLakOnly =
-                (product.cost_currency || product.costCurrency) === 'LAK' ||
-                (Number(product.costBaht ?? product.cost_thb ?? 0) === 0 && Number(product.costKip ?? product.cost_lak ?? product.costPerBaseUnit ?? 0) > 0);
-
               const { cartonUnitName, cartonCostKip, cartonCostBaht } = getCartonUnitInfo(product, rate);
               const costDirty = manualCostEdits[product.id];
               const curCostThb = costDirty?.cost_thb !== undefined ? costDirty.cost_thb : cartonCostBaht;
               const curCostLak = costDirty?.cost_lak !== undefined ? costDirty.cost_lak : cartonCostKip;
+
+              const isBoughtInKip =
+                (product.cost_currency || product.costCurrency) === 'LAK' &&
+                Number(curCostLak || 0) > 0 &&
+                Number(curCostThb || 0) === 0;
 
               const isCostThbDirty = costDirty?.cost_thb !== undefined && costDirty.cost_thb !== cartonCostBaht;
               const isCostLakDirty = costDirty?.cost_lak !== undefined && costDirty.cost_lak !== cartonCostKip;
@@ -488,7 +491,7 @@ export default function BulkPriceModal({
                       {/* Cost Input Section (ຕົ້ນທຶນ B & K) */}
                       <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-slate-200/90 shadow-2xs">
                         <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">ຕົ້ນທຶນ:</span>
-                        {!isLakOnly && (
+                        {!isBoughtInKip && (
                           <div className="relative w-20 sm:w-24">
                             <input
                               type="text"

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   Warehouse,
   Plus,
@@ -381,6 +381,19 @@ export default function ProductsView({
   const [priceToast, setPriceToast] = useState(null);
   const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
 
+  // Theo dõi vị trí cuộn trên Mobile: Khi cuộn qua Header chính, hiển thị nút Refresh trong khung Filter dính
+  const [isScrolledPastHeader, setIsScrolledPastHeader] = useState(false);
+  const isScrolledRef = useRef(false);
+
+  const handleScroll = useCallback((e) => {
+    const scrollTop = e.currentTarget.scrollTop || 0;
+    const shouldBeScrolled = scrollTop > 70;
+    if (shouldBeScrolled !== isScrolledRef.current) {
+      isScrolledRef.current = shouldBeScrolled;
+      setIsScrolledPastHeader(shouldBeScrolled);
+    }
+  }, []);
+
   const handleLocalRefresh = async () => {
     if (isLocalRefreshing) return;
     setIsLocalRefreshing(true);
@@ -718,9 +731,12 @@ export default function ProductsView({
     const rate = Number(exchangeRate) || 690;
     const maxMult = Math.max(1, ...(product.units || []).map((u) => Number(u.multiplier) || 1));
 
-    const isLakOnly =
-      (product.cost_currency || product.costCurrency) === 'LAK' ||
-      (Number(product.costBaht ?? product.cost_thb ?? 0) === 0 && Number(product.costKip ?? product.cost_lak ?? product.costPerBaseUnit ?? 0) > 0);
+    const isBoughtInKip =
+      (product.cost_currency || product.costCurrency) === 'LAK' &&
+      Number(product.costLak ?? product.cost_lak ?? product.costKip ?? (Number(product.costPerBaseUnit || 0) * maxMult) ?? 0) > 0 &&
+      Number(product.costBaht ?? product.cost_thb ?? 0) === 0;
+
+    const isLakCurrency = isBoughtInKip || (product.cost_currency || product.costCurrency) === 'LAK';
 
     const origCostLak = Number(product.costLak ?? product.cost_lak ?? product.costKip ?? (Number(product.costPerBaseUnit || 0) * maxMult) ?? 0);
     const origCostThb = Number(product.costBaht ?? product.cost_thb ?? 0);
@@ -737,13 +753,13 @@ export default function ProductsView({
       } else if (field === 'cost_lak') {
         // Gõ trực tiếp vào ô Kíp: Giữ nguyên số tiền người dùng nhập
         curCostLak = val;
-        if (isLakOnly) {
+        if (isBoughtInKip || isLakCurrency) {
           curCostThb = 0;
         }
       }
 
       const costPerBaseUnit = Math.round(curCostLak / maxMult);
-      const isChanged = curCostLak !== origCostLak || (!isLakOnly && curCostThb !== origCostThb);
+      const isChanged = curCostLak !== origCostLak || (!isLakCurrency && curCostThb !== origCostThb);
 
       if (!isChanged) {
         const copy = { ...prev };
@@ -755,9 +771,9 @@ export default function ProductsView({
         ...prev,
         [prodId]: {
           productId: prodId,
-          currency: isLakOnly ? 'LAK' : 'THB',
+          currency: isLakCurrency ? 'LAK' : 'THB',
           cost_lak: curCostLak,
-          cost_thb: curCostThb,
+          cost_thb: isLakCurrency ? 0 : curCostThb,
           cost_per_base_unit: costPerBaseUnit,
         },
       };
@@ -1067,6 +1083,7 @@ export default function ProductsView({
 
   return (
     <main
+      onScroll={handleScroll}
       className="flex-1 w-full max-w-full px-3 sm:px-5 md:px-6 pt-0 overflow-y-auto overflow-x-hidden font-sans min-h-0 pb-4 sm:pb-6 touch-pan-y"
       style={{
         paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
@@ -1239,6 +1256,25 @@ export default function ProductsView({
               <span className="hidden md:inline text-xs font-bold">ສະແກນ</span>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse hidden md:inline" />
             </button>
+
+            {/* Nút Refresh thông minh khi cuộn xuống: Nằm ở bên phải cùng */}
+            {isScrolledPastHeader && onRefreshProducts && (
+              <button
+                type="button"
+                onClick={handleLocalRefresh}
+                disabled={isLocalRefreshing}
+                className={`w-10 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs flex items-center justify-center shrink-0 active:scale-90 transition-all cursor-pointer animate-in fade-in zoom-in-95 duration-150 ${
+                  isLocalRefreshing ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+                title="ໂຫຼດຂໍ້ມູນຄືນໃໝ່ (Refresh Data)"
+              >
+                <ArrowClockwise
+                  size={18}
+                  weight="bold"
+                  className={`transition-transform duration-300 ${isLocalRefreshing ? 'animate-spin text-teal-600' : 'text-blue-600 hover:rotate-180'}`}
+                />
+              </button>
+            )}
           </div>
 
           {/* HÀNG 2: CÁC NÚT LỌC VÀ CHỨC NĂNG (TÁCH XUỐNG HÀNG THỨ 2 TRÊN MOBILE) */}
@@ -1504,9 +1540,10 @@ export default function ProductsView({
                     }
                   ];
 
-              const isLakCurrency =
-                (p.cost_currency || p.costCurrency) === 'LAK' ||
-                (Number(p.costBaht ?? p.cost_thb ?? 0) === 0 && Number(p.costKip ?? p.cost_lak ?? p.costPerBaseUnit ?? 0) > 0);
+              const isBoughtInKip =
+                (p.cost_currency || p.costCurrency) === 'LAK' &&
+                Number(info.cartonCostKip ?? p.costKip ?? p.cost_lak ?? p.costPerBaseUnit ?? 0) > 0 &&
+                Number(info.cartonCostBaht ?? p.costBaht ?? p.cost_thb ?? 0) === 0;
 
               const maxMult = Math.max(1, ...(units || []).map((un) => Number(un.multiplier) || 1));
               const origCostLak = Number(p.costLak ?? p.cost_lak ?? p.costKip ?? (Number(p.costPerBaseUnit || 0) * maxMult) ?? 0);
@@ -1594,7 +1631,7 @@ export default function ProductsView({
                         ຕົ້ນທຶນ ({info.cartonUnitName}):
                       </span>
 
-                      {isLakCurrency ? (
+                      {isBoughtInKip ? (
                         <div className="relative">
                           <input
                             type="text"
@@ -1887,7 +1924,7 @@ export default function ProductsView({
               <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-between text-xs font-mono">
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400 text-[11px] font-sans">ຕົ້ນທຶນ ({info.cartonUnitName}):</span>
-                  {!isLakCurrency && (
+                  {!isBoughtInKip && (
                     <>
                       <span className="font-black text-slate-900">{formatBaht(info.cartonCostBaht)}</span>
                       <span className="text-slate-300">/</span>
@@ -2184,9 +2221,10 @@ export default function ProductsView({
                     }
                   ];
 
-              const isLakCurrency =
-                (p.cost_currency || p.costCurrency) === 'LAK' ||
-                (Number(p.costBaht ?? p.cost_thb ?? 0) === 0 && Number(p.costKip ?? p.cost_lak ?? p.costPerBaseUnit ?? 0) > 0);
+              const isBoughtInKip =
+                (p.cost_currency || p.costCurrency) === 'LAK' &&
+                Number(info.cartonCostKip ?? p.costKip ?? p.cost_lak ?? p.costPerBaseUnit ?? 0) > 0 &&
+                Number(info.cartonCostBaht ?? p.costBaht ?? p.cost_thb ?? 0) === 0;
 
               const maxMult = Math.max(1, ...(units || []).map((un) => Number(un.multiplier) || 1));
               const origCostLak = Number(p.costLak ?? p.cost_lak ?? p.costKip ?? (Number(p.costPerBaseUnit || 0) * maxMult) ?? 0);
@@ -2272,7 +2310,7 @@ export default function ProductsView({
                           ຕົ້ນທຶນ ({info.cartonUnitName}):
                         </span>
 
-                        {isLakCurrency ? (
+                        {isBoughtInKip ? (
                           /* CHỈ 1 Ô INPUT KÍP CHO SẢN PHẨM TIỀN KÍP */
                           <div className="relative">
                             <input
@@ -2607,7 +2645,7 @@ export default function ProductsView({
                   {/* Cost breakdown */}
                   <td className="py-3 px-3">
                     <div className="flex flex-col gap-0.5 text-xs">
-                      {!isLakCurrency && (
+                      {!isBoughtInKip && (
                         <div className="flex items-center gap-1.5 font-mono">
                           <span className="text-[10px] font-bold text-slate-400 w-3">฿</span>
                           <span className="font-extrabold text-slate-900">

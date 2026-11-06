@@ -66,7 +66,7 @@ import LoginScreen from './components/auth/LoginScreen';
 import AuthLoadingSplash from './components/auth/AuthLoadingSplash';
 import { useAuth, useAuthRole } from './contexts/AuthContext';
 import { useOrderRealtime } from './hooks/useOrderRealtime';
-import { safeSetItem, safeGetJSON, cleanupLegacyStorage } from './utils/safeStorage';
+import { safeSetItem, safeGetJSON, cleanupLegacyStorage, clearAllLocalProductMeta } from './utils/safeStorage';
 import { idbSet, idbGet } from './utils/indexedDbStorage';
 import OfflineSyncBanner from './components/common/OfflineSyncBanner';
 import CustomerCatalogView from './components/customer/CustomerCatalogView';
@@ -1474,6 +1474,10 @@ export default function App() {
 
   // Full Refresh Orchestrator (Debounced & coalesced to defeat egress leaks)
   const handleRefreshAllFromSupabase = useCallback(async (force = false) => {
+    if (force) {
+      cleanupLegacyStorage();
+      clearAllLocalProductMeta();
+    }
     const now = Date.now();
     // If not forced and called again within 2 seconds, coalesce
     if (!force && now - lastRefreshAllTimeRef.current < 2000 && refreshAllInFlightRef.current) {
@@ -1511,6 +1515,8 @@ export default function App() {
 
   // Tab-specific isolated refresh handlers (No global isRefreshing side-effects)
   const handleRefreshPosTab = useCallback(async () => {
+    cleanupLegacyStorage();
+    clearAllLocalProductMeta();
     await Promise.all([
       refreshProducts(true),
       refreshCategories(true),
@@ -1519,6 +1525,8 @@ export default function App() {
   }, [refreshProducts, refreshCategories, refreshBundles]);
 
   const handleRefreshProductsTab = useCallback(async () => {
+    cleanupLegacyStorage();
+    clearAllLocalProductMeta();
     await Promise.all([
       refreshProducts(true),
       refreshCategories(true),
@@ -2014,21 +2022,38 @@ export default function App() {
     const pBaht = parseCurrencyInput(p.costBaht ?? p.cost_thb ?? '');
     const rate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 690;
 
-    if (pKip > 0 && pBaht === 0) {
-      setNewProdCostKip(formatDots(pKip));
-      setNewProdCostBaht(formatDots(Math.round(pKip / rate)));
+    // Multi-Currency & Auto-Repricing settings:
+    // Tab ເງິນກີບ (LAK) tự động active khi:
+    // 1. p.cost_currency === 'LAK' hoặc p.costCurrency === 'LAK'
+    // 2. Hoặc khi chưa cấu hình currency nhưng không có giá Baht (pBaht === 0) và có giá Kíp (pKip > 0)
+    const rawCurrency = p.cost_currency || p.costCurrency;
+    const isLak = rawCurrency === 'LAK' || (rawCurrency !== 'THB' && pBaht === 0 && pKip > 0);
+    const resolvedCostCurrency = isLak ? 'LAK' : 'THB';
+    setCostCurrency(resolvedCostCurrency);
+
+    if (resolvedCostCurrency === 'LAK') {
+      // Khi sản phẩm mua bằng tiền Kíp: Điền đúng giá vốn Kíp, tuyệt đối KHÔNG tự quy đổi điền giá Baht
+      setNewProdCostKip(pKip > 0 ? formatDots(pKip) : '');
+      setNewProdCostBaht('');
+      setIsAutoCurrencyReprice(false);
     } else if (pBaht > 0 && pKip === 0) {
       setNewProdCostBaht(formatDots(pBaht));
       setNewProdCostKip(formatDots(Math.round(pBaht * rate)));
+      setIsAutoCurrencyReprice(
+        p.is_auto_currency_reprice !== undefined
+          ? Boolean(p.is_auto_currency_reprice)
+          : Boolean(p.isAutoCurrencyReprice)
+      );
     } else {
-      setNewProdCostBaht(formatDots(p.costBaht ?? p.cost_thb ?? ''));
-      setNewProdCostKip(formatDots(p.costKip ?? p.cost_lak ?? ''));
+      setNewProdCostBaht(pBaht > 0 ? formatDots(pBaht) : '');
+      setNewProdCostKip(pKip > 0 ? formatDots(pKip) : '');
+      setIsAutoCurrencyReprice(
+        p.is_auto_currency_reprice !== undefined
+          ? Boolean(p.is_auto_currency_reprice)
+          : Boolean(p.isAutoCurrencyReprice)
+      );
     }
     setLastModifiedCostField(null);
-
-    // Multi-Currency & Auto-Repricing settings
-    const resolvedCostCurrency = p.cost_currency || p.costCurrency || (Number(p.costBaht ?? p.cost_thb) > 0 ? 'THB' : (Number(p.costKip ?? p.cost_lak) > 0 ? 'LAK' : 'THB'));
-    setCostCurrency(resolvedCostCurrency);
     setIsAutoCurrencyReprice(
       p.is_auto_currency_reprice !== undefined
         ? Boolean(p.is_auto_currency_reprice)
@@ -2484,9 +2509,9 @@ export default function App() {
         imageUrl: finalImageUrl,
         baseUnit: actualBaseUnitName,
         costPerBaseUnit: Math.round(Number(costPerBaseUnit) || 0),
-        costBaht: Number(costBaht) || 0,
+        costBaht: costCurrency === 'LAK' ? 0 : (Number(costBaht) || 0),
         costKip: Math.round(Number(costKip) || 0),
-        cost_thb: Number(costBaht) || 0,
+        cost_thb: costCurrency === 'LAK' ? 0 : (Number(costBaht) || 0),
         cost_lak: Math.round(Number(costKip) || 0),
         cost_currency: costCurrency,
         costCurrency: costCurrency,

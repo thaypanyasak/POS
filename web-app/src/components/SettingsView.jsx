@@ -26,9 +26,15 @@ import {
   SpeakerHigh,
   SpeakerSlash,
   WarningCircle,
+  Info,
 } from '@phosphor-icons/react';
 import { Capacitor } from '@capacitor/core';
-import { updateExchangeRateInSupabase, updateExchangeRateAndRepriceInSupabase, supabase } from '../services/supabase';
+import {
+  updateExchangeRateInSupabase,
+  updateExchangeRateAndRepriceInSupabase,
+  backfillMissingInvoiceCosts,
+  supabase,
+} from '../services/supabase';
 import queryClient from '../services/queryClient';
 import { formatDots } from '../utils/formatters';
 import { getPrinterConfig, savePrinterConfig, fetchPrinterConfigFromDb, testPrinterConnection } from '../services/printerService';
@@ -95,6 +101,37 @@ export default function SettingsView({
 
   const [isRepriceModalOpen, setIsRepriceModalOpen] = useState(false);
   const [isApplyingReprice, setIsApplyingReprice] = useState(false);
+  const [isBackfillModalOpen, setIsBackfillModalOpen] = useState(false);
+  const [isBackfillingAll, setIsBackfillingAll] = useState(false);
+
+  // HÀNH ĐỘNG: BÙ GIÁ VỐN TOÀN BỘ HÓA ĐƠN CŨ (BACKFILL ALL MISSING INVOICE COSTS)
+  const handleConfirmBackfillAll = async () => {
+    setIsBackfillingAll(true);
+    playRefreshBeep('system');
+    try {
+      const res = await backfillMissingInvoiceCosts(null);
+      if (res && res.success) {
+        setIsBackfillModalOpen(false);
+        playSuccessBeep('system');
+        onAlert?.(
+          `ອັບເດດຕົ້ນທຶນສຳເລັດ! ໄດ້ປັບປຸງ ${res.updated_items || 0} ລາຍການໃນ ${res.updated_invoices || 0} ບິນຂາຍ.`,
+          'ສຳເລັດ',
+          'success'
+        );
+        if (onRefreshAll) {
+          await onRefreshAll();
+        }
+      } else {
+        throw new Error(res?.error || 'ບໍ່ສາມາດອັບເດດຕົ້ນທຶນໄດ້');
+      }
+    } catch (err) {
+      console.error('Backfill all error:', err);
+      playErrorBeep();
+      onAlert?.(`ເກີດຂໍ້ຜິດພາດ: ${err.message}`, 'ແຈ້ງເຕືອນ', 'warning');
+    } finally {
+      setIsBackfillingAll(false);
+    }
+  };
 
   // HÀNH ĐỘNG 1: LƯU TỶ GIÁ THAM CHIẾU (SAVE EXCHANGE RATE ONLY)
   // Chỉ cập nhật bảng store_settings (key = 'thb_lak_exchange_rate').
@@ -887,6 +924,35 @@ export default function SettingsView({
               </div>
             </div>
 
+            {/* Card 2.5: Cost Backfill Utility (ອັບເດດຕົ້ນທຶນໃຫ້ບິນເກົ່າ) */}
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 sm:p-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-700 shrink-0 border border-amber-200">
+                    <ArrowClockwise size={18} weight="bold" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                      ອັບເດດຕົ້ນທຶນບິນເກົ່າ (Cost Backfill)
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      ຄຳນວນ ແລະ ຕື່ມຕົ້ນທຶນປັດຈຸບັນເຂົ້າບັນດາບິນຂາຍເກົ່າທີ່ຍັງບໍ່ມີລາຄາທຶນ
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsBackfillModalOpen(true)}
+                disabled={isBackfillingAll}
+                className="w-full h-9 px-4 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-xs flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all disabled:opacity-50"
+              >
+                <ArrowClockwise size={15} weight="bold" className={isBackfillingAll ? 'animate-spin' : ''} />
+                <span>ອັບເດດຕົ້ນທຶນໃຫ້ບິນເກົ່າທັງໝົດ</span>
+              </button>
+            </div>
+
             {/* Card 3: Live Update OTA (Cập nhật không cần cài lại IPA) */}
             <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 relative overflow-hidden">
               {/* Subtle accent background glow */}
@@ -1110,6 +1176,89 @@ export default function SettingsView({
                   <>
                     <ArrowsClockwise size={14} weight="bold" />
                     <span>ຢືນຢັນປັບລາຄາ</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal Xác nhận Bù giá vốn toàn bộ hóa đơn cũ (Confirmation Dialog) */}
+      {isBackfillModalOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => !isBackfillingAll && setIsBackfillModalOpen(false)}
+        >
+          <div
+            className="relative max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-amber-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200">
+                  <ArrowClockwise size={18} weight="bold" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  ຢືນຢັນອັບເດດຕົ້ນທຶນບິນເກົ່າ
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isBackfillingAll && setIsBackfillModalOpen(false)}
+                className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-3 text-xs text-slate-600">
+              <p className="leading-relaxed">
+                ທ່ານຕ້ອງການອັບເດດຕົ້ນທຶນສິນຄ້າປັດຈຸບັນ ເຂົ້າໃນບັນດາບິນຂາຍເກົ່າທີ່ຍັງບໍ່ມີລາຄາທຶນແທ້ບໍ່?
+              </p>
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/80 space-y-1.5 text-amber-900">
+                <p className="font-bold flex items-center gap-1.5">
+                  <Info size={14} weight="bold" />
+                  <span>ຫຼັກການເຮັດວຽກ (Zero-Egress):</span>
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-800">
+                  <li>ຄຳນວນ ແລະ ອັບເດດໂດຍກົງໃນຖານຂໍ້ມູນ PostgreSQL.</li>
+                  <li>ນຳໃຊ້ລາຄາຕົ້ນທຶນລ້າສຸດ ແລະ ຕົວຄູນຫົວໜ່ວຍທີ່ຖືກຕ້ອງ.</li>
+                  <li>ຄຳນວນຄືນຍອດຕົ້ນທຶນລວມ ແລະ ກຳໄລຂອງແຕ່ລະບິນໂດຍອັດຕະໂນມັດ.</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={isBackfillingAll}
+                onClick={() => setIsBackfillModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200/70 border border-slate-200 transition-colors cursor-pointer"
+              >
+                ຍົກເລີກ
+              </button>
+              <button
+                type="button"
+                disabled={isBackfillingAll}
+                onClick={handleConfirmBackfillAll}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white shadow-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isBackfillingAll ? (
+                  <>
+                    <CircleNotch size={14} className="animate-spin" />
+                    <span>ກຳລັງປະມວນຜົນ...</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowClockwise size={14} weight="bold" />
+                    <span>ຢືນຢັນອັບເດດ</span>
                   </>
                 )}
               </button>

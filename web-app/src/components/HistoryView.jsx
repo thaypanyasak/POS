@@ -2555,6 +2555,10 @@ export default function HistoryView({
           transaction={selectedProfitTx}
           products={products}
           onPrintReceipt={handlePrintReceipt}
+          onTransactionUpdated={(updatedTx) => {
+            setSelectedProfitTx(updatedTx);
+            onRefreshTransactions?.();
+          }}
         />
       )}
 

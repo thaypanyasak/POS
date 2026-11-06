@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   X,
   ChartLineUp,
@@ -13,10 +13,13 @@ import {
   Warehouse,
   CurrencyCircleDollar,
   HandCoins,
-  FileText
+  FileText,
+  ArrowClockwise
 } from '@phosphor-icons/react';
 import { formatKip, formatDateToDDMMYYYY, formatTime24h } from '../utils/formatters';
 import { calculateItemCostAndMultiplier } from '../utils/costCalculation';
+import { backfillMissingInvoiceCosts, fetchTransactionByIdFromSupabase } from '../services/supabase';
+import { playRefreshBeep, playSuccessBeep, playErrorBeep } from '../utils/audioFeedback';
 
 /**
  * Robust Transaction Profit & Cost Metrics Calculation
@@ -181,7 +184,15 @@ export default function InvoiceProfitDetailModal({
   transaction,
   products = [],
   onPrintReceipt,
+  onTransactionUpdated,
 }) {
+  const [currentTx, setCurrentTx] = useState(transaction);
+  const [isBackfilling, setIsBackfilling] = useState(false);
+
+  useEffect(() => {
+    setCurrentTx(transaction);
+  }, [transaction]);
+
   const productsMap = useMemo(() => {
     const map = new Map();
     (products || []).forEach((p) => {
@@ -192,12 +203,60 @@ export default function InvoiceProfitDetailModal({
   }, [products]);
 
   const metrics = useMemo(() => {
-    return calculateTxProfitMetrics(transaction, productsMap);
-  }, [transaction, productsMap]);
+    return calculateTxProfitMetrics(currentTx, productsMap);
+  }, [currentTx, productsMap]);
 
-  if (!isOpen || !transaction) return null;
+  const handleBackfillCost = async () => {
+    if (isBackfilling || !currentTx?.id) return;
+    setIsBackfilling(true);
+    playRefreshBeep('history');
+    try {
+      const res = await backfillMissingInvoiceCosts(currentTx.id);
+      if (res && res.success) {
+        // Fetch fresh updated transaction directly from Supabase
+        const updated = await fetchTransactionByIdFromSupabase(currentTx.id);
+        if (updated) {
+          setCurrentTx(updated);
+          onTransactionUpdated?.(updated);
+        } else {
+          // In-place fallback computation with productsMap
+          const updatedItems = (currentTx.items || currentTx.sale_transaction_items || []).map((it) => {
+            const costInfo = calculateItemCostAndMultiplier({
+              ...it,
+              product: productsMap.get(it.productId || it.product_id),
+            });
+            return {
+              ...it,
+              line_cost: costInfo.lineCost,
+              lineCost: costInfo.lineCost,
+              cost_price: costInfo.unitCost,
+              line_profit: Number(it.line_total || it.lineTotal || 0) - costInfo.lineCost,
+              lineProfit: Number(it.line_total || it.lineTotal || 0) - costInfo.lineCost,
+            };
+          });
+          const newTx = {
+            ...currentTx,
+            items: updatedItems,
+            sale_transaction_items: updatedItems,
+          };
+          setCurrentTx(newTx);
+          onTransactionUpdated?.(newTx);
+        }
+        playSuccessBeep('history');
+      } else {
+        playErrorBeep();
+      }
+    } catch (err) {
+      console.error('Backfill error:', err);
+      playErrorBeep();
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
 
-  const isCancelled = transaction.status === 'cancelled' || transaction.isCancelled;
+  if (!isOpen || !currentTx) return null;
+
+  const isCancelled = currentTx.status === 'cancelled' || currentTx.isCancelled;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-150">
@@ -221,7 +280,7 @@ export default function InvoiceProfitDetailModal({
                   ລາຍລະອຽດຕົ້ນທຶນ & ກຳໄລບິນ
                 </h2>
                 <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md border border-slate-200">
-                  #{transaction.receiptNumber || transaction.id}
+                  #{currentTx.receiptNumber || currentTx.receipt_number || currentTx.id}
                 </span>
                 {isCancelled && (
                   <span className="text-[10px] font-black bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md border border-rose-200">
@@ -232,16 +291,16 @@ export default function InvoiceProfitDetailModal({
               <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
                 <span className="inline-flex items-center gap-1">
                   <CalendarBlank size={12} weight="bold" />
-                  <span>{formatDateToDDMMYYYY(transaction.createdAt || transaction.created_at)}</span>
-                  <span>{formatTime24h(transaction.createdAt || transaction.created_at)}</span>
+                  <span>{formatDateToDDMMYYYY(currentTx.createdAt || currentTx.created_at)}</span>
+                  <span>{formatTime24h(currentTx.createdAt || currentTx.created_at)}</span>
                 </span>
                 <span>•</span>
                 <span className="inline-flex items-center gap-1">
                   <User size={12} weight="bold" />
-                  <span>ຜູ້ຂາຍ: <strong>{transaction.cashierName || transaction.cashier_name || 'Meii'}</strong></span>
+                  <span>ຜູ້ຂາຍ: <strong>{currentTx.cashierName || currentTx.cashier_name || 'Meii'}</strong></span>
                 </span>
                 <span>•</span>
-                <span>ລູກຄ້າ: <strong>{transaction.customerName || 'ລູກຄ້າທົ່ວໄປ'}</strong></span>
+                <span>ລູກຄ້າ: <strong>{currentTx.customerName || currentTx.customer_name || 'ລູກຄ້າທົ່ວໄປ'}</strong></span>
               </p>
             </div>
           </div>
@@ -338,17 +397,6 @@ export default function InvoiceProfitDetailModal({
               )}
             </div>
           </div>
-
-          {/* Alert if any items have no cost price */}
-          {metrics.hasIncompleteCost && (
-            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
-              <Info size={16} weight="bold" className="text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <strong>ແຈ້ງເຕືອນ:</strong> ມີ {metrics.zeroCostCount} ລາຍການໃນບິນນີ້ຍັງບໍ່ມີລາຄາທຶນ (ມູນຄ່າຍອດຂາຍ {formatKip(metrics.zeroCostRevenue)} ₭). 
-                ກຳໄລຂ້າງເທິງຍັງບໍ່ໄດ້ຫັກຕົ້ນທຶນຂອງສິນຄ້າດັ່ງກ່າວ (ກຳໄລຕົວຈິງຈະປັບຫຼຸດລົງເມື່ອອັບເດດລາຄາທຶນຄົບຖ້ວນ).
-              </div>
-            </div>
-          )}
 
           {/* 3. PRODUCT BREAKDOWN TABLE */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
@@ -502,12 +550,24 @@ export default function InvoiceProfitDetailModal({
             ອັດຕາກຳໄລລວມຂອງບິນ: <strong className={metrics.isLoss ? 'text-rose-600' : 'text-emerald-700'}>{metrics.overallMargin}%</strong>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+            {/* Nút ອັບເດດຕົ້ນທຶນ - Luôn hiển thị tại Footer Bar */}
+            <button
+              type="button"
+              onClick={handleBackfillCost}
+              disabled={isBackfilling}
+              className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold inline-flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
+              title="ອັບເດດຕົ້ນທຶນໃຫ້ບິນນີ້ (Backfill Cost)"
+            >
+              <ArrowClockwise size={15} weight="bold" className={isBackfilling ? 'animate-spin text-amber-700' : ''} />
+              <span>{isBackfilling ? 'ກຳລັງອັບເດດ...' : 'ອັບເດດຕົ້ນທຶນ'}</span>
+            </button>
+
             {onPrintReceipt && (
               <button
                 type="button"
                 onClick={() => {
-                  onPrintReceipt(transaction);
+                  onPrintReceipt(currentTx);
                 }}
                 className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold inline-flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
               >
