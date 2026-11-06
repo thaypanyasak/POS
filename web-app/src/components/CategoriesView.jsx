@@ -51,6 +51,12 @@ function CategoryProductsDetailModal({
 
   // Multi-select for items already in category (for batch removal)
   const [selectedDetailIds, setSelectedDetailIds] = useState(new Set());
+  // Optimistic tracking of locally removed product IDs for instantaneous UI removal
+  const [removedProductIds, setRemovedProductIds] = useState(() => new Set());
+
+  useEffect(() => {
+    setRemovedProductIds(new Set());
+  }, [category?.id, isOpen]);
 
   // Multi-select and infinite scroll pagination for candidate picker
   const [selectedCandidateIds, setSelectedCandidateIds] = useState(new Set());
@@ -110,6 +116,9 @@ function CategoryProductsDetailModal({
 
   const categoryProducts = useMemo(() => {
     return (products || []).filter((p) => {
+      // 0. Skip optimistically removed items immediately
+      if (removedProductIds.has(p.id)) return false;
+
       // 1. Direct Category ID match
       const pCatId = p.categoryId || p.category_id || p.categories?.id;
       if (categoryId && pCatId && String(pCatId) === String(categoryId)) {
@@ -129,7 +138,7 @@ function CategoryProductsDetailModal({
         return false;
       });
     });
-  }, [products, categoryName, categoryId, normCategoryName, targetNameLower]);
+  }, [products, categoryName, categoryId, normCategoryName, targetNameLower, removedProductIds]);
 
   const filtered = useMemo(() => {
     if (!searchTerm.trim()) return categoryProducts;
@@ -323,6 +332,11 @@ function CategoryProductsDetailModal({
 
       if (res?.success !== false) {
         playSuccessBeep('category');
+        setRemovedProductIds((prev) => {
+          const next = new Set(prev);
+          removals.forEach((r) => next.add(r.productId));
+          return next;
+        });
         onAlert?.(`ຍ້າຍ ${removals.length} ສິນຄ້າອອກຈາກໝວດ "${category.name}" ສຳເລັດແລ້ວ!`, 'ສຳເລັດ', 'success');
         setSelectedDetailIds(new Set());
       } else {
@@ -351,6 +365,7 @@ function CategoryProductsDetailModal({
 
       const res = await onRemoveProduct?.(prod.id, nextCategoryStr);
       if (res?.success !== false) {
+        setRemovedProductIds((prev) => new Set([...prev, prod.id]));
         setSelectedDetailIds((prev) => {
           const next = new Set(prev);
           next.delete(prod.id);

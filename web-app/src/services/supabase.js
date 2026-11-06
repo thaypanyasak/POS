@@ -4,6 +4,7 @@ import { sanitizeImageUrl, normalizeLao } from '../utils/formatters';
 import { idbGet, idbSet } from '../utils/indexedDbStorage';
 import { safeSetItem } from '../utils/safeStorage';
 import { isCustomerStorefrontRoute } from '../utils/routeUtils';
+import { calculateItemCostAndMultiplier, recalculateTransactionTotals } from '../utils/costCalculation';
 
 const SUPABASE_URL = 'https://qanphpmphnipyuwcadwz.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_zQw2L3JfnT-5o_-tJgZaIA_WETQFTPq';
@@ -320,27 +321,50 @@ export async function fetchAllRowsWithRange(makeQueryFn, chunkSize = 1000) {
 
 /**
  * In-memory SWR Cache for Products & In-Flight Promise Deduplication (Bandwidth Egress Defense)
+ * Tách biệt hoàn toàn Cache POS (đầy đủ giá vốn) và Cache Storefront Khách hàng (bảo mật tuyệt đối, 0 rò rỉ dữ liệu)
  */
+let cachedPosProductsInMemory = null;
+let cachedPosProductsTimestamp = 0;
+let inFlightPosProductsPromise = null;
+
+let cachedCustomerProductsInMemory = null;
+let cachedCustomerProductsTimestamp = 0;
+let inFlightCustomerProductsPromise = null;
+
+// Backward-compatible pointer to cachedPosProductsInMemory
 let cachedProductsInMemory = null;
 let cachedProductsTimestamp = 0;
-let inFlightProductsPromise = null;
+
 const PRODUCTS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache TTL
 
 export function invalidateProductsCache() {
+  cachedPosProductsInMemory = null;
+  cachedPosProductsTimestamp = 0;
+  inFlightPosProductsPromise = null;
+  cachedCustomerProductsInMemory = null;
+  cachedCustomerProductsTimestamp = 0;
+  inFlightCustomerProductsPromise = null;
   cachedProductsInMemory = null;
   cachedProductsTimestamp = 0;
-  inFlightProductsPromise = null;
   try {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('meiishop_catalog_fingerprint');
+      localStorage.removeItem('meiishop_customer_catalog_fingerprint');
     }
   } catch (_) {}
 }
 
-export function setCachedProductsInMemory(products) {
+export function setCachedProductsInMemory(products, isCustomer = false) {
   if (Array.isArray(products)) {
-    cachedProductsInMemory = products;
-    cachedProductsTimestamp = Date.now();
+    if (isCustomer) {
+      cachedCustomerProductsInMemory = products;
+      cachedCustomerProductsTimestamp = Date.now();
+    } else {
+      cachedPosProductsInMemory = products;
+      cachedPosProductsTimestamp = Date.now();
+      cachedProductsInMemory = products;
+      cachedProductsTimestamp = Date.now();
+    }
   }
 }
 
@@ -349,26 +373,34 @@ export function setCachedProductsInMemory(products) {
  * Features Stale-While-Revalidate caching, in-flight deduplication, selective column projection,
  * and Delta-Sync fingerprint check to slash PostgREST egress by over 90%.
  */
-export async function fetchProductsFromSupabase({ force = false } = {}) {
+export async function fetchProductsFromSupabase({ force = false, forCustomer = false } = {}) {
+  const isCustomer = Boolean(forCustomer || isCustomerStorefrontRoute());
   const now = Date.now();
+
+  const cachedInMemory = isCustomer ? cachedCustomerProductsInMemory : cachedPosProductsInMemory;
+  const cachedTimestamp = isCustomer ? cachedCustomerProductsTimestamp : cachedPosProductsTimestamp;
+
   // 1. If not forcing and cache is still fresh within TTL, return in-memory cache directly (0 Egress bytes!)
-  if (!force && cachedProductsInMemory && (now - cachedProductsTimestamp < PRODUCTS_CACHE_TTL)) {
-    return cachedProductsInMemory;
+  if (!force && cachedInMemory && (now - cachedTimestamp < PRODUCTS_CACHE_TTL)) {
+    return cachedInMemory;
   }
 
   // 2. In-flight deduplication: If a fetch is already running, share the exact same promise!
-  if (inFlightProductsPromise) {
-    return inFlightProductsPromise;
+  const activePromise = isCustomer ? inFlightCustomerProductsPromise : inFlightPosProductsPromise;
+  if (activePromise) {
+    return activePromise;
   }
 
-  inFlightProductsPromise = (async () => {
+  const fetchTask = (async () => {
     try {
       // 2.1 Bandwidth Defense: Delta-Sync check before downloading 600+ products (~65KB)
-      // Check if client already has local cached catalog in memory or IndexedDB
-      let localProducts = cachedProductsInMemory;
+      let localProducts = cachedInMemory;
+      const storageKey = isCustomer ? 'meiishop_customer_products_v1' : 'meiishop_products_v5';
+      const fingerprintKey = isCustomer ? 'meiishop_customer_catalog_fingerprint' : 'meiishop_catalog_fingerprint';
+
       if (!localProducts && typeof window !== 'undefined') {
         try {
-          localProducts = await idbGet('meiishop_products_v5', null);
+          localProducts = await idbGet(storageKey, null);
         } catch (_) {}
       }
 
@@ -384,12 +416,17 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
           if (!checkErr && cloudCount !== null && latestRows && latestRows.length > 0) {
             const latest = latestRows[0];
             const cloudFingerprint = `${cloudCount}_${latest.id}_${latest.updated_at || latest.created_at}`;
-            const localFingerprint = typeof window !== 'undefined' ? localStorage.getItem('meiishop_catalog_fingerprint') : null;
+            const localFingerprint = typeof window !== 'undefined' ? localStorage.getItem(fingerprintKey) : null;
 
             if (cloudFingerprint === localFingerprint) {
-              console.log(`[Bandwidth Guard] Products catalog fingerprint matches cloud (${cloudCount} items). Bypassed 65KB full fetch!`);
-              cachedProductsInMemory = localProducts;
-              cachedProductsTimestamp = Date.now();
+              console.log(`[Bandwidth Guard] Products catalog fingerprint matches cloud (${cloudCount} items). Bypassed full fetch!`);
+              if (isCustomer) {
+                cachedCustomerProductsInMemory = localProducts;
+                cachedCustomerProductsTimestamp = Date.now();
+              } else {
+                cachedPosProductsInMemory = localProducts;
+                cachedPosProductsTimestamp = Date.now();
+              }
               return localProducts;
             }
           }
@@ -398,16 +435,22 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
         }
       }
 
-      // 1. Fetch ALL products using chunked range queries with explicit column projection (0 HTTP 400 errors)
+      // 1. Fetch products using explicit column projection
+      // BẢO MẬT & TIẾT KIỆM BĂNG THÔNG EGRESS:
+      // Trang khách xem menu (Storefront) TUYỆT ĐỐI KHÔNG truy vấn giá vốn, tồn kho, lãi gộp hay giá sỉ
+      const productSelectCols = isCustomer
+        ? 'id, name, name_vi, barcode, image_url, category, category_id, base_unit, created_at'
+        : 'id, name, name_vi, barcode, image_url, category, category_id, base_unit, cost_lak, cost_thb, cost_currency, is_auto_currency_reprice, cost_per_base_unit, track_stock, current_stock_base_units, allow_negative_stock, is_deleted, created_at, updated_at';
+
       let res = await fetchAllRowsWithRange(() =>
         supabase
           .from('products')
-          .select('id, name, name_vi, barcode, image_url, category, category_id, base_unit, cost_lak, cost_thb, cost_currency, is_auto_currency_reprice, cost_per_base_unit, track_stock, current_stock_base_units, allow_negative_stock, is_deleted, created_at, updated_at')
+          .select(productSelectCols)
           .order('created_at', { ascending: true })
       );
 
-      // Safe fallback if cost_currency / is_auto_currency_reprice not yet in schema cache
-      if (res.error && (res.error.message?.includes('cost_currency') || res.error.message?.includes('is_auto_currency_reprice'))) {
+      // Safe fallback if cost_currency / is_auto_currency_reprice not yet in schema cache (POS mode)
+      if (!isCustomer && res.error && (res.error.message?.includes('cost_currency') || res.error.message?.includes('is_auto_currency_reprice'))) {
         res = await fetchAllRowsWithRange(() =>
           supabase
             .from('products')
@@ -421,21 +464,26 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
 
       if (prodErr || !prodData) {
         console.warn('Could not fetch products from Supabase:', prodErr);
-        return cachedProductsInMemory || localProducts || null;
+        return cachedInMemory || localProducts || null;
       }
 
       // Filter out soft-deleted products if is_deleted column is present
       const activeProducts = prodData.filter((p) => p.is_deleted !== true);
 
       // 2. Fetch product_units using explicit column projection
+      // Trang khách Storefront chỉ cần giá bán lẻ (retail_price); Bỏ qua toàn bộ giá sỉ và tỷ lệ giá!
+      const unitSelectCols = isCustomer
+        ? 'id, product_id, unit_name, multiplier, retail_price, barcode, is_base_unit'
+        : 'id, product_id, unit_name, multiplier, retail_price, wholesale_price, price_2, price_3, price_ratio_1, price_ratio_2, price_ratio_3, barcode, is_base_unit';
+
       let { data: unitsData, error: unitsErr } = await fetchAllRowsWithRange(() =>
         supabase
           .from('product_units')
-          .select('id, product_id, unit_name, multiplier, retail_price, wholesale_price, price_2, price_3, price_ratio_1, price_ratio_2, price_ratio_3, barcode, is_base_unit')
+          .select(unitSelectCols)
       );
 
       // Safe fallback if price_ratio columns not yet in schema cache
-      if (unitsErr && (unitsErr.message?.includes('price_ratio_1') || unitsErr.message?.includes('price_ratio'))) {
+      if (!isCustomer && unitsErr && (unitsErr.message?.includes('price_ratio_1') || unitsErr.message?.includes('price_ratio'))) {
         const fallbackUnitsRes = await fetchAllRowsWithRange(() =>
           supabase
             .from('product_units')
@@ -447,239 +495,296 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
 
       if (unitsErr || !unitsData) {
         console.warn('Could not fetch product_units from Supabase:', unitsErr);
-        return cachedProductsInMemory || null;
+        return cachedInMemory || null;
       }
 
-    // Fetch product_crate_deposits synchronized settings from store_settings (bypassed for customer storefront)
-    const crateDepositsMap = isCustomerStorefrontRoute() ? {} : await fetchProductCrateDeposits().catch(() => ({}));
+      // Fetch product_crate_deposits synchronized settings from store_settings (bypassed for customer storefront)
+      const crateDepositsMap = isCustomer ? {} : await fetchProductCrateDeposits().catch(() => ({}));
 
-    // 3. O(N) Hash Map Indexing for units by product_id (eliminates O(N*M) 27-million iteration loop)
-    const unitsByProductId = new Map();
-    for (let i = 0; i < unitsData.length; i++) {
-      const u = unitsData[i];
-      const pid = u.product_id;
-      let list = unitsByProductId.get(pid);
-      if (!list) {
-        list = [];
-        unitsByProductId.set(pid, list);
+      // 3. O(N) Hash Map Indexing for units by product_id (eliminates O(N*M) 27-million iteration loop)
+      const unitsByProductId = new Map();
+      for (let i = 0; i < unitsData.length; i++) {
+        const u = unitsData[i];
+        const pid = u.product_id;
+        let list = unitsByProductId.get(pid);
+        if (!list) {
+          list = [];
+          unitsByProductId.set(pid, list);
+        }
+        list.push(u);
       }
-      list.push(u);
-    }
 
-    // Map units to their corresponding products
-    const mapped = activeProducts.map((p) => {
-      const rawUnits = unitsByProductId.get(p.id) || [];
-      const pUnits = rawUnits.map((u) => {
-        let resolvedTier = 1;
-        if (
-          u.id?.endsWith('_carton') ||
-          ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].includes(u.unit_name)
-        ) {
-          resolvedTier = 3;
-        } else if (
-          u.id?.endsWith('_pack') ||
-          ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂหล', 'ຖົງກາງ'].includes(u.unit_name)
-        ) {
-          resolvedTier = 2;
-        } else if (
-          u.id?.endsWith('_piece') ||
-          ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ', 'ຕຸກ', 'ຊອງ', 'ກ່ອງນ້ອຍ'].includes(u.unit_name)
-        ) {
-          resolvedTier = 1;
+      // Map units to their corresponding products
+      const mapped = activeProducts.map((p) => {
+        const rawUnits = unitsByProductId.get(p.id) || [];
+        const pUnits = rawUnits.map((u) => {
+          let resolvedTier = 1;
+          if (
+            u.id?.endsWith('_carton') ||
+            ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].includes(u.unit_name)
+          ) {
+            resolvedTier = 3;
+          } else if (
+            u.id?.endsWith('_pack') ||
+            ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂหล', 'ຖົງກາງ'].includes(u.unit_name)
+          ) {
+            resolvedTier = 2;
+          } else if (
+            u.id?.endsWith('_piece') ||
+            ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ', 'ຕຸກ', 'ຊອງ', 'ກ່ອງນ້ອຍ'].includes(u.unit_name)
+          ) {
+            resolvedTier = 1;
+          }
+
+          if (isCustomer) {
+            return {
+              id: u.id,
+              productId: u.product_id,
+              unitName: u.unit_name,
+              multiplier: Number(u.multiplier) || 1,
+              retailPrice: Number(u.retail_price) || 0,
+              barcode: u.barcode || null,
+              isBaseUnit: Boolean(u.is_base_unit),
+              tier: resolvedTier,
+            };
+          }
+
+          return {
+            id: u.id,
+            productId: u.product_id,
+            unitName: u.unit_name,
+            multiplier: Number(u.multiplier) || 1,
+            retailPrice: Number(u.retail_price) || 0,
+            wholesalePrice: Number(u.wholesale_price) || 0,
+            price_2: Number(u.price_2) || 0,
+            price_3: Number(u.price_3) || 0,
+            price2: Number(u.price_2) || 0,
+            price3: Number(u.price_3) || 0,
+            price_ratio_1: Number(u.price_ratio_1) || 0,
+            price_ratio_2: Number(u.price_ratio_2) || 0,
+            price_ratio_3: Number(u.price_ratio_3) || 0,
+            barcode: u.barcode || null,
+            isBaseUnit: Boolean(u.is_base_unit),
+            tier: resolvedTier,
+          };
+        });
+
+        // Sort units by multiplier ascending
+        pUnits.sort((a, b) => a.multiplier - b.multiplier);
+
+        const localMeta = isCustomer ? null : getProductMetaLocal(p.id);
+
+        // 1. Identify distinct active tier units from database rows
+        let cartonUnit = pUnits.find(
+          (u) =>
+            u.tier === 3 ||
+            u.id?.endsWith('_carton') ||
+            ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].includes(u.unitName)
+        );
+
+        let packUnit = pUnits.find(
+          (u) =>
+            (u.tier === 2 ||
+              u.id?.endsWith('_pack') ||
+              ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂหล', 'ຖົງກາງ'].includes(u.unitName)) &&
+            (!cartonUnit || u.id !== cartonUnit.id)
+        );
+
+        let pieceUnit = pUnits.find(
+          (u) =>
+            (u.tier === 1 ||
+              u.id?.endsWith('_piece') ||
+              ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ', 'ຕຸກ', 'ຊອງ', 'ກ່ອງນ້ອຍ'].includes(u.unitName)) &&
+            (!cartonUnit || u.id !== cartonUnit.id) &&
+            (!packUnit || u.id !== packUnit.id)
+        );
+
+        // Handle single unit case where name wasn't in preset dictionary
+        if (pUnits.length === 1 && !cartonUnit && !packUnit && !pieceUnit) {
+          pieceUnit = pUnits[0];
         }
 
+        // Determine active status: A tier is active IF AND ONLY IF its corresponding unit exists in the DB
+        const isCartonActive = Boolean(cartonUnit);
+        const isPackActive = Boolean(packUnit);
+        const isPieceActive = Boolean(pieceUnit);
+
+        // Multipliers resolution
+        let packsPerCarton = 8;
+        if (isCartonActive && isPackActive && cartonUnit.multiplier > packUnit.multiplier) {
+          packsPerCarton = Math.round(cartonUnit.multiplier / packUnit.multiplier);
+        } else if (isCartonActive && cartonUnit.multiplier > 1) {
+          packsPerCarton = cartonUnit.multiplier;
+        }
+
+        let piecesPerPack = 6;
+        if (isPackActive && isPieceActive && packUnit.multiplier > pieceUnit.multiplier) {
+          piecesPerPack = Math.round(packUnit.multiplier / pieceUnit.multiplier);
+        } else if (isPackActive && packUnit.multiplier > 1) {
+          piecesPerPack = packUnit.multiplier;
+        }
+
+        const tierSettings = {
+          enableCarton: isCartonActive,
+          enablePack: isPackActive,
+          enablePiece: isPieceActive,
+          cartonUnitName: cartonUnit?.unitName || 'ແກັດ',
+          packUnitName: packUnit?.unitName || 'ແພັກ',
+          pieceUnitName: pieceUnit?.unitName || 'ອັນ',
+          packMultiplier: piecesPerPack,
+          cartonMultiplier: packsPerCarton,
+        };
+
+        // Dynamic Base Unit Name
+        let resolvedBaseUnit = p.base_unit || 'ອັນ';
+        if (isPieceActive && pieceUnit) {
+          resolvedBaseUnit = pieceUnit.unitName;
+        } else if (isPackActive && packUnit) {
+          resolvedBaseUnit = packUnit.unitName;
+        } else if (isCartonActive && cartonUnit) {
+          resolvedBaseUnit = cartonUnit.unitName;
+        }
+
+        // Dynamic Category Name resolution: prefer relational categories.name, then fallback to p.category
+        const resolvedCategoryName = p.categories?.name || p.category || 'ເຄື່ອງດື່ມ';
+        const resolvedCategoryId = p.category_id || p.categories?.id || null;
+
+        const resolvedNameVi = p.name_vi || p.nameVi || localMeta?.name_vi || localMeta?.nameVi || '';
+
+        // 4. Pre-computed Flat Search Index for instantaneous search in POS and Customer Menu (< 1ms)
+        const cleanName = (p.name || '').toLowerCase();
+        const normLaoName = normalizeLao(p.name || '');
+        const cleanViName = (resolvedNameVi || '').toLowerCase();
+        const cleanBarcode = (p.barcode || '').toLowerCase();
+        const cleanCat = (resolvedCategoryName || '').toLowerCase();
+        const normCat = normalizeLao(resolvedCategoryName || '');
+        const unitsTokens = pUnits
+          .map((u) => `${u.unitName} ${normalizeLao(u.unitName)} ${u.barcode || ''}`)
+          .join(' ')
+          .toLowerCase();
+
+        const searchKey = `${cleanName} ${normLaoName} ${cleanViName} ${cleanBarcode} ${cleanCat} ${normCat} ${unitsTokens}`.trim();
+
+        // NẾU LÀ KHÁCH XEM STOREFRONT: Chỉ trả về thông tin công khai
+        // TUYỆT ĐỐI KHÔNG chứa: cost_lak, cost_thb, current_stock_base_units, wholesale_price, v.v.
+        if (isCustomer) {
+          return {
+            id: p.id,
+            created_at: p.created_at || null,
+            createdAt: p.created_at || null,
+            name: p.name,
+            name_vi: resolvedNameVi,
+            nameVi: resolvedNameVi,
+            category: resolvedCategoryName,
+            categoryId: resolvedCategoryId,
+            barcode: p.barcode || '',
+            imageUrl: sanitizeImageUrl(p.image_url) || null,
+            baseUnit: resolvedBaseUnit,
+            tier1_active: isCartonActive,
+            tier2_active: isPackActive,
+            tier3_active: isPieceActive,
+            tierSettings,
+            _searchKey: searchKey,
+            units: pUnits.length > 0 ? pUnits : [
+              {
+                id: `${p.id}_base`,
+                productId: p.id,
+                unitName: resolvedBaseUnit,
+                multiplier: 1,
+                retailPrice: 0,
+                isBaseUnit: true,
+                tier: 1,
+              }
+            ],
+          };
+        }
+
+        // DÀNH CHO NHÂN VIÊN POS & QUẢN LÝ (AUTHENTICATED ONLY)
+        const cartonMultiplier = cartonUnit ? cartonUnit.multiplier : 1;
+        const baseCostKip = Number(p.cost_per_base_unit) || 0;
+        const computedCartonCostKip = baseCostKip * cartonMultiplier;
+
+        const costKip = localMeta?.costKip !== undefined ? localMeta.costKip : (Number(p.cost_lak) || computedCartonCostKip);
+        const costBaht = localMeta?.costBaht !== undefined ? localMeta.costBaht : (Number(p.cost_thb) || Number(p.cost_baht) || 0);
+
+        const isTrackStock = p.track_stock !== false;
+        const stockValue = isTrackStock
+          ? (p.current_stock_base_units !== null && p.current_stock_base_units !== undefined
+              ? Number(p.current_stock_base_units)
+              : 0)
+          : 0;
+
         return {
-          id: u.id,
-          productId: u.product_id,
-          unitName: u.unit_name,
-          multiplier: Number(u.multiplier) || 1,
-          retailPrice: Number(u.retail_price) || 0,
-          wholesalePrice: Number(u.wholesale_price) || 0,
-          price_2: Number(u.price_2) || 0,
-          price_3: Number(u.price_3) || 0,
-          price2: Number(u.price_2) || 0,
-          price3: Number(u.price_3) || 0,
-          price_ratio_1: Number(u.price_ratio_1) || 0,
-          price_ratio_2: Number(u.price_ratio_2) || 0,
-          price_ratio_3: Number(u.price_ratio_3) || 0,
-          barcode: u.barcode || null,
-          isBaseUnit: Boolean(u.is_base_unit),
-          tier: resolvedTier,
+          id: p.id,
+          created_at: p.created_at || null,
+          createdAt: p.created_at || null,
+          updated_at: p.updated_at || null,
+          updatedAt: p.updated_at || null,
+          name: p.name,
+          name_vi: resolvedNameVi,
+          nameVi: resolvedNameVi,
+          category: resolvedCategoryName,
+          categoryId: resolvedCategoryId,
+          categories: p.categories || null,
+          barcode: p.barcode || '',
+          imageUrl: sanitizeImageUrl(p.image_url) || null,
+          baseUnit: resolvedBaseUnit,
+          costPerBaseUnit: baseCostKip,
+          costBaht: Number(costBaht) || 0,
+          costKip: Number(costKip) || 0,
+          cost_thb: Number(costBaht) || 0,
+          cost_lak: Number(costKip) || 0,
+          cost_currency: p.cost_currency || (Number(costBaht) > 0 ? 'THB' : (Number(costKip) > 0 ? 'LAK' : 'THB')),
+          costCurrency: p.cost_currency || (Number(costBaht) > 0 ? 'THB' : (Number(costKip) > 0 ? 'LAK' : 'THB')),
+          is_auto_currency_reprice: p.is_auto_currency_reprice !== undefined ? Boolean(p.is_auto_currency_reprice) : false,
+          isAutoCurrencyReprice: p.is_auto_currency_reprice !== undefined ? Boolean(p.is_auto_currency_reprice) : false,
+          tier1_active: isCartonActive,
+          tier2_active: isPackActive,
+          tier3_active: isPieceActive,
+          tierSettings,
+          currentStockBaseUnits: stockValue,
+          trackStock: isTrackStock,
+          hasCrateDeposit: p.has_crate_deposit !== undefined && p.has_crate_deposit !== null
+            ? Boolean(p.has_crate_deposit)
+            : Boolean(crateDepositsMap?.[p.id]?.hasCrateDeposit ?? localMeta?.hasCrateDeposit ?? false),
+          crateDepositFee: Number(p.crate_deposit_fee ?? crateDepositsMap?.[p.id]?.crateDepositFee ?? localMeta?.crateDepositFee) || 30000,
+          _searchKey: searchKey,
+          units: pUnits.length > 0 ? pUnits : [
+            {
+              id: `${p.id}_base`,
+              productId: p.id,
+              unitName: resolvedBaseUnit,
+              multiplier: 1,
+              retailPrice: 0,
+              wholesalePrice: 0,
+              price_2: 0,
+              price_3: 0,
+              price2: 0,
+              price3: 0,
+              isBaseUnit: true,
+              tier: 1,
+            }
+          ],
         };
       });
 
-      // Sort units by multiplier ascending
-      pUnits.sort((a, b) => a.multiplier - b.multiplier);
-
-      const localMeta = getProductMetaLocal(p.id);
-
-      // 1. Identify distinct active tier units from database rows
-      let cartonUnit = pUnits.find(
-        (u) =>
-          u.tier === 3 ||
-          u.id?.endsWith('_carton') ||
-          ['ແກັດ', 'ລັງ', 'ເປົາ', 'ກະສອບ', 'ກ່ອງໃຫຍ່', 'ຖັງ'].includes(u.unitName)
-      );
-
-      let packUnit = pUnits.find(
-        (u) =>
-          (u.tier === 2 ||
-            u.id?.endsWith('_pack') ||
-            ['ແພັກ', 'ມັດ', 'ແຕະ', 'ໂหล', 'ຖົງກາງ'].includes(u.unitName)) &&
-          (!cartonUnit || u.id !== cartonUnit.id)
-      );
-
-      let pieceUnit = pUnits.find(
-        (u) =>
-          (u.tier === 1 ||
-            u.id?.endsWith('_piece') ||
-            ['ອັນ', 'ແກ້ວ', 'ຖົງ', 'ກະປ໋ອງ', 'ຕຸກ', 'ຊອງ', 'ກ່ອງນ້ອຍ'].includes(u.unitName)) &&
-          (!cartonUnit || u.id !== cartonUnit.id) &&
-          (!packUnit || u.id !== packUnit.id)
-      );
-
-      // Handle single unit case where name wasn't in preset dictionary
-      if (pUnits.length === 1 && !cartonUnit && !packUnit && !pieceUnit) {
-        pieceUnit = pUnits[0];
+      if (isCustomer) {
+        cachedCustomerProductsInMemory = mapped;
+        cachedCustomerProductsTimestamp = Date.now();
+      } else {
+        cachedPosProductsInMemory = mapped;
+        cachedPosProductsTimestamp = Date.now();
+        cachedProductsInMemory = mapped;
+        cachedProductsTimestamp = Date.now();
       }
-
-      // Determine active status: A tier is active IF AND ONLY IF its corresponding unit exists in the DB
-      const isCartonActive = Boolean(cartonUnit);
-      const isPackActive = Boolean(packUnit);
-      const isPieceActive = Boolean(pieceUnit);
-
-      const cartonMultiplier = cartonUnit ? cartonUnit.multiplier : 1;
-      const baseCostKip = Number(p.cost_per_base_unit) || 0;
-      const computedCartonCostKip = baseCostKip * cartonMultiplier;
-
-      const costKip = localMeta?.costKip !== undefined ? localMeta.costKip : (Number(p.cost_lak) || computedCartonCostKip);
-      const costBaht = localMeta?.costBaht !== undefined ? localMeta.costBaht : (Number(p.cost_thb) || Number(p.cost_baht) || 0);
-
-      // Multipliers resolution
-      let packsPerCarton = 8;
-      if (isCartonActive && isPackActive && cartonUnit.multiplier > packUnit.multiplier) {
-        packsPerCarton = Math.round(cartonUnit.multiplier / packUnit.multiplier);
-      } else if (isCartonActive && cartonUnit.multiplier > 1) {
-        packsPerCarton = cartonUnit.multiplier;
-      }
-
-      let piecesPerPack = 6;
-      if (isPackActive && isPieceActive && packUnit.multiplier > pieceUnit.multiplier) {
-        piecesPerPack = Math.round(packUnit.multiplier / pieceUnit.multiplier);
-      } else if (isPackActive && packUnit.multiplier > 1) {
-        piecesPerPack = packUnit.multiplier;
-      }
-
-      const tierSettings = {
-        enableCarton: isCartonActive,
-        enablePack: isPackActive,
-        enablePiece: isPieceActive,
-        cartonUnitName: cartonUnit?.unitName || 'ແກັດ',
-        packUnitName: packUnit?.unitName || 'ແພັກ',
-        pieceUnitName: pieceUnit?.unitName || 'ອັນ',
-        packMultiplier: piecesPerPack,
-        cartonMultiplier: packsPerCarton,
-      };
-
-      const isTrackStock = p.track_stock !== false;
-      const stockValue = isTrackStock
-        ? (p.current_stock_base_units !== null && p.current_stock_base_units !== undefined
-            ? Number(p.current_stock_base_units)
-            : 0)
-        : 0;
-
-      // Dynamic Base Unit Name
-      let resolvedBaseUnit = p.base_unit || 'ອັນ';
-      if (isPieceActive && pieceUnit) {
-        resolvedBaseUnit = pieceUnit.unitName;
-      } else if (isPackActive && packUnit) {
-        resolvedBaseUnit = packUnit.unitName;
-      } else if (isCartonActive && cartonUnit) {
-        resolvedBaseUnit = cartonUnit.unitName;
-      }
-
-      // Dynamic Category Name resolution: prefer relational categories.name, then fallback to p.category
-      const resolvedCategoryName = p.categories?.name || p.category || 'ເຄື່ອງດື່ມ';
-      const resolvedCategoryId = p.category_id || p.categories?.id || null;
-
-      const resolvedNameVi = p.name_vi || p.nameVi || localMeta?.name_vi || localMeta?.nameVi || '';
-
-      // 4. Pre-computed Flat Search Index for instantaneous search in POS and Customer Menu (< 1ms)
-      const cleanName = (p.name || '').toLowerCase();
-      const normLaoName = normalizeLao(p.name || '');
-      const cleanViName = (resolvedNameVi || '').toLowerCase();
-      const cleanBarcode = (p.barcode || '').toLowerCase();
-      const cleanCat = (resolvedCategoryName || '').toLowerCase();
-      const normCat = normalizeLao(resolvedCategoryName || '');
-      const unitsTokens = pUnits
-        .map((u) => `${u.unitName} ${normalizeLao(u.unitName)} ${u.barcode || ''}`)
-        .join(' ')
-        .toLowerCase();
-
-      const searchKey = `${cleanName} ${normLaoName} ${cleanViName} ${cleanBarcode} ${cleanCat} ${normCat} ${unitsTokens}`.trim();
-
-      return {
-        id: p.id,
-        created_at: p.created_at || null,
-        createdAt: p.created_at || null,
-        updated_at: p.updated_at || null,
-        updatedAt: p.updated_at || null,
-        name: p.name,
-        name_vi: resolvedNameVi,
-        nameVi: resolvedNameVi,
-        category: resolvedCategoryName,
-        categoryId: resolvedCategoryId,
-        categories: p.categories || null,
-        barcode: p.barcode || '',
-        imageUrl: sanitizeImageUrl(p.image_url) || null,
-        baseUnit: resolvedBaseUnit,
-        costPerBaseUnit: baseCostKip,
-        costBaht: Number(costBaht) || 0,
-        costKip: Number(costKip) || 0,
-        cost_thb: Number(costBaht) || 0,
-        cost_lak: Number(costKip) || 0,
-        cost_currency: p.cost_currency || (Number(costBaht) > 0 ? 'THB' : (Number(costKip) > 0 ? 'LAK' : 'THB')),
-        costCurrency: p.cost_currency || (Number(costBaht) > 0 ? 'THB' : (Number(costKip) > 0 ? 'LAK' : 'THB')),
-        is_auto_currency_reprice: p.is_auto_currency_reprice !== undefined ? Boolean(p.is_auto_currency_reprice) : false,
-        isAutoCurrencyReprice: p.is_auto_currency_reprice !== undefined ? Boolean(p.is_auto_currency_reprice) : false,
-        tier1_active: isCartonActive,
-        tier2_active: isPackActive,
-        tier3_active: isPieceActive,
-        tierSettings,
-        currentStockBaseUnits: stockValue,
-        trackStock: isTrackStock,
-        hasCrateDeposit: p.has_crate_deposit !== undefined && p.has_crate_deposit !== null
-          ? Boolean(p.has_crate_deposit)
-          : Boolean(crateDepositsMap?.[p.id]?.hasCrateDeposit ?? localMeta?.hasCrateDeposit ?? false),
-        crateDepositFee: Number(p.crate_deposit_fee ?? crateDepositsMap?.[p.id]?.crateDepositFee ?? localMeta?.crateDepositFee) || 30000,
-        _searchKey: searchKey,
-        units: pUnits.length > 0 ? pUnits : [
-          {
-            id: `${p.id}_base`,
-            productId: p.id,
-            unitName: resolvedBaseUnit,
-            multiplier: 1,
-            retailPrice: 0,
-            wholesalePrice: 0,
-            price_2: 0,
-            price_3: 0,
-            price2: 0,
-            price3: 0,
-            isBaseUnit: true,
-            tier: 1,
-          }
-        ],
-      };
-    });
-
-      cachedProductsInMemory = mapped;
-      cachedProductsTimestamp = Date.now();
 
       // Persist to IndexedDB and update catalog fingerprint in localStorage
       if (typeof window !== 'undefined') {
         try {
-          idbSet('meiishop_products_v5', mapped);
-          safeSetItem('meiishop_products_v5', mapped);
+          const storageKey = isCustomer ? 'meiishop_customer_products_v1' : 'meiishop_products_v5';
+          const fingerprintKey = isCustomer ? 'meiishop_customer_catalog_fingerprint' : 'meiishop_catalog_fingerprint';
+          idbSet(storageKey, mapped);
+          safeSetItem(storageKey, mapped);
           const sorted = prodData.slice().sort((a, b) => {
             const tA = new Date(a.updated_at || a.created_at || 0).getTime();
             const tB = new Date(b.updated_at || b.created_at || 0).getTime();
@@ -688,7 +793,7 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
           const latestRow = sorted[0];
           if (latestRow) {
             const newFingerprint = `${prodData.length}_${latestRow.id}_${latestRow.updated_at || latestRow.created_at}`;
-            localStorage.setItem('meiishop_catalog_fingerprint', newFingerprint);
+            localStorage.setItem(fingerprintKey, newFingerprint);
           }
         } catch (_) {}
       }
@@ -696,13 +801,23 @@ export async function fetchProductsFromSupabase({ force = false } = {}) {
       return mapped;
     } catch (err) {
       console.warn('Supabase fetch failed:', err);
-      return cachedProductsInMemory || localProducts || null;
+      return cachedInMemory || localProducts || null;
     } finally {
-      inFlightProductsPromise = null;
+      if (isCustomer) {
+        inFlightCustomerProductsPromise = null;
+      } else {
+        inFlightPosProductsPromise = null;
+      }
     }
   })();
 
-  return inFlightProductsPromise;
+  if (isCustomer) {
+    inFlightCustomerProductsPromise = fetchTask;
+  } else {
+    inFlightPosProductsPromise = fetchTask;
+  }
+
+  return fetchTask;
 }
 
 /**
@@ -1092,6 +1207,33 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     };
   });
 
+  const itemsSum = rawItems.reduce((sum, item) => sum + (Number(item.lineTotal) || 0), 0);
+  const rawGrandTotal = Number(t.grand_total ?? t.grandTotal ?? t.total_lak ?? 0);
+  const resolvedGrandTotal = rawGrandTotal > 0 ? rawGrandTotal : (itemsSum > 0 ? itemsSum : 0);
+
+  // Self-heal corrupted zero-revenue rows directly in database in the background
+  if (rawGrandTotal === 0 && itemsSum > 0 && t.id) {
+    const editRate = Number(t.exchange_rate || 690);
+    const costLak = Number(t.total_cost_lak ?? t.total_cost ?? 0);
+    const profitLak = itemsSum - costLak;
+    const totalThb = editRate > 0 ? Number((itemsSum / editRate).toFixed(2)) : 0;
+    const profitThb = editRate > 0 ? Number((profitLak / editRate).toFixed(2)) : 0;
+    supabase
+      .from('sale_transactions')
+      .update({
+        grand_total: itemsSum,
+        subtotal: itemsSum,
+        total_lak: itemsSum,
+        gross_profit: profitLak,
+        gross_profit_lak: profitLak,
+        total_thb: totalThb,
+        gross_profit_thb: profitThb,
+      })
+      .eq('id', t.id)
+      .then(() => {})
+      .catch(() => {});
+  }
+
   return {
     id: t.id,
     receiptNumber: t.receipt_number || t.id,
@@ -1115,10 +1257,10 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     status: isCancelled ? 'cancelled' : 'completed',
     isCancelled: isCancelled,
     cancelledAt: cachedMeta?.cancelledAt || (isCancelled ? t.created_at : null),
-    subtotal: Number(t.subtotal) || 0,
+    subtotal: (Number(t.subtotal) > 0 ? Number(t.subtotal) : resolvedGrandTotal),
     discountTotal: Number(t.discount_total) || 0,
-    grandTotal: Number(t.grand_total) || 0,
-    grand_total: Number(t.grand_total) || 0,
+    grandTotal: resolvedGrandTotal,
+    grand_total: resolvedGrandTotal,
     amountTendered: Number(t.amount_tendered) || 0,
     changeAmount: Number(t.change_amount) || 0,
     totalCost: Number(t.total_cost_lak ?? t.total_cost ?? cachedMeta?.receipt?.totalCost ?? cachedMeta?.totalCost ?? 0),
@@ -1721,12 +1863,6 @@ export async function uploadProductImageToSupabase(fileOrBlob, productId, extens
 export async function createSaleTransactionInSupabase(tx, stockDeductions = []) {
   try {
     const rate = Number(tx.exchange_rate || tx.exchangeRate || 0);
-    const totalLak = Number(tx.total_lak ?? tx.totalLak ?? tx.grandTotal ?? 0);
-    const totalCostLak = Number(tx.total_cost_lak ?? tx.totalCostLak ?? tx.totalCost ?? 0);
-    const totalThb = Number(tx.total_thb ?? tx.totalThb ?? (rate > 0 ? Number((totalLak / rate).toFixed(2)) : 0));
-    const totalCostThb = Number(tx.total_cost_thb ?? tx.totalCostThb ?? (rate > 0 ? Number((totalCostLak / rate).toFixed(2)) : 0));
-    const grossProfitLak = Number(tx.gross_profit_lak ?? tx.grossProfitLak ?? tx.grossProfit ?? 0);
-    const grossProfitThb = Number(tx.gross_profit_thb ?? tx.grossProfitThb ?? Number((totalThb - totalCostThb).toFixed(2)));
 
     const checkoutItems = (tx.items || []).map((item) => {
       const isBundle = Boolean(item.isBundle || item.bundle_components?.length || item.bundleComponents?.length);
@@ -1745,9 +1881,12 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       ) || 0;
       const qty = Number(item.quantity) || 1;
       const lineTotal = Number(item.lineTotal !== undefined ? item.lineTotal : (unitPrice * qty));
-      const fullMult = Number(item.effectiveMultiplier ?? item.unit?.multiplier) || 1;
-      const multiplier = item.isHalfCarton ? (fullMult > 1 ? Math.round(fullMult / 2) : 1) : Math.round(fullMult);
-      const baseCost = Number(item.product?.costPerBaseUnit) || 0;
+
+      // Calculate cost & multiplier through standard single source of truth engine
+      const costInfo = calculateItemCostAndMultiplier(item);
+      const multiplier = costInfo.multiplier;
+      const lineCost = Number(item.line_cost ?? item.lineCost ?? costInfo.lineCost);
+      const lineProfit = lineTotal - lineCost;
 
       // Extract bundle components breakdown if item is a bundle
       const bundleComponents = isBundle
@@ -1759,20 +1898,8 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
           }))
         : null;
 
-      let lineCost = 0;
-      if (isBundle && bundleComponents && bundleComponents.length > 0) {
-        // Line cost of a bundle is the sum of cost of all child flavor components
-        lineCost = (item.bundleComponents || []).reduce((sum, c) => {
-          const compCost = Number(c.product?.costPerBaseUnit ?? c.costPerBaseUnit ?? 0);
-          return sum + compCost * (Number(c.quantity) || 1);
-        }, 0);
-      } else {
-        lineCost = baseCost * multiplier * qty;
-      }
-      const lineProfit = lineTotal - lineCost;
-
       const rawUnitName = item.unit?.unitName || item.unitName || (isBundle ? (item.bundle?.unit_name || 'ແກັດ') : 'ອັນ');
-      const unitName = item.isHalfCarton && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
+      const unitName = (item.isHalfCarton || costInfo.isHalfCarton) && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
 
       const mappedItem = {
         id: generateUUID(),
@@ -1794,6 +1921,15 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       return mappedItem;
     });
 
+    // Recalculate transaction totals from actual final items
+    const totals = recalculateTransactionTotals(checkoutItems, rate);
+    const totalLak = Number(tx.total_lak ?? tx.totalLak ?? tx.grandTotal ?? totals.totalAmountLak);
+    const totalCostLak = totals.totalCostLak;
+    const totalThb = totals.totalAmountThb;
+    const totalCostThb = totals.totalCostThb;
+    const grossProfitLak = totalLak - totalCostLak;
+    const grossProfitThb = Number((totalThb - totalCostThb).toFixed(2));
+
     const toValidUuidOrNull = (val) => {
       if (typeof val !== 'string') return null;
       const trimmed = val.trim();
@@ -1810,13 +1946,15 @@ export async function createSaleTransactionInSupabase(tx, stockDeductions = []) 
       customer_id: tx.customerId || tx.customer_id || null,
       customer_phone: tx.customerPhone || tx.customer_phone || null,
       payment_method: tx.paymentMethod || 'cash',
-      subtotal: Number(tx.subtotal) || 0,
+      subtotal: totalLak,
       discount_total: Number(tx.discountTotal) || 0,
-      grand_total: Number(tx.grandTotal) || 0,
+      grand_total: totalLak,
       amount_tendered: Number(tx.amountTendered) || 0,
       change_amount: Number(tx.changeAmount) || 0,
+      total_cost: totalCostLak,
       total_cost_lak: totalCostLak,
       total_cost_thb: totalCostThb,
+      gross_profit: grossProfitLak,
       gross_profit_lak: grossProfitLak,
       gross_profit_thb: grossProfitThb,
       cashier_name: sanitizeCashierName(tx.cashierName),
@@ -2532,16 +2670,20 @@ export async function assignProductToCategoryInSupabase(productId, categoryName,
     }
 
     if (!error) {
-      if (cachedProductsInMemory && Array.isArray(cachedProductsInMemory)) {
-        const target = cachedProductsInMemory.find((p) => p.id === productId);
-        if (target) {
-          target.category = cleanCat;
-          target.categoryId = categoryId;
-          target.category_id = categoryId;
-          target.updated_at = new Date().toISOString();
+      const allCaches = [cachedPosProductsInMemory, cachedCustomerProductsInMemory, cachedProductsInMemory].filter(Boolean);
+      allCaches.forEach((cacheArr) => {
+        if (Array.isArray(cacheArr)) {
+          const target = cacheArr.find((p) => p.id === productId);
+          if (target) {
+            target.category = cleanCat;
+            target.categoryId = categoryId;
+            target.category_id = categoryId;
+            target.updated_at = new Date().toISOString();
+          }
         }
-        cachedProductsTimestamp = Date.now();
-      }
+      });
+      cachedPosProductsTimestamp = Date.now();
+      cachedProductsTimestamp = Date.now();
     }
 
     return { success: !error, error: error?.message };
@@ -2605,19 +2747,23 @@ export async function batchAssignProductsToCategoryInSupabase(assignments = []) 
     }
 
     // 3. In-place memory cache mutation (ZERO EGRESS - avoids re-downloading catalog)
-    if (cachedProductsInMemory && Array.isArray(cachedProductsInMemory)) {
-      const assignmentMap = new Map(assignments.map((a) => [a.productId, a]));
-      cachedProductsInMemory.forEach((p) => {
-        const match = assignmentMap.get(p.id);
-        if (match) {
-          p.category = match.categoryName;
-          p.categoryId = match.categoryId || null;
-          p.category_id = match.categoryId || null;
-          p.updated_at = now;
-        }
-      });
-      cachedProductsTimestamp = Date.now();
-    }
+    const allCaches = [cachedPosProductsInMemory, cachedCustomerProductsInMemory, cachedProductsInMemory].filter(Boolean);
+    const assignmentMap = new Map(assignments.map((a) => [a.productId, a]));
+    allCaches.forEach((cacheArr) => {
+      if (Array.isArray(cacheArr)) {
+        cacheArr.forEach((p) => {
+          const match = assignmentMap.get(p.id);
+          if (match) {
+            p.category = match.categoryName;
+            p.categoryId = match.categoryId || null;
+            p.category_id = match.categoryId || null;
+            p.updated_at = now;
+          }
+        });
+      }
+    });
+    cachedPosProductsTimestamp = Date.now();
+    cachedProductsTimestamp = Date.now();
 
     return { success: true };
   } catch (e) {
@@ -3421,6 +3567,7 @@ export async function updateExistingSaleTransactionInSupabase(
 
     if (deleteRes?.error) {
       console.error('Error deleting old sale_transaction_items:', deleteRes.error);
+      return { success: false, error: 'ບໍ່ສາມາດລຶບລາຍການເກົ່າໄດ້: ' + deleteRes.error.message };
     }
 
     if (productsRes.data && productsRes.data.length > 0) {
@@ -3447,7 +3594,10 @@ export async function updateExistingSaleTransactionInSupabase(
     // Step 4 & 5: Insert new sale_transaction_items AND update sale_transactions header IN PARALLEL
     const itemsPayload = (newCartItems && newCartItems.length > 0)
       ? newCartItems.map((item) => {
-          const prodId = item.product?.id || item.productId || item.product_id || 'p_custom';
+          const isBundle = Boolean(item.isBundle || item.bundle_components?.length || item.bundleComponents?.length);
+          const prodId = isBundle
+            ? (item.bundleId || item.bundle?.id || item.productId || 'bnd_custom')
+            : (item.product?.id || item.productId || item.product_id || 'p_custom');
           const rawCustom = item.customPrice !== undefined && item.customPrice !== null ? Number(item.customPrice) : null;
           const rawEffective = item.effectivePrice !== undefined && item.effectivePrice !== null ? Number(item.effectivePrice) : null;
           const rawUnitPrice = item.unitPrice !== undefined && item.unitPrice !== null ? Number(item.unitPrice) : null;
@@ -3458,20 +3608,21 @@ export async function updateExistingSaleTransactionInSupabase(
           const qty = Number(item.quantity) || 1;
           const rawLine = Number(item.lineTotal || item.line_total);
           const lineTotal = rawLine > 0 ? rawLine : (unitPrice * qty);
-          const fullMult = Number(item.effectiveMultiplier ?? item.unit?.multiplier) || 1;
-          const multiplier = item.isHalfCarton ? (fullMult > 1 ? Math.round(fullMult / 2) : 1) : Math.round(fullMult);
-          const baseCost = Number(item.product?.costPerBaseUnit) || 0;
-          const lineCost = baseCost * multiplier * qty;
+
+          // Calculate cost & multiplier through standard single source of truth engine
+          const costInfo = calculateItemCostAndMultiplier(item);
+          const multiplier = costInfo.multiplier;
+          const lineCost = Number(item.line_cost ?? item.lineCost ?? costInfo.lineCost);
           const lineProfit = lineTotal - lineCost;
 
-          const rawUnitName = item.unit?.unitName || item.unitName || 'ອັນ';
-          const unitName = item.isHalfCarton && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
+          const rawUnitName = item.unit?.unitName || item.unitName || (isBundle ? (item.bundle?.unit_name || 'ແກັດ') : 'ອັນ');
+          const unitName = (item.isHalfCarton || costInfo.isHalfCarton) && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
 
           const row = {
             id: generateUUID(),
             transaction_id: txId,
             product_id: prodId,
-            product_name: item.productName || item.product?.name || 'ສິນຄ້າ',
+            product_name: item.productName || item.product?.name || item.bundleName || (isBundle ? 'ນົມກ່ອງ ລວມລົດຊາດ' : 'ສິນຄ້າ'),
             unit_name: unitName,
             multiplier,
             quantity: qty,
@@ -3502,29 +3653,45 @@ export async function updateExistingSaleTransactionInSupabase(
       }
     }
 
-    // Step 5: Update sale_transactions header
+    // Step 5: Recalculate transaction totals from actual final items
+    const editRate = Number(newTxData.exchange_rate || newTxData.exchangeRate || 0);
+    const totals = recalculateTransactionTotals(itemsPayload, editRate);
+
+    const recalculatedTotalCostLak = totals.totalCostLak;
+    const fallbackGrandTotal = Number(newTxData.grandTotal ?? newTxData.grand_total ?? newTxData.total_lak ?? 0);
+    const recalculatedTotalAmountLak = (itemsPayload.length > 0 && totals.totalAmountLak > 0)
+      ? totals.totalAmountLak
+      : (totals.totalAmountLak > 0 ? totals.totalAmountLak : fallbackGrandTotal);
+    const recalculatedGrossProfitLak = recalculatedTotalAmountLak - recalculatedTotalCostLak;
+    const recalculatedTotalCostThb = totals.totalCostThb;
+    const recalculatedTotalThb = totals.totalAmountThb;
+    const recalculatedGrossProfitThb = Number((recalculatedTotalThb - recalculatedTotalCostThb).toFixed(2));
+
+    // Update sale_transactions header
     const headerPayload = {
       is_wholesale: Boolean(newTxData.isWholesale),
       customer_name: newTxData.customerName || 'ລູກຄ້າທົ່ວໄປ',
       customer_id: newTxData.customerId || newTxData.customer_id || null,
       customer_phone: newTxData.customerPhone || newTxData.customer_phone || null,
       payment_method: newTxData.paymentMethod || 'cash',
-      subtotal: Number(newTxData.subtotal) || 0,
+      subtotal: recalculatedTotalAmountLak,
       discount_total: Number(newTxData.discountTotal) || 0,
-      grand_total: Number(newTxData.grandTotal) || 0,
+      grand_total: recalculatedTotalAmountLak,
       amount_tendered: Number(newTxData.amountTendered) || 0,
       change_amount: Number(newTxData.changeAmount) || 0,
-      total_cost: Number(newTxData.totalCost) || 0,
-      gross_profit: Number(newTxData.grossProfit) || 0,
+      total_cost: recalculatedTotalCostLak,
+      total_cost_lak: recalculatedTotalCostLak,
+      total_cost_thb: recalculatedTotalCostThb,
+      gross_profit: recalculatedGrossProfitLak,
+      gross_profit_lak: recalculatedGrossProfitLak,
+      gross_profit_thb: recalculatedGrossProfitThb,
       paid_amount: Number(newTxData.paidAmount ?? newTxData.amountTendered ?? 0),
       remaining_debt: Number(newTxData.remainingDebt ?? 0),
       payment_status: newTxData.paymentStatus || 'PAID',
       debt_due_date: newTxData.debtDueDate || newTxData.debt_due_date || null,
-      exchange_rate: Number(newTxData.exchange_rate || newTxData.exchangeRate || 0),
-      total_lak: Number(newTxData.total_lak ?? newTxData.totalLak ?? newTxData.grandTotal ?? 0),
-      total_thb: Number(newTxData.total_thb ?? newTxData.totalThb ?? 0),
-      gross_profit_lak: Number(newTxData.gross_profit_lak ?? newTxData.grossProfitLak ?? newTxData.grossProfit ?? 0),
-      gross_profit_thb: Number(newTxData.gross_profit_thb ?? newTxData.grossProfitThb ?? 0),
+      exchange_rate: editRate,
+      total_lak: recalculatedTotalAmountLak,
+      total_thb: recalculatedTotalThb,
       updated_at: new Date().toISOString(),
     };
 
@@ -4235,8 +4402,9 @@ export async function updateProductUnitPricesZeroEgress(dirtyUnits) {
 
   // Pre-build O(1) lookup map from in-memory cache to resolve product_id and unit_name for PostgreSQL NOT NULL constraint
   const cacheLookupMap = new Map();
-  if (cachedProductsInMemory && Array.isArray(cachedProductsInMemory)) {
-    cachedProductsInMemory.forEach((prod) => {
+  const activeLookupCache = cachedPosProductsInMemory || cachedProductsInMemory;
+  if (activeLookupCache && Array.isArray(activeLookupCache)) {
+    activeLookupCache.forEach((prod) => {
       if (prod.units && Array.isArray(prod.units)) {
         const maxMult = Math.max(...prod.units.map((un) => Number(un.multiplier) || 1), 1);
         const prodCostLak = Number(prod.cost_lak || prod.costKip) || 0;
@@ -4330,28 +4498,33 @@ export async function updateProductUnitPricesZeroEgress(dirtyUnits) {
     }
 
     // 2. In-place memory cache mutation (0 network request)
-    if (cachedProductsInMemory && Array.isArray(cachedProductsInMemory)) {
-      const unitPriceMap = new Map(payload.map((u) => [u.id, u]));
-      cachedProductsInMemory.forEach((prod) => {
-        if (prod.units && Array.isArray(prod.units)) {
-          prod.units.forEach((unit) => {
-            if (unitPriceMap.has(unit.id)) {
-              const delta = unitPriceMap.get(unit.id);
-              if (delta.retail_price !== undefined) unit.retailPrice = delta.retail_price;
-              if (delta.price_2 !== undefined) {
-                unit.price_2 = delta.price_2;
-                unit.price2 = delta.price_2;
-                unit.wholesalePrice = delta.price_2;
+    const allPriceCaches = [cachedPosProductsInMemory, cachedCustomerProductsInMemory, cachedProductsInMemory].filter(Boolean);
+    const unitPriceMap = new Map(payload.map((u) => [u.id, u]));
+    allPriceCaches.forEach((cacheArr) => {
+      if (Array.isArray(cacheArr)) {
+        cacheArr.forEach((prod) => {
+          if (prod.units && Array.isArray(prod.units)) {
+            prod.units.forEach((unit) => {
+              if (unitPriceMap.has(unit.id)) {
+                const delta = unitPriceMap.get(unit.id);
+                if (delta.retail_price !== undefined) unit.retailPrice = delta.retail_price;
+                if (delta.price_2 !== undefined) {
+                  unit.price_2 = delta.price_2;
+                  unit.price2 = delta.price_2;
+                  unit.wholesalePrice = delta.price_2;
+                }
+                if (delta.price_3 !== undefined) {
+                  unit.price_3 = delta.price_3;
+                  unit.price3 = delta.price_3;
+                }
               }
-              if (delta.price_3 !== undefined) {
-                unit.price_3 = delta.price_3;
-                unit.price3 = delta.price_3;
-              }
-            }
-          });
-        }
-      });
-    }
+            });
+          }
+        });
+      }
+    });
+    cachedPosProductsTimestamp = Date.now();
+    cachedProductsTimestamp = Date.now();
 
     // 3. P2P Realtime Broadcast to sync other iPads over WebSocket (0 REST API egress)
     broadcastPriceUpdate(payload);

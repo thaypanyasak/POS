@@ -452,7 +452,7 @@ export default function CustomerCatalogView({
             {onRefresh && (
               <button
                 type="button"
-                onClick={onRefresh}
+                onClick={() => onRefresh(true)}
                 disabled={isLoading}
                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-slate-200/80 text-slate-500 hover:text-primary hover:bg-slate-50 flex items-center justify-center cursor-pointer transition-colors active:scale-95 shadow-2xs"
                 title="ໂຫຼດຂໍ້ມູນໃໝ່"

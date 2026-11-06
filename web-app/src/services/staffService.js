@@ -9,13 +9,36 @@ export const STAFF_STORAGE_KEY = 'app_staff_list_v1';
 export const EVENT_STAFF_CHANGED = 'meiishop:staff-updated';
 
 /**
+ * Get staff list cached locally on this terminal device (Offline-first, 0 network requests)
+ */
+export function getLocalStaffList() {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(`meiishop_${STAFF_STORAGE_KEY}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    }
+  } catch (_) {}
+  return [];
+}
+
+/**
  * Fetch all staff profiles (Admin view)
  * Reads cloud store_settings with local cache
  */
-export async function fetchStaffProfiles({ force = false } = {}) {
+export async function fetchStaffProfiles({ force = false, isAuthenticated = false } = {}) {
   // Security Guard: Never fetch or leak staff list/PINs to public customer storefront visitors
   if (isCustomerStorefrontRoute()) {
     return { data: [], error: null };
+  }
+
+  // Security Guard: If user is not authenticated and not explicitly forced,
+  // do NOT call PostgREST API over the network. Read only from trusted local device cache.
+  if (!isAuthenticated && !force) {
+    const local = getLocalStaffList();
+    return { data: local, error: null };
   }
 
   try {
@@ -52,9 +75,9 @@ export async function fetchStaffProfiles({ force = false } = {}) {
 /**
  * Fetch active cashiers for quick shift switching and LoginScreen
  */
-export async function fetchActiveCashiers() {
+export async function fetchActiveCashiers({ isAuthenticated = false, force = false } = {}) {
   try {
-    const { data: allStaff, error } = await fetchStaffProfiles();
+    const { data: allStaff, error } = await fetchStaffProfiles({ isAuthenticated, force });
     if (error || !Array.isArray(allStaff)) {
       return { data: [], error: error || null };
     }

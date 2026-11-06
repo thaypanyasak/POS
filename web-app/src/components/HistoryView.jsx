@@ -1364,7 +1364,9 @@ export default function HistoryView({
           <div className="md:hidden flex flex-col gap-3 pb-6">
             {displayedTransactions.map((tx) => {
           const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
-          const total = Number(tx.grandTotal) || 0;
+          const profitMetrics = calculateTxProfitMetrics(tx, productsMap);
+          const rawTotal = Number(tx.grandTotal ?? tx.grand_total ?? tx.total_lak ?? 0);
+          const total = rawTotal > 0 ? rawTotal : (profitMetrics.grandTotal || 0);
           const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
           const method = (tx.paymentMethod || '').toLowerCase();
           const status = (tx.paymentStatus || '').toUpperCase();
@@ -1403,8 +1405,6 @@ export default function HistoryView({
 
           // 2. Phân biệt đơn mới (chỉ khi không phải đơn sửa và có unreadOrderIds hoặc realtime new)
           const isOrderNew = !isOrderUpdated && ((unreadOrderIds && unreadOrderIds.has(tx.id)) || isRealtimeNew);
-
-          const profitMetrics = calculateTxProfitMetrics(tx, productsMap);
 
           return (
             <div
@@ -1843,7 +1843,9 @@ export default function HistoryView({
             {displayedTransactions.map((tx, idx) => {
               const itemIndex = (currentPage - 1) * pageSize + idx + 1;
               const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
-              const total = Number(tx.grandTotal) || 0;
+              const profitMetrics = calculateTxProfitMetrics(tx, productsMap);
+              const rawTotal = Number(tx.grandTotal ?? tx.grand_total ?? tx.total_lak ?? 0);
+              const total = rawTotal > 0 ? rawTotal : (profitMetrics.grandTotal || 0);
               const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
               const method = (tx.paymentMethod || '').toLowerCase();
               const status = (tx.paymentStatus || '').toUpperCase();
@@ -1887,8 +1889,6 @@ export default function HistoryView({
 
               // 2. Phân biệt đơn mới (chỉ khi không phải đơn sửa và có unreadOrderIds hoặc realtime new)
               const isOrderNew = !isOrderUpdated && ((unreadOrderIds && unreadOrderIds.has(tx.id)) || isRealtimeNew);
-
-              const profitMetrics = calculateTxProfitMetrics(tx, productsMap);
 
               return (
                 <tr

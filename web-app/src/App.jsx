@@ -57,6 +57,7 @@ import MixProductsView from './components/MixProductsView';
 import CustomersView from './components/CustomersView';
 import CustomerFormModal from './components/CustomerFormModal';
 import { fetchSavedCustomers, saveCustomerRecord, buildCustomerDirectory } from './services/customerService';
+import { fetchPrinterConfigFromDb } from './services/printerConfigService';
 import ConfirmDialogModal from './components/ConfirmDialogModal';
 import StaffManagementView from './components/auth/StaffManagementView';
 import CashierLockOverlay from './components/auth/CashierLockOverlay';
@@ -90,10 +91,12 @@ import {
   playOrderDingSound,
 } from './utils/audioFeedback';
 import { isCustomerStorefrontRoute } from './utils/routeUtils';
+import { calculateItemCostAndMultiplier, recalculateTransactionTotals } from './utils/costCalculation';
 
 export default function App() {
   const { activeCashier, user, isLoading } = useAuth();
   const { canAccessRoute } = useAuthRole();
+  const isAuthenticated = Boolean(activeCashier || user);
 
   // Navigation Tabs: 'pos' | 'dashboard' | 'products' | 'history' | 'purchases' | 'sales-by-unit' | 'settings' | 'staff-management'
   const [activeMainTab, setActiveMainTab] = useState(() => {
@@ -197,13 +200,16 @@ export default function App() {
   // Hydrate full catalog & transactions from high-capacity IndexedDB if localStorage was pruned or empty
   useEffect(() => {
     let isMounted = true;
-    idbGet('meiishop_products_v5').then((cached) => {
-      if (isMounted && Array.isArray(cached) && cached.length > 0) {
-        setProducts((prev) => (prev.length === 0 || cached.length > prev.length ? cached : prev));
-      }
-    });
-    // Bỏ qua nạp lịch sử hóa đơn IndexedDB nếu đang ở trang khách xem menu
-    if (!isCustomerLink() && appMode !== 'customer') {
+    if (isCustomerLink() || appMode === 'customer' || isAuthenticated) {
+      const storageKey = (isCustomerLink() || appMode === 'customer') ? 'meiishop_customer_products_v1' : 'meiishop_products_v5';
+      idbGet(storageKey).then((cached) => {
+        if (isMounted && Array.isArray(cached) && cached.length > 0) {
+          setProducts((prev) => (prev.length === 0 || cached.length > prev.length ? cached : prev));
+        }
+      });
+    }
+    // Bỏ qua nạp lịch sử hóa đơn IndexedDB nếu chưa đăng nhập hoặc đang ở trang khách xem menu
+    if (isAuthenticated && !isCustomerLink() && appMode !== 'customer') {
       idbGet('meiishop_transactions_v7').then((cached) => {
         if (isMounted && Array.isArray(cached) && cached.length > 0) {
           setTransactions((prev) => (prev.length === 0 || cached.length > prev.length ? cached : prev));
@@ -211,7 +217,7 @@ export default function App() {
       });
     }
     return () => { isMounted = false; };
-  }, [appMode]);
+  }, [isAuthenticated, appMode]);
 
   const [isCloudSynced, setIsCloudSynced] = useState(false);
   const [isOnline, setIsOnline] = useState(() => isDeviceOnline());
@@ -234,9 +240,9 @@ export default function App() {
     return 690;
   }); // Default 1 ฿ = 690 ₭ (Dynamic Point-in-Time Snapshot)
 
-  // Listen & synchronize exchange rate from store_settings (Bỏ qua đối với khách xem Storefront)
+  // Listen & synchronize exchange rate from store_settings (Bỏ qua nếu chưa đăng nhập hoặc là khách xem menu)
   useEffect(() => {
-    if (isCustomerLink() || appMode === 'customer') return;
+    if (!isAuthenticated || isCustomerLink() || appMode === 'customer') return;
 
     let mounted = true;
     fetchExchangeRate().then((rate) => {
@@ -256,7 +262,7 @@ export default function App() {
       mounted = false;
       unsubscribe();
     };
-  }, [appMode]);
+  }, [isAuthenticated, appMode]);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Default collapsed: chỉ thấy icon
   const [searchQuery, setSearchQuery] = useState('');
@@ -682,6 +688,8 @@ export default function App() {
 
   // Realtime Broadcast for POS Terminal Price Sync & Exchange Rate Reprice (Zero-Egress Strategy)
   useEffect(() => {
+    if (!isAuthenticated || isCustomerLink() || appMode === 'customer') return;
+
     const handleExchangeRateEvent = ({ payload }) => {
       if (payload?.rate && Number(payload.rate) > 0) {
         setExchangeRate(Number(payload.rate));
@@ -711,11 +719,11 @@ export default function App() {
       supabase.removeChannel(priceSyncChannel);
       supabase.removeChannel(storeEventsChannel);
     };
-  }, [handleApplyUnitPricesInPlace, handleApplyRepriceForRateChange]);
+  }, [isAuthenticated, appMode, handleApplyUnitPricesInPlace, handleApplyRepriceForRateChange]);
 
   useEffect(() => {
-    // Chặn triệt để rò rỉ dữ liệu khách hàng nếu đang ở trang khách xem menu Storefront
-    if (isCustomerLink() || appMode === 'customer') return;
+    // Chặn triệt để rò rỉ dữ liệu khách hàng nếu chưa đăng nhập hoặc đang ở trang khách xem menu Storefront
+    if (!isAuthenticated || isCustomerLink() || appMode === 'customer') return;
 
     fetchSavedCustomers().then((data) => setSavedCustomersList(data || []));
 
@@ -747,7 +755,7 @@ export default function App() {
     return () => {
       supabase.removeChannel(custChannel);
     };
-  }, [appMode]);
+  }, [isAuthenticated, appMode]);
   const customerDirectory = useMemo(() => {
     return buildCustomerDirectory(savedCustomersList, transactions);
   }, [savedCustomersList, transactions]);
@@ -1009,7 +1017,7 @@ export default function App() {
   }, [applyStockDeductionsFromTx]);
 
   const { realtimeHighlights, triggerHighlight } = useOrderRealtime({
-    enabled: !isCustomerLink() && appMode !== 'customer',
+    enabled: isAuthenticated && !isCustomerLink() && appMode !== 'customer',
     onNewOrder: handleRealtimeNewOrder,
     onUpdateOrder: handleRealtimeUpdateOrder,
     onDeleteOrder: handleRealtimeDeleteOrder,
@@ -1261,9 +1269,10 @@ export default function App() {
   const lastRefreshAllTimeRef = useRef(0);
 
   // 1. Modular Products Refresh
-  const refreshProducts = useCallback(async (force = false) => {
+  const refreshProducts = useCallback(async (force = false, forCustomer = false) => {
     try {
-      const cloudProds = await fetchProductsFromSupabase({ force });
+      const isCustomer = Boolean(forCustomer || isCustomerLink() || appMode === 'customer');
+      const cloudProds = await fetchProductsFromSupabase({ force, forCustomer: isCustomer });
       if (cloudProds) {
         const mockIds = new Set([
           'p_beerlao_gold',
@@ -1284,7 +1293,7 @@ export default function App() {
       console.warn('refreshProducts error:', err);
     }
     return null;
-  }, []);
+  }, [appMode]);
 
   // 2. Modular Transactions Refresh
   const refreshTransactions = useCallback(async (force = false) => {
@@ -1366,10 +1375,11 @@ export default function App() {
 
   // Auto-refresh categories whenever cashier enters POS screen or Categories to ensure child categories are up to date
   useEffect(() => {
+    if (!isAuthenticated) return;
     if (activeMainTab === 'pos' || activeMainTab === 'categories') {
       refreshCategories(true);
     }
-  }, [activeMainTab, refreshCategories]);
+  }, [isAuthenticated, activeMainTab, refreshCategories]);
 
   // 5. Modular Purchases & Suppliers Refresh (Lazy-loaded only when on Purchases screen)
   const refreshPurchases = useCallback(async (force = false) => {
@@ -1466,8 +1476,9 @@ export default function App() {
   const handleCustomerCatalogRefresh = useCallback(async (force = false) => {
     setIsRefreshing(true);
     try {
-      const realProds = await refreshProducts(force);
-      await refreshCategories(force, realProds);
+      const isForced = Boolean(force === true);
+      const realProds = await refreshProducts(isForced, true);
+      await refreshCategories(isForced, realProds);
     } catch (err) {
       console.warn('handleCustomerCatalogRefresh error:', err);
     } finally {
@@ -1477,33 +1488,48 @@ export default function App() {
   }, [refreshProducts, refreshCategories]);
 
   // Initial Data Fetch from Supabase với phân tách luồng nghiêm ngặt
+  // BẢO MẬT TUYỆT ĐỐI: CHỈ FETCH KHI ĐÃ ĐĂNG NHẬP THÀNH CÔNG (HOẶC ROUTE STOREFRONT CỦA KHÁCH)
   useEffect(() => {
     if (isCustomerLink() || appMode === 'customer') {
-      // Khách xem menu Storefront: Chỉ tải danh mục và sản phẩm
+      // Khách xem menu Storefront: Chỉ tải danh mục và sản phẩm (dữ liệu công khai, 0 giá vốn)
       handleCustomerCatalogRefresh();
-    } else {
-      // Nhân viên / Admin POS: Tải toàn bộ dữ liệu cửa hàng
+    } else if (isAuthenticated) {
+      // Nhân viên / Admin POS: CHỈ nạp toàn bộ dữ liệu nội bộ KHI ĐÃ XÁC THỰC
       handleRefreshAllFromSupabase();
+      fetchPrinterConfigFromDb().catch(() => {});
     }
-  }, [appMode]);
+  }, [appMode, isAuthenticated]);
+
+  // Xóa sạch dữ liệu nhạy cảm trong bộ nhớ khi Đăng xuất (Logout)
+  useEffect(() => {
+    if (!isAuthenticated && !isCustomerLink() && appMode !== 'customer') {
+      setTransactions([]);
+      setSavedCustomersList([]);
+      setProducts([]);
+      setBundles([]);
+    }
+  }, [isAuthenticated, appMode]);
 
   // Lazy load purchase orders & suppliers when Purchases tab opens (Bandwidth Defense)
   useEffect(() => {
+    if (!isAuthenticated) return;
     if (activeMainTab === 'purchases') {
       refreshPurchases();
     }
-  }, [activeMainTab, refreshPurchases]);
+  }, [isAuthenticated, activeMainTab, refreshPurchases]);
 
   // Subscribe to React Query Cache Invalidation with granular dispatchers
   useEffect(() => {
     if (isCustomerLink() || appMode === 'customer') {
       const unsubProducts = queryClient.subscribe('products', () => {
-        refreshProducts(true);
+        refreshProducts(true, true);
       });
       return () => {
         unsubProducts();
       };
     }
+
+    if (!isAuthenticated) return;
 
     const unsubProducts = queryClient.subscribe('products', () => {
       refreshProducts(true);
@@ -1529,7 +1555,7 @@ export default function App() {
       unsubTx();
       unsubSuppliers();
     };
-  }, [appMode]);
+  }, [isAuthenticated, appMode, refreshProducts, refreshBundles, refreshPurchases, refreshTransactions]);
 
   // Automatic startup cleanup for obsolete localStorage keys
   useEffect(() => {
@@ -1538,7 +1564,7 @@ export default function App() {
 
   // Offline queue synchronization handler
   const handleSyncOfflineQueue = useCallback(async () => {
-    if (!navigator.onLine || isSyncingOffline) return;
+    if (!isAuthenticated || !navigator.onLine || isSyncingOffline) return;
     setIsSyncingOffline(true);
     try {
       const res = await syncOfflineQueue(createSaleTransactionInSupabase);
@@ -2512,6 +2538,9 @@ export default function App() {
       }
     },
     enabled:
+      isAuthenticated &&
+      !isCustomerLink() &&
+      appMode !== 'customer' &&
       activeMainTab !== 'pos' &&
       activeMainTab !== 'products' &&
       activeMainTab !== 'history' &&
@@ -2988,22 +3017,11 @@ export default function App() {
       const receiptNo = editingOldTransaction ? editingOldTransaction.receiptNumber : ('INV-' + Date.now().toString().slice(-6));
       const createdAt = editingOldTransaction ? editingOldTransaction.createdAt : new Date().toISOString();
 
-      let totalCost = 0;
-      cart.forEach((it) => {
-        if (it.isBundle) {
-          (it.bundleComponents || []).forEach((c) => {
-            const compCost = Number(c.product?.costPerBaseUnit ?? c.costPerBaseUnit ?? 0);
-            totalCost += compCost * (Number(c.quantity) || 1);
-          });
-        } else {
-          const fullMult = Number(it.unit?.multiplier || 1);
-          const effectiveMult = it.isHalfCarton ? (fullMult > 1 ? fullMult / 2 : 1) : fullMult;
-          totalCost += (it.product?.costPerBaseUnit || 0) * effectiveMult * it.quantity;
-        }
-      });
-      const grossProfit = cartSubtotal - totalCost;
+      const currentRate = Number(exchangeRate) || 0;
 
       const receiptItems = cart.map((it) => {
+        const costInfo = calculateItemCostAndMultiplier(it);
+
         if (it.isBundle) {
           const childPieces = (it.bundleComponents || []).reduce((sum, c) => sum + (Number(c.quantity || c.qty) || 0), 0);
           const pkgLimit = Number(it.packageQty) || 12;
@@ -3044,6 +3062,10 @@ export default function App() {
             price: effectivePrice,
             customPrice: it.customPrice,
             lineTotal: bundleLineTotal,
+            lineCost: costInfo.lineCost,
+            line_cost: costInfo.lineCost,
+            costPerUnit: costInfo.unitCost,
+            hasCost: costInfo.hasCost,
             quantity: bundleQty,
             isBundle: true,
             bundleComponents: it.bundleComponents || [],
@@ -3066,8 +3088,8 @@ export default function App() {
         const baseLine = effectivePrice * it.quantity;
         const lineTotal = baseLine + crateDepositTotal;
 
-        const fullMult = Number(it.unit.multiplier || 1);
-        const effectiveMultiplier = it.isHalfCarton ? (fullMult > 1 ? Math.round(fullMult / 2) : 1) : Math.round(fullMult);
+        const effectiveMultiplier = costInfo.multiplier;
+        const lineCost = costInfo.lineCost;
 
         return {
           ...it,
@@ -3084,7 +3106,11 @@ export default function App() {
           unitPrice: effectivePrice,
           effectivePrice,
           effectiveMultiplier,
-          isHalfCarton: Boolean(it.isHalfCarton),
+          lineCost,
+          line_cost: lineCost,
+          costPerUnit: costInfo.unitCost,
+          hasCost: costInfo.hasCost,
+          isHalfCarton: Boolean(it.isHalfCarton || costInfo.isHalfCarton),
           selectedPriceTier: it.selectedPriceTier || 1,
           noEmptyCrates: Boolean(it.noEmptyCrates),
           missingCratesCount: missingCount,
@@ -3103,13 +3129,13 @@ export default function App() {
         ? (actualPaid <= 0 ? 'unpaid' : (remainingDebt > 0 ? 'partial' : 'paid'))
         : 'paid';
 
-      // Point-in-Time Exchange Rate Snapshot calculations (IAS 21 Presentation Standard)
-      const currentRate = Number(exchangeRate) || 0;
-      const totalLak = Number(cartSubtotal) || 0;
-      const totalCostLak = Number(totalCost) || 0;
-      const grossProfitLak = Number(grossProfit) || 0;
-      const totalThb = currentRate > 0 ? Number((totalLak / currentRate).toFixed(2)) : 0;
-      const totalCostThb = currentRate > 0 ? Number((totalCostLak / currentRate).toFixed(2)) : 0;
+      // Recalculate financial totals directly from receiptItems to ensure 100% agreement
+      const totals = recalculateTransactionTotals(receiptItems, currentRate);
+      const totalCostLak = totals.totalCostLak;
+      const totalLak = Number(cartSubtotal) || totals.totalAmountLak;
+      const grossProfitLak = totalLak - totalCostLak;
+      const totalCostThb = totals.totalCostThb;
+      const totalThb = totals.totalAmountThb;
       const grossProfitThb = Number((totalThb - totalCostThb).toFixed(2));
 
       const receipt = {
@@ -3204,6 +3230,16 @@ export default function App() {
                 ? {
                     ...t,
                     ...receipt,
+                    totalCost: totalCostLak,
+                    total_cost: totalCostLak,
+                    total_cost_lak: totalCostLak,
+                    totalCostThb,
+                    total_cost_thb: totalCostThb,
+                    grossProfit: grossProfitLak,
+                    gross_profit: grossProfitLak,
+                    gross_profit_lak: grossProfitLak,
+                    grossProfitThb,
+                    gross_profit_thb: grossProfitThb,
                     items: receiptItems,
                     sale_transaction_items: receiptItems,
                     updated_at: new Date().toISOString(),
@@ -3416,27 +3452,34 @@ export default function App() {
 
     const rawItems = tx.items || tx.sale_transaction_items || [];
     const loadedCart = rawItems.map((it) => {
+      const isBundle = Boolean(it.isBundle || it.bundleComponents?.length || it.bundle_components?.length);
       const prodId = it.product?.id || it.productId || it.product_id;
       const foundProd = products.find((p) => p.id === prodId) || {
         id: prodId,
-        name: it.productName || it.product_name || 'ສິນຄ້າ',
+        name: it.productName || it.product_name || (isBundle ? 'ນົມກ່ອງ ລວມລົດຊາດ' : 'ສິນຄ້າ'),
         costPerBaseUnit: 0,
         currentStockBaseUnits: 0,
         trackStock: false,
         units: [],
       };
 
-      const unitName = it.unit?.unitName || it.unitName || it.unit_name || 'ອັນ';
-      const multiplier = Number(it.unit?.multiplier || it.multiplier) || 1;
+      const rawUnitName = String(it.unit?.unitName || it.unitName || it.unit_name || 'ອັນ');
+      const isHalfCarton = Boolean(
+        it.isHalfCarton ||
+        rawUnitName.includes('½') ||
+        rawUnitName.includes('1/2')
+      );
+      const cleanUnitName = rawUnitName.replace(/½\s*|1\/2\s*/g, '').trim();
+
       const rawUnitPrice = Number(it.unitPrice ?? it.unit_price ?? it.unit?.retailPrice ?? it.price) || 0;
       const qty = Number(it.quantity) || 1;
       const rawLineTotal = Number(it.lineTotal || it.line_total) || (rawUnitPrice * qty);
       const effectiveUnitPrice = rawUnitPrice > 0 ? rawUnitPrice : (rawLineTotal > 0 && qty > 0 ? Math.round(rawLineTotal / qty) : 0);
 
-      const matchedUnit = foundProd.units?.find((u) => u.unitName === unitName) || {
-        id: `u_${unitName}`,
-        unitName,
-        multiplier,
+      const matchedUnit = foundProd.units?.find((u) => u.unitName === cleanUnitName || u.unitName === rawUnitName) || {
+        id: `u_${cleanUnitName || rawUnitName}`,
+        unitName: cleanUnitName || rawUnitName,
+        multiplier: Number(it.unit?.multiplier || it.multiplier) || 1,
         retailPrice: effectiveUnitPrice,
         wholesalePrice: effectiveUnitPrice,
       };
@@ -3448,13 +3491,19 @@ export default function App() {
       const missingCount = Number(it.missingCratesCount) || (crateDepositTotal > 0 ? Math.round(crateDepositTotal / fee) : 0);
       const hasMissingCrates = Boolean(it.noEmptyCrates || crateDepositTotal > 0 || (foundProd.hasCrateDeposit && diff > 0));
 
-      return {
+      const cartItem = {
         product: foundProd,
+        productId: prodId,
+        productName: foundProd.name || it.productName || it.product_name,
+        name_vi: foundProd.name_vi || foundProd.nameVi || it.name_vi || it.nameVi || '',
+        nameVi: foundProd.name_vi || foundProd.nameVi || it.name_vi || it.nameVi || '',
         unit: {
           ...matchedUnit,
           retailPrice: effectiveUnitPrice > 0 ? effectiveUnitPrice : matchedUnit.retailPrice,
           wholesalePrice: effectiveUnitPrice > 0 ? effectiveUnitPrice : matchedUnit.wholesalePrice,
         },
+        unitName: matchedUnit.unitName,
+        isHalfCarton,
         quantity: qty,
         unitPrice: effectiveUnitPrice,
         customPrice: effectiveUnitPrice > 0 ? effectiveUnitPrice : null,
@@ -3463,7 +3512,17 @@ export default function App() {
         crateDepositFee: fee,
         crateDepositTotal,
         lineTotal: rawLineTotal > 0 ? rawLineTotal : (effectiveUnitPrice * qty),
+        lineCost: Number(it.line_cost || it.lineCost) || 0,
       };
+
+      if (isBundle) {
+        cartItem.isBundle = true;
+        cartItem.bundleId = it.bundleId || prodId;
+        cartItem.bundleName = it.bundleName || it.productName || 'ນົມກ່ອງ ລວມລົດຊາດ';
+        cartItem.bundleComponents = it.bundleComponents || it.bundle_components || [];
+      }
+
+      return cartItem;
     });
 
     const rawMethod = (tx.paymentMethod || tx.payment_method || '').toUpperCase();
@@ -3969,7 +4028,8 @@ export default function App() {
               return {
                 ...p,
                 category: categoryName,
-                categoryId: categoryId,
+                categoryId: categoryId || null,
+                category_id: categoryId || null,
                 categories: categoryId ? { id: categoryId, name: categoryName } : null,
               };
             }
@@ -4002,6 +4062,7 @@ export default function App() {
                 ...p,
                 category: cleanCat,
                 categoryId: null,
+                category_id: null,
                 categories: null,
               };
             }
@@ -4035,6 +4096,7 @@ export default function App() {
                 ...p,
                 category: match.categoryName,
                 categoryId: match.categoryId || null,
+                category_id: match.categoryId || null,
                 categories: match.categoryId ? { id: match.categoryId, name: match.categoryName } : null,
               };
             }
@@ -4045,7 +4107,6 @@ export default function App() {
           return updated;
         });
         // Zero-Egress Architecture: State, localStorage, and IndexedDB are already updated in-place.
-        return { success: true };
         return { success: true };
       }
       return res;

@@ -3,16 +3,14 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { liveUpdater } from './services/liveUpdateService'
-import { fetchPrinterConfigFromDb } from './services/printerConfigService'
 import { ensurePhetsarathLoaded } from './utils/phetsarathFont'
 import { isCustomerStorefrontRoute } from './utils/routeUtils'
 
 // Thông báo cho Capgo OTA biết app đã khởi chạy thành công
 liveUpdater.notifyAppReady();
 
-// Chỉ đồng bộ IP máy in và nạp font in nhiệt khi ở chế độ POS/Admin (không gọi ở trang khách xem menu)
+// Chỉ nạp font in nhiệt khi ở chế độ POS/Admin (không gọi ở trang khách xem menu)
 if (!isCustomerStorefrontRoute()) {
-  fetchPrinterConfigFromDb().catch(() => {});
   ensurePhetsarathLoaded().catch(() => {});
 }
 

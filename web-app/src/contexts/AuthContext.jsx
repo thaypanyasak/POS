@@ -71,8 +71,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   // 2. Refresh active cashiers list
-  const refreshStaffList = useCallback(async () => {
-    const { data } = await fetchActiveCashiers();
+  const refreshStaffList = useCallback(async ({ isAuthenticated = false, force = false } = {}) => {
+    const { data } = await fetchActiveCashiers({ isAuthenticated, force });
     if (data && data.length > 0) {
       setActiveCashiersList(data);
     }
@@ -92,23 +92,27 @@ export function AuthProvider({ children }) {
       try {
         setIsLoading(true);
 
+        // Check if explicitly logged out
+        const isExplicitlyLoggedOut = typeof window !== 'undefined' && localStorage.getItem('meiishop_pos_logged_out') === 'true';
+
         // Check lock status
         const locked = await getPosLockStatusLocal();
         if (isMounted) setIsLockedState(locked);
 
         // Check active cashier
-        const savedCashier = await getActiveCashierLocal();
+        const savedCashier = isExplicitlyLoggedOut ? null : await getActiveCashierLocal();
         if (isMounted && savedCashier) {
           setActiveCashierState(savedCashier);
         }
 
         // Get initial Supabase session
         const { data: { session: initSession } } = await supabase.auth.getSession();
+        let currentAuthUser = isExplicitlyLoggedOut ? null : (initSession?.user || null);
         if (isMounted) {
-          setSession(initSession);
-          setUser(initSession?.user || null);
-          if (initSession?.user) {
-            const prof = await fetchProfile(initSession.user.id);
+          setSession(isExplicitlyLoggedOut ? null : initSession);
+          setUser(currentAuthUser);
+          if (currentAuthUser && !isExplicitlyLoggedOut) {
+            const prof = await fetchProfile(currentAuthUser.id);
             if (!savedCashier && prof) {
               const defaultCashier = {
                 id: prof.id,
@@ -121,17 +125,25 @@ export function AuthProvider({ children }) {
           }
         }
 
-        await refreshStaffList();
-
-        // Fetch dynamic roles & permissions from cloud/local storage
-        const [loadedRoles, perms] = await Promise.all([
-          getAppRoles(),
-          getRolePermissions(),
-        ]);
-
-        if (isMounted) {
-          if (loadedRoles) setRolesList(loadedRoles);
-          if (perms) setRolePermissions(perms);
+        const isUserAuthed = Boolean(savedCashier || currentAuthUser);
+        if (isUserAuthed) {
+          // CHỈ tải danh sách nhân viên và quyền từ Cloud Supabase KHI ĐÃ CÓ PHIÊN ĐĂNG NHẬP
+          await refreshStaffList({ isAuthenticated: true });
+          const [loadedRoles, perms] = await Promise.all([
+            getAppRoles({ isAuthenticated: true }),
+            getRolePermissions({ isAuthenticated: true }),
+          ]);
+          if (isMounted) {
+            if (loadedRoles) setRolesList(loadedRoles);
+            if (perms) setRolePermissions(perms);
+          }
+        } else {
+          // Chưa đăng nhập: Chỉ nạp nhân viên từ cache nội bộ trên máy POS này (0 cuộc gọi API Supabase)
+          await refreshStaffList({ isAuthenticated: false });
+          if (isMounted) {
+            setRolesList(DEFAULT_ROLES);
+            setRolePermissions(DEFAULT_ROLE_PERMISSIONS);
+          }
         }
       } catch (err) {
         console.error('[AuthContext] initAuth error:', err);
@@ -178,6 +190,9 @@ export function AuthProvider({ children }) {
         };
         setActiveCashierState(cashier);
         await saveActiveCashierLocal(cashier);
+        refreshStaffList({ isAuthenticated: true, force: true }).catch(() => {});
+        getAppRoles({ isAuthenticated: true }).then((r) => r && setRolesList(r)).catch(() => {});
+        getRolePermissions({ isAuthenticated: true }).then((p) => p && setRolePermissions(p)).catch(() => {});
       } else if (event === 'SIGNED_OUT') {
         setProfile(null);
       }
@@ -207,6 +222,9 @@ export function AuthProvider({ children }) {
 
       localStorage.removeItem('meiishop_pos_logged_out');
       playSuccessBeep();
+      refreshStaffList({ isAuthenticated: true, force: true }).catch(() => {});
+      getAppRoles({ isAuthenticated: true }).then((r) => r && setRolesList(r)).catch(() => {});
+      getRolePermissions({ isAuthenticated: true }).then((p) => p && setRolePermissions(p)).catch(() => {});
       return { success: true, user: data.user };
     } catch (err) {
       playErrorBeep();
@@ -226,6 +244,8 @@ export function AuthProvider({ children }) {
       setProfile(null);
       setActiveCashierState(null);
       setIsLockedState(false);
+      // Reload local cashiers only without network requests
+      refreshStaffList({ isAuthenticated: false }).catch(() => {});
       playSuccessBeep();
       return { success: true };
     } catch (err) {
@@ -268,6 +288,9 @@ export function AuthProvider({ children }) {
       setIsLockedState(false);
       await savePosLockStatusLocal(false);
       playSuccessBeep();
+      refreshStaffList({ isAuthenticated: true, force: true }).catch(() => {});
+      getAppRoles({ isAuthenticated: true }).then((r) => r && setRolesList(r)).catch(() => {});
+      getRolePermissions({ isAuthenticated: true }).then((p) => p && setRolePermissions(p)).catch(() => {});
       return { success: true, switchedTo: resAny.staff };
     }
 
@@ -285,6 +308,9 @@ export function AuthProvider({ children }) {
       setIsLockedState(false);
       await savePosLockStatusLocal(false);
       playSuccessBeep();
+      refreshStaffList({ isAuthenticated: true, force: true }).catch(() => {});
+      getAppRoles({ isAuthenticated: true }).then((r) => r && setRolesList(r)).catch(() => {});
+      getRolePermissions({ isAuthenticated: true }).then((p) => p && setRolePermissions(p)).catch(() => {});
       return { success: true, staff: res.staff };
     }
     playErrorBeep();

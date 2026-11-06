@@ -16,6 +16,7 @@ import {
   FileText
 } from '@phosphor-icons/react';
 import { formatKip, formatDateToDDMMYYYY, formatTime24h } from '../utils/formatters';
+import { calculateItemCostAndMultiplier } from '../utils/costCalculation';
 
 /**
  * Robust Transaction Profit & Cost Metrics Calculation
@@ -25,6 +26,7 @@ export function calculateTxProfitMetrics(tx, productsMap = null) {
   if (!tx) {
     return {
       grandTotal: 0,
+      totalQuantity: 0,
       totalCost: 0,
       totalProfit: 0,
       overallMargin: '0',
@@ -33,31 +35,43 @@ export function calculateTxProfitMetrics(tx, productsMap = null) {
       isBreakEven: true,
       hasCost: false,
       hasIncompleteCost: false,
+      zeroCostCount: 0,
+      zeroCostRevenue: 0,
       itemsBreakdown: [],
     };
   }
 
-  const grandTotal = Number(tx.grandTotal ?? tx.grand_total ?? tx.total_lak ?? 0);
+  const explicitGrandTotal = Number(tx.grandTotal ?? tx.grand_total ?? tx.total_lak ?? 0);
   const items = tx.items || tx.sale_transaction_items || [];
   
-  let calculatedCostFromItems = 0;
-  let hasIncompleteCost = false;
-  let hasAnyCost = false;
+  let totalCostFromItems = 0;
+  let itemsRevenueSum = 0;
+  let zeroCostCount = 0;
+  let zeroCostRevenue = 0;
 
-  const itemsBreakdown = items.map((it, idx) => {
+  const itemsBreakdown = (Array.isArray(items) ? items : []).map((it, idx) => {
     const qty = Number(it.quantity) || 1;
     const uPrice = Number(
-      it.effectivePrice !== undefined
+      it.unit_price !== undefined && it.unit_price !== null
+        ? it.unit_price
+        : it.effectivePrice !== undefined && it.effectivePrice !== null
         ? it.effectivePrice
-        : it.customPrice !== undefined
+        : it.customPrice !== undefined && it.customPrice !== null
         ? it.customPrice
-        : it.unitPrice !== undefined
+        : it.unitPrice !== undefined && it.unitPrice !== null
         ? it.unitPrice
-        : it.price !== undefined
+        : it.price !== undefined && it.price !== null
         ? it.price
         : it.unit?.retailPrice || 0
     );
-    const lineTotal = Number(it.lineTotal !== undefined ? it.lineTotal : (uPrice * qty));
+    const lineTotal = Number(
+      it.line_total !== undefined && it.line_total !== null && Number(it.line_total) > 0
+        ? it.line_total
+        : it.lineTotal !== undefined && it.lineTotal !== null && Number(it.lineTotal) > 0
+        ? it.lineTotal
+        : (uPrice * qty)
+    );
+    itemsRevenueSum += lineTotal;
     const effectiveUnitPrice = qty > 0 ? Math.round(lineTotal / qty) : uPrice;
 
     // Resolve matching product metadata for accurate cost
@@ -70,44 +84,49 @@ export function calculateTxProfitMetrics(tx, productsMap = null) {
       matchedProd = it.product;
     }
 
-    // Determine cost per unit & line cost
+    // Determine cost per unit & line cost using single source of truth engine
     let lineCost = 0;
     let costPerUnit = 0;
-    const explicitLineCost = Number(it.line_cost ?? it.lineCost ?? 0);
+    let hasCost = false;
 
+    const explicitLineCost = Number(it.line_cost ?? it.lineCost ?? 0);
     if (explicitLineCost > 0) {
       lineCost = explicitLineCost;
       costPerUnit = Math.round(lineCost / qty);
-      hasAnyCost = true;
+      hasCost = true;
     } else {
-      // Calculate from base unit cost and multiplier
-      const baseCost = Number(
-        matchedProd?.costPerBaseUnit ??
-        matchedProd?.cost_per_base_unit ??
-        it.product?.costPerBaseUnit ??
-        it.product?.cost_per_base_unit ??
-        0
-      );
-      const mult = Number(it.effectiveMultiplier ?? it.multiplier ?? it.unit?.multiplier ?? 1);
-      costPerUnit = baseCost * mult;
-      lineCost = costPerUnit * qty;
-
-      if (costPerUnit > 0) {
-        hasAnyCost = true;
+      const itemWithProd = {
+        ...it,
+        product: matchedProd || it.product,
+      };
+      const costInfo = calculateItemCostAndMultiplier(itemWithProd);
+      if (costInfo.hasCost) {
+        lineCost = costInfo.lineCost;
+        costPerUnit = costInfo.unitCost;
+        hasCost = true;
       } else {
-        hasIncompleteCost = true;
+        lineCost = 0;
+        costPerUnit = 0;
+        hasCost = false;
       }
     }
 
-    const lineProfit = lineTotal - lineCost;
-    const profitMargin = lineTotal > 0 ? ((lineProfit / lineTotal) * 100).toFixed(1) : '0';
+    if (hasCost) {
+      totalCostFromItems += lineCost;
+    } else {
+      zeroCostCount += 1;
+      zeroCostRevenue += lineTotal;
+    }
 
-    calculatedCostFromItems += lineCost;
+    const lineProfit = hasCost ? (lineTotal - lineCost) : 0;
+    const profitMargin = hasCost && lineTotal > 0 ? ((lineProfit / lineTotal) * 100).toFixed(1) : '0';
 
-    const unitName = it.unitName || it.unit_name || it.unit?.unitName || (it.isBundle ? 'ແກັດ' : 'ອັນ');
+    const rawUnitName = String(it.unitName || it.unit_name || it.unit?.unitName || (it.isBundle ? 'ແກັດ' : 'ອັນ'));
+    const isHalfCarton = Boolean(it.isHalfCarton || rawUnitName.includes('½') || rawUnitName.includes('1/2'));
+    const unitName = isHalfCarton && !rawUnitName.includes('½') ? `½ ${rawUnitName}` : rawUnitName;
 
     return {
-      id: it.id || `item_${idx}`,
+      id: it.id || `item_${prodId || 'p'}_${idx}`,
       productName: it.productName || it.product_name || matchedProd?.name || 'ສິນຄ້າ',
       nameVi: it.nameVi || it.name_vi || matchedProd?.nameVi || matchedProd?.name_vi || '',
       unitName,
@@ -118,20 +137,17 @@ export function calculateTxProfitMetrics(tx, productsMap = null) {
       lineCost,
       lineProfit,
       profitMargin,
-      hasCost: costPerUnit > 0,
-      isProfit: lineProfit > 0,
-      isLoss: lineProfit < 0,
+      hasCost,
+      isZeroCost: !hasCost,
+      isProfit: hasCost && lineProfit > 0,
+      isLoss: hasCost && lineProfit < 0,
       isBundle: Boolean(it.isBundle || it.is_bundle),
     };
   });
 
-  // Transaction header level stored cost
-  const storedCost = Number(tx.total_cost_lak ?? tx.total_cost ?? tx.totalCost ?? 0);
-
-  // If stored cost exists and is > 0, use it; otherwise use sum of item costs
-  const finalTotalCost = storedCost > 0 ? storedCost : calculatedCostFromItems;
-  if (finalTotalCost > 0) hasAnyCost = true;
-
+  // Calculate final totals directly from displayed items (reduce) to guarantee 100% agreement
+  const grandTotal = explicitGrandTotal > 0 ? explicitGrandTotal : itemsRevenueSum;
+  const finalTotalCost = totalCostFromItems;
   const finalProfit = grandTotal - finalTotalCost;
   const overallMargin = grandTotal > 0 ? ((finalProfit / grandTotal) * 100).toFixed(1) : '0';
   const totalQuantity = itemsBreakdown.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
@@ -145,8 +161,10 @@ export function calculateTxProfitMetrics(tx, productsMap = null) {
     isProfit: finalProfit > 0,
     isLoss: finalProfit < 0,
     isBreakEven: finalProfit === 0,
-    hasCost: hasAnyCost,
-    hasIncompleteCost,
+    hasCost: finalTotalCost > 0,
+    hasIncompleteCost: zeroCostCount > 0,
+    zeroCostCount,
+    zeroCostRevenue,
     itemsBreakdown,
   };
 }
@@ -297,13 +315,21 @@ export default function InvoiceProfitDetailModal({
               }`}>
                 {metrics.isProfit ? '+' : ''}{formatKip(metrics.totalProfit)}
               </div>
-              <p className={`text-[10.5px] font-bold mt-1 ${
-                metrics.isLoss ? 'text-rose-600' : 'text-emerald-700'
-              }`}>
-                {metrics.isLoss
-                  ? ' ບິນນີ້ຂາດທຶນ! ກະລຸນາກວດສອບລາຄາຂາຍ'
-                  : 'ກຳໄລຕົວຈິງຫຼັງຫັກຕົ້ນທຶນສິນຄ້າ'}
-              </p>
+              {metrics.zeroCostCount > 0 ? (
+                <div className="mt-1">
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 px-1.5 py-0.5 rounded border border-amber-300 inline-block">
+                    * ຍັງບໍ່ຫັກທຶນ {metrics.zeroCostCount} ລາຍການ
+                  </span>
+                </div>
+              ) : (
+                <p className={`text-[10.5px] font-bold mt-1 ${
+                  metrics.isLoss ? 'text-rose-600' : 'text-emerald-700'
+                }`}>
+                  {metrics.isLoss
+                    ? 'ບິນນີ້ຂາດທຶນ! ກະລຸນາກວດສອບລາຄາຂາຍ'
+                    : 'ກຳໄລຕົວຈິງຫຼັງຫັກຕົ້ນທຶນສິນຄ້າ'}
+                </p>
+              )}
             </div>
           </div>
 
@@ -312,8 +338,8 @@ export default function InvoiceProfitDetailModal({
             <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
               <Info size={16} weight="bold" className="text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <strong>ແຈ້ງເຕືອນ:</strong> ມີບາງສິນຄ້າໃນບິນນີ້ຍັງບໍ່ໄດ້ກຳນົດຕົ້ນທຶນຮັບເຂົ້າ (ຕົ້ນທຶນ = 0 ₭). 
-                ທ່ານສາມາດເຂົ້າໄປກຳນົດຕົ້ນທຶນໃນເມນູ <strong>"ສິນຄ້າ (Categories)"</strong> ເພື່ອໃຫ້ກຳໄລຖືກຕ້ອງ 100%.
+                <strong>ແຈ້ງເຕືອນ:</strong> ມີ {metrics.zeroCostCount} ລາຍການໃນບິນນີ້ຍັງບໍ່ມີລາຄາທຶນ (ມູນຄ່າຍອດຂາຍ {formatKip(metrics.zeroCostRevenue)} ₭). 
+                ກຳໄລຂ້າງເທິງຍັງບໍ່ໄດ້ຫັກຕົ້ນທຶນຂອງສິນຄ້າດັ່ງກ່າວ (ກຳໄລຕົວຈິງຈະປັບຫຼຸດລົງເມື່ອອັບເດດລາຄາທຶນຄົບຖ້ວນ).
               </div>
             </div>
           )}
@@ -344,8 +370,9 @@ export default function InvoiceProfitDetailModal({
                 </thead>
                 <tbody className="[&_td]:border-b [&_td]:border-slate-100">
                   {metrics.itemsBreakdown.map((item, idx) => {
+                    const rowKey = item.id ? `${item.id}_${idx}` : `row_${idx}_${item.unitName}`;
                     return (
-                      <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                      <tr key={rowKey} className="hover:bg-slate-50/60 transition-colors">
                         {/* 0. STT */}
                         <td className="py-3 px-3 text-center font-mono font-bold text-slate-400 text-[11px]">
                           {idx + 1}
@@ -396,15 +423,24 @@ export default function InvoiceProfitDetailModal({
                               </div>
                             </>
                           ) : (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                              <span>ຍັງບໍ່ມີທຶນ</span>
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                              ຍັງບໍ່ມີທຶນ
                             </span>
                           )}
                         </td>
 
                         {/* 5. Tiền lãi & Tỷ lệ lãi */}
                         <td className="py-3 px-3 text-right font-mono">
-                          {item.isLoss ? (
+                          {!item.hasCost ? (
+                            <div className="inline-flex flex-col items-end">
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/80">
+                                ລໍຖ້າຕົ້ນທຶນ
+                              </span>
+                              <span className="text-[9.5px] text-slate-400 mt-0.5">
+                                --
+                              </span>
+                            </div>
+                          ) : item.isLoss ? (
                             <div className="inline-flex flex-col items-end">
                               <span className="font-black text-rose-600 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
                                 {formatKip(item.lineProfit)}

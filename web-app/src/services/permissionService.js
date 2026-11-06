@@ -32,8 +32,8 @@ export const DEFAULT_ROLES = [
  * Fetch all available roles (System Roles + Custom Created Roles)
  * @returns {Promise<Array>} List of role objects
  */
-export async function getAppRoles() {
-  if (isCustomerStorefrontRoute()) return DEFAULT_ROLES;
+export async function getAppRoles({ isAuthenticated = false } = {}) {
+  if (isCustomerStorefrontRoute() || !isAuthenticated) return DEFAULT_ROLES;
   try {
     const roles = await fetchStoreSetting(ROLES_STORAGE_KEY, DEFAULT_ROLES);
 
@@ -84,8 +84,8 @@ export async function saveAppRoles(rolesList) {
  * Get current role permissions for all roles (Offline-first with Supabase cloud sync)
  * @returns {Promise<Object>} Map of roleId -> string[]
  */
-export async function getRolePermissions() {
-  if (isCustomerStorefrontRoute()) return DEFAULT_ROLE_PERMISSIONS;
+export async function getRolePermissions({ isAuthenticated = false } = {}) {
+  if (isCustomerStorefrontRoute() || !isAuthenticated) return DEFAULT_ROLE_PERMISSIONS;
   try {
     const permissions = await fetchStoreSetting(
       PERMISSIONS_STORAGE_KEY,
