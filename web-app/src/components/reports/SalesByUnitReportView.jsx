@@ -21,7 +21,7 @@ import {
 } from '@phosphor-icons/react';
 import { exportSalesByUnitToExcel } from '../../utils/excelExport';
 import { formatKip, formatDots, normalizeLao } from '../../utils/formatters';
-import { playUnitChangeBeep, playActionClickBeep } from '../../utils/audioFeedback';
+import { playUnitChangeBeep, playActionClickBeep, playRefreshBeep, playSuccessBeep } from '../../utils/audioFeedback';
 import { SalesByUnitSkeleton } from '../common/SkeletonLoaders';
 
 /**
@@ -128,6 +128,24 @@ export default function SalesByUnitReportView({
   const [pageSize, setPageSize] = useState(20); // 20 | 50 | 100 | 200 | 'ALL'
   const mainScrollRef = useRef(null);
   const tableTopRef = useRef(null);
+  const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
+
+  const handleLocalRefresh = async () => {
+    if (isLocalRefreshing) return;
+    setIsLocalRefreshing(true);
+    playRefreshBeep('sales_report');
+    try {
+      await Promise.all([
+        onRefresh?.(),
+        new Promise((res) => setTimeout(res, 600)),
+      ]);
+      playSuccessBeep('sales_report');
+    } catch (err) {
+      console.error('Sales report refresh error:', err);
+    } finally {
+      setIsLocalRefreshing(false);
+    }
+  };
 
   const scrollToTableTop = () => {
     tableTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -656,12 +674,18 @@ export default function SalesByUnitReportView({
             {onRefresh && (
               <button
                 type="button"
-                onClick={onRefresh}
-                disabled={isLoading}
-                className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-teal-700 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                title="ໂຫຼດຂໍ້ມູນໃໝ່"
+                onClick={handleLocalRefresh}
+                disabled={isLocalRefreshing}
+                className={`group/ref p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-teal-700 text-xs font-bold transition-all duration-200 shadow-2xs active:scale-90 active:rotate-12 cursor-pointer flex items-center gap-1.5 ${
+                  isLocalRefreshing ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+                title="ໂຫຼດຂໍ້ມູນໃໝ່ (Refresh Sales Report)"
               >
-                <ArrowClockwise size={15} weight="bold" className={isLoading ? 'animate-spin text-teal-600' : ''} />
+                <ArrowClockwise
+                  size={15}
+                  weight="bold"
+                  className={`transition-transform duration-300 ${isLocalRefreshing ? 'animate-spin text-teal-600' : 'group-hover/ref:rotate-180'}`}
+                />
                 <span className="hidden sm:inline">ຣີເຟຣຊ</span>
               </button>
             )}

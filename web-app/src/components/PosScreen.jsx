@@ -45,6 +45,7 @@ import {
   playPriceTierBeep,
   playActionClickBeep,
   playUnitChangeBeep,
+  playRefreshBeep,
 } from '../utils/audioFeedback';
 
 /**
@@ -204,6 +205,24 @@ export default function PosScreen({
   const [editingBundleCartItem, setEditingBundleCartItem] = useState(null);
   const searchInputRef = useRef(null);
   const lastHardwareScanTimeRef = useRef(0);
+  const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
+
+  const handleLocalRefresh = async () => {
+    if (isLocalRefreshing) return;
+    setIsLocalRefreshing(true);
+    playRefreshBeep('cart');
+    try {
+      await Promise.all([
+        onRefreshProducts?.(),
+        new Promise((res) => setTimeout(res, 600)),
+      ]);
+      playSuccessBeep('cart');
+    } catch (err) {
+      console.error('POS refresh error:', err);
+    } finally {
+      setIsLocalRefreshing(false);
+    }
+  };
 
   // Local search state with debounce to prevent re-rendering the entire App during high-speed hardware barcode scans
   const [localSearch, setLocalSearch] = useState(searchQuery || '');
@@ -2071,20 +2090,17 @@ export default function PosScreen({
             {/* Nút Refresh: Nút tiện ích hệ thống */}
             <button
               type="button"
-              onClick={() => {
-                playActionClickBeep();
-                onRefreshProducts?.();
-              }}
-              disabled={isLoading}
-              className={`group/ref h-11 px-3 py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl flex items-center gap-1.5 shadow-sm hover:border-blue-300 hover:bg-blue-50/60 transition-all duration-200 cursor-pointer active:scale-95 shrink-0 text-xs sm:text-sm ${
-                isLoading ? 'opacity-50 cursor-not-allowed' : ''
+              onClick={handleLocalRefresh}
+              disabled={isLocalRefreshing}
+              className={`group/ref h-11 px-3 py-2 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl flex items-center gap-1.5 shadow-sm hover:border-teal-300 hover:bg-teal-50/60 transition-all duration-200 cursor-pointer active:scale-90 active:rotate-12 shrink-0 text-xs sm:text-sm ${
+                isLocalRefreshing ? 'opacity-60 cursor-not-allowed' : ''
               }`}
-              title="Làm mới"
+              title="ໂຫຼດຂໍ້ມູນຄືນໃໝ່ (Refresh POS)"
             >
               <ArrowClockwise
                 size={18}
                 weight="bold"
-                className={`text-blue-600 transition-transform duration-300 group-hover/ref:rotate-180 ${isLoading ? 'animate-spin' : ''}`}
+                className={`transition-transform duration-300 ${isLocalRefreshing ? 'animate-spin text-teal-600' : 'text-blue-600 group-hover/ref:rotate-180'}`}
               />
               <span className="text-slate-700 font-medium hidden sm:inline">ຣີເຟຣຊ</span>
             </button>

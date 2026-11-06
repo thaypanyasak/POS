@@ -28,35 +28,131 @@ import {
   ArrowsDownUp,
 } from '@phosphor-icons/react';
 import BulkPriceModal from './BulkPriceModal';
-import { updateProductUnitPricesZeroEgress } from '../services/supabase';
+import { updateProductUnitPricesZeroEgress, updateProductCostsZeroEgress } from '../services/supabase';
 import { exportProductsToExcel } from '../utils/excelExport';
 import { formatKip, formatBaht, getCartonUnitInfo, formatStockDisplay, formatNegativeStockCompound, normalizeLao } from '../utils/formatters';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner, sanitizeBarcode } from '../hooks/useHardwareBarcodeScanner';
-import { playSuccessBeep, playErrorBeep, playActionClickBeep, playUnitChangeBeep } from '../utils/audioFeedback';
+import { playSuccessBeep, playErrorBeep, playActionClickBeep, playUnitChangeBeep, playRefreshBeep } from '../utils/audioFeedback';
 import { ProductsListSkeleton } from './common/SkeletonLoaders';
 import { useAuthRole } from '../contexts/AuthContext';
 
 /**
- * Distinct unit badge styling for Inline Edit Mode:
- * - Thùng/Két (highest multiplier): Purple theme
- * - Lốc/Gói (mid multiplier): Blue theme
- * - Lẻ/ອັນ (base/lowest unit): Emerald theme
+ * Modern Pastel unit badge styling:
+ * - Cấp 1: Thùng / Carton (ແກັດ) -> Tím Pastel: bg-purple-100/90 text-purple-700 border-purple-300/80
+ * - Cấp 2: Pack / Gói (ແພັກ) -> Xanh Biển Pastel: bg-sky-100/90 text-sky-700 border-sky-300/80
+ * - Cấp 3: Đơn vị lẻ / Cơ sở (ອັນ, ຕຸກ, ປ໋ອງ...) -> Xanh Ngọc Pastel: bg-emerald-100/90 text-emerald-800 border-emerald-300/80
  */
+export function getUnitBadgeConfig(u, sortedUnits = []) {
+  const name = (u.unitName || u.unit_name || '').toLowerCase();
+  const uId = u.id || u.unitId;
+  const isSorted = sortedUnits && sortedUnits.length > 0;
+  const firstId = sortedUnits[0]?.id || sortedUnits[0]?.unitId;
+  const lastId = sortedUnits[sortedUnits.length - 1]?.id || sortedUnits[sortedUnits.length - 1]?.unitId;
+  const mult = Number(u.multiplier) || 1;
+
+  // Single unit product is always base/tier 3
+  if (sortedUnits && sortedUnits.length <= 1) {
+    return {
+      badge: 'bg-emerald-100/90 text-emerald-800 border-emerald-300/80',
+      mult: 'text-emerald-700/80',
+    };
+  }
+
+  // Cấp 1: Thùng / Carton / Bán buôn lớn nhất
+  if (
+    name.includes('ແກັດ') || name.includes('thùng') || name.includes('thung') || name.includes('carton') || name.includes('case') ||
+    (isSorted && uId === firstId && mult > 1)
+  ) {
+    return {
+      badge: 'bg-purple-100/90 text-purple-700 border-purple-300/80',
+      mult: 'text-purple-600/80',
+    };
+  }
+
+  // Cấp 3: Đơn vị cơ sở / Bán lẻ nhỏ nhất
+  if (
+    name.includes('ອັນ') || name.includes('ຕຸກ') || name.includes('ປ໋ອງ') || name.includes('ກິບ') || name.includes('lẻ') || name.includes('le') || name.includes('piece') ||
+    (isSorted && uId === lastId) || mult === 1
+  ) {
+    return {
+      badge: 'bg-emerald-100/90 text-emerald-800 border-emerald-300/80',
+      mult: 'text-emerald-700/80',
+    };
+  }
+
+  // Cấp 2: Pack / Gói / Đơn vị trung gian
+  return {
+    badge: 'bg-sky-100/90 text-sky-700 border-sky-300/80',
+    mult: 'text-sky-600/80',
+  };
+}
+
 export function getUnitBadgeStyle(u, sortedUnits = []) {
-  if (!sortedUnits || sortedUnits.length <= 1) {
-    return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+  return getUnitBadgeConfig(u, sortedUnits).badge;
+}
+
+/**
+ * Calculate dynamic profit margin percentage badge (+15%, -2%, etc.)
+ */
+export function calculateProfitBadge(sellingPrice, unitCost) {
+  const p = Number(sellingPrice) || 0;
+  const c = Number(unitCost) || 0;
+  if (p <= 0 || c <= 0) return null;
+  const diff = p - c;
+  const pct = Math.round((diff / c) * 100);
+  if (pct > 0) {
+    return {
+      text: `+${pct}%`,
+      className: 'text-emerald-700 bg-emerald-50 border-emerald-200/80',
+    };
+  } else if (pct < 0) {
+    return {
+      text: `${pct}%`,
+      className: 'text-rose-700 bg-rose-50 border-rose-200/80',
+    };
   }
-  // Highest unit (Thùng / Két)
-  if (u.id === sortedUnits[0]?.id && (Number(u.multiplier) > 1 || sortedUnits.length > 1)) {
-    return 'bg-purple-50 text-purple-700 border border-purple-200';
+  return {
+    text: '0%',
+    className: 'text-slate-600 bg-slate-100 border-slate-200/80',
+  };
+}
+
+/**
+ * Resolves the relative step multiplier for a unit compared to the direct child unit right below it.
+ * E.g., Carton (144) with Pack (24) below it => 144 / 24 = 6 => displays "(x6)"
+ * Pack (24) with Piece (1) below it => 24 / 1 = 24 => displays "(x24)"
+ * Base unit (1) => displays "" (no parenthesis)
+ */
+export function getUnitStepMultiplier(unit, sortedUnits = [], product = null) {
+  if (!unit || !sortedUnits || sortedUnits.length <= 1) return null;
+  const idx = sortedUnits.findIndex((u) => u.id === unit.id);
+  if (idx === -1 || idx >= sortedUnits.length - 1) {
+    return null;
   }
-  // Lowest unit (Lẻ / ອັນ)
-  if (Number(u.multiplier) === 1 || u.id === sortedUnits[sortedUnits.length - 1]?.id) {
-    return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+
+  // Check explicit direct properties if available
+  const explicitStep = Number(
+    unit.units_per_carton ??
+    unit.unitsPerCarton ??
+    unit.pack_quantity ??
+    unit.packQuantity ??
+    unit.step_multiplier ??
+    unit.stepMultiplier ??
+    (idx === 0 && product?.tierSettings?.cartonMultiplier) ??
+    (idx === 1 && sortedUnits.length > 2 && product?.tierSettings?.packMultiplier) ??
+    0
+  );
+  if (explicitStep > 1) {
+    return explicitStep;
   }
-  // Mid unit (Lốc / Gói)
-  return 'bg-blue-50 text-blue-700 border border-blue-200';
+
+  const nextUnit = sortedUnits[idx + 1];
+  const curMult = Number(unit.multiplier) || 1;
+  const nextMult = Number(nextUnit.multiplier) || 1;
+  if (nextMult <= 0) return null;
+  const step = Math.round(curMult / nextMult);
+  return step > 1 ? step : null;
 }
 
 /**
@@ -256,6 +352,7 @@ export default function ProductsView({
   onOpenBundleManager,
   isLoading,
   onUpdateProductUnitPrices,
+  onUpdateProductCosts,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -271,16 +368,35 @@ export default function ProductsView({
   // Thứ tự sắp xếp mặc định: Mới nhất ở trên đầu bảng ('newest_first')
   const [productSortOrder, setProductSortOrder] = useState('newest_first');
 
-  // Price Editing & Multi-select State (Zero-Egress Strategy)
+  // Price & Cost Editing & Multi-select State (Zero-Egress Strategy)
   const [isPriceEditMode, setIsPriceEditMode] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [dirtyUnits, setDirtyUnits] = useState({});
+  const [dirtyCosts, setDirtyCosts] = useState({});
   const [isSavingPrices, setIsSavingPrices] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState(new Set());
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkModalTargetProduct, setBulkModalTargetProduct] = useState(null);
   const [bulkModalInitialTab, setBulkModalInitialTab] = useState('manual');
   const [priceToast, setPriceToast] = useState(null);
+  const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
+
+  const handleLocalRefresh = async () => {
+    if (isLocalRefreshing) return;
+    setIsLocalRefreshing(true);
+    playRefreshBeep('products');
+    try {
+      await Promise.all([
+        onRefreshProducts?.(),
+        new Promise((res) => setTimeout(res, 600)),
+      ]);
+      playSuccessBeep('products');
+    } catch (err) {
+      console.error('Products refresh error:', err);
+    } finally {
+      setIsLocalRefreshing(false);
+    }
+  };
 
   // Local search state with debounce to prevent re-rendering catalog during high-speed scanner bursts
   const [localSearch, setLocalSearch] = useState(searchTerm || '');
@@ -366,21 +482,19 @@ export default function ProductsView({
       });
     }
 
-    // 2. Search Query Filter
+    // 2. Search Query Filter - chỉ tìm kiếm theo tên sản phẩm (và mã vạch khi quét barcode)
     const q = normalizeLao(searchTerm);
     if (q) {
       list = list.filter((p) => {
-        return (
+        const matchesName =
           (p.name && normalizeLao(p.name).includes(q)) ||
+          (p.name_vi && normalizeLao(p.name_vi).includes(q)) ||
+          (p.nameVi && normalizeLao(p.nameVi).includes(q));
+        const matchesBarcode =
           (p.barcode && normalizeLao(p.barcode).includes(q)) ||
-          (p.category && normalizeLao(p.category).includes(q)) ||
           (p.units &&
-            p.units.some(
-              (u) =>
-                normalizeLao(u.unitName).includes(q) ||
-                (u.barcode && normalizeLao(u.barcode).includes(q))
-            ))
-        );
+            p.units.some((u) => u.barcode && normalizeLao(u.barcode).includes(q)));
+        return matchesName || matchesBarcode;
       });
     }
 
@@ -479,8 +593,8 @@ export default function ProductsView({
     return filteredProducts.slice(start, start + pageSize);
   }, [filteredProducts, currentPage, pageSize]);
 
-  // Number of dirty units currently modified in Mode 2
-  const dirtyCount = Object.keys(dirtyUnits).length;
+  // Number of dirty items currently modified in Mode 2
+  const dirtyCount = Object.keys(dirtyUnits).length + Object.keys(dirtyCosts).length;
 
   // Selected products for Modal (handles either bulk selection or single quick price edit)
   const selectedProductsForModal = useMemo(() => {
@@ -597,15 +711,75 @@ export default function ProductsView({
     });
   };
 
-  // Quick reset prices for a single product in Mode 2
+  // Inline cost value change for Mode 2 (supports both Baht and Kip inputs with live exchange conversion)
+  const handleProductCostChange = (product, field, rawVal) => {
+    const val = Number(String(rawVal).replace(/[^\d]/g, '')) || 0;
+    const prodId = product.id;
+    const rate = Number(exchangeRate) || 690;
+    const maxMult = Math.max(1, ...(product.units || []).map((u) => Number(u.multiplier) || 1));
+
+    const isLakOnly =
+      (product.cost_currency || product.costCurrency) === 'LAK' ||
+      (Number(product.costBaht ?? product.cost_thb ?? 0) === 0 && Number(product.costKip ?? product.cost_lak ?? product.costPerBaseUnit ?? 0) > 0);
+
+    const origCostLak = Number(product.costLak ?? product.cost_lak ?? product.costKip ?? (Number(product.costPerBaseUnit || 0) * maxMult) ?? 0);
+    const origCostThb = Number(product.costBaht ?? product.cost_thb ?? 0);
+
+    setDirtyCosts((prev) => {
+      const existing = prev[prodId];
+      let curCostThb = existing?.cost_thb !== undefined ? existing.cost_thb : origCostThb;
+      let curCostLak = existing?.cost_lak !== undefined ? existing.cost_lak : origCostLak;
+
+      if (field === 'cost_thb') {
+        curCostThb = val;
+        // Tự động tính toán và điền giá trị theo công thức cost_lak = Math.round(cost_thb * current_exchange_rate)
+        curCostLak = Math.round(val * rate);
+      } else if (field === 'cost_lak') {
+        // Gõ trực tiếp vào ô Kíp: Giữ nguyên số tiền người dùng nhập
+        curCostLak = val;
+        if (isLakOnly) {
+          curCostThb = 0;
+        }
+      }
+
+      const costPerBaseUnit = Math.round(curCostLak / maxMult);
+      const isChanged = curCostLak !== origCostLak || (!isLakOnly && curCostThb !== origCostThb);
+
+      if (!isChanged) {
+        const copy = { ...prev };
+        delete copy[prodId];
+        return copy;
+      }
+
+      return {
+        ...prev,
+        [prodId]: {
+          productId: prodId,
+          currency: isLakOnly ? 'LAK' : 'THB',
+          cost_lak: curCostLak,
+          cost_thb: curCostThb,
+          cost_per_base_unit: costPerBaseUnit,
+        },
+      };
+    });
+  };
+
+  // Quick reset prices and costs for a single product in Mode 2
   const handleResetProductPrices = (product) => {
-    if (!product || !product.units) return;
+    if (!product) return;
     playActionClickBeep('products');
     setDirtyUnits((prev) => {
       const next = { ...prev };
-      product.units.forEach((u) => {
-        delete next[u.id];
-      });
+      if (product.units) {
+        product.units.forEach((u) => {
+          delete next[u.id];
+        });
+      }
+      return next;
+    });
+    setDirtyCosts((prev) => {
+      const next = { ...prev };
+      delete next[product.id];
       return next;
     });
   };
@@ -613,24 +787,41 @@ export default function ProductsView({
   // Save Inline Edits for Mode 2
   const handleSaveInlinePrices = async () => {
     const dirtyList = Object.values(dirtyUnits);
-    if (dirtyList.length === 0) return;
+    const dirtyCostList = Object.values(dirtyCosts);
+    if (dirtyList.length === 0 && dirtyCostList.length === 0) return;
     setIsSavingPrices(true);
     try {
-      const res = await updateProductUnitPricesZeroEgress(dirtyList);
-      if (res.success) {
-        if (onUpdateProductUnitPrices) {
-          onUpdateProductUnitPrices(res.payload);
+      const promises = [];
+      if (dirtyList.length > 0) {
+        promises.push(updateProductUnitPricesZeroEgress(dirtyList));
+      }
+      if (dirtyCostList.length > 0) {
+        promises.push(updateProductCostsZeroEgress(dirtyCostList));
+      }
+
+      const results = await Promise.all(promises);
+      const allSuccess = results.every((r) => r.success);
+
+      if (allSuccess) {
+        if (onUpdateProductUnitPrices && dirtyList.length > 0) {
+          const unitPayload = results[0]?.payload || dirtyList;
+          onUpdateProductUnitPrices(unitPayload);
+        }
+        if (onUpdateProductCosts && dirtyCostList.length > 0) {
+          onUpdateProductCosts(dirtyCostList);
         }
         playSuccessBeep('products');
         setDirtyUnits({});
+        setDirtyCosts({});
+        const totalItemsCount = dirtyList.length + dirtyCostList.length;
         setPriceToast({
           type: 'success',
-          message: `ບັນທຶກລາຄາໃໝ່ສຳເລັດແລ້ວ ${dirtyList.length} ຫົວໜ່ວຍ `,
+          message: `ບັນທຶກການແກ້ໄຂສຳເລັດແລ້ວ ${totalItemsCount} ລາຍການ`,
         });
         setTimeout(() => setPriceToast(null), 3500);
       } else {
         playErrorBeep('products');
-        alert('ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກລາຄາ: ' + (res.error || ''));
+        alert('ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກ: ' + (results.find((r) => !r.success)?.error || ''));
       }
     } catch (err) {
       console.error('Save inline prices error:', err);
@@ -639,26 +830,43 @@ export default function ProductsView({
     }
   };
 
-  // Apply Bulk Adjustment for Mode 3
-  const handleApplyBulkPrices = async (dirtyPayload) => {
-    if (!dirtyPayload || dirtyPayload.length === 0) return;
+  // Apply Bulk Adjustment for Mode 1 & Mode 2
+  const handleApplyBulkPrices = async (dirtyPayload, dirtyCostsPayload = []) => {
+    if ((!dirtyPayload || dirtyPayload.length === 0) && (!dirtyCostsPayload || dirtyCostsPayload.length === 0)) return;
     setIsSavingPrices(true);
     try {
-      const res = await updateProductUnitPricesZeroEgress(dirtyPayload);
-      if (res.success) {
-        if (onUpdateProductUnitPrices) {
-          onUpdateProductUnitPrices(res.payload);
+      const promises = [];
+      const dirtyUnitList = dirtyPayload && Array.isArray(dirtyPayload) ? dirtyPayload : [];
+      const dirtyCostList = dirtyCostsPayload && Array.isArray(dirtyCostsPayload) ? dirtyCostsPayload : [];
+
+      if (dirtyUnitList.length > 0) {
+        promises.push(updateProductUnitPricesZeroEgress(dirtyUnitList));
+      }
+      if (dirtyCostList.length > 0) {
+        promises.push(updateProductCostsZeroEgress(dirtyCostList));
+      }
+
+      const results = await Promise.all(promises);
+      const allSuccess = results.every((r) => r.success);
+
+      if (allSuccess) {
+        if (onUpdateProductUnitPrices && dirtyUnitList.length > 0) {
+          onUpdateProductUnitPrices(dirtyUnitList);
+        }
+        if (onUpdateProductCosts && dirtyCostList.length > 0) {
+          onUpdateProductCosts(dirtyCostList);
         }
         playSuccessBeep('products');
         setSelectedProductIds(new Set());
+        const totalItemsCount = dirtyUnitList.length + dirtyCostList.length;
         setPriceToast({
           type: 'success',
-          message: `ປັບລາຄາພ້ອມກັນສຳເລັດ ${dirtyPayload.length} ຫົວໜ່ວຍ `,
+          message: `ປັບລາຄາ ແລະ ຕົ້ນທຶນສຳເລັດ ${totalItemsCount} ລາຍການ`,
         });
         setTimeout(() => setPriceToast(null), 3500);
       } else {
         playErrorBeep('products');
-        alert('ເກີດຂໍ້ຜິດພາດໃນການປັບລາຄາ: ' + (res.error || ''));
+        alert('ເກີດຂໍ້ຜິດພາດໃນການປັບລາຄາ ຫຼື ຕົ້ນທຶນ');
       }
     } catch (err) {
       console.error('Bulk apply price error:', err);
@@ -895,15 +1103,18 @@ export default function ProductsView({
           {onRefreshProducts && (
             <button
               type="button"
-              onClick={() => {
-                playUnitChangeBeep('products');
-                onRefreshProducts();
-              }}
-              disabled={isLoading}
-              className="p-2 sm:p-2.5 h-9 sm:h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 border border-slate-200 shadow-2xs shrink-0"
-              title="ໂຫຼດຂໍ້ມູນຄືນຈາກ Supabase"
+              onClick={handleLocalRefresh}
+              disabled={isLocalRefreshing}
+              className={`group/ref p-2 sm:px-3 sm:py-2.5 h-9 sm:h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer active:scale-90 active:rotate-12 flex items-center justify-center gap-1.5 border border-slate-200 shadow-2xs shrink-0 ${
+                isLocalRefreshing ? 'opacity-60 cursor-not-allowed' : ''
+              }`}
+              title="ໂຫຼດຂໍ້ມູນຄືນຈາກ Supabase (Refresh Data)"
             >
-              <ArrowClockwise size={15} className={isLoading ? 'animate-spin' : ''} weight="bold" />
+              <ArrowClockwise
+                size={16}
+                weight="bold"
+                className={`transition-transform duration-300 ${isLocalRefreshing ? 'animate-spin text-teal-600' : 'group-hover/ref:rotate-180'}`}
+              />
               <span className="hidden sm:inline">ຣີເຟຣຊ</span>
             </button>
           )}
@@ -982,11 +1193,12 @@ export default function ProductsView({
         </div>
       </div>
 
-      {/* 2. Unified Sticky Toolbar: Single Row for Search, Category Filter & Quick Price Actions */}
+      {/* 2. Unified Sticky Toolbar: Responsive 2-row on Mobile, 1-row on Desktop */}
       <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md py-2 -mx-3 sm:-mx-5 md:-mx-6 px-3 sm:px-5 md:px-6 border-b border-slate-200 shadow-2xs mb-3">
-        <div className="flex items-center gap-1.5 sm:gap-2 w-full flex-wrap sm:flex-nowrap">
-          {/* Barcode & Text Search Input */}
-          <div className="relative flex-1 min-w-[140px] sm:min-w-[180px]">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full">
+          {/* HÀNG 1: Ô TÌM KIẾM VÀ NÚT QUÉT MÃ VẠCH (SEARCH & SCAN) */}
+          <div className="flex items-center gap-2 flex-1 w-full min-w-0">
+            <div className="relative flex-1 min-w-0">
               <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               <input
                 ref={searchInputRef}
@@ -1001,46 +1213,45 @@ export default function ProductsView({
                 value={localSearch}
                 onChange={handleSearchChange}
                 onKeyDown={handleSearchKeyDown}
-                placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ, ໝວດໝູ່ ຫຼື ສະແກນບາໂຄດ..."
-                className="w-full pl-9 pr-32 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium shadow-2xs min-h-[40px] sm:min-h-[36px]"
+                placeholder="ຄົ້ນຫາຊື່ສິນຄ້າ, ໝວດໝູ່ ຫຼື ສະແກນ..."
+                className="w-full pl-9 pr-9 md:pr-10 h-10 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-teal-600 font-medium shadow-2xs"
               />
-
-              {/* Action Buttons: Quick Clear 'X' and Camera Scan - Compact height with breathing room */}
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                {localSearch.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleClearSearch}
-                    className="w-6 h-6 sm:w-6.5 sm:h-6.5 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white rounded-md flex items-center justify-center shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all"
-                    title="ລຶບການຄົ້ນຫາ (Xóa tất cả)"
-                  >
-                    <X size={14} weight="bold" />
-                  </button>
-                )}
-
-                {/* Barcode / Camera Button inside Search Bar */}
+              {localSearch.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setScannerOpen(true)}
-                  className="h-6 sm:h-6.5 px-2 rounded-md bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center gap-1 active:scale-95"
-                  title="ເປີດກ້ອງສະແກນບາໂຄດສິນຄ້າ (Camera Barcode Scanner) • ຮອງຮັບເຄື່ອງຍິງບາໂຄດ USB/Bluetooth ອັດຕະໂນມັດ"
+                  onClick={handleClearSearch}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white rounded-md flex items-center justify-center shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all"
+                  title="ລຶບການຄົ້ນຫາ (Clear)"
                 >
-                  <Barcode size={14} weight="bold" />
-                  <span className="text-[10px] font-bold">ສະແກນ</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="Hardware Scanner Ready" />
+                  <X size={14} weight="bold" />
                 </button>
-              </div>
+              )}
             </div>
 
-            {/* Searchable Category Select Dropdown */}
-            <div ref={categoryDropdownRef} className="relative w-36 sm:w-44 md:w-52 shrink-0">
+            {/* Nút Quét mã vạch: Mobile icon vuông w-10 h-10, Desktop có thêm chữ ສະແກນ */}
+            <button
+              type="button"
+              onClick={() => setScannerOpen(true)}
+              className="w-10 h-10 md:w-auto md:px-3.5 md:h-10 rounded-xl bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-700 transition-all cursor-pointer border border-teal-200 shadow-2xs flex items-center justify-center gap-1.5 active:scale-95 shrink-0 p-0 md:py-2"
+              title="ເປີດກ້ອງສະແກນບາໂຄດສິນຄ້າ (Camera Barcode Scanner)"
+            >
+              <Barcode size={18} weight="bold" />
+              <span className="hidden md:inline text-xs font-bold">ສະແກນ</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse hidden md:inline" />
+            </button>
+          </div>
+
+          {/* HÀNG 2: CÁC NÚT LỌC VÀ CHỨC NĂNG (TÁCH XUỐNG HÀNG THỨ 2 TRÊN MOBILE) */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full md:w-auto">
+            {/* Dropdown Danh mục (ທຸກໝວດໝູ່) */}
+            <div ref={categoryDropdownRef} className="relative flex-1 md:w-48 lg:w-56 min-w-0 shrink-0">
               <button
                 type="button"
                 onClick={() => {
                   playActionClickBeep('products');
                   setIsCategoryDropdownOpen(!isCategoryDropdownOpen);
                 }}
-                className={`w-full px-2.5 h-9 bg-white border rounded-xl text-xs flex items-center justify-between gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                className={`w-full px-2.5 h-10 bg-white border rounded-xl text-xs flex items-center justify-between gap-1.5 transition-all cursor-pointer shadow-2xs ${
                   isCategoryDropdownOpen
                     ? 'border-teal-600 ring-2 ring-teal-500/20 text-slate-900'
                     : selectedCategory !== 'ALL'
@@ -1055,7 +1266,7 @@ export default function ProductsView({
                     className={selectedCategory !== 'ALL' ? 'text-teal-600 shrink-0' : 'text-slate-400 shrink-0'}
                   />
                   <span className="truncate text-left font-medium">
-                    {selectedCategory === 'ALL' ? 'ທຸກໝວດໝູ່ (All Categories)' : selectedCategory}
+                    {selectedCategory === 'ALL' ? 'ທຸກໝວດໝູ່' : selectedCategory}
                   </span>
                   {selectedCategory !== 'ALL' && (
                     <span className="px-1.5 py-0.2 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold shrink-0">
@@ -1117,7 +1328,6 @@ export default function ProductsView({
 
                   {/* Categories Options List */}
                   <div className="max-h-60 overflow-y-auto p-1.5 space-y-0.5">
-                    {/* Option: All Categories */}
                     {!categorySearchTerm && (
                       <button
                         type="button"
@@ -1172,7 +1382,7 @@ export default function ProductsView({
                       })
                     ) : (
                       <div className="py-4 text-center text-xs text-slate-400 font-medium">
-                        ບໍ່ພົບໝວດໝູ່ "{categorySearchTerm}"
+                        ບໍ່ພົບໝວດໝູ່ "${categorySearchTerm}"
                       </div>
                     )}
                   </div>
@@ -1180,36 +1390,7 @@ export default function ProductsView({
               )}
             </div>
 
-            {/* Nút Sắp xếp thứ tự sản phẩm: Mặc định Mới nhất ở trên đầu bảng (newest_first), bấm để chuyển sang Cũ nhất ở trên */}
-            {!isPriceEditMode && (
-              <button
-                type="button"
-                onClick={() => {
-                  playUnitChangeBeep('products');
-                  setProductSortOrder((prev) => (prev === 'newest_first' ? 'oldest_first' : 'newest_first'));
-                }}
-                className={`h-9 px-2.5 sm:px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center gap-1.5 shrink-0 ${
-                  productSortOrder === 'newest_first'
-                    ? 'bg-teal-50 hover:bg-teal-100 text-teal-800 border-teal-300'
-                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
-                }`}
-                title={
-                  productSortOrder === 'newest_first'
-                    ? 'ກຳລັງສະແດງ: ສິນຄ້າໃໝ່ສຸດຂຶ້ນເທິງ (ຄລິກເພື່ອປ່ຽນເປັນ ເກົ່າສຸດຂຶ້ນເທິງ)'
-                    : 'ກຳລັງສະແດງ: ສິນຄ້າເກົ່າສຸດຂຶ້ນເທິງ (ຄລິກເພື່ອປ່ຽນເປັນ ໃໝ່ສຸດຂຶ້ນເທິງ)'
-                }
-              >
-                <ArrowsDownUp size={15} weight="bold" />
-                <span className="hidden sm:inline">
-                  {productSortOrder === 'newest_first' ? 'ໃໝ່ສຸດເທິງ' : 'ເກົ່າສຸດເທິງ'}
-                </span>
-                <span className="sm:hidden text-[11px]">
-                  {productSortOrder === 'newest_first' ? 'ໃໝ່' : 'ເກົ່າ'}
-                </span>
-              </button>
-            )}
-
-            {/* Nút 1: Multi-Select Toggle (Icon vuông không chữ: Xám khi tắt, Xanh thành công khi bật) */}
+            {/* Nút Chọn nhiều (Checkbox toggle) */}
             {!isPriceEditMode && (
               <button
                 type="button"
@@ -1219,7 +1400,7 @@ export default function ProductsView({
                   }
                   setIsSelectionMode(!isSelectionMode);
                 }}
-                className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95 ${
                   isSelectionMode
                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 ring-2 ring-emerald-300 border border-emerald-600'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200'
@@ -1230,26 +1411,27 @@ export default function ProductsView({
               </button>
             )}
 
-            {/* Nút 2: Sửa giá hàng loạt - Gọn gàng, giảm chữ */}
+            {/* Nút Sửa giá nhóm khi chọn nhiều */}
             {!isPriceEditMode && isSelectionMode && selectedProductIds.size > 0 && (
               <button
                 type="button"
                 onClick={handleOpenBulkPriceModal}
-                className="px-2.5 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 shadow-md shadow-primary/20 active:scale-95 bg-primary hover:bg-primary-hover text-white animate-in zoom-in-95 duration-150"
+                className="px-2.5 h-10 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 shadow-md shadow-primary/20 active:scale-95 bg-primary hover:bg-primary-hover text-white animate-in zoom-in-95 duration-150"
                 title={`ແກ້ໄຂລາຄາພ້ອມກັນ ${selectedProductIds.size} ສິນຄ້າ`}
               >
-                <PencilLine size={14} weight="bold" />
+                <PencilLine size={15} weight="bold" />
                 <span className="whitespace-nowrap">ແກ້ໄຂ ({selectedProductIds.size})</span>
               </button>
             )}
 
-            {/* Nút 3: Mode 2 - Bật/Tắt Chế độ sửa giá nhanh - Gọn gàng, giảm chữ */}
+            {/* Nút Sửa nhanh (ແກ້ໄຂດ່ວນ) */}
             <button
               type="button"
               onClick={() => {
                 if (isPriceEditMode && dirtyCount > 0) {
                   if (!window.confirm('ທ່ານມີການແກ້ໄຂລາຄາທີ່ຍັງບໍ່ທັນບັນທຶກ, ຕ້ອງການອອກແທ້ບໍ່?')) return;
                   setDirtyUnits({});
+                  setDirtyCosts({});
                 }
                 const nextMode = !isPriceEditMode;
                 setIsPriceEditMode(nextMode);
@@ -1258,14 +1440,14 @@ export default function ProductsView({
                   setSelectedProductIds(new Set());
                 }
               }}
-              className={`px-2.5 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 shadow-2xs active:scale-95 ${
+              className={`h-10 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-2xs active:scale-95 ${
                 isPriceEditMode
                   ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300 shadow-amber-500/20 shadow-md'
                   : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
               }`}
-              title="ເປີດ/ປິດ ໂໝດແກ້ໄຂລາຄາສິນຄ້າດ່ວນເທິງຕາຕະລາງ"
+              title="ເປີດ/ປິດ ໂໝດແກ້ໄຂລາຄາສິນຄ້າດ່ວນ"
             >
-              <CurrencyDollar size={15} weight="bold" />
+              <CurrencyDollar size={16} weight="bold" />
               <span className="whitespace-nowrap">{isPriceEditMode ? 'ປິດແກ້ໄຂ' : 'ແກ້ໄຂດ່ວນ'}</span>
               {dirtyCount > 0 && (
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping ml-0.5" />
@@ -1273,6 +1455,7 @@ export default function ProductsView({
             </button>
           </div>
         </div>
+      </div>
 
       {/* 3. Skeleton Loading State (While fetching data) */}
       {isLoading && products.length === 0 ? (
@@ -1282,7 +1465,28 @@ export default function ProductsView({
           {/* Scroll anchor for pagination scroll-to-top */}
           <div ref={tableTopRef} className="scroll-mt-3 sm:scroll-mt-4" />
           {/* 3. A: MOBILE VIEW (< 768px) - Touch-Optimized Card List */}
-          <div className="md:hidden flex flex-col gap-3 pb-8">
+          <div className="md:hidden flex items-center justify-between pb-1.5 px-1">
+            <span className="text-xs font-bold text-slate-500">
+              ລາຍການສິນຄ້າ ({filteredProducts.length})
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                playUnitChangeBeep('products');
+                setProductSortOrder((prev) => (prev === 'newest_first' ? 'oldest_first' : 'newest_first'));
+              }}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border cursor-pointer active:scale-95 transition-all ${
+                productSortOrder === 'newest_first'
+                  ? 'bg-teal-50 text-teal-800 border-teal-200'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}
+              title="ກົດເພື່ອສະຫຼັບລະຫວ່າງ ໃໝ່ສຸດ / ເກົ່າສຸດ"
+            >
+              <ArrowsDownUp size={12} weight="bold" />
+              <span>{productSortOrder === 'newest_first' ? 'ໃໝ່ສຸດ' : 'ເກົ່າສຸດ'}</span>
+            </button>
+          </div>
+          <div className={`md:hidden flex flex-col gap-3 ${isPriceEditMode ? 'pb-32' : 'pb-8'}`}>
             {paginatedProducts.map((p) => {
               const info = getProductStockDetails(p, exchangeRate);
               const isHighlighted = p.id === scannedHighlightId;
@@ -1300,8 +1504,25 @@ export default function ProductsView({
                     }
                   ];
 
+              const isLakCurrency =
+                (p.cost_currency || p.costCurrency) === 'LAK' ||
+                (Number(p.costBaht ?? p.cost_thb ?? 0) === 0 && Number(p.costKip ?? p.cost_lak ?? p.costPerBaseUnit ?? 0) > 0);
+
+              const maxMult = Math.max(1, ...(units || []).map((un) => Number(un.multiplier) || 1));
+              const origCostLak = Number(p.costLak ?? p.cost_lak ?? p.costKip ?? (Number(p.costPerBaseUnit || 0) * maxMult) ?? 0);
+              const origCostThb = Number(p.costBaht ?? p.cost_thb ?? 0);
+
+              const curCostLak = dirtyCosts[p.id]?.cost_lak !== undefined ? dirtyCosts[p.id].cost_lak : origCostLak;
+              const curCostThb = dirtyCosts[p.id]?.cost_thb !== undefined ? dirtyCosts[p.id].cost_thb : origCostThb;
+
+              const isCostDirty = dirtyCosts[p.id] !== undefined;
+              const isProductDirty = units.some((u) => Boolean(dirtyUnits[u.id])) || isCostDirty;
+
+              const effectiveCostPerBaseUnit = dirtyCosts[p.id]?.cost_per_base_unit !== undefined
+                ? dirtyCosts[p.id].cost_per_base_unit
+                : (Number(p.costPerBaseUnit ?? p.cost_per_base_unit ?? 0) || (curCostLak > 0 ? Math.round(curCostLak / maxMult) : 0));
+
               if (isPriceEditMode) {
-                const isProductDirty = units.some((u) => Boolean(dirtyUnits[u.id]));
                 return (
                   <div
                     key={p.id}
@@ -1367,18 +1588,71 @@ export default function ProductsView({
                       )}
                     </div>
 
-                    {/* Cost Info in Mobile Edit Mode */}
-                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-between text-xs font-mono">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-400 text-[10.5px] font-sans">ຕົ້ນທຶນ ({info.cartonUnitName}):</span>
-                        <span className="font-extrabold text-slate-900">{formatBaht(info.cartonCostBaht)}</span>
-                        <span className="text-slate-300">/</span>
-                        <span className="font-extrabold text-slate-800">{formatKip(info.cartonCostKip)}</span>
-                      </div>
-                      {info.cartonUnit && info.packUnit && (
-                        <span className="text-[9.5px] text-slate-500 font-sans font-bold bg-white px-1.5 py-0.5 rounded border border-slate-200">
-                          1 {info.cName} = {info.packsPerCarton} {info.pName}
-                        </span>
+                    {/* Cost Info & Input in Mobile Edit Mode (Both Baht & Kip inputs for THB, single Kip for LAK) */}
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 flex flex-col gap-1.5 text-xs">
+                      <span className="text-slate-500 font-bold font-sans">
+                        ຕົ້ນທຶນ ({info.cartonUnitName}):
+                      </span>
+
+                      {isLakCurrency ? (
+                        <div className="relative">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={curCostLak > 0 ? Number(curCostLak).toLocaleString('de-DE') : ''}
+                            onChange={(e) => handleProductCostChange(p, 'cost_lak', e.target.value)}
+                            placeholder="0 ₭"
+                            className={`w-full h-8 px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                              isCostDirty
+                                ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                            }`}
+                            title={`${info.cartonUnitName} - ຕົ້ນທຶນ (LAK)`}
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                            ₭
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="relative">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={curCostThb > 0 ? Number(curCostThb).toLocaleString('de-DE') : ''}
+                              onChange={(e) => handleProductCostChange(p, 'cost_thb', e.target.value)}
+                              placeholder="0 ฿"
+                              className={`w-full h-8 px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                isCostDirty
+                                  ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                  : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                              }`}
+                              title={`${info.cartonUnitName} - ຕົ້ນທຶນ (THB)`}
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                              ฿
+                            </span>
+                          </div>
+
+                          <div className="relative">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={curCostLak > 0 ? Number(curCostLak).toLocaleString('de-DE') : ''}
+                              onChange={(e) => handleProductCostChange(p, 'cost_lak', e.target.value)}
+                              placeholder="0 ₭"
+                              className={`w-full h-8 px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                isCostDirty
+                                  ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                  : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                              }`}
+                              title={`${info.cartonUnitName} - ຕົ້ນທຶນ (LAK)`}
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                              ₭
+                            </span>
+                          </div>
+                        </div>
                       )}
                     </div>
 
@@ -1399,6 +1673,10 @@ export default function ProductsView({
                         const isPrice3Dirty = dirty?.price_3 !== undefined && dirty.price_3 !== origPrice3;
                         const isAnyDirty = isRetailDirty || isPrice2Dirty || isPrice3Dirty;
 
+                        const unitCost = Math.round(effectiveCostPerBaseUnit * (Number(u.multiplier) || 1));
+                        
+                        const stepMult = getUnitStepMultiplier(u, units, p);
+
                         return (
                           <div
                             key={u.id}
@@ -1407,14 +1685,19 @@ export default function ProductsView({
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span
-                                className={`font-bold px-2 py-0.5 rounded text-xs min-w-[70px] text-center ${getUnitBadgeStyle(
-                                  u,
-                                  units
-                                )}`}
-                              >
-                                {u.unitName} {u.multiplier > 1 ? `(x${u.multiplier})` : ''}
-                              </span>
+                              {(() => {
+                                const bConfig = getUnitBadgeConfig(u, units);
+                                return (
+                                  <span
+                                    className={`inline-flex items-center justify-center gap-1 px-2.5 py-1 min-h-[26px] rounded-md text-xs min-w-[68px] text-center border font-medium shadow-2xs ${bConfig.badge}`}
+                                  >
+                                    <span>{u.unitName}</span>
+                                    {stepMult ? (
+                                      <span className={`font-normal text-[10.5px] ${bConfig.mult}`}>(x{stepMult})</span>
+                                    ) : null}
+                                  </span>
+                                );
+                              })()}
                               {isAnyDirty && (
                                 <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900">
                                   ແກ້ໄຂແລ້ວ
@@ -1425,51 +1708,51 @@ export default function ProductsView({
                             <div className="grid grid-cols-3 gap-1.5">
                               {/* Price 1 */}
                               <div className="flex flex-col gap-0.5">
-                                <span className="text-[9.5px] font-bold text-slate-500">ລາຄາ 1 (ມາດຕະຖານ)</span>
+                                <span className="text-[9.5px] font-bold text-slate-500">ລາຄາ 1</span>
                                 <input
                                   type="text"
                                   inputMode="numeric"
                                   value={curRetail > 0 ? Number(curRetail).toLocaleString('de-DE') : ''}
                                   onChange={(e) => handleUnitValueChange(u, 'retail_price', e.target.value)}
                                   placeholder="0"
-                                  className={`w-full h-10 px-2 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                  className={`w-full h-9 px-2 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
                                     isRetailDirty
-                                      ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200 text-amber-900 font-semibold'
-                                      : 'bg-white border-slate-200 text-slate-800'
+                                      ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                      : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
                                   }`}
                                 />
                               </div>
 
                               {/* Price 2 */}
                               <div className="flex flex-col gap-0.5">
-                                <span className="text-[9.5px] font-bold text-slate-500">ລາຄາ 2 (ລູກຄ້າປະຈຳ)</span>
+                                <span className="text-[9.5px] font-bold text-slate-500">ລາຄາ 2</span>
                                 <input
                                   type="text"
                                   inputMode="numeric"
                                   value={curPrice2 > 0 ? Number(curPrice2).toLocaleString('de-DE') : ''}
                                   onChange={(e) => handleUnitValueChange(u, 'price_2', e.target.value)}
                                   placeholder="0"
-                                  className={`w-full h-10 px-2 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                  className={`w-full h-9 px-2 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
                                     isPrice2Dirty
-                                      ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200 text-amber-900 font-semibold'
-                                      : 'bg-white border-slate-200 text-slate-800'
+                                      ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                      : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
                                   }`}
                                 />
                               </div>
 
                               {/* Price 3 */}
                               <div className="flex flex-col gap-0.5">
-                                <span className="text-[9.5px] font-bold text-slate-500">ລາຄາ 3 (VIP/ຂາຍສົ່ງ)</span>
+                                <span className="text-[9.5px] font-bold text-slate-500">ລາຄາ 3</span>
                                 <input
                                   type="text"
                                   inputMode="numeric"
                                   value={curPrice3 > 0 ? Number(curPrice3).toLocaleString('de-DE') : ''}
                                   onChange={(e) => handleUnitValueChange(u, 'price_3', e.target.value)}
                                   placeholder="0"
-                                  className={`w-full h-10 px-2 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                  className={`w-full h-9 px-2 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
                                     isPrice3Dirty
-                                      ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200 text-amber-900 font-semibold'
-                                      : 'bg-white border-slate-200 text-slate-800'
+                                      ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                      : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
                                   }`}
                                 />
                               </div>
@@ -1604,8 +1887,12 @@ export default function ProductsView({
               <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-between text-xs font-mono">
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400 text-[11px] font-sans">ຕົ້ນທຶນ ({info.cartonUnitName}):</span>
-                  <span className="font-black text-slate-900">{formatBaht(info.cartonCostBaht)}</span>
-                  <span className="text-slate-300">/</span>
+                  {!isLakCurrency && (
+                    <>
+                      <span className="font-black text-slate-900">{formatBaht(info.cartonCostBaht)}</span>
+                      <span className="text-slate-300">/</span>
+                    </>
+                  )}
                   <span className="font-black text-slate-800">{formatKip(info.cartonCostKip)}</span>
                 </div>
                 {info.cartonUnit && info.packUnit && (
@@ -1801,7 +2088,32 @@ export default function ProductsView({
               )}
               {isPriceEditMode ? (
                 <>
-                  <th className="py-3.5 px-4 w-[28%] min-w-[240px]">ຮູບ & ຂໍ້ມູນສິນຄ້າ</th>
+                  <th
+                    className="py-3.5 px-4 w-[28%] min-w-[240px] cursor-pointer select-none hover:bg-slate-100/90 transition-colors group"
+                    onClick={() => {
+                      playUnitChangeBeep('products');
+                      setProductSortOrder((prev) => (prev === 'newest_first' ? 'oldest_first' : 'newest_first'));
+                    }}
+                    title={
+                      productSortOrder === 'newest_first'
+                        ? 'ກຳລັງສະແດງ: ສິນຄ້າໃໝ່ສຸດຂຶ້ນເທິງ (ຄລິກເພື່ອປ່ຽນເປັນ ເກົ່າສຸດຂຶ້ນເທິງ)'
+                        : 'ກຳລັງສະແດງ: ສິນຄ້າເກົ່າສຸດຂຶ້ນເທິງ (ຄລິກເພື່ອປ່ຽນເປັນ ໃໝ່ສຸດຂຶ້ນເທິງ)'
+                    }
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="group-hover:text-teal-700 transition-colors">ຮູບ & ຂໍ້ມູນສິນຄ້າ</span>
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-all ${
+                          productSortOrder === 'newest_first'
+                            ? 'text-teal-700 bg-teal-100/80 border border-teal-200'
+                            : 'text-amber-800 bg-amber-100/80 border border-amber-200'
+                        }`}
+                      >
+                        <ArrowsDownUp size={12} weight="bold" />
+                        <span>{productSortOrder === 'newest_first' ? 'ໃໝ່ສຸດ' : 'ເກົ່າສຸດ'}</span>
+                      </span>
+                    </div>
+                  </th>
                   <th className="py-3.5 px-3 w-[15%] min-w-[120px]">ຕົ້ນທຶນບາດ (฿) & ກີບ (₭)</th>
                   <th className="py-3.5 px-3 w-[45%] min-w-[420px]">
                     <div className="flex items-center gap-2">
@@ -1818,11 +2130,29 @@ export default function ProductsView({
                 </>
               ) : (
                 <>
-                  <th className="py-3.5 px-4 w-[24%] min-w-[200px]">
+                  <th
+                    className="py-3.5 px-4 w-[24%] min-w-[200px] cursor-pointer select-none hover:bg-slate-100/90 transition-colors group"
+                    onClick={() => {
+                      playUnitChangeBeep('products');
+                      setProductSortOrder((prev) => (prev === 'newest_first' ? 'oldest_first' : 'newest_first'));
+                    }}
+                    title={
+                      productSortOrder === 'newest_first'
+                        ? 'ກຳລັງສະແດງ: ສິນຄ້າໃໝ່ສຸດຂຶ້ນເທິງ (ຄລິກເພື່ອປ່ຽນເປັນ ເກົ່າສຸດຂຶ້ນເທິງ)'
+                        : 'ກຳລັງສະແດງ: ສິນຄ້າເກົ່າສຸດຂຶ້ນເທິງ (ຄລິກເພື່ອປ່ຽນເປັນ ໃໝ່ສຸດຂຶ້ນເທິງ)'
+                    }
+                  >
                     <div className="flex items-center gap-1.5">
-                      <span>ຮູບ & ຊື່ສິນຄ້າ</span>
-                      <span className="text-[10px] font-bold text-teal-700 bg-teal-100/80 px-1.5 py-0.5 rounded">
-                        {productSortOrder === 'newest_first' ? 'ໃໝ່ສຸດ' : 'ເກົ່າສຸດ'}
+                      <span className="group-hover:text-teal-700 transition-colors">ຮູບ & ຊື່ສິນຄ້າ</span>
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-all ${
+                          productSortOrder === 'newest_first'
+                            ? 'text-teal-700 bg-teal-100/80 border border-teal-200'
+                            : 'text-amber-800 bg-amber-100/80 border border-amber-200'
+                        }`}
+                      >
+                        <ArrowsDownUp size={12} weight="bold" />
+                        <span>{productSortOrder === 'newest_first' ? 'ໃໝ່ສຸດ' : 'ເກົ່າສຸດ'}</span>
                       </span>
                     </div>
                   </th>
@@ -1854,13 +2184,29 @@ export default function ProductsView({
                     }
                   ];
 
-              const isProductDirty = units.some((u) => Boolean(dirtyUnits[u.id]));
+              const isLakCurrency =
+                (p.cost_currency || p.costCurrency) === 'LAK' ||
+                (Number(p.costBaht ?? p.cost_thb ?? 0) === 0 && Number(p.costKip ?? p.cost_lak ?? p.costPerBaseUnit ?? 0) > 0);
+
+              const maxMult = Math.max(1, ...(units || []).map((un) => Number(un.multiplier) || 1));
+              const origCostLak = Number(p.costLak ?? p.cost_lak ?? p.costKip ?? (Number(p.costPerBaseUnit || 0) * maxMult) ?? 0);
+              const origCostThb = Number(p.costBaht ?? p.cost_thb ?? 0);
+
+              const curCostLak = dirtyCosts[p.id]?.cost_lak !== undefined ? dirtyCosts[p.id].cost_lak : origCostLak;
+              const curCostThb = dirtyCosts[p.id]?.cost_thb !== undefined ? dirtyCosts[p.id].cost_thb : origCostThb;
+
+              const isCostDirty = dirtyCosts[p.id] !== undefined;
+              const isProductDirty = units.some((u) => Boolean(dirtyUnits[u.id])) || isCostDirty;
+
+              const effectiveCostPerBaseUnit = dirtyCosts[p.id]?.cost_per_base_unit !== undefined
+                ? dirtyCosts[p.id].cost_per_base_unit
+                : (Number(p.costPerBaseUnit ?? p.cost_per_base_unit ?? 0) || (curCostLak > 0 ? Math.round(curCostLak / maxMult) : 0));
 
               if (isPriceEditMode) {
                 return (
                   <tr
                     key={`${p.id}_edit`}
-                    className="transition-colors duration-150 hover:bg-slate-50/80 bg-white"
+                    className="transition-colors duration-150 hover:bg-slate-50/90 bg-white border-b-[2.5px] border-slate-300/90 [&>td]:border-b-[2.5px] [&>td]:border-slate-300/90"
                   >
                     {/* CỘT 1: HÌNH ẢNH & THÔNG TIN SẢN PHẨM (GIỮ NGUYÊN BẢN GỐC) */}
                     <td className="py-3 px-4 align-top">
@@ -1921,29 +2267,74 @@ export default function ProductsView({
 
                     {/* CỘT 2: GIÁ VỐN (ຕົ້ນທຶນ: Bath ฿ / Kip ₭) */}
                     <td className="py-3 px-3 align-top">
-                      <div className="flex flex-col gap-0.5 text-xs">
-                        <div className="flex items-center gap-1.5 font-mono">
-                          <span className="text-[10px] font-bold text-slate-400 w-3">฿</span>
-                          <span className="font-extrabold text-slate-900">
-                            {formatBaht(info.cartonCostBaht).replace(' ฿', '')} ฿
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-sans">
-                            / {info.cartonUnitName}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 font-mono">
-                          <span className="text-[10px] font-bold text-slate-400 w-3">₭</span>
-                          <span className="font-extrabold text-slate-800">
-                            {formatKip(info.cartonCostKip).replace(' ₭', '')} ₭
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-sans">
-                            / {info.cartonUnitName}
-                          </span>
-                        </div>
-                        {info.cartonUnit && info.packUnit && (
-                          <span className="text-[10px] text-slate-500 font-sans font-bold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 mt-1 inline-block w-fit">
-                            1 {info.cName} = {info.packsPerCarton} {info.pName}
-                          </span>
+                      <div className="flex flex-col gap-1.5 text-xs">
+                        <span className="text-[10px] font-bold text-slate-400">
+                          ຕົ້ນທຶນ ({info.cartonUnitName}):
+                        </span>
+
+                        {isLakCurrency ? (
+                          /* CHỈ 1 Ô INPUT KÍP CHO SẢN PHẨM TIỀN KÍP */
+                          <div className="relative">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={curCostLak > 0 ? Number(curCostLak).toLocaleString('de-DE') : ''}
+                              onChange={(e) => handleProductCostChange(p, 'cost_lak', e.target.value)}
+                              placeholder="0 ₭"
+                              className={`w-full h-9 px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                isCostDirty
+                                  ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                  : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                              }`}
+                              title={`${info.cartonUnitName} - ຕົ້ນທຶນ (LAK)`}
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                              ₭
+                            </span>
+                          </div>
+                        ) : (
+                          /* ĐỦ 2 Ô INPUT: BAHT VÀ KÍP CHO SẢN PHẨM TIỀN BAHT */
+                          <div className="flex flex-col gap-1.5">
+                            {/* Input 1: Giá vốn Baht */}
+                            <div className="relative">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={curCostThb > 0 ? Number(curCostThb).toLocaleString('de-DE') : ''}
+                                onChange={(e) => handleProductCostChange(p, 'cost_thb', e.target.value)}
+                                placeholder="0 ฿"
+                                className={`w-full h-8 px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                  isCostDirty
+                                    ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                    : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                                }`}
+                                title={`${info.cartonUnitName} - ຕົ້ນທຶນ (THB)`}
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                                ฿
+                              </span>
+                            </div>
+
+                            {/* Input 2: Giá vốn Kíp */}
+                            <div className="relative">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={curCostLak > 0 ? Number(curCostLak).toLocaleString('de-DE') : ''}
+                                onChange={(e) => handleProductCostChange(p, 'cost_lak', e.target.value)}
+                                placeholder="0 ₭"
+                                className={`w-full h-8 px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                  isCostDirty
+                                    ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                    : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                                }`}
+                                title={`${info.cartonUnitName} - ຕົ້ນທຶນ (LAK)`}
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                                ₭
+                              </span>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </td>
@@ -1965,82 +2356,100 @@ export default function ProductsView({
                           const isPrice2Dirty = dirty?.price_2 !== undefined && dirty.price_2 !== origPrice2;
                           const isPrice3Dirty = dirty?.price_3 !== undefined && dirty.price_3 !== origPrice3;
 
+                          const unitCost = Math.round(effectiveCostPerBaseUnit * (Number(u.multiplier) || 1));
+                          
+                          const stepMult = getUnitStepMultiplier(u, units, p);
+
                           return (
                             <div
                               key={u.id}
-                              className="flex items-center gap-2 py-1.5 border-b border-slate-100 last:border-b-0"
+                              className="flex items-start gap-2 py-2 border-b border-slate-100 last:border-b-0"
                             >
-                              {/* Badge tên đơn vị nổi bật có màu riêng để nhận diện */}
-                              <span
-                                className={`font-bold px-2 py-0.5 rounded text-xs min-w-[70px] text-center shrink-0 ${getUnitBadgeStyle(
-                                  u,
-                                  units
-                                )}`}
-                                title={`${u.unitName} (multiplier: ${u.multiplier})`}
-                              >
-                                {u.unitName} {u.multiplier > 1 ? `(x${u.multiplier})` : ''}
-                              </span>
+                              {/* Badge tên đơn vị Pastel phân cấp rõ ràng */}
+                              {(() => {
+                                const bConfig = getUnitBadgeConfig(u, units);
+                                return (
+                                  <span
+                                    className={`inline-flex items-center justify-center gap-1 px-2.5 py-1 min-h-[28px] rounded-md text-xs min-w-[72px] text-center shrink-0 mt-0.5 border font-medium shadow-2xs ${bConfig.badge}`}
+                                    title={`${u.unitName} (multiplier: ${u.multiplier})`}
+                                  >
+                                    <span>{u.unitName}</span>
+                                    {stepMult ? (
+                                      <span className={`font-normal text-[11px] ${bConfig.mult}`}>(x{stepMult})</span>
+                                    ) : null}
+                                  </span>
+                                );
+                              })()}
 
                               {/* 3 Ô INPUT TƯƠNG ỨNG VỚI 3 MỨC GIÁ CỦA ĐƠN VỊ ĐÓ */}
                               <div className="grid grid-cols-3 gap-2 flex-1">
                                 {/* Ô Giá 1 (Giá lẻ / Tiêu chuẩn - ລາຄາ 1) */}
-                                <div className="relative">
-                                  <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    value={curRetail > 0 ? Number(curRetail).toLocaleString('de-DE') : ''}
-                                    onChange={(e) => handleUnitValueChange(u, 'retail_price', e.target.value)}
-                                    placeholder="0 ₭"
-                                    className={`w-full h-9 px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
-                                      isRetailDirty
-                                        ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200 text-amber-900 font-semibold'
-                                        : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-200'
-                                    }`}
-                                    title={`${u.unitName} - ລາຄາ 1 (ມາດຕະຖານ)`}
-                                  />
-                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
-                                    ₭
-                                  </span>
+                                <div className="flex flex-col gap-0.5">
+                                  <div className="relative">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={curRetail > 0 ? Number(curRetail).toLocaleString('de-DE') : ''}
+                                      onChange={(e) => handleUnitValueChange(u, 'retail_price', e.target.value)}
+                                      placeholder="0 ₭"
+                                      className={`w-full h-8 px-2 pr-5 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                        isRetailDirty
+                                          ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                          : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                                      }`}
+                                      title={`${u.unitName} - ລາຄາ 1 (ມາດຕະຖານ)`}
+                                    />
+                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 pointer-events-none">
+                                      ₭
+                                    </span>
+                                  </div>
+
                                 </div>
 
                                 {/* Ô Giá 2 (Khách sỉ / Quen - ລາຄາ 2) */}
-                                <div className="relative">
-                                  <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    value={curPrice2 > 0 ? Number(curPrice2).toLocaleString('de-DE') : ''}
-                                    onChange={(e) => handleUnitValueChange(u, 'price_2', e.target.value)}
-                                    placeholder="0 ₭"
-                                    className={`w-full h-9 px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
-                                      isPrice2Dirty
-                                        ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200 text-amber-900 font-semibold'
-                                        : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-200'
-                                    }`}
-                                    title={`${u.unitName} - ລາຄາ 2 (ລູກຄ້າປະຈຳ)`}
-                                  />
-                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
-                                    ₭
-                                  </span>
+                                <div className="flex flex-col gap-0.5">
+                                  <div className="relative">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={curPrice2 > 0 ? Number(curPrice2).toLocaleString('de-DE') : ''}
+                                      onChange={(e) => handleUnitValueChange(u, 'price_2', e.target.value)}
+                                      placeholder="0 ₭"
+                                      className={`w-full h-8 px-2 pr-5 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                        isPrice2Dirty
+                                          ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                          : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                                      }`}
+                                      title={`${u.unitName} - ລາຄາ 2 (ລູກຄ້າປະຈຳ)`}
+                                    />
+                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 pointer-events-none">
+                                      ₭
+                                    </span>
+                                  </div>
+
                                 </div>
 
                                 {/* Ô Giá 3 (VIP / Đại lý - ລາຄາ 3) */}
-                                <div className="relative">
-                                  <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    value={curPrice3 > 0 ? Number(curPrice3).toLocaleString('de-DE') : ''}
-                                    onChange={(e) => handleUnitValueChange(u, 'price_3', e.target.value)}
-                                    placeholder="0 ₭"
-                                    className={`w-full h-9 px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
-                                      isPrice3Dirty
-                                        ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200 text-amber-900 font-semibold'
-                                        : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300 focus:border-teal-500 focus:ring-1 focus:ring-teal-200'
-                                    }`}
-                                    title={`${u.unitName} - ລາຄາ 3 (VIP/ຂາຍສົ່ງ)`}
-                                  />
-                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
-                                    ₭
-                                  </span>
+                                <div className="flex flex-col gap-0.5">
+                                  <div className="relative">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={curPrice3 > 0 ? Number(curPrice3).toLocaleString('de-DE') : ''}
+                                      onChange={(e) => handleUnitValueChange(u, 'price_3', e.target.value)}
+                                      placeholder="0 ₭"
+                                      className={`w-full h-8 px-2 pr-5 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                        isPrice3Dirty
+                                          ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                          : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                                      }`}
+                                      title={`${u.unitName} - ລາຄາ 3 (VIP/ຂາຍສົ່ງ)`}
+                                    />
+                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 pointer-events-none">
+                                      ₭
+                                    </span>
+                                  </div>
+
                                 </div>
                               </div>
                             </div>
@@ -2111,7 +2520,7 @@ export default function ProductsView({
               return (
                 <tr
                   key={p.id}
-                  className={`transition-colors duration-150 ${
+                  className={`transition-colors duration-150 border-b border-slate-100 [&>td]:border-b [&>td]:border-slate-100 ${
                     isHighlighted
                       ? 'bg-teal-50 ring-2 ring-teal-500 shadow-sm'
                       : isSelected
@@ -2198,15 +2607,17 @@ export default function ProductsView({
                   {/* Cost breakdown */}
                   <td className="py-3 px-3">
                     <div className="flex flex-col gap-0.5 text-xs">
-                      <div className="flex items-center gap-1.5 font-mono">
-                        <span className="text-[10px] font-bold text-slate-400 w-3">฿</span>
-                        <span className="font-extrabold text-slate-900">
-                          {formatBaht(info.cartonCostBaht).replace(' ฿', '')} ฿
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-sans">
-                          / {info.cartonUnitName}
-                        </span>
-                      </div>
+                      {!isLakCurrency && (
+                        <div className="flex items-center gap-1.5 font-mono">
+                          <span className="text-[10px] font-bold text-slate-400 w-3">฿</span>
+                          <span className="font-extrabold text-slate-900">
+                            {formatBaht(info.cartonCostBaht).replace(' ฿', '')} ฿
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-sans">
+                            / {info.cartonUnitName}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-1.5 font-mono">
                         <span className="text-[10px] font-bold text-slate-400 w-3">₭</span>
                         <span className="font-extrabold text-slate-800">
@@ -2545,22 +2956,22 @@ export default function ProductsView({
         </div>
       )}
 
-      {/* Mode 2: Sticky Bottom Action Bar */}
+      {/* Mode 2: Sticky Bottom Action Bar (Overlays mobile bottomTab with z-[70]) */}
       {isPriceEditMode && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t-2 border-amber-300 shadow-2xl px-4 py-3 sm:px-6 flex items-center justify-between animate-in slide-in-from-bottom-4 duration-200">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shrink-0">
-              <Tag size={20} weight="fill" />
+        <div className="fixed bottom-0 left-0 right-0 z-[70] bg-white/98 backdrop-blur-md border-t-2 border-amber-400 shadow-[0_-8px_30px_rgba(0,0,0,0.18)] px-3 py-2.5 sm:px-6 sm:py-3.5 flex items-center justify-between animate-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shrink-0">
+              <Tag size={18} weight="fill" />
             </div>
-            <div>
-              <div className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
-                <span>ໂໝດແກ້ໄຂລາຄາດ່ວນ (Inline Mode)</span>
+            <div className="min-w-0">
+              <div className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5 sm:gap-2">
+                <span className="truncate">ແກ້ໄຂດ່ວນ</span>
                 <span
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-bold ${
+                  className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-mono font-bold shrink-0 ${
                     dirtyCount > 0 ? 'bg-amber-500 text-white shadow-2xs' : 'bg-slate-200 text-slate-600'
                   }`}
                 >
-                  ແກ້ໄຂແລ້ວ {dirtyCount} ຫົວໜ່ວຍ
+                  {dirtyCount} ລາຍການ
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 hidden sm:block">
@@ -2569,12 +2980,33 @@ export default function ProductsView({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Nút Thoát khỏi chế độ Sửa hàng loạt */}
             <button
               type="button"
-              onClick={() => setDirtyUnits({})}
+              onClick={() => {
+                if (dirtyCount > 0) {
+                  if (!window.confirm('ທ່ານມີການແກ້ໄຂລາຄາທີ່ຍັງບໍ່ທັນບັນທຶກ, ຕ້ອງການອອກແທ້ບໍ່?')) return;
+                  setDirtyUnits({});
+                  setDirtyCosts({});
+                }
+                setIsPriceEditMode(false);
+              }}
+              className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 min-h-[40px] sm:min-h-[44px] active:scale-95 shadow-2xs"
+              title="ອອກຈາກໂໝດແກ້ໄຂດ່ວນ (Exit Edit Mode)"
+            >
+              <X size={15} weight="bold" />
+              <span>ອອກ</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDirtyUnits({});
+                setDirtyCosts({});
+              }}
               disabled={dirtyCount === 0 || isSavingPrices}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer min-h-[44px]"
+              className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer min-h-[40px] sm:min-h-[44px]"
             >
               ຍົກເລີກ {dirtyCount > 0 ? `(${dirtyCount})` : ''}
             </button>
@@ -2583,14 +3015,14 @@ export default function ProductsView({
               type="button"
               onClick={handleSaveInlinePrices}
               disabled={dirtyCount === 0 || isSavingPrices}
-              className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-xs sm:text-sm font-black transition-all shadow-md shadow-amber-600/25 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2 min-h-[44px]"
+              className="px-3.5 sm:px-6 py-2 sm:py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-xs sm:text-sm font-black transition-all shadow-md shadow-amber-600/25 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 sm:gap-2 min-h-[40px] sm:min-h-[44px]"
             >
               {isSavingPrices ? (
-                <ArrowClockwise size={18} className="animate-spin" />
+                <ArrowClockwise size={16} className="animate-spin" />
               ) : (
-                <CheckCircle size={18} weight="fill" />
+                <CheckCircle size={16} weight="fill" />
               )}
-              <span>ບັນທຶກລາຄາ {dirtyCount > 0 ? `(${dirtyCount})` : ''}</span>
+              <span>ບັນທຶກ {dirtyCount > 0 ? `(${dirtyCount})` : ''}</span>
             </button>
           </div>
         </div>
@@ -2602,6 +3034,7 @@ export default function ProductsView({
         onClose={handleCloseBulkPriceModal}
         selectedProducts={selectedProductsForModal}
         initialTab={bulkModalInitialTab}
+        exchangeRate={exchangeRate}
         onApplyBulkPrices={handleApplyBulkPrices}
       />
 

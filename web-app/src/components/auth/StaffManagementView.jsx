@@ -32,7 +32,7 @@ import {
   adminToggleStaffActive,
 } from '../../services/staffService';
 import { useAuth } from '../../contexts/AuthContext';
-import { playActionClickBeep, playSuccessBeep, playErrorBeep } from '../../utils/audioFeedback';
+import { playActionClickBeep, playSuccessBeep, playErrorBeep, playRefreshBeep } from '../../utils/audioFeedback';
 import { NAVIGATION_SCHEMA, DEFAULT_ROLE_PERMISSIONS } from '../../config/navigationSchema';
 
 export default function StaffManagementView() {
@@ -60,7 +60,25 @@ export default function StaffManagementView() {
 
   const [staffList, setStaffList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const handleLocalRefresh = async () => {
+    if (isLocalRefreshing) return;
+    setIsLocalRefreshing(true);
+    playRefreshBeep('system');
+    try {
+      await Promise.all([
+        loadStaff(true),
+        new Promise((res) => setTimeout(res, 600)),
+      ]);
+      playSuccessBeep('system');
+    } catch (err) {
+      console.error('Staff refresh error:', err);
+    } finally {
+      setIsLocalRefreshing(false);
+    }
+  };
   const [roleFilter, setRoleFilter] = useState('all'); // 'all' | role ID
 
   // Modals state
@@ -463,12 +481,18 @@ export default function StaffManagementView() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => loadStaff(true)}
-            disabled={isLoading}
-            className="p-2 sm:px-3 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
-            title="ຣີເຟຣຊ"
+            onClick={handleLocalRefresh}
+            disabled={isLocalRefreshing}
+            className={`group/ref p-2 sm:px-3 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer active:scale-90 active:rotate-12 flex items-center gap-1.5 border border-slate-200 shadow-2xs ${
+              isLocalRefreshing ? 'opacity-60 cursor-not-allowed' : ''
+            }`}
+            title="ຣີເຟຣຊ (Refresh Staff)"
           >
-            <ArrowClockwise size={15} className={isLoading ? 'animate-spin' : ''} weight="bold" />
+            <ArrowClockwise
+              size={15}
+              weight="bold"
+              className={`transition-transform duration-300 ${isLocalRefreshing ? 'animate-spin text-teal-600' : 'group-hover/ref:rotate-180'}`}
+            />
             <span className="hidden sm:inline">ຣີເຟຣຊ</span>
           </button>
 

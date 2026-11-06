@@ -93,6 +93,40 @@ import {
 import { isCustomerStorefrontRoute } from './utils/routeUtils';
 import { calculateItemCostAndMultiplier, recalculateTransactionTotals } from './utils/costCalculation';
 
+function sanitizeCachedTransactions(txList) {
+  if (!Array.isArray(txList)) return [];
+  return txList.map((tx) => {
+    if (!tx) return tx;
+    const rawG = Number(
+      (Number(tx.grandTotal) > 0 ? tx.grandTotal : null) ??
+      (Number(tx.grand_total) > 0 ? tx.grand_total : null) ??
+      (Number(tx.total_lak) > 0 ? tx.total_lak : null) ??
+      0
+    );
+    if (rawG === 0) {
+      const items = tx.items || tx.sale_transaction_items || [];
+      const sum = items.reduce(
+        (s, it) =>
+          s +
+          (Number(it.lineTotal || it.line_total) ||
+            (Number(it.unitPrice || it.unit_price) || 0) * (Number(it.quantity) || 1)),
+        0
+      );
+      if (sum > 0) {
+        return {
+          ...tx,
+          grandTotal: sum,
+          grand_total: sum,
+          subtotal: sum,
+          total_lak: sum,
+          totalLak: sum,
+        };
+      }
+    }
+    return tx;
+  });
+}
+
 export default function App() {
   const { activeCashier, user, isLoading } = useAuth();
   const { canAccessRoute } = useAuthRole();
@@ -212,7 +246,8 @@ export default function App() {
     if (isAuthenticated && !isCustomerLink() && appMode !== 'customer') {
       idbGet('meiishop_transactions_v7').then((cached) => {
         if (isMounted && Array.isArray(cached) && cached.length > 0) {
-          setTransactions((prev) => (prev.length === 0 || cached.length > prev.length ? cached : prev));
+          const sanitized = sanitizeCachedTransactions(cached);
+          setTransactions((prev) => (prev.length === 0 || sanitized.length > prev.length ? sanitized : prev));
         }
       });
     }
@@ -550,7 +585,8 @@ export default function App() {
 
   // Transactions History (Supabase Live Sync with cache)
   const [transactions, setTransactions] = useState(() => {
-    return safeGetJSON('meiishop_transactions_v7', []);
+    const raw = safeGetJSON('meiishop_transactions_v7', []);
+    return sanitizeCachedTransactions(raw);
   });
 
   // Customer Directory State (Loaded from Supabase 'customers' table + calculated from sales transactions)
@@ -594,6 +630,47 @@ export default function App() {
         return {
           ...prod,
           units: nextUnits,
+        };
+      });
+
+      if (hasChanged) {
+        try {
+          safeSetItem('meiishop_products_v5', nextProducts);
+          idbSet('meiishop_products_v5', nextProducts);
+        } catch (_) {}
+        return nextProducts;
+      }
+      return prevProducts;
+    });
+  }, []);
+
+  /**
+   * Zero-Egress In-Memory Cost Updating:
+   * Synchronizes product cost changes directly in React state and local storage.
+   */
+  const handleApplyProductCostsInPlace = useCallback((updatedCosts) => {
+    if (!updatedCosts || !Array.isArray(updatedCosts) || updatedCosts.length === 0) return;
+    const costMap = new Map(updatedCosts.map((c) => [c.productId, c]));
+
+    setProducts((prevProducts) => {
+      if (!prevProducts || prevProducts.length === 0) return prevProducts;
+      let hasChanged = false;
+      const nextProducts = prevProducts.map((prod) => {
+        if (!costMap.has(prod.id)) return prod;
+        const delta = costMap.get(prod.id);
+        hasChanged = true;
+        return {
+          ...prod,
+          cost_lak: delta.cost_lak,
+          costLak: delta.cost_lak,
+          costKip: delta.cost_lak,
+          cost_thb: delta.cost_thb,
+          costThb: delta.cost_thb,
+          costBaht: delta.cost_thb,
+          cost_currency: delta.currency,
+          costCurrency: delta.currency,
+          cost_per_base_unit: delta.cost_per_base_unit,
+          costPerBaseUnit: delta.cost_per_base_unit,
         };
       });
 
@@ -1432,6 +1509,50 @@ export default function App() {
     return task;
   }, [refreshProducts, refreshTransactions, refreshCategories, refreshBundles, refreshPurchases]);
 
+  // Tab-specific isolated refresh handlers (No global isRefreshing side-effects)
+  const handleRefreshPosTab = useCallback(async () => {
+    await Promise.all([
+      refreshProducts(true),
+      refreshCategories(true),
+      refreshBundles(),
+    ]);
+  }, [refreshProducts, refreshCategories, refreshBundles]);
+
+  const handleRefreshProductsTab = useCallback(async () => {
+    await Promise.all([
+      refreshProducts(true),
+      refreshCategories(true),
+      refreshBundles(),
+    ]);
+  }, [refreshProducts, refreshCategories, refreshBundles]);
+
+  const handleRefreshCategoriesTab = useCallback(async () => {
+    await Promise.all([
+      refreshProducts(true),
+      refreshCategories(true),
+    ]);
+  }, [refreshProducts, refreshCategories]);
+
+  const handleRefreshTransactionsTab = useCallback(async () => {
+    await refreshTransactions(true);
+  }, [refreshTransactions]);
+
+  const handleRefreshPurchasesTab = useCallback(async () => {
+    await refreshPurchases(true);
+  }, [refreshPurchases]);
+
+  const handleRefreshSalesByUnitTab = useCallback(async () => {
+    await Promise.all([
+      refreshTransactions(true),
+      refreshProducts(true),
+    ]);
+  }, [refreshTransactions, refreshProducts]);
+
+  const handleRefreshCustomersTab = useCallback(async () => {
+    const data = await fetchSavedCustomers({ force: true });
+    if (data) setSavedCustomersList(data);
+  }, []);
+
   const handleSaveBundle = async (bundleData, childProductIds) => {
     setIsSavingDb(true);
     setDbSavingMessage('ກຳລັງບັນທຶກກຸ່ມສິນຄ້າລວມ...');
@@ -1474,16 +1595,12 @@ export default function App() {
   // Khách xem Storefront chỉ tải danh sách sản phẩm và danh mục để xem món/chọn món.
   // Tuyệt đối KHÔNG tải hóa đơn bán hàng (sale_transactions), thông tin khách hàng, cấu hình máy in hay nhập hàng!
   const handleCustomerCatalogRefresh = useCallback(async (force = false) => {
-    setIsRefreshing(true);
     try {
       const isForced = Boolean(force === true);
       const realProds = await refreshProducts(isForced, true);
       await refreshCategories(isForced, realProds);
     } catch (err) {
       console.warn('handleCustomerCatalogRefresh error:', err);
-    } finally {
-      setIsRefreshing(false);
-      setIsLoadingProducts(false);
     }
   }, [refreshProducts, refreshCategories]);
 
@@ -3132,7 +3249,7 @@ export default function App() {
       // Recalculate financial totals directly from receiptItems to ensure 100% agreement
       const totals = recalculateTransactionTotals(receiptItems, currentRate);
       const totalCostLak = totals.totalCostLak;
-      const totalLak = Number(cartSubtotal) || totals.totalAmountLak;
+      const totalLak = Number(cartSubtotal) > 0 ? Number(cartSubtotal) : totals.totalAmountLak;
       const grossProfitLak = totalLak - totalCostLak;
       const totalCostThb = totals.totalCostThb;
       const totalThb = totals.totalAmountThb;
@@ -3154,9 +3271,10 @@ export default function App() {
         customer_phone: (customerPhone || '').trim(),
         items: receiptItems,
         isWholesale: false,
-        subtotal: cartSubtotal,
+        subtotal: totalLak,
         discountTotal: 0,
-        grandTotal: cartSubtotal,
+        grandTotal: totalLak,
+        grand_total: totalLak,
         amountTendered: actualPaid,
         changeAmount: paymentMethod === 'cash' ? Math.max(0, tenderedKip - cartSubtotal) : 0,
         isDebt,
@@ -3230,6 +3348,11 @@ export default function App() {
                 ? {
                     ...t,
                     ...receipt,
+                    subtotal: totalLak,
+                    grandTotal: totalLak,
+                    grand_total: totalLak,
+                    totalLak: totalLak,
+                    total_lak: totalLak,
                     totalCost: totalCostLak,
                     total_cost: totalCostLak,
                     total_cost_lak: totalCostLak,
@@ -4185,17 +4308,16 @@ export default function App() {
         if (!matchesCat) return false;
         if (!q) return true;
 
-        // Ultra-fast path: Pre-computed flat search index (< 1ms)
-        if (p._searchKey) {
-          return p._searchKey.includes(q);
-        }
-
-        // Safe fallback for dynamic items missing precomputed index
-        return (
-          normalizeLao(p.name).toLowerCase().includes(q) ||
+        // Tìm kiếm POS chỉ theo tên sản phẩm (và mã vạch khi quét barcode)
+        const normName = normalizeLao(p.name || '').toLowerCase();
+        const normVi = normalizeLao(p.name_vi || p.nameVi || '').toLowerCase();
+        const matchesName = normName.includes(q) || normVi.includes(q);
+        const matchesBarcode =
           (p.barcode && normalizeLao(p.barcode).toLowerCase().includes(q)) ||
-          p.units.some((u) => normalizeLao(u.unitName).toLowerCase().includes(q) || (u.barcode && normalizeLao(u.barcode).toLowerCase().includes(q)))
-        );
+          (p.units &&
+            p.units.some((u) => u.barcode && normalizeLao(u.barcode).toLowerCase().includes(q)));
+
+        return matchesName || matchesBarcode;
       });
     }
 
@@ -4426,14 +4548,8 @@ export default function App() {
             filteredProducts={filteredProducts}
             products={products}
             bundles={bundles}
-            isLoading={isLoadingProducts || isRefreshing}
-            onRefreshProducts={async () => {
-              await Promise.all([
-                refreshProducts(true),
-                refreshCategories(true),
-                refreshBundles(true),
-              ]);
-            }}
+            isLoading={isLoadingProducts}
+            onRefreshProducts={handleRefreshPosTab}
             addToCart={addToCart}
             openUnitSelector={openUnitSelector}
             cart={cart}
@@ -4481,7 +4597,7 @@ export default function App() {
               products={products}
               rawCategories={rawCategories}
               exchangeRate={exchangeRate}
-              isLoading={isLoadingProducts || isRefreshing}
+              isLoading={isLoadingProducts}
             />
           </RouteGuard>
         )}
@@ -4494,17 +4610,12 @@ export default function App() {
               onAddNewProduct={handleOpenNewProduct}
               onEditProduct={handleOpenEditProduct}
               onDeleteProduct={handleDeleteProduct}
-              onRefreshProducts={async () => {
-              await Promise.all([
-                refreshProducts(true),
-                refreshCategories(true),
-                refreshBundles(true),
-              ]);
-            }}
+              onRefreshProducts={handleRefreshProductsTab}
               onOpenCategoryManager={() => setActiveMainTab('categories')}
               onOpenBundleManager={() => setActiveMainTab('bundles')}
-              isLoading={isLoadingProducts || isRefreshing}
+              isLoading={isLoadingProducts}
               onUpdateProductUnitPrices={handleApplyUnitPricesInPlace}
+              onUpdateProductCosts={handleApplyProductCostsInPlace}
             />
           </RouteGuard>
         )}
@@ -4523,10 +4634,8 @@ export default function App() {
               onBatchAssignProducts={handleBatchAssignProductsToCategory}
               onBatchRemoveProducts={handleBatchAssignProductsToCategory}
               onOpenCreateProduct={handleOpenCreateProductForCategory}
-              onRefresh={async () => {
-                await Promise.all([refreshProducts(true), refreshCategories(true)]);
-              }}
-              isLoading={isLoadingProducts || isRefreshing}
+              onRefresh={handleRefreshCategoriesTab}
+              isLoading={isLoadingProducts}
               onAlert={openAlert}
             />
           </RouteGuard>
@@ -4551,8 +4660,8 @@ export default function App() {
               transactions={transactions}
               onUpdateOnlineStatus={handleUpdateOnlineStatus}
               onOpenReceipt={handleOpenReceipt}
-              onRefresh={() => refreshTransactions(true)}
-              isLoading={isLoadingProducts || isRefreshing}
+              onRefresh={handleRefreshTransactionsTab}
+              isLoading={isLoadingProducts}
             />
           </RouteGuard>
         )}
@@ -4571,9 +4680,9 @@ export default function App() {
               onCancelTransaction={handleCancelTransaction}
               onDeleteTransaction={handleDeleteTransaction}
               onUpdateTransaction={handleUpdateTransaction}
-              onRefreshTransactions={() => refreshTransactions(true)}
+              onRefreshTransactions={handleRefreshTransactionsTab}
               onEditOrderInPos={handleEditOrderInPos}
-              isLoading={isLoadingProducts || isRefreshing}
+              isLoading={isLoadingProducts}
               onAlert={openAlert}
             />
           </RouteGuard>
@@ -4591,8 +4700,8 @@ export default function App() {
                 setPurchaseEntryModalOpen(true);
               }}
               onOpenSupplierManager={() => setSupplierManagerModalOpen(true)}
-              onRefresh={() => refreshPurchases(true)}
-              isLoading={isLoadingProducts || isRefreshing}
+              onRefresh={handleRefreshPurchasesTab}
+              isLoading={isLoadingProducts}
               onAlert={openAlert}
             />
           </RouteGuard>
@@ -4604,13 +4713,8 @@ export default function App() {
               transactions={transactions}
               products={products}
               exchangeRate={exchangeRate}
-              onRefresh={async () => {
-                await Promise.all([
-                  refreshTransactions(true),
-                  refreshProducts(true),
-                ]);
-              }}
-              isLoading={isLoadingProducts || isRefreshing}
+              onRefresh={handleRefreshSalesByUnitTab}
+              isLoading={isLoadingProducts}
               onAlert={openAlert}
             />
           </RouteGuard>
@@ -4652,7 +4756,7 @@ export default function App() {
               products={products}
               onUpdateTransaction={handleUpdateTransaction}
               onAlert={openAlert}
-              onRefresh={() => fetchSavedCustomers({ force: true }).then((data) => setSavedCustomersList(data || []))}
+              onRefresh={handleRefreshCustomersTab}
             />
           </RouteGuard>
         )}

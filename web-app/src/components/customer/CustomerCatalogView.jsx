@@ -19,7 +19,7 @@ import {
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao, getSortedUnits, getProductTierBreakdown, sanitizeImageUrl } from '../../utils/formatters';
 import { supabase, createOnlineOrderInSupabase } from '../../services/supabase';
-import { playSuccessBeep } from '../../utils/audioFeedback';
+import { playSuccessBeep, playRefreshBeep } from '../../utils/audioFeedback';
 import CustomerProductDetailModal from './CustomerProductDetailModal';
 import CustomerUnitSelectorModal from './CustomerUnitSelectorModal';
 import CustomerCartCheckoutModal from './CustomerCartCheckoutModal';
@@ -43,6 +43,24 @@ export default function CustomerCatalogView({
   const [trackingOrder, setTrackingOrder] = useState(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [dismissedOrderIds, setDismissedOrderIds] = useState(() => new Set());
+  const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
+
+  const handleLocalRefresh = async () => {
+    if (isLocalRefreshing) return;
+    setIsLocalRefreshing(true);
+    playRefreshBeep('system');
+    try {
+      await Promise.all([
+        onRefresh?.(true),
+        new Promise((res) => setTimeout(res, 600)),
+      ]);
+      playSuccessBeep('system');
+    } catch (err) {
+      console.error('Customer catalog refresh error:', err);
+    } finally {
+      setIsLocalRefreshing(false);
+    }
+  };
 
   // Customer recent orders persisted in localStorage for live tracking
   const [recentOrders, setRecentOrders] = useState(() => {
@@ -279,13 +297,13 @@ export default function CustomerCatalogView({
       }
 
       const normName = normalizeLao((p.name || '').toLowerCase());
+      const normVi = normalizeLao((p.name_vi || p.nameVi || '').toLowerCase());
       const barcode = (p.barcode || '').toLowerCase();
-      const cat = normalizeLao((p.category || '').toLowerCase());
 
       return (
         normName.includes(normQuery) ||
-        barcode.includes(normQuery) ||
-        cat.includes(normQuery)
+        normVi.includes(normQuery) ||
+        barcode.includes(normQuery)
       );
     });
   }, [products, searchQuery, activeCategory]);
@@ -452,15 +470,17 @@ export default function CustomerCatalogView({
             {onRefresh && (
               <button
                 type="button"
-                onClick={() => onRefresh(true)}
-                disabled={isLoading}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-slate-200/80 text-slate-500 hover:text-primary hover:bg-slate-50 flex items-center justify-center cursor-pointer transition-colors active:scale-95 shadow-2xs"
-                title="ໂຫຼດຂໍ້ມູນໃໝ່"
+                onClick={handleLocalRefresh}
+                disabled={isLocalRefreshing}
+                className={`group/ref w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-slate-200/80 text-slate-500 hover:text-teal-600 hover:bg-slate-50 flex items-center justify-center cursor-pointer transition-all duration-200 active:scale-90 active:rotate-12 shadow-2xs ${
+                  isLocalRefreshing ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+                title="ໂຫຼດຂໍ້ມູນໃໝ່ (Refresh Catalog)"
               >
                 <ArrowClockwise
                   size={16}
                   weight="bold"
-                  className={isLoading ? 'animate-spin text-primary' : ''}
+                  className={`transition-transform duration-300 ${isLocalRefreshing ? 'animate-spin text-teal-600' : 'group-hover/ref:rotate-180'}`}
                 />
               </button>
             )}

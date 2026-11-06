@@ -22,7 +22,7 @@ import {
   CaretRight,
 } from '@phosphor-icons/react';
 import { formatKip } from '../utils/formatters';
-import { playSuccessBeep, playActionClickBeep, playErrorBeep } from '../utils/audioFeedback';
+import { playSuccessBeep, playActionClickBeep, playErrorBeep, playRefreshBeep } from '../utils/audioFeedback';
 
 export default function OnlineOrdersView({
   transactions = [],
@@ -37,6 +37,24 @@ export default function OnlineOrdersView({
   const [copiedId, setCopiedId] = useState(null);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [selectedDetailOrder, setSelectedDetailOrder] = useState(null);
+  const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
+
+  const handleLocalRefresh = async () => {
+    if (isLocalRefreshing) return;
+    setIsLocalRefreshing(true);
+    playRefreshBeep('history');
+    try {
+      await Promise.all([
+        onRefresh?.(),
+        new Promise((res) => setTimeout(res, 600)),
+      ]);
+      playSuccessBeep('history');
+    } catch (err) {
+      console.error('Online orders refresh error:', err);
+    } finally {
+      setIsLocalRefreshing(false);
+    }
+  };
 
   // Filter only online orders (Defensive multi-attribute detection)
   const onlineOrders = useMemo(() => {
@@ -213,15 +231,17 @@ export default function OnlineOrdersView({
             {onRefresh && (
               <button
                 type="button"
-                onClick={onRefresh}
-                disabled={isLoading}
-                className="h-8.5 sm:h-9 px-2.5 sm:px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer active:scale-95 shadow-2xs border border-slate-200"
-                title="ໂຫຼດຂໍ້ມູນໃໝ່"
+                onClick={handleLocalRefresh}
+                disabled={isLocalRefreshing}
+                className={`group/ref h-8.5 sm:h-9 px-2.5 sm:px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all duration-200 cursor-pointer active:scale-90 active:rotate-12 shadow-2xs border border-slate-200 ${
+                  isLocalRefreshing ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+                title="ໂຫຼດຂໍ້ມູນໃໝ່ (Refresh Online Orders)"
               >
                 <ArrowClockwise
                   size={15}
                   weight="bold"
-                  className={isLoading ? 'animate-spin text-primary' : ''}
+                  className={`transition-transform duration-300 ${isLocalRefreshing ? 'animate-spin text-teal-600' : 'group-hover/ref:rotate-180'}`}
                 />
                 <span className="hidden sm:inline">ໂຫຼດໃໝ່</span>
               </button>

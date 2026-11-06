@@ -18,7 +18,7 @@ import {
   CalendarBlank,
 } from '@phosphor-icons/react';
 import { formatKip, normalizeLao } from '../utils/formatters';
-import { playActionClickBeep, playSuccessBeep } from '../utils/audioFeedback';
+import { playActionClickBeep, playSuccessBeep, playRefreshBeep } from '../utils/audioFeedback';
 import CustomerFormModal from './CustomerFormModal';
 import CustomerDetailModal from './CustomerDetailModal';
 import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
@@ -39,8 +39,26 @@ export default function CustomersView({
 }) {
   const [savedCustomers, setSavedCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDebt, setFilterDebt] = useState('all'); // 'all' | 'debt' | 'nodebt'
+
+  const handleLocalRefresh = async () => {
+    if (isLocalRefreshing) return;
+    setIsLocalRefreshing(true);
+    playRefreshBeep('system');
+    try {
+      await Promise.all([
+        loadCustomers(true),
+        new Promise((res) => setTimeout(res, 600)),
+      ]);
+      playSuccessBeep('system');
+    } catch (err) {
+      console.error('Customers refresh error:', err);
+    } finally {
+      setIsLocalRefreshing(false);
+    }
+  };
 
   // Modal States
   const [editingCustomer, setEditingCustomer] = useState(null);
@@ -237,11 +255,18 @@ export default function CustomersView({
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => loadCustomers(true)}
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
-            title="ໂຫຼດຂໍ້ມູນຄືນໃໝ່"
+            onClick={handleLocalRefresh}
+            disabled={isLocalRefreshing}
+            className={`group/ref w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all duration-200 cursor-pointer active:scale-90 active:rotate-12 border border-slate-200 shadow-2xs ${
+              isLocalRefreshing ? 'opacity-60 cursor-not-allowed' : ''
+            }`}
+            title="ໂຫຼດຂໍ້ມູນຄືນໃໝ່ (Refresh Customers)"
           >
-            <ArrowClockwise size={16} className={isLoading ? 'animate-spin' : ''} />
+            <ArrowClockwise
+              size={16}
+              weight="bold"
+              className={`transition-transform duration-300 ${isLocalRefreshing ? 'animate-spin text-teal-600' : 'group-hover/ref:rotate-180'}`}
+            />
           </button>
 
           <button

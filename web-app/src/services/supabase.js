@@ -656,14 +656,13 @@ export async function fetchProductsFromSupabase({ force = false, forCustomer = f
         const normLaoName = normalizeLao(p.name || '');
         const cleanViName = (resolvedNameVi || '').toLowerCase();
         const cleanBarcode = (p.barcode || '').toLowerCase();
-        const cleanCat = (resolvedCategoryName || '').toLowerCase();
-        const normCat = normalizeLao(resolvedCategoryName || '');
-        const unitsTokens = pUnits
-          .map((u) => `${u.unitName} ${normalizeLao(u.unitName)} ${u.barcode || ''}`)
+        const unitsBarcodes = pUnits
+          .map((u) => u.barcode || '')
+          .filter(Boolean)
           .join(' ')
           .toLowerCase();
 
-        const searchKey = `${cleanName} ${normLaoName} ${cleanViName} ${cleanBarcode} ${cleanCat} ${normCat} ${unitsTokens}`.trim();
+        const searchKey = `${cleanName} ${normLaoName} ${cleanViName} ${cleanBarcode} ${unitsBarcodes}`.trim();
 
         // NẾU LÀ KHÁCH XEM STOREFRONT: Chỉ trả về thông tin công khai
         // TUYỆT ĐỐI KHÔNG chứa: cost_lak, cost_thb, current_stock_base_units, wholesale_price, v.v.
@@ -1207,8 +1206,17 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     };
   });
 
-  const itemsSum = rawItems.reduce((sum, item) => sum + (Number(item.lineTotal) || 0), 0);
-  const rawGrandTotal = Number(t.grand_total ?? t.grandTotal ?? t.total_lak ?? 0);
+  const finalItems = cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0
+    ? cachedMeta.items
+    : rawItems;
+  const itemsSum = finalItems.reduce((sum, item) => sum + (Number(item.lineTotal || item.line_total) || 0), 0);
+  const rawGrandTotal = Number(
+    (Number(t.grand_total) > 0 ? t.grand_total : null) ??
+    (Number(t.grandTotal) > 0 ? t.grandTotal : null) ??
+    (Number(t.total_lak) > 0 ? t.total_lak : null) ??
+    (Number(t.subtotal) > 0 ? t.subtotal : null) ??
+    0
+  );
   const resolvedGrandTotal = rawGrandTotal > 0 ? rawGrandTotal : (itemsSum > 0 ? itemsSum : 0);
 
   // Self-heal corrupted zero-revenue rows directly in database in the background
@@ -1261,6 +1269,8 @@ export function mapDatabaseSaleTransaction(t, cachedProds = null) {
     discountTotal: Number(t.discount_total) || 0,
     grandTotal: resolvedGrandTotal,
     grand_total: resolvedGrandTotal,
+    totalLak: resolvedGrandTotal,
+    total_lak: resolvedGrandTotal,
     amountTendered: Number(t.amount_tendered) || 0,
     changeAmount: Number(t.change_amount) || 0,
     totalCost: Number(t.total_cost_lak ?? t.total_cost ?? cachedMeta?.receipt?.totalCost ?? cachedMeta?.totalCost ?? 0),
@@ -4532,6 +4542,76 @@ export async function updateProductUnitPricesZeroEgress(dirtyUnits) {
     return { success: true, count: payload.length, payload };
   } catch (err) {
     console.error('[ZeroEgress] updateProductUnitPricesZeroEgress exception:', err);
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Zero-Egress Batch Product Costs Update
+ * Updates cost_lak, cost_thb, cost_currency, and cost_per_base_unit directly.
+ * Updates in-memory caches immediately without re-fetching all products.
+ */
+export async function updateProductCostsZeroEgress(dirtyCosts) {
+  if (!dirtyCosts || !Array.isArray(dirtyCosts) || dirtyCosts.length === 0) {
+    return { success: true, count: 0, payload: [] };
+  }
+
+  try {
+    const promises = dirtyCosts.map((item) => {
+      const updateData = {
+        updated_at: new Date().toISOString(),
+      };
+      if (item.cost_lak !== undefined) updateData.cost_lak = item.cost_lak;
+      if (item.cost_thb !== undefined) updateData.cost_thb = item.cost_thb;
+      if (item.currency !== undefined) updateData.cost_currency = item.currency;
+      if (item.cost_per_base_unit !== undefined) updateData.cost_per_base_unit = item.cost_per_base_unit;
+
+      return supabase
+        .from('products')
+        .update(updateData)
+        .eq('id', item.productId);
+    });
+
+    const results = await Promise.all(promises);
+    const hasErr = results.find((r) => r.error);
+    if (hasErr) {
+      console.warn('[ZeroEgress] updateProductCostsZeroEgress partial warning:', hasErr.error);
+    }
+
+    // In-place memory cache mutation
+    const allCaches = [cachedPosProductsInMemory, cachedCustomerProductsInMemory, cachedProductsInMemory].filter(Boolean);
+    const costMap = new Map(dirtyCosts.map((c) => [c.productId, c]));
+    allCaches.forEach((cacheArr) => {
+      if (Array.isArray(cacheArr)) {
+        cacheArr.forEach((prod) => {
+          if (costMap.has(prod.id)) {
+            const delta = costMap.get(prod.id);
+            if (delta.cost_lak !== undefined) {
+              prod.cost_lak = delta.cost_lak;
+              prod.costLak = delta.cost_lak;
+              prod.costKip = delta.cost_lak;
+            }
+            if (delta.cost_thb !== undefined) {
+              prod.cost_thb = delta.cost_thb;
+              prod.costThb = delta.cost_thb;
+              prod.costBaht = delta.cost_thb;
+            }
+            if (delta.currency !== undefined) {
+              prod.cost_currency = delta.currency;
+              prod.costCurrency = delta.currency;
+            }
+            if (delta.cost_per_base_unit !== undefined) {
+              prod.cost_per_base_unit = delta.cost_per_base_unit;
+              prod.costPerBaseUnit = delta.cost_per_base_unit;
+            }
+          }
+        });
+      }
+    });
+
+    return { success: true, count: dirtyCosts.length, payload: dirtyCosts };
+  } catch (err) {
+    console.error('[ZeroEgress] updateProductCostsZeroEgress exception:', err);
     return { success: false, error: err.message || String(err) };
   }
 }

@@ -52,7 +52,7 @@ import {
 import { queryClient } from '../../services/queryClient';
 import BarcodeScannerModal from '../../components/BarcodeScannerModal';
 import MultiProductGRNForm from '../../components/inventory/MultiProductGRNForm';
-import { playUnitChangeBeep, playActionClickBeep, playSuccessBeep, playErrorBeep } from '../../utils/audioFeedback';
+import { playUnitChangeBeep, playActionClickBeep, playSuccessBeep, playErrorBeep, playRefreshBeep } from '../../utils/audioFeedback';
 import { PurchasesListSkeleton } from '../../components/common/SkeletonLoaders';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -85,6 +85,24 @@ export default function PurchasesView({
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const [poToDelete, setPoToDelete] = useState(null);
   const [isDeletingPo, setIsDeletingPo] = useState(false);
+  const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
+
+  const handleLocalRefresh = async () => {
+    if (isLocalRefreshing) return;
+    setIsLocalRefreshing(true);
+    playRefreshBeep('inventory');
+    try {
+      await Promise.all([
+        onRefresh?.(),
+        new Promise((res) => setTimeout(res, 600)),
+      ]);
+      playSuccessBeep('inventory');
+    } catch (err) {
+      console.error('Purchases refresh error:', err);
+    } finally {
+      setIsLocalRefreshing(false);
+    }
+  };
 
   // =========================================================================
   // FULLSCREEN FORM STATE (MULTI-PRODUCT GRN)
@@ -1035,15 +1053,18 @@ export default function PurchasesView({
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => {
-              playUnitChangeBeep('inventory');
-              onRefresh?.();
-            }}
-            disabled={isLoading}
-            className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs disabled:opacity-50"
-            title="ໂຫຼດຂໍ້ມູນໃໝ່"
+            onClick={handleLocalRefresh}
+            disabled={isLocalRefreshing}
+            className={`group/ref p-2 sm:px-3 sm:py-2.5 h-9 sm:h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer active:scale-90 active:rotate-12 flex items-center gap-1.5 border border-slate-200 shadow-2xs ${
+              isLocalRefreshing ? 'opacity-60 cursor-not-allowed' : ''
+            }`}
+            title="ໂຫຼດຂໍ້ມູນໃໝ່ (Refresh Purchases)"
           >
-            <ArrowClockwise size={15} className={isLoading ? 'animate-spin' : ''} />
+            <ArrowClockwise
+              size={15}
+              weight="bold"
+              className={`transition-transform duration-300 ${isLocalRefreshing ? 'animate-spin text-teal-600' : 'group-hover/ref:rotate-180'}`}
+            />
             <span className="hidden sm:inline">ຣີເຟຣຊ</span>
           </button>
 

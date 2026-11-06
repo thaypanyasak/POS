@@ -38,7 +38,7 @@ import CustomerDebtPaymentModal from './inventory/CustomerDebtPaymentModal';
 import InvoiceProfitDetailModal, { calculateTxProfitMetrics } from './InvoiceProfitDetailModal';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import { useHardwareBarcodeScanner, sanitizeBarcode } from '../hooks/useHardwareBarcodeScanner';
-import { playUnitChangeBeep, playActionClickBeep, playErrorBeep, playSuccessBeep } from '../utils/audioFeedback';
+import { playUnitChangeBeep, playActionClickBeep, playErrorBeep, playSuccessBeep, playRefreshBeep } from '../utils/audioFeedback';
 import { HistoryListSkeleton } from './common/SkeletonLoaders';
 import { useAuthRole } from '../contexts/AuthContext';
 import { fetchTransactionByIdFromSupabase, fetchArchivedTransactionFromSupabase } from '../services/supabase';
@@ -87,6 +87,24 @@ export default function HistoryView({
   const [currentPage, setCurrentPage] = useState(1);
   const [archivedSearchedTx, setArchivedSearchedTx] = useState(null);
   const [isSearchingArchive, setIsSearchingArchive] = useState(false);
+  const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
+
+  const handleLocalRefresh = async () => {
+    if (isLocalRefreshing) return;
+    setIsLocalRefreshing(true);
+    playRefreshBeep('history');
+    try {
+      await Promise.all([
+        onRefreshTransactions?.(),
+        new Promise((res) => setTimeout(res, 600)),
+      ]);
+      playSuccessBeep('history');
+    } catch (err) {
+      console.error('History refresh error:', err);
+    } finally {
+      setIsLocalRefreshing(false);
+    }
+  };
 
   const handleClearSearch = () => {
     setSearchTerm('');
@@ -359,13 +377,24 @@ export default function HistoryView({
       const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
       if (isCancelled) return; // Cancelled bills do not contribute to revenue, cost, or profit
 
-      const rev = Number(tx.finalTotalKip || tx.final_total_kip || tx.grandTotal || tx.grand_total || tx.totalKip || tx.total_kip || 0);
       const metrics = calculateTxProfitMetrics(tx, productsMap);
+      const explicitRev = Number(
+        (Number(tx.grandTotal) > 0 ? tx.grandTotal : null) ??
+        (Number(tx.grand_total) > 0 ? tx.grand_total : null) ??
+        (Number(tx.total_lak) > 0 ? tx.total_lak : null) ??
+        (Number(tx.finalTotalKip) > 0 ? tx.finalTotalKip : null) ??
+        (Number(tx.final_total_kip) > 0 ? tx.final_total_kip : null) ??
+        (Number(tx.totalKip) > 0 ? tx.totalKip : null) ??
+        (Number(tx.total_kip) > 0 ? tx.total_kip : null) ??
+        0
+      );
+      const rev = explicitRev > 0 ? explicitRev : (metrics?.grandTotal || 0);
       const cost = Number(metrics?.totalCost || 0);
+      const profit = metrics?.totalProfit !== undefined ? metrics.totalProfit : (rev - cost);
 
       totalRevenue += rev;
       totalCost += cost;
-      totalProfit += (rev - cost);
+      totalProfit += profit;
     });
 
     const overallMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0';
@@ -894,14 +923,18 @@ export default function HistoryView({
 
           <button
             type="button"
-            onClick={() => {
-              onRefreshTransactions?.();
-            }}
-            disabled={isLoading}
-            className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-2xs"
-            title="ໂຫຼດຂໍ້ມູນຄືນຈາກ Supabase"
+            onClick={handleLocalRefresh}
+            disabled={isLocalRefreshing}
+            className={`group/ref p-2 sm:px-3 sm:py-2.5 h-9 sm:h-10 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer active:scale-90 active:rotate-12 flex items-center gap-1.5 border border-slate-200 shadow-2xs ${
+              isLocalRefreshing ? 'opacity-60 cursor-not-allowed' : ''
+            }`}
+            title="ໂຫຼດຂໍ້ມູນຄືນຈາກ Supabase (Refresh Transactions)"
           >
-            <ArrowClockwise size={15} className={isLoading ? 'animate-spin' : ''} weight="bold" />
+            <ArrowClockwise
+              size={15}
+              weight="bold"
+              className={`transition-transform duration-300 ${isLocalRefreshing ? 'animate-spin text-teal-600' : 'group-hover/ref:rotate-180'}`}
+            />
             <span className="hidden sm:inline">ຣີເຟຣຊ</span>
           </button>
         </div>
@@ -1365,7 +1398,13 @@ export default function HistoryView({
             {displayedTransactions.map((tx) => {
           const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
           const profitMetrics = calculateTxProfitMetrics(tx, productsMap);
-          const rawTotal = Number(tx.grandTotal ?? tx.grand_total ?? tx.total_lak ?? 0);
+          const rawTotal = Number(
+            (Number(tx.grandTotal) > 0 ? tx.grandTotal : null) ??
+            (Number(tx.grand_total) > 0 ? tx.grand_total : null) ??
+            (Number(tx.total_lak) > 0 ? tx.total_lak : null) ??
+            (Number(tx.subtotal) > 0 ? tx.subtotal : null) ??
+            0
+          );
           const total = rawTotal > 0 ? rawTotal : (profitMetrics.grandTotal || 0);
           const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
           const method = (tx.paymentMethod || '').toLowerCase();
@@ -1844,7 +1883,13 @@ export default function HistoryView({
               const itemIndex = (currentPage - 1) * pageSize + idx + 1;
               const isCancelled = tx.status === 'cancelled' || tx.isCancelled;
               const profitMetrics = calculateTxProfitMetrics(tx, productsMap);
-              const rawTotal = Number(tx.grandTotal ?? tx.grand_total ?? tx.total_lak ?? 0);
+              const rawTotal = Number(
+                (Number(tx.grandTotal) > 0 ? tx.grandTotal : null) ??
+                (Number(tx.grand_total) > 0 ? tx.grand_total : null) ??
+                (Number(tx.total_lak) > 0 ? tx.total_lak : null) ??
+                (Number(tx.subtotal) > 0 ? tx.subtotal : null) ??
+                0
+              );
               const total = rawTotal > 0 ? rawTotal : (profitMetrics.grandTotal || 0);
               const paid = Number(tx.paidAmount ?? tx.amountTendered ?? 0);
               const method = (tx.paymentMethod || '').toLowerCase();

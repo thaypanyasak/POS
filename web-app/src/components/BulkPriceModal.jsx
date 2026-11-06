@@ -12,37 +12,8 @@ import {
   Package,
   Barcode
 } from '@phosphor-icons/react';
-import { formatKip, roundLakToStep } from '../utils/formatters';
-
-/**
- * Consistent unit badge coloring based on unit name and multiplier rank
- * Thùng / Két (ແກັດ) -> Purple
- * Lốc / Gói (ແພັກ) -> Blue
- * Lẻ (ອັນ) -> Emerald
- */
-export function getUnitBadgeStyle(u, sortedUnits = []) {
-  const name = (u.unitName || u.unit_name || '').toLowerCase();
-  if (name.includes('ແກັດ') || name.includes('thùng') || name.includes('thung') || name.includes('carton') || name.includes('case')) {
-    return 'bg-purple-50 text-purple-700 border border-purple-200';
-  }
-  if (name.includes('ແພັກ') || name.includes('lốc') || name.includes('loc') || name.includes('pack')) {
-    return 'bg-blue-50 text-blue-700 border border-blue-200';
-  }
-  if (name.includes('ອັນ') || name.includes('lẻ') || name.includes('le') || name.includes('piece')) {
-    return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
-  }
-  // Fallback based on multiplier rank
-  if (sortedUnits && sortedUnits.length > 1) {
-    if (u.id === sortedUnits[0]?.id) {
-      return 'bg-purple-50 text-purple-700 border border-purple-200';
-    }
-    if (u.id === sortedUnits[sortedUnits.length - 1]?.id) {
-      return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
-    }
-    return 'bg-blue-50 text-blue-700 border border-blue-200';
-  }
-  return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
-}
+import { formatKip, roundLakToStep, getCartonUnitInfo } from '../utils/formatters';
+import { getUnitStepMultiplier, getUnitBadgeStyle, getUnitBadgeConfig } from './ProductsView';
 
 export default function BulkPriceModal({
   isOpen,
@@ -50,6 +21,7 @@ export default function BulkPriceModal({
   selectedProducts = [],
   onApplyBulkPrices,
   initialTab = 'manual',
+  exchangeRate = 690,
 }) {
   // Tabs: 'manual' (Mode 1: Tự do nhập giá từng sản phẩm) | 'formula' (Mode 2: Công thức +/- % hoặc Kíp)
   const [activeTab, setActiveTab] = useState('manual');
@@ -58,6 +30,8 @@ export default function BulkPriceModal({
   useEffect(() => {
     if (isOpen) {
       setActiveTab(initialTab || 'manual');
+      setManualEdits({});
+      setManualCostEdits({});
     }
   }, [isOpen, initialTab]);
 
@@ -75,6 +49,8 @@ export default function BulkPriceModal({
   // ===================== MANUAL EDITS STATE (MODE 1) =====================
   // Map of unitId -> { id, productId, product_id, unitName, multiplier, retail_price, price_2, price_3 }
   const [manualEdits, setManualEdits] = useState({});
+  // Map of productId -> { productId, currency, cost_lak, cost_thb, cost_per_base_unit }
+  const [manualCostEdits, setManualCostEdits] = useState({});
 
   const [isApplying, setIsApplying] = useState(false);
 
@@ -232,15 +208,70 @@ export default function BulkPriceModal({
     });
   };
 
-  const manualDirtyCount = Object.keys(manualEdits).length;
+  // Bidirectional cost input handler for Mode 1
+  const handleManualCostChange = (product, field, rawVal) => {
+    const val = Number(String(rawVal).replace(/[^\d]/g, '')) || 0;
+    const prodId = product.id;
+    const rate = Number(exchangeRate) || 690;
+    const maxMult = Math.max(1, ...(product.units || []).map((u) => Number(u.multiplier) || 1));
+
+    const isLakOnly =
+      (product.cost_currency || product.costCurrency) === 'LAK' ||
+      (Number(product.costBaht ?? product.cost_thb ?? 0) === 0 && Number(product.costKip ?? product.cost_lak ?? product.costPerBaseUnit ?? 0) > 0);
+
+    const { cartonCostKip, cartonCostBaht } = getCartonUnitInfo(product, rate);
+    const origCostLak = cartonCostKip;
+    const origCostThb = cartonCostBaht;
+
+    setManualCostEdits((prev) => {
+      const existing = prev[prodId];
+      let curCostThb = existing?.cost_thb !== undefined ? existing.cost_thb : origCostThb;
+      let curCostLak = existing?.cost_lak !== undefined ? existing.cost_lak : origCostLak;
+
+      if (field === 'cost_thb') {
+        curCostThb = val;
+        // Tự động điền Kíp bằng tỷ giá Baht của hệ thống
+        curCostLak = Math.round(val * rate);
+      } else if (field === 'cost_lak') {
+        // Gõ trực tiếp vào ô Kíp: Giữ nguyên số tiền người dùng nhập
+        curCostLak = val;
+        if (isLakOnly) {
+          curCostThb = 0;
+        }
+      }
+
+      const costPerBaseUnit = Math.round(curCostLak / maxMult);
+      const isChanged = curCostLak !== origCostLak || (!isLakOnly && curCostThb !== origCostThb);
+
+      if (!isChanged) {
+        const copy = { ...prev };
+        delete copy[prodId];
+        return copy;
+      }
+
+      return {
+        ...prev,
+        [prodId]: {
+          productId: prodId,
+          currency: isLakOnly ? 'LAK' : 'THB',
+          cost_lak: curCostLak,
+          cost_thb: curCostThb,
+          cost_per_base_unit: costPerBaseUnit,
+        },
+      };
+    });
+  };
+
+  const manualDirtyCount = Object.keys(manualEdits).length + Object.keys(manualCostEdits).length;
 
   // ===================== SUBMISSION =====================
   const handleApply = async () => {
-    if (allSelectedUnits.length === 0) return;
+    if (allSelectedUnits.length === 0 && Object.keys(manualCostEdits).length === 0) return;
     setIsApplying(true);
 
     try {
       const minimalDirtyPayload = [];
+      const dirtyCostPayload = Object.values(manualCostEdits);
 
       if (activeTab === 'manual') {
         // Collect from manual edits (Mode 1)
@@ -298,8 +329,8 @@ export default function BulkPriceModal({
         });
       }
 
-      if (minimalDirtyPayload.length > 0) {
-        await onApplyBulkPrices(minimalDirtyPayload);
+      if (minimalDirtyPayload.length > 0 || dirtyCostPayload.length > 0) {
+        await onApplyBulkPrices(minimalDirtyPayload, dirtyCostPayload);
       }
       onClose();
     } catch (err) {
@@ -389,14 +420,27 @@ export default function BulkPriceModal({
 
             {productsWithSortedUnits.map(({ product, sortedUnits }) => {
               const productImg = product.imageUrl || product.image_url || product.image;
+              const rate = Number(exchangeRate) || 690;
+              const isLakOnly =
+                (product.cost_currency || product.costCurrency) === 'LAK' ||
+                (Number(product.costBaht ?? product.cost_thb ?? 0) === 0 && Number(product.costKip ?? product.cost_lak ?? product.costPerBaseUnit ?? 0) > 0);
+
+              const { cartonUnitName, cartonCostKip, cartonCostBaht } = getCartonUnitInfo(product, rate);
+              const costDirty = manualCostEdits[product.id];
+              const curCostThb = costDirty?.cost_thb !== undefined ? costDirty.cost_thb : cartonCostBaht;
+              const curCostLak = costDirty?.cost_lak !== undefined ? costDirty.cost_lak : cartonCostKip;
+
+              const isCostThbDirty = costDirty?.cost_thb !== undefined && costDirty.cost_thb !== cartonCostBaht;
+              const isCostLakDirty = costDirty?.cost_lak !== undefined && costDirty.cost_lak !== cartonCostKip;
+              const isCostDirty = isCostThbDirty || isCostLakDirty;
 
               return (
                 <div
                   key={product.id}
                   className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs transition-all shrink-0"
                 >
-                  {/* Product Card Header - Compact */}
-                  <div className="bg-slate-50/90 border-b border-slate-200 px-3 py-1.5 sm:py-2 flex items-center justify-between gap-2.5 rounded-t-xl">
+                  {/* Product Card Header - Compact with Cost Inputs */}
+                  <div className="bg-slate-50/90 border-b border-slate-200 px-3 py-1.5 sm:py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 rounded-t-xl">
                     <div className="flex items-center gap-2.5 min-w-0">
                       {productImg ? (
                         <img
@@ -420,7 +464,7 @@ export default function BulkPriceModal({
                       </div>
 
                       <div className="min-w-0">
-                        <h4 className="font-bold text-slate-800 text-xs sm:text-sm truncate max-w-[280px] sm:max-w-[420px]">
+                        <h4 className="font-bold text-slate-800 text-xs sm:text-sm truncate max-w-[240px] sm:max-w-[340px]">
                           {product.name}
                         </h4>
                         <div className="flex items-center gap-1.5 mt-0.5">
@@ -439,7 +483,68 @@ export default function BulkPriceModal({
                       </div>
                     </div>
 
-                    <div className="shrink-0 flex items-center gap-2">
+                    {/* Cost Inputs & Unit Badge */}
+                    <div className="shrink-0 flex items-center flex-wrap gap-2 justify-between sm:justify-end">
+                      {/* Cost Input Section (ຕົ້ນທຶນ B & K) */}
+                      <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-slate-200/90 shadow-2xs">
+                        <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">ຕົ້ນທຶນ:</span>
+                        {!isLakOnly && (
+                          <div className="relative w-20 sm:w-24">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={curCostThb > 0 ? Number(curCostThb).toLocaleString('de-DE') : ''}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => handleManualCostChange(product, 'cost_thb', e.target.value)}
+                              placeholder="0"
+                              className={`w-full h-7 px-2 pr-5 rounded-md border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                                isCostThbDirty
+                                  ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                  : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                              }`}
+                            />
+                            <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                              ฿
+                            </span>
+                          </div>
+                        )}
+                        <div className="relative w-24 sm:w-28">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={curCostLak > 0 ? Number(curCostLak).toLocaleString('de-DE') : ''}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => handleManualCostChange(product, 'cost_lak', e.target.value)}
+                            placeholder="0"
+                            className={`w-full h-7 px-2 pr-5 rounded-md border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
+                              isCostLakDirty
+                                ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                            }`}
+                          />
+                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                            ₭
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">/{cartonUnitName}</span>
+                        {isCostDirty && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setManualCostEdits((prev) => {
+                                const copy = { ...prev };
+                                delete copy[product.id];
+                                return copy;
+                              });
+                            }}
+                            className="text-[10px] text-amber-700 hover:text-amber-900 font-bold underline cursor-pointer ml-0.5"
+                            title="ຄືນຄ່າຕົ້ນທຶນ"
+                          >
+                            ຄືນຄ່າ
+                          </button>
+                        )}
+                      </div>
+
                       <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-primary-light/70 text-primary border border-primary-border/80 shadow-2xs flex items-center gap-1">
                         <span className="font-extrabold">{sortedUnits.length}</span> ຫົວໜ່ວຍ
                       </span>
@@ -475,14 +580,22 @@ export default function BulkPriceModal({
                           <div className="flex flex-col sm:grid sm:grid-cols-12 gap-1.5 sm:gap-2 items-stretch sm:items-center">
                             {/* Unit Badge and Name */}
                             <div className="sm:col-span-3 flex items-center justify-between sm:justify-start gap-1.5">
-                              <span
-                                className={`font-bold px-2 py-0.5 rounded text-xs min-w-[65px] text-center shrink-0 ${getUnitBadgeStyle(
-                                  uItem,
-                                  sortedUnits
-                                )}`}
-                              >
-                                {uItem.unitName} {uItem.multiplier > 1 ? `(x${uItem.multiplier})` : ''}
-                              </span>
+                              {(() => {
+                                const bConfig = getUnitBadgeConfig(uItem, sortedUnits);
+                                const sMult = getUnitStepMultiplier(uItem, sortedUnits);
+                                return (
+                                  <span
+                                    className={`inline-flex items-center justify-center gap-1 px-2.5 py-1 min-h-[26px] rounded-md text-xs min-w-[65px] text-center shrink-0 border font-medium shadow-2xs ${bConfig.badge}`}
+                                  >
+                                    <span>{uItem.unitName}</span>
+                                    {sMult ? (
+                                      <span className={`font-normal text-[10.5px] ${bConfig.mult}`}>
+                                        (x{sMult})
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                );
+                              })()}
 
                               {isAnyDirty && (
                                 <button
@@ -512,12 +625,13 @@ export default function BulkPriceModal({
                                     type="text"
                                     inputMode="numeric"
                                     value={curRetail > 0 ? Number(curRetail).toLocaleString('de-DE') : ''}
+                                    onFocus={(e) => e.target.select()}
                                     onChange={(e) => handleManualUnitChange(uItem, 'retail_price', e.target.value)}
                                     placeholder="0"
                                     className={`w-full h-9 min-h-[36px] px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
                                       isRetailDirty
-                                        ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200 text-amber-950 font-black shadow-2xs'
-                                        : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300 focus:border-primary focus:ring-1 focus:ring-primary-light'
+                                        ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                        : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
                                     }`}
                                   />
                                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
@@ -534,12 +648,13 @@ export default function BulkPriceModal({
                                     type="text"
                                     inputMode="numeric"
                                     value={curPrice2 > 0 ? Number(curPrice2).toLocaleString('de-DE') : ''}
+                                    onFocus={(e) => e.target.select()}
                                     onChange={(e) => handleManualUnitChange(uItem, 'price_2', e.target.value)}
                                     placeholder="0"
                                     className={`w-full h-9 min-h-[36px] px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
                                       isPrice2Dirty
-                                        ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200 text-amber-950 font-black shadow-2xs'
-                                        : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300 focus:border-primary focus:ring-1 focus:ring-primary-light'
+                                        ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                        : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
                                     }`}
                                   />
                                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
@@ -556,12 +671,13 @@ export default function BulkPriceModal({
                                     type="text"
                                     inputMode="numeric"
                                     value={curPrice3 > 0 ? Number(curPrice3).toLocaleString('de-DE') : ''}
+                                    onFocus={(e) => e.target.select()}
                                     onChange={(e) => handleManualUnitChange(uItem, 'price_3', e.target.value)}
                                     placeholder="0"
                                     className={`w-full h-9 min-h-[36px] px-2.5 pr-6 rounded-lg border text-xs font-mono font-bold text-right transition-all focus:outline-none ${
                                       isPrice3Dirty
-                                        ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200 text-amber-950 font-black shadow-2xs'
-                                        : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300 focus:border-primary focus:ring-1 focus:ring-primary-light'
+                                        ? 'bg-amber-50/60 border-amber-300 text-slate-900 font-bold focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-200/50'
+                                        : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
                                     }`}
                                   />
                                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
@@ -757,14 +873,22 @@ export default function BulkPriceModal({
                             return (
                               <div key={u.unitId} className="px-3 py-2 hover:bg-slate-50/50 transition-colors">
                                 <div className="flex items-center justify-between mb-1.5">
-                                  <span
-                                    className={`font-bold px-2 py-0.5 rounded text-xs min-w-[65px] text-center shrink-0 ${getUnitBadgeStyle(
-                                      u,
-                                      sortedUnits
-                                    )}`}
-                                  >
-                                    {u.unitName} {u.multiplier > 1 ? `(x${u.multiplier})` : ''}
-                                  </span>
+                                  {(() => {
+                                    const bConfig = getUnitBadgeConfig(u, sortedUnits);
+                                    const sMult = getUnitStepMultiplier(u, sortedUnits);
+                                    return (
+                                      <span
+                                        className={`inline-flex items-center justify-center gap-1 px-2.5 py-1 min-h-[26px] rounded-md text-xs min-w-[65px] text-center shrink-0 border font-medium shadow-2xs ${bConfig.badge}`}
+                                      >
+                                        <span>{u.unitName}</span>
+                                        {sMult ? (
+                                          <span className={`font-normal text-[10.5px] ${bConfig.mult}`}>
+                                            (x{sMult})
+                                          </span>
+                                        ) : null}
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 font-mono text-xs">
                                   {[
@@ -835,14 +959,22 @@ export default function BulkPriceModal({
                               className="px-3 py-1.5 sm:py-2 flex items-center justify-between gap-2.5 hover:bg-slate-50/50 transition-colors"
                             >
                               <div className="flex items-center gap-1.5">
-                                <span
-                                  className={`font-bold px-2 py-0.5 rounded text-xs min-w-[65px] text-center shrink-0 ${getUnitBadgeStyle(
-                                    u,
-                                    sortedUnits
-                                  )}`}
-                                >
-                                  {u.unitName} {u.multiplier > 1 ? `(x${u.multiplier})` : ''}
-                                </span>
+                                {(() => {
+                                  const bConfig = getUnitBadgeConfig(u, sortedUnits);
+                                  const sMult = getUnitStepMultiplier(u, sortedUnits);
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center justify-center gap-1 px-2.5 py-1 min-h-[26px] rounded-md text-xs min-w-[65px] text-center shrink-0 border font-medium shadow-2xs ${bConfig.badge}`}
+                                    >
+                                      <span>{u.unitName}</span>
+                                      {sMult ? (
+                                        <span className={`font-normal text-[10.5px] ${bConfig.mult}`}>
+                                          (x{sMult})
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                  );
+                                })()}
                                 <span className="text-[11px] text-slate-500 font-medium">
                                   ({targetLabel})
                                 </span>

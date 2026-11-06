@@ -41,7 +41,13 @@ export function calculateTxProfitMetrics(tx, productsMap = null) {
     };
   }
 
-  const explicitGrandTotal = Number(tx.grandTotal ?? tx.grand_total ?? tx.total_lak ?? 0);
+  const explicitGrandTotal = Number(
+    (Number(tx.grandTotal) > 0 ? tx.grandTotal : null) ??
+    (Number(tx.grand_total) > 0 ? tx.grand_total : null) ??
+    (Number(tx.total_lak) > 0 ? tx.total_lak : null) ??
+    (Number(tx.subtotal) > 0 ? tx.subtotal : null) ??
+    0
+  );
   const items = tx.items || tx.sale_transaction_items || [];
   
   let totalCostFromItems = 0;

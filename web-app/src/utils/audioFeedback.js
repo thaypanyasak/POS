@@ -478,6 +478,44 @@ export function playActionClickBeep(section = 'checkout') {
 }
 
 /**
+ * Play fresh, energetic spin chime when refreshing data/API
+ * Tone: Crisp ascending dual tone (784Hz G5 -> 1046Hz C6 -> 1318Hz E6), ~110ms duration
+ * Haptic: 35ms crisp tap
+ */
+export function playRefreshBeep(section = 'system') {
+  try {
+    const ctx = getAudioContext(section);
+    if (ctx) {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(784, now);
+      osc.frequency.exponentialRampToValueAtTime(1318, now + 0.08);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.24, now + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.12);
+    }
+  } catch (err) {
+    console.debug('[audioFeedback] playRefreshBeep muted:', err);
+  }
+
+  try {
+    if (isSoundEnabled(section) && typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(35);
+    }
+  } catch (_) {}
+}
+
+/**
  * Play soft, descending dismiss tone when closing or cancelling a modal
  * Tone: Soft falling tone (600Hz -> 360Hz), gentle volume, ~75ms duration
  * Haptic: 20ms light tap

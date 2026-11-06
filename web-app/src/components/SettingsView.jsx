@@ -37,6 +37,7 @@ import {
   playSuccessBeep,
   playErrorBeep,
   playUnitChangeBeep,
+  playRefreshBeep,
   isSoundEnabled,
   setSoundEnabled,
   getSoundSections,
@@ -401,10 +402,14 @@ export default function SettingsView({
   const handleHeaderRefresh = async () => {
     if (isHeaderRefreshing || isLoading) return;
     setIsHeaderRefreshing(true);
+    playRefreshBeep('system');
     try {
       // 1. Refresh Supabase database
       if (onRefreshAll) {
-        await onRefreshAll();
+        await Promise.all([
+          onRefreshAll(),
+          new Promise((res) => setTimeout(res, 600)),
+        ]);
       }
 
       // 2. If on Native, also check for Capgo OTA update
@@ -470,13 +475,15 @@ export default function SettingsView({
               type="button"
               onClick={handleHeaderRefresh}
               disabled={isLoading || isHeaderRefreshing}
-              className="p-2 sm:px-3 sm:py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5 border border-slate-200/80 shadow-2xs active:scale-95"
-              title="ໂຫຼດຂໍ້ມູນຄືນ ແລະ ກວດສອບອັບເດດເວີຊັນໃໝ່"
+              className={`group/ref p-2 sm:px-3 sm:py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer active:scale-90 active:rotate-12 flex items-center gap-1.5 border border-slate-200/80 shadow-2xs ${
+                isLoading || isHeaderRefreshing ? 'opacity-60 cursor-not-allowed' : ''
+              }`}
+              title="ໂຫຼດຂໍ້ມູນຄືນ ແລະ ກວດສອບອັບເດດເວີຊັນໃໝ່ (Refresh & Check Updates)"
             >
               <ArrowClockwise
                 size={15}
                 weight="bold"
-                className={isLoading || isHeaderRefreshing ? 'animate-spin text-teal-600' : ''}
+                className={`transition-transform duration-300 ${isLoading || isHeaderRefreshing ? 'animate-spin text-teal-600' : 'group-hover/ref:rotate-180'}`}
               />
               <span className="hidden sm:inline">
                 {isHeaderRefreshing ? 'ກຳລັງກວດສອບ...' : 'ຣີເຟຣຊ & ກວດອັບເດດ'}
