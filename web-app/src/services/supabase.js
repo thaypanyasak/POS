@@ -3818,11 +3818,7 @@ export async function fetchDualMonthTransactions(yearMonthA, yearMonthB) {
           } catch (_) {}
 
           let items = [];
-          if (cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0) {
-            items = cachedMeta.items;
-          } else if (Array.isArray(cachedMeta) && cachedMeta.length > 0) {
-            items = cachedMeta;
-          } else if (t.sale_transaction_items && t.sale_transaction_items.length > 0) {
+          if (t.sale_transaction_items && t.sale_transaction_items.length > 0) {
             items = t.sale_transaction_items.map((i) => ({
               id: i.id,
               product: { id: i.product_id, name: i.product_name },
@@ -3848,6 +3844,10 @@ export async function fetchDualMonthTransactions(yearMonthA, yearMonthB) {
               lineProfit: Number(i.line_profit) || 0,
               line_profit: Number(i.line_profit) || 0,
             }));
+          } else if (cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0) {
+            items = cachedMeta.items;
+          } else if (Array.isArray(cachedMeta) && cachedMeta.length > 0) {
+            items = cachedMeta;
           }
 
           return {
@@ -3913,11 +3913,7 @@ export async function fetchDateRangeTransactions(startDateStr, endDateStr) {
         } catch (_) {}
 
         let items = [];
-        if (cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0) {
-          items = cachedMeta.items;
-        } else if (Array.isArray(cachedMeta) && cachedMeta.length > 0) {
-          items = cachedMeta;
-        } else if (t.sale_transaction_items && t.sale_transaction_items.length > 0) {
+        if (t.sale_transaction_items && t.sale_transaction_items.length > 0) {
           items = t.sale_transaction_items.map((i) => ({
             id: i.id,
             product: { id: i.product_id, name: i.product_name },
@@ -3943,6 +3939,10 @@ export async function fetchDateRangeTransactions(startDateStr, endDateStr) {
             lineProfit: Number(i.line_profit) || 0,
             line_profit: Number(i.line_profit) || 0,
           }));
+        } else if (cachedMeta?.items && Array.isArray(cachedMeta.items) && cachedMeta.items.length > 0) {
+          items = cachedMeta.items;
+        } else if (Array.isArray(cachedMeta) && cachedMeta.length > 0) {
+          items = cachedMeta;
         }
 
         return {

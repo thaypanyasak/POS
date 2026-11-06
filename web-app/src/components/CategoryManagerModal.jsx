@@ -137,22 +137,22 @@ export default function CategoryManagerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 sm:backdrop-blur-xs flex flex-col sm:items-center sm:justify-center p-0 sm:p-4 animate-in fade-in duration-200">
       <div
-        className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200"
+        className="bg-white rounded-none sm:rounded-3xl shadow-2xl border-none sm:border border-slate-200 w-full sm:max-w-lg h-full sm:h-auto sm:max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header - Royal Blue to Blue Gradient (Xanh dương - Xanh dương theo theme hệ thống) */}
-        <header className="px-6 py-4 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-800 text-white flex items-center justify-between shrink-0 shadow-xs">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center border border-white/20">
-              <Folders size={20} weight="fill" className="text-blue-200" />
+        <header className="pt-[max(0.6rem,env(safe-area-inset-top,0.6rem))] sm:pt-4 pb-2.5 sm:pb-4 px-3.5 sm:px-6 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-800 text-white flex items-center justify-between shrink-0 shadow-xs">
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-white/15 flex items-center justify-center border border-white/20">
+              <Folders size={16} weight="fill" className="text-blue-200 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h2 className="font-extrabold text-sm sm:text-base leading-tight">
+              <h2 className="font-extrabold text-xs sm:text-base leading-tight">
                 ຈັດການໝວດໝູ່ສິນຄ້າ (Category Manager)
               </h2>
-              <p className="text-[10.5px] text-blue-100/90 mt-0.5">
+              <p className="text-[10px] sm:text-[10.5px] text-blue-100/90 mt-0.5">
                 ເພີ່ມ, ແກ້ໄຂຊື່ ແລະ ລຶບໝວດໝູ່ໃນລະບົບ Supabase
               </p>
             </div>
@@ -160,9 +160,9 @@ export default function CategoryManagerModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
           >
-            <X size={18} weight="bold" />
+            <X size={16} weight="bold" />
           </button>
         </header>
 
@@ -379,15 +379,15 @@ export default function CategoryManagerModal({
         </div>
 
         {/* Footer */}
-        <footer className="p-4 bg-slate-100/80 border-t border-slate-200 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-1.5 text-[10.5px] text-slate-500">
+        <footer className="relative z-30 p-2.5 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0.75rem))] bg-white sm:bg-slate-100/80 border-t border-slate-200 flex items-center justify-between shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+          <div className="flex items-center gap-1.5 text-[10px] sm:text-[10.5px] text-slate-500">
             <Info size={14} className="text-teal-600 shrink-0" />
             <span>ບັນທຶກລົງຕາຕະລາງ `categories` ໃນ Supabase ໂດຍກົງ</span>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            className="px-3.5 sm:px-4 py-1.5 sm:py-2 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer"
           >
             ປິດໜ້າຕ່າງ
           </button>

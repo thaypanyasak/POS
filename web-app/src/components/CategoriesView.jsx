@@ -384,33 +384,29 @@ function CategoryProductsDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 md:p-6 animate-in fade-in duration-200"
-      style={{
-        paddingTop: 'max(2.75rem, calc(2.25rem + env(safe-area-inset-top, 0px)))',
-        paddingBottom: 'max(4rem, calc(3.5rem + env(safe-area-inset-bottom, 0px)))',
-      }}
+      className="fixed inset-0 z-[70] bg-slate-950/70 sm:backdrop-blur-xs flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-6 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 w-full sm:w-[94vw] md:w-[92vw] lg:max-w-5xl h-full max-h-full sm:max-h-[86vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+        className="bg-white rounded-none sm:rounded-3xl shadow-2xl border-none sm:border border-slate-200/90 w-full sm:w-[94vw] md:w-[92vw] lg:max-w-5xl h-full sm:h-auto sm:max-h-[86vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header - Royal Blue to Blue Gradient */}
-        <div className="px-3.5 sm:px-5 py-3 sm:py-4 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-800 text-white flex items-center justify-between shrink-0 shadow-xs">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
-              <Folders size={20} weight="duotone" className="text-blue-200" />
+        <div className="pt-[max(0.6rem,env(safe-area-inset-top,0.6rem))] sm:pt-3.5 pb-2 sm:pb-3.5 px-3 sm:px-5 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-800 text-white flex items-center justify-between shrink-0 shadow-xs">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
+              <Folders size={16} weight="duotone" className="text-blue-200 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-sm sm:text-base md:text-lg leading-tight truncate">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h3 className="font-extrabold text-xs sm:text-base md:text-lg leading-tight truncate">
                   ໝວດໝູ່: {category.name}
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-bold bg-white/20 text-white shrink-0">
+                <span className="px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-white/20 text-white shrink-0">
                   {totalItems} ສິນຄ້າ
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-blue-100/90 truncate mt-0.5">
+              <p className="text-[10px] sm:text-xs text-blue-100/90 truncate mt-0.5">
                 ມູນຄ່າສະຕັອກລວມໃນໝວດ: {formatKip(totalStockVal)}
               </p>
             </div>
@@ -419,10 +415,10 @@ function CategoryProductsDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-2"
+            className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-2"
             title="ປິດ (Close)"
           >
-            <X size={18} weight="bold" />
+            <X size={16} weight="bold" className="sm:w-[18px] sm:h-[18px]" />
           </button>
         </div>
 
@@ -669,14 +665,14 @@ function CategoryProductsDetailModal({
         </div>
 
         {/* Footer */}
-        <div className="p-3 sm:p-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
-          <div className="text-xs text-slate-500 font-medium">
+        <div className="relative z-30 p-2.5 sm:p-3.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0.75rem))] bg-white sm:bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+          <div className="text-[11px] sm:text-xs text-slate-500 font-medium">
             ລວມທັງໝົດ: <span className="font-bold text-slate-800">{totalItems}</span> ສິນຄ້າ
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+            className="px-4 sm:px-5 py-1.5 sm:py-2 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 font-bold rounded-xl text-xs transition-colors cursor-pointer"
           >
             ປິດ
           </button>
@@ -685,28 +681,24 @@ function CategoryProductsDetailModal({
       {/* Modal chọn sản phẩm để gán vào danh mục (Multi-Select & Infinite Scroll xem hết 668+ sản phẩm giống POS) */}
       {isAssignPickerOpen && (
         <div
-          className="fixed inset-0 z-[80] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 md:p-6 animate-in fade-in duration-200"
-          style={{
-            paddingTop: 'max(2.75rem, calc(2.25rem + env(safe-area-inset-top, 0px)))',
-            paddingBottom: 'max(4rem, calc(3.5rem + env(safe-area-inset-bottom, 0px)))',
-          }}
+          className="fixed inset-0 z-[80] bg-slate-950/80 sm:backdrop-blur-xs flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-6 animate-in fade-in duration-200"
           onClick={() => setIsAssignPickerOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 w-full sm:w-[94vw] md:w-[90vw] lg:max-w-3xl h-full max-h-full sm:max-h-[84vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+            className="bg-white rounded-none sm:rounded-3xl shadow-2xl border-none sm:border border-slate-200/90 w-full sm:w-[94vw] md:w-[90vw] lg:max-w-3xl h-full sm:h-auto sm:max-h-[84vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header - Royal Blue to Blue Gradient (Xanh dương - Xanh dương theo theme hệ thống) */}
-            <div className="px-3.5 sm:px-5 py-3 sm:py-3.5 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-800 text-white flex items-center justify-between shrink-0 shadow-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
-                  <Plus size={18} weight="bold" className="text-blue-200" />
+            <div className="pt-[max(0.6rem,env(safe-area-inset-top,0.6rem))] sm:pt-3.5 pb-2 sm:pb-3.5 px-3 sm:px-5 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-800 text-white flex items-center justify-between shrink-0 shadow-xs">
+              <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                  <Plus size={16} weight="bold" className="text-blue-200 sm:w-[18px] sm:h-[18px]" />
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-extrabold text-sm sm:text-base leading-tight truncate">
+                  <h4 className="font-extrabold text-xs sm:text-base leading-tight truncate">
                     ເລືອກສິນຄ້າຍ້າຍເຂົ້າໝວດ: {category.name}
                   </h4>
-                  <p className="text-[11px] text-blue-100/90 truncate">
+                  <p className="text-[10px] sm:text-[11px] text-blue-100/90 truncate">
                     ເລືອກຫຼາຍສິນຄ້າພ້ອມກັນ ແລ້ວກົດປຸ່ມ "+ ເພີ່ມເຂົ້າໝວດ" ດ້ານລຸ່ມ
                   </p>
                 </div>
@@ -714,9 +706,9 @@ function CategoryProductsDetailModal({
               <button
                 type="button"
                 onClick={() => setIsAssignPickerOpen(false)}
-                className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-2"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-2"
               >
-                <X size={18} weight="bold" />
+                <X size={16} weight="bold" className="sm:w-[18px] sm:h-[18px]" />
               </button>
             </div>
 
@@ -870,9 +862,9 @@ function CategoryProductsDetailModal({
             </div>
 
             {/* Footer */}
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0">
+            <div className="relative z-30 p-2.5 sm:p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0.75rem))] bg-white sm:bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-2.5 shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
               <div className="flex items-center justify-between sm:justify-start gap-2">
-                <span className="text-xs text-slate-600 font-bold truncate">
+                <span className="text-[11px] sm:text-xs text-slate-600 font-bold truncate">
                   ພົບເຫັນ {candidateProducts.length} ສິນຄ້າຈາກໝວດອື່ນ
                 </span>
                 <span className="text-xs font-bold text-blue-700 sm:hidden">
@@ -883,7 +875,7 @@ function CategoryProductsDetailModal({
                 <button
                   type="button"
                   onClick={() => setIsAssignPickerOpen(false)}
-                  className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors flex-1 sm:flex-initial text-center"
+                  className="px-3 py-1.5 sm:px-3.5 sm:py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors flex-1 sm:flex-initial text-center"
                 >
                   ຍົກເລີກ
                 </button>
@@ -891,7 +883,7 @@ function CategoryProductsDetailModal({
                   type="button"
                   onClick={handleBatchAssign}
                   disabled={isProcessing || selectedCandidateIds.size === 0}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none flex-1 sm:flex-initial"
+                  className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none flex-1 sm:flex-initial"
                 >
                   <Plus size={14} weight="bold" />
                   <span>

@@ -66,7 +66,7 @@ import LoginScreen from './components/auth/LoginScreen';
 import AuthLoadingSplash from './components/auth/AuthLoadingSplash';
 import { useAuth, useAuthRole } from './contexts/AuthContext';
 import { useOrderRealtime } from './hooks/useOrderRealtime';
-import { safeSetItem, safeGetJSON, cleanupLegacyStorage, clearAllLocalProductMeta } from './utils/safeStorage';
+import { safeSetItem, safeGetJSON, cleanupLegacyStorage, clearAllLocalProductMeta, clearAllLocalTransactionMeta, clearAllLocalBundleMeta } from './utils/safeStorage';
 import { idbSet, idbGet } from './utils/indexedDbStorage';
 import OfflineSyncBanner from './components/common/OfflineSyncBanner';
 import CustomerCatalogView from './components/customer/CustomerCatalogView';
@@ -1477,6 +1477,8 @@ export default function App() {
     if (force) {
       cleanupLegacyStorage();
       clearAllLocalProductMeta();
+      clearAllLocalTransactionMeta();
+      clearAllLocalBundleMeta();
     }
     const now = Date.now();
     // If not forced and called again within 2 seconds, coalesce
@@ -1517,6 +1519,7 @@ export default function App() {
   const handleRefreshPosTab = useCallback(async () => {
     cleanupLegacyStorage();
     clearAllLocalProductMeta();
+    clearAllLocalBundleMeta();
     await Promise.all([
       refreshProducts(true),
       refreshCategories(true),
@@ -1527,6 +1530,7 @@ export default function App() {
   const handleRefreshProductsTab = useCallback(async () => {
     cleanupLegacyStorage();
     clearAllLocalProductMeta();
+    clearAllLocalBundleMeta();
     await Promise.all([
       refreshProducts(true),
       refreshCategories(true),
@@ -1542,6 +1546,8 @@ export default function App() {
   }, [refreshProducts, refreshCategories]);
 
   const handleRefreshTransactionsTab = useCallback(async () => {
+    cleanupLegacyStorage();
+    clearAllLocalTransactionMeta();
     await refreshTransactions(true);
   }, [refreshTransactions]);
 
@@ -1550,6 +1556,9 @@ export default function App() {
   }, [refreshPurchases]);
 
   const handleRefreshSalesByUnitTab = useCallback(async () => {
+    cleanupLegacyStorage();
+    clearAllLocalProductMeta();
+    clearAllLocalTransactionMeta();
     await Promise.all([
       refreshTransactions(true),
       refreshProducts(true),

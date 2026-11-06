@@ -27,6 +27,9 @@ export function cleanupLegacyStorage() {
       } else if (k.startsWith('meiishop_prod_meta_')) {
         // Dọn sạch toàn bộ metadata cục bộ cũ để không làm sai lệch giá vốn so với Cloud Supabase
         keysToRemove.push(k);
+      } else if (k === 'meiishop_bundles_cache') {
+        // Khóa cache combo cũ không còn sử dụng
+        keysToRemove.push(k);
       } else if (k.startsWith('meiishop_tx_meta_')) {
         txMetaKeys.push(k);
       }
@@ -144,3 +147,35 @@ export function clearAllLocalProductMeta() {
     });
   } catch (_) {}
 }
+
+/**
+ * Xóa sạch toàn bộ metadata cục bộ của hóa đơn khi Refresh.
+ * Đảm bảo 100% mọi thiết bị đọc giá trị chính xác tuyệt đối từ Supabase Cloud.
+ */
+export function clearAllLocalTransactionMeta() {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('meiishop_tx_meta_')) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => {
+      try { localStorage.removeItem(k); } catch (_) {}
+    });
+  } catch (_) {}
+}
+
+/**
+ * Xóa sạch cache combo / thùng mix vị khi Refresh.
+ */
+export function clearAllLocalBundleMeta() {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    localStorage.removeItem('meiishop_bundles_cache');
+    localStorage.removeItem('meiishop_product_bundles_v1');
+  } catch (_) {}
+}
+

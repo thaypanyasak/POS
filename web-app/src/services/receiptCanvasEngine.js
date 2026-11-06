@@ -807,7 +807,11 @@ function layoutReceipt(ctx, receipt, lang = 'lo', qrImage = null, pageInfo = nul
 
       if (!packageQty || !detectedBaseUnit) {
         try {
-          const cachedBundles = JSON.parse(localStorage.getItem('meiishop_bundles_cache') || '[]');
+          const cachedBundles = JSON.parse(
+            localStorage.getItem('meiishop_product_bundles_v1') ||
+            localStorage.getItem('meiishop_bundles_cache') ||
+            '[]'
+          );
           const foundB = cachedBundles.find(
             (b) => (it.bundleId && b.id === it.bundleId) ||
                    (it.productId && b.id === it.productId) ||
